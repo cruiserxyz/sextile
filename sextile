@@ -1,0 +1,1454 @@
+#!/usr/bin/env bash
+# ./sextile: build (once) and run Sextile in Docker, or with --no-docker
+# build this checkout with the host's go and run it.
+#
+#   ./sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [-- APP ARGS...]
+#   ./sextile doctor [--charts-dir DIR] [--port N]
+#
+# Docker, local daemon only; --no-docker never runs a docker command, and
+# never falls back to Docker. Compatible with bash 3.2 (macOS /bin/bash):
+# no associative arrays, no case-changing expansions, no mapfile or readarray.
+# Every refusal exits 2; a launch ends in `exec docker run`, so the exit status
+# is Docker's (or the app's, with --no-docker).
+
+unset CDPATH
+
+IMAGE_REPO=localhost/sextile
+LABEL=io.github.cruiserxyz.sextile.launcher
+COMMIT_LABEL=io.github.cruiserxyz.sextile.commit
+MIN_DOCKER=28
+DEFAULT_PORT=5307
+GET_DOCKER=https://docs.docker.com/get-docker/
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 2
+}
+
+# step: say what the launcher is doing now, so no wait is ever silent. Only
+# for a person: printed when stderr is a terminal, never into a pipe or log.
+step() {
+  [ -t 2 ] && printf '%s\n' "$*" >&2
+  return 0
+}
+
+# Where this script lives, as a physical path. Not readlink -f / realpath:
+# neither exists on stock macOS.
+here=${BASH_SOURCE[0]:-$0}
+case $here in
+  */*) here_dir=${here%/*} ;;
+  *) here_dir=. ;;
+esac
+[ -n "$here_dir" ] || here_dir=/
+ROOT=$(cd -- "$here_dir" >/dev/null 2>&1 && pwd -P) || die "cannot find the folder this script is in"
+
+usage() {
+  local l
+  while IFS= read -r l; do printf '%s\n' "$l"; done <<'EOF'
+usage: ./sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [-- APP-ARGS...]
+       ./sextile doctor [--charts-dir DIR] [--port N]
+
+Builds the Docker image for this checkout when it is missing, then runs Sextile
+in it with your charts folder mounted.
+
+  --charts-dir DIR  use DIR as the charts folder for this run only
+  --port N          publish the preview on 127.0.0.1:N (1024-65535; default 5307,
+                    or the next free port when 5307 is taken)
+  --rebuild         build the image again even if it is present
+  --no-open         do not open the wheel in your browser on the first Ctrl+X
+  --no-docker       build and run this checkout with the host's go and astrolog
+                    instead of Docker
+  doctor            say what is wrong, without changing anything
+  --                everything after it goes to Sextile unchanged
+EOF
+}
+
+# ---------------------------------------------------------------- arguments
+
+MODE=launch
+PORT=$DEFAULT_PORT
+PORT_SET=
+CHARTS_ARG=
+CHARTS_SET=
+REBUILD=
+NO_OPEN=
+NATIVE=
+SEP=
+FWD=()
+
+forward() {
+  case $1 in
+    --charts-dir | --charts-dir=* | -charts-dir | -charts-dir=*)
+      die "$1 would override the charts folder this launcher mounts; use ./sextile --charts-dir DIR (before any --)" ;;
+  esac
+  FWD+=("$1")
+}
+
+if [ $# -gt 0 ] && [ "$1" = doctor ]; then
+  MODE=doctor
+  shift
+fi
+
+while [ $# -gt 0 ]; do
+  arg=$1
+  shift
+  if [ -n "$SEP" ]; then
+    forward "$arg"
+    continue
+  fi
+  case $arg in
+    --)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--')"
+      SEP=1 ;;
+    --help | -h)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '$arg')"
+      usage
+      exit 0 ;;
+    --rebuild)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--rebuild')"
+      [ -n "$REBUILD" ] && die "--rebuild was given twice"
+      REBUILD=1 ;;
+    --no-open)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--no-open')"
+      [ -n "$NO_OPEN" ] && die "--no-open was given twice"
+      NO_OPEN=1 ;;
+    --no-docker)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--no-docker')"
+      [ -n "$NATIVE" ] && die "--no-docker was given twice"
+      NATIVE=1 ;;
+    --charts-dir | --charts-dir=*)
+      [ -n "$CHARTS_SET" ] && die "--charts-dir was given twice"
+      if [ "$arg" = --charts-dir ]; then
+        [ $# -gt 0 ] || die "--charts-dir needs a folder"
+        CHARTS_ARG=$1
+        shift
+      else
+        CHARTS_ARG=${arg#--charts-dir=}
+      fi
+      [ -n "$CHARTS_ARG" ] || die "--charts-dir needs a folder"
+      CHARTS_SET=1 ;;
+    --port | --port=*)
+      [ -n "$PORT_SET" ] && die "--port was given twice"
+      if [ "$arg" = --port ]; then
+        [ $# -gt 0 ] || die "--port needs a number"
+        PORT=$1
+        shift
+      else
+        PORT=${arg#--port=}
+      fi
+      [ -n "$PORT" ] || die "--port needs a number"
+      PORT_SET=1 ;;
+    *)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '$arg')"
+      forward "$arg" ;;
+  esac
+done
+
+case $PORT in
+  [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
+  *) die "--port '$PORT' is not a number from 1024 to 65535" ;;
+esac
+if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
+  die "--port '$PORT' is not a number from 1024 to 65535"
+fi
+
+# ------------------------------------------------------------------- checks
+#
+# Each check_* sets ST (ok | note | FAIL) and MSG. A launch dies with MSG on
+# FAIL; doctor prints one line per check.
+
+ST=
+MSG=
+DMSG= # doctor's wording, when it differs from the refusal's
+
+check_docker() {
+  local p
+  if p=$(command -v docker 2>/dev/null) && [ -n "$p" ]; then
+    ST=ok
+    MSG="found at $p"
+  else
+    ST=FAIL
+    MSG="Docker was not found on PATH; install it from $GET_DOCKER"
+  fi
+}
+
+SERVER_VERSION=
+check_daemon() {
+  local out rc major
+  SERVER_VERSION=
+  out=$(docker version --format '{{.Server.Version}}' 2>&1)
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    ST=FAIL
+    case $out in
+      *ermission*denied* | *EACCES*)
+        MSG="you cannot reach the Docker daemon (permission denied on its socket); join the docker group (https://docs.docker.com/engine/install/linux-postinstall/) or start Docker Desktop" ;;
+      *)
+        MSG="Docker is not running; start Docker (Docker Desktop, or the docker service) and try again" ;;
+    esac
+    return
+  fi
+  SERVER_VERSION=$out
+  major=${out%%.*}
+  case $major in
+    '' | *[!0-9]*)
+      ST=FAIL
+      MSG="Docker reported the version '$out', which is not a number; Sextile needs Docker $MIN_DOCKER or newer"
+      return ;;
+  esac
+  if [ "$major" -lt "$MIN_DOCKER" ]; then
+    ST=FAIL
+    MSG="Docker $out is too old; Sextile needs Docker $MIN_DOCKER or newer"
+    return
+  fi
+  ST=ok
+  MSG="version $out (needs $MIN_DOCKER+)"
+}
+
+ENDPOINT=
+check_endpoint() {
+  if [ -n "${DOCKER_HOST-}" ]; then
+    ENDPOINT=$DOCKER_HOST
+  else
+    ENDPOINT=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
+  fi
+  case $ENDPOINT in
+    unix://*)
+      ST=ok
+      MSG=$ENDPOINT ;;
+    '')
+      ST=FAIL
+      MSG="only a local Docker is supported, and its endpoint could not be read (docker context inspect)" ;;
+    *)
+      ST=FAIL
+      MSG="only a local Docker is supported (this endpoint is $ENDPOINT): Sextile mounts a folder of this machine, which a remote Docker cannot see" ;;
+  esac
+}
+
+DESCRIBE=
+COMMIT=
+TAG=
+IMAGE=
+ALWAYS=
+check_tag() {
+  local dirty
+  DESCRIBE=local
+  COMMIT=
+  TAG=local
+  ALWAYS=
+  ST=ok
+  if [ -e "$ROOT/.git" ] && command -v git >/dev/null 2>&1; then
+    # `describe --dirty` can refresh and rewrite .git/index when file times are
+    # racy; the launcher writes nothing in the clone, so "dirty" is asked of
+    # `status`, which takes no optional locks under GIT_OPTIONAL_LOCKS=0.
+    # The result is the name `git describe --tags --always --dirty` gives.
+    DESCRIBE=$(GIT_OPTIONAL_LOCKS=0 git -C "$ROOT" describe --tags --always 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$DESCRIBE" ]; then
+      ST=FAIL
+      MSG="git describe failed in $ROOT, so the image cannot be named; run it there to see why"
+      return
+    fi
+    COMMIT=$(GIT_OPTIONAL_LOCKS=0 git -C "$ROOT" rev-parse HEAD 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$COMMIT" ]; then
+      ST=FAIL
+      MSG="git rev-parse HEAD failed in $ROOT, so the image cannot be identified; run it there to see why"
+      return
+    fi
+    dirty=$(GIT_OPTIONAL_LOCKS=0 git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)
+    if [ $? -ne 0 ]; then
+      ST=FAIL
+      MSG="git status failed in $ROOT, so the image cannot be named; run it there to see why"
+      return
+    fi
+    [ -z "$dirty" ] || DESCRIBE=$DESCRIBE-dirty
+    TAG=${DESCRIBE//\//-}
+    TAG=${TAG//[!A-Za-z0-9_.-]/-}
+  fi
+  IMAGE=$IMAGE_REPO:$TAG
+  case $TAG in
+    local | *-dirty) ALWAYS=1 ;;
+  esac
+  MSG=$IMAGE
+}
+
+busy_port() {
+  # A TCP connect to 127.0.0.1:$1 (bash's /dev/tcp; no ss or lsof needed),
+  # given two seconds. A connect nobody answers (a full listen queue, some
+  # WSL networking modes) otherwise waits out the kernel's SYN retries, about
+  # two minutes; an unanswered port is reported free.
+  local pid i=0
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$i" -ge 20 ]; then
+      kill "$pid" 2>/dev/null
+      { wait "$pid"; } 2>/dev/null
+      return 1
+    fi
+    # Without a working sleep the old unbounded wait is the honest answer.
+    sleep 0.1 2>/dev/null || { wait "$pid"; return; }
+    i=$((i + 1))
+  done
+  wait "$pid"
+}
+
+check_port() {
+  local next
+  if busy_port "$PORT"; then
+    next=$((PORT + 1))
+    [ "$PORT" -eq 65535 ] && next=65534
+    ST=FAIL
+    MSG="port $PORT is in use; run ./sextile --port $next"
+    DMSG="$PORT in use; ./sextile --port $next"
+  else
+    ST=ok
+    MSG="$PORT is free"
+  fi
+}
+
+# pick_port moves PORT to the first free port among the next hundred and says
+# so on one line; it fails, leaving PORT alone, when all of them are in use.
+pick_port() {
+  local p=$((PORT + 1))
+  while [ "$p" -le 65535 ] && [ "$p" -le $((PORT + 100)) ]; do
+    if ! busy_port "$p"; then
+      printf 'port %s is in use; this window uses port %s\n' "$PORT" "$p" >&2
+      PORT=$p
+      return 0
+    fi
+    p=$((p + 1))
+  done
+  return 1
+}
+
+# ------------------------------------------------------------- the browser
+
+# The wheel is served by Sextile inside the container, from the first Ctrl+X on.
+# The launcher knows the port, so it can say where the wheel will be and open
+# it once it is there. wslview (WSL) wins over xdg-open (Linux); with neither,
+# the printed address is all.
+OPENER=
+find_opener() {
+  local c
+  OPENER=
+  for c in wslview xdg-open; do
+    if command -v "$c" >/dev/null 2>&1; then
+      OPENER=$c
+      return
+    fi
+  done
+}
+
+# wheel_answers PORT: something speaking HTTP answers on 127.0.0.1:PORT. A bare
+# connect is not enough: Docker accepts on a published port before anything
+# listens behind it, then drops the connection without a word. Bounded to
+# three seconds like busy_port, so an unanswered SYN cannot stall the waiter.
+wheel_answers() {
+  local pid i=0
+  (
+    exec 3<>"/dev/tcp/127.0.0.1/$1" || exit 1
+    printf 'GET /version HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 || exit 1
+    line=
+    IFS= read -r -t 2 line <&3
+    case $line in
+      HTTP/*) exit 0 ;;
+    esac
+    exit 1
+  ) >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$i" -ge 30 ]; then
+      kill "$pid" 2>/dev/null
+      { wait "$pid"; } 2>/dev/null
+      return 1
+    fi
+    sleep 0.1 2>/dev/null || { wait "$pid"; return; }
+    i=$((i + 1))
+  done
+  wait "$pid"
+}
+
+# start_wheel_opener URL: a background waiter that polls the port once a second
+# (SEXTILE_OPEN_POLL is the test seam for the interval) and, the first time the
+# wheel answers, opens URL with $OPENER, once. It lives exactly as long as this
+# process: `exec docker run` keeps the process id, so when Docker exits the
+# waiter's next look finds the parent gone and it ends. Its output goes
+# nowhere, so it can never hold a pipe the caller is reading.
+start_wheel_opener() {
+  local url=$1 parent=$$
+  (
+    while kill -0 "$parent" 2>/dev/null; do
+      if wheel_answers "$PORT"; then
+        "$OPENER" "$url" >/dev/null 2>&1 </dev/null
+        exit 0
+      fi
+      sleep "${SEXTILE_OPEN_POLL:-1}" 2>/dev/null || exit 0
+    done
+  ) >/dev/null 2>&1 </dev/null &
+}
+
+# start_wheel: say where the wheel will be and, unless --no-open, start the
+# waiter that opens it. The last step before the exec of either run.
+start_wheel() {
+  step "starting Sextile (charts: $CHARTS_DIR)..."
+  find_opener
+  if [ -n "$NO_OPEN" ]; then
+    step "Wheel: http://localhost:$PORT; open it yourself after the first Ctrl+X"
+  elif [ -z "$OPENER" ]; then
+    step "Wheel: http://localhost:$PORT; open it yourself after the first Ctrl+X (no wslview or xdg-open found)"
+  else
+    step "Wheel: http://localhost:$PORT; your browser opens on the first Ctrl+X"
+    start_wheel_opener "http://localhost:$PORT/"
+  fi
+}
+
+valid_zone() {
+  case $1 in
+    '' | /* | *..* | *[!A-Za-z0-9_+./-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# exported NAME: NAME is in the environment (set, even if empty). Not just set:
+# bash itself makes TERM=dumb, unexported, when the host has none.
+exported() {
+  local out flags
+  out=$(declare -p "$1" 2>/dev/null) || return 1
+  flags=${out#declare -}
+  flags=${flags%% *}
+  case $flags in
+    *x*) return 0 ;;
+  esac
+  return 1
+}
+
+ZONE=
+find_zone() {
+  # SEXTILE_TEST_SYSROOT exists only for tools/launcher's tests: it re-roots
+  # /etc/timezone, /etc/localtime, /usr/share/zoneinfo and the two system
+  # Astrolog share folders (find_share).
+  local sys=${SEXTILE_TEST_SYSROOT-} z link
+  ZONE=
+  if [ -n "${TZ-}" ] && valid_zone "$TZ" && [ -f "$sys/usr/share/zoneinfo/$TZ" ]; then
+    ZONE=$TZ
+    return
+  fi
+  if [ -r "$sys/etc/timezone" ]; then
+    IFS= read -r z <"$sys/etc/timezone"
+    if valid_zone "$z"; then
+      ZONE=$z
+      return
+    fi
+  fi
+  if [ -L "$sys/etc/localtime" ]; then
+    link=$(readlink "$sys/etc/localtime")
+    case $link in
+      *zoneinfo/*)
+        z=${link#*zoneinfo/}
+        if valid_zone "$z"; then
+          ZONE=$z
+          return
+        fi ;;
+    esac
+  fi
+}
+
+check_zone() {
+  find_zone
+  if [ -n "$ZONE" ]; then
+    ST=ok
+    MSG=$ZONE
+  else
+    ST=note
+    MSG="none found; the first run will not propose a city"
+  fi
+}
+
+# --------------------------------------------------------- charts and config
+
+unmountable() {
+  case $1 in
+    *,* | *$'\n'*) return 0 ;;
+  esac
+  return 1
+}
+
+unmountable_msg() {
+  printf 'Docker cannot mount a folder whose path holds a comma or a newline: %s' "${1//$'\n'/\\n}"
+}
+
+CONF_DIR=
+CONF=
+CONF_ERR=
+
+# resolve_path P: the physical path of P, which need not exist (its nearest
+# existing parent is resolved and the rest is appended).
+resolve_path() {
+  local p=$1 rest= d
+  while [ ! -d "$p" ]; do
+    case $p in
+      */*)
+        rest=/${p##*/}$rest
+        p=${p%/*}
+        [ -n "$p" ] || p=/ ;;
+      *)
+        rest=/$p$rest
+        p=.
+        break ;;
+    esac
+  done
+  d=$(cd -- "$p" >/dev/null 2>&1 && pwd -P) || d=$p
+  printf '%s%s' "${d%/}" "$rest"
+}
+
+# inside_clone P: P, physically resolved, is the clone or below it. Client
+# charts never belong in the checkout (a commit or a Docker build context would
+# sweep them up).
+inside_clone() {
+  local r
+  r=$(resolve_path "$1")
+  case $r/ in
+    "$ROOT"/*) return 0 ;;
+  esac
+  return 1
+}
+
+inside_clone_msg() {
+  printf '%s is inside the Sextile checkout (%s); keep client charts outside it' "$1" "$ROOT"
+}
+
+# config_location: sets CONF_DIR and CONF, or CONF_ERR (and returns 1).
+config_location() {
+  local base resolved
+  CONF_ERR=
+  if [ -n "${XDG_CONFIG_HOME-}" ]; then
+    case $XDG_CONFIG_HOME in
+      /*) base=$XDG_CONFIG_HOME ;;
+      *)
+        CONF_ERR="XDG_CONFIG_HOME is not an absolute path ($XDG_CONFIG_HOME); set it to one or unset it"
+        return 1 ;;
+    esac
+  else
+    case ${HOME-} in
+      /*) base=$HOME/.config ;;
+      *)
+        CONF_ERR="HOME is not an absolute path (${HOME-unset}), so there is nowhere to keep the config; use --charts-dir DIR"
+        return 1 ;;
+    esac
+  fi
+  base=${base%/}
+  CONF_DIR=$base/sextile
+  CONF=$CONF_DIR/launcher.conf
+  if [ -L "$CONF_DIR" ]; then
+    CONF_ERR="the config folder $CONF_DIR is a symlink; the launcher will not read or write through it"
+    return 1
+  fi
+  if [ -L "$CONF" ]; then
+    CONF_ERR="the config file $CONF is a symlink; the launcher will not read or write through it"
+    return 1
+  fi
+  resolved=$(resolve_path "$CONF_DIR")
+  case $resolved/ in
+    "$ROOT"/*)
+      CONF_ERR="the config location $CONF is inside the Sextile checkout ($ROOT); set XDG_CONFIG_HOME to a folder outside it"
+      return 1 ;;
+  esac
+  return 0
+}
+
+CF_ST=
+CF_DIR=
+# read_config: CF_ST is absent, valid or invalid; invalid sets CONF_ERR.
+read_config() {
+  local line n=0 val= t dir why
+  CF_DIR=
+  CONF_ERR=
+  if [ ! -e "$CONF" ]; then
+    CF_ST=absent
+    return
+  fi
+  CF_ST=invalid
+  if [ ! -f "$CONF" ] || [ ! -r "$CONF" ]; then
+    CONF_ERR="the config file $CONF is not a readable file; delete it to be asked again"
+    return
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+      '' | '#'*) continue ;;
+    esac
+    t=${line//[[:space:]]/}
+    [ -n "$t" ] || continue
+    n=$((n + 1))
+    val=$line
+  done <"$CONF"
+  if [ "$n" -ne 1 ]; then
+    CONF_ERR="the config file $CONF is not valid: it must hold exactly one line, charts-dir=<absolute folder>; fix it or delete it to be asked again"
+    return
+  fi
+  case $val in
+    charts-dir=/*) dir=${val#charts-dir=} ;;
+    *)
+      CONF_ERR="the config file $CONF is not valid: the line must be charts-dir=<absolute folder>; fix it or delete it to be asked again"
+      return ;;
+  esac
+  if unmountable "$dir"; then
+    why=$(unmountable_msg "$dir")
+    CONF_ERR="the config file $CONF names a folder that cannot be used: $why"
+    return
+  fi
+  if inside_clone "$dir"; then
+    CONF_ERR="$(inside_clone_msg "$dir"). It is remembered in $CONF; fix or delete that file"
+    return
+  fi
+  if [ ! -d "$dir" ]; then
+    CONF_ERR="the remembered charts folder $dir (from $CONF) does not exist; Sextile will not create it again, in case a disk is not mounted. Restore it, fix the file, or delete the file to be asked again"
+    return
+  fi
+  CF_ST=valid
+  CF_DIR=$dir
+}
+
+CHARTS_DIR=
+CHARTS_SRC=
+# given_dir P: the physical path of the existing folder P, in ABS; or CONF_ERR.
+ABS=
+given_dir() {
+  ABS=
+  if unmountable "$1"; then
+    CONF_ERR=$(unmountable_msg "$1")
+    return 1
+  fi
+  if [ ! -d "$1" ]; then
+    CONF_ERR="--charts-dir $1 is not an existing folder (the launcher does not create it for a single run)"
+    return 1
+  fi
+  ABS=$(cd -- "$1" >/dev/null 2>&1 && pwd -P) || {
+    CONF_ERR="--charts-dir $1 cannot be entered"
+    return 1
+  }
+  if unmountable "$ABS"; then
+    CONF_ERR=$(unmountable_msg "$ABS")
+    return 1
+  fi
+  if inside_clone "$ABS"; then
+    CONF_ERR=$(inside_clone_msg "$1")
+    return 1
+  fi
+  return 0
+}
+
+# decide_charts: sets CH_ST and CH_MSG for the "charts folder" line, CF_* for
+# the "config" line, and CHARTS_DIR / CHARTS_SRC (flag, config or none).
+CH_ST=
+CH_MSG=
+CFL_ST=
+CFL_MSG=
+decide_charts() {
+  CHARTS_DIR=
+  CHARTS_SRC=none
+  if [ -n "$CHARTS_SET" ]; then
+    CFL_ST=note
+    CFL_MSG="not read (--charts-dir given)"
+    if given_dir "$CHARTS_ARG"; then
+      CHARTS_DIR=$ABS
+      CHARTS_SRC=flag
+      CH_ST=ok
+      CH_MSG="$ABS (from --charts-dir)"
+    else
+      CH_ST=FAIL
+      CH_MSG=$CONF_ERR
+    fi
+    return
+  fi
+  if ! config_location; then
+    CFL_ST=FAIL
+    CFL_MSG=$CONF_ERR
+    CH_ST=FAIL
+    CH_MSG=$CONF_ERR
+    return
+  fi
+  read_config
+  case $CF_ST in
+    invalid)
+      CFL_ST=FAIL
+      CFL_MSG=$CONF_ERR
+      CH_ST=FAIL
+      CH_MSG=$CONF_ERR ;;
+    valid)
+      CFL_ST=ok
+      CFL_MSG=$CONF
+      CHARTS_DIR=$CF_DIR
+      CHARTS_SRC=config
+      CH_ST=ok
+      CH_MSG="$CF_DIR (remembered in the config)" ;;
+    *)
+      CFL_ST=note
+      CFL_MSG="$CONF does not exist yet; the first run creates it"
+      if [ -t 0 ] && [ -t 2 ]; then
+        CH_ST=note
+        CH_MSG="none chosen yet; the first run asks"
+      else
+        CH_ST=FAIL
+        CH_MSG="no charts folder is chosen and there is no terminal to ask; run ./sextile --charts-dir DIR"
+      fi ;;
+  esac
+}
+
+# make_dir P: create P and its missing parents, each created folder 0700.
+make_dir() {
+  [ -d "$1" ] && return 0
+  local parent=${1%/*}
+  [ -n "$parent" ] || parent=/
+  make_dir "$parent" || return 1
+  mkdir -m 0700 -- "$1"
+}
+
+DIR_STATE=
+# prepare_dir P: validate P (absolute) for the prompt, create it when missing.
+# Any refusal exits 2 before anything is created. Sets ABS and DIR_STATE.
+prepare_dir() {
+  local p=$1 anc
+  if unmountable "$p"; then
+    die "$(unmountable_msg "$p")"
+  fi
+  if inside_clone "$p"; then
+    die "$(inside_clone_msg "$p")"
+  fi
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    [ -d "$p" ] || die "$p exists and is not a folder"
+    DIR_STATE=exists
+  else
+    anc=$p
+    while [ ! -e "$anc" ] && [ ! -L "$anc" ]; do
+      anc=${anc%/*}
+      [ -n "$anc" ] || anc=/
+    done
+    if [ ! -d "$anc" ] || [ ! -w "$anc" ] || [ ! -x "$anc" ]; then
+      die "cannot create $p: $anc is not a folder you can write in"
+    fi
+    make_dir "$p" || die "cannot create $p"
+    DIR_STATE=created
+  fi
+  ABS=$(cd -- "$p" >/dev/null 2>&1 && pwd -P) || die "cannot enter $p"
+  if unmountable "$ABS"; then
+    die "$(unmountable_msg "$ABS")"
+  fi
+  if inside_clone "$ABS"; then
+    die "$(inside_clone_msg "$p")"
+  fi
+}
+
+describe_folder() {
+  local d=$1 f n=0 magic
+  if [ ! -d "$d" ]; then
+    printf 'new folder'
+    return
+  fi
+  # A chart is known by its first three bytes (Astrolog's @AI header), never by
+  # its name. The glob skips dotfiles, as Sextile does. A NUL among the three
+  # bytes is dropped by the shell, so the comparison can only hold for exactly
+  # "@AI"; the braces keep the shell's own warning about it off the screen.
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    magic=
+    { magic=$(head -c 3 -- "$f"); } 2>/dev/null
+    if [ "$magic" = '@AI' ]; then
+      n=$((n + 1))
+    fi
+  done
+  if [ "$n" -eq 0 ]; then
+    printf 'exists, no charts yet'
+  elif [ "$n" -eq 1 ]; then
+    printf 'holds 1 chart'
+  else
+    printf 'holds %s charts' "$n"
+  fi
+}
+
+write_config() {
+  local tmp
+  make_dir "$CONF_DIR" || die "cannot create the config folder $CONF_DIR"
+  [ -L "$CONF_DIR" ] && die "the config folder $CONF_DIR is a symlink; the launcher will not write through it"
+  chmod 700 "$CONF_DIR" || die "cannot make the config folder $CONF_DIR private (chmod 700 failed)"
+  [ -L "$CONF" ] && die "the config file $CONF is a symlink; the launcher will not write through it"
+  tmp=$(mktemp "$CONF_DIR/.launcher.conf.XXXXXX") || die "cannot write in the config folder $CONF_DIR"
+  # The temporary file is the launcher's own; every failure path removes it.
+  if ! printf '# written by ./sextile; delete this file to be asked again\ncharts-dir=%s\n' "$1" >"$tmp"; then
+    rm -f -- "$tmp"
+    die "cannot write the config file $CONF"
+  fi
+  if ! chmod 600 "$tmp"; then
+    rm -f -- "$tmp"
+    die "cannot make the config file $CONF private (chmod 600 failed)"
+  fi
+  if ! mv -f -- "$tmp" "$CONF"; then
+    rm -f -- "$tmp"
+    die "cannot write the config file $CONF"
+  fi
+}
+
+# tilde: a path under $HOME as ~/..., any other path as it is.
+tilde() {
+  case $1 in
+    "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# data_home: $XDG_DATA_HOME when it is absolute, else ~/.local/share; empty
+# when that folder does not exist (a home without the common Linux layout).
+data_home() {
+  local d=$HOME/.local/share
+  case ${XDG_DATA_HOME-} in
+    /*) d=$XDG_DATA_HOME ;;
+  esac
+  [ -d "$d" ] && printf '%s' "$d"
+}
+
+prompt_charts() {
+  local tries=0 ans path choice state n i other range dh
+  # Suggested folders, in order; "another folder" is always the last number.
+  # ~/.local/share/sextile/charts is bin/sextile's own default, offered on
+  # Linux when the home has that layout, so both ways of running agree.
+  local opts=("$HOME/.charts")
+  case ${OSTYPE-} in
+    linux*)
+      dh=$(data_home)
+      [ -n "$dh" ] && opts+=("$dh/sextile/charts") ;;
+  esac
+  [ -d "$HOME/Documents" ] && opts+=("$HOME/Documents/charts")
+  n=${#opts[@]}
+  other=$((n + 1))
+  range=1
+  i=2
+  while [ "$i" -lt "$other" ]; do
+    range="$range, $i"
+    i=$((i + 1))
+  done
+  range="$range or $other"
+  {
+    printf 'Sextile keeps your charts, Astrolog chart files, in one folder. Which folder?\n'
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      printf '  %s) %-30s%s\n' "$((i + 1))" "$(tilde "${opts[$i]}")" "$(describe_folder "${opts[$i]}")"
+      i=$((i + 1))
+    done
+    printf '  %s) another folder\n' "$other"
+  } >&2
+  while :; do
+    printf 'Choose [1]: ' >&2
+    if ! IFS= read -r ans; then
+      printf '\n' >&2
+      die "no answer; nothing was written. Run ./sextile --charts-dir DIR to choose without being asked"
+    fi
+    [ -n "$ans" ] || ans=1
+    path=
+    choice=
+    case $ans in
+      "$other") choice=other ;;
+      "$other "*)
+        choice=other
+        path=${ans#"$other" } ;;
+      [1-9])
+        [ "$ans" -le "$n" ] && path=${opts[$((ans - 1))]} ;;
+    esac
+    if [ "$choice" = other ] && [ -z "$path" ]; then
+      printf 'Folder: ' >&2
+      if ! IFS= read -r path; then
+        printf '\n' >&2
+        die "no answer; nothing was written"
+      fi
+    fi
+    if [ -n "$path" ]; then
+      case $path in
+        '~') path=$HOME ;;
+        '~/'*) path=$HOME/${path#'~/'} ;;
+        '~'*) die "'$path': only ~ and ~/... are understood; give a path" ;;
+      esac
+      case $path in
+        /*) ;;
+        *) path=$PWD/$path ;;
+      esac
+      while [ "${#path}" -gt 1 ] && [ "${path%/}" != "$path" ]; do
+        path=${path%/}
+      done
+      prepare_dir "$path"
+      state=$DIR_STATE
+      CHARTS_DIR=$ABS
+      CHARTS_SRC=prompt
+      write_config "$CHARTS_DIR"
+      printf 'charts folder: %s (%s); remembered in %s; --charts-dir DIR uses another for one run\n' \
+        "$CHARTS_DIR" "$state" "$CONF" >&2
+      return
+    fi
+    tries=$((tries + 1))
+    if [ "$tries" -ge 3 ]; then
+      die "no valid answer; nothing was written"
+    fi
+    printf 'Please answer %s.\n' "$range" >&2
+  done
+}
+
+# eligible_tags: the one answer to "which older images does this launcher
+# remove?", used by prune_images (which removes them) and by doctor (which
+# counts them), so the two cannot disagree. Sets ELIG_TAGS (one
+# $IMAGE_REPO:tag per line), ELIG_N (how many) and ELIG_FAILED (tags it could
+# not judge). A tag is eligible when its image carries the launcher's label,
+# the image is not the current image's id, and no container (running or
+# stopped) uses that image. Returns 1 when the images cannot be listed.
+eligible_tags() {
+  local out id ref cur_id= busy busy_ids=" " free_ids=" "
+  ELIG_TAGS=
+  ELIG_N=0
+  ELIG_FAILED=0
+  out=$(docker image ls --filter "label=$LABEL=1" --format '{{.ID}} {{.Repository}}:{{.Tag}}' "$IMAGE_REPO" 2>/dev/null) || return 1
+  while read -r id ref; do
+    [ "$ref" = "$IMAGE" ] && cur_id=$id
+  done <<EOF
+$out
+EOF
+  while read -r id ref; do
+    [ -n "$id" ] || continue
+    [ "$ref" = "$IMAGE" ] && continue
+    [ "$id" = "$cur_id" ] && continue
+    case $ref in "$IMAGE_REPO":*) ;; *) continue ;; esac
+    case $ref in *:'<none>') continue ;; esac
+    case $busy_ids in *" $id "*) continue ;; esac
+    case $free_ids in
+      *" $id "*) ;;
+      *)
+        busy=$(docker ps -a -q --filter "ancestor=$id" 2>/dev/null </dev/null) || {
+          ELIG_FAILED=$((ELIG_FAILED + 1))
+          continue
+        }
+        if [ -n "$busy" ]; then
+          busy_ids="$busy_ids$id "
+          continue
+        fi
+        free_ids="$free_ids$id " ;;
+    esac
+    ELIG_TAGS="$ELIG_TAGS$ref"$'\n'
+    ELIG_N=$((ELIG_N + 1))
+  done <<EOF
+$out
+EOF
+  return 0
+}
+
+# prune_images: once this launch's image is ready, remove the tags
+# eligible_tags names, one `docker image rm REPO:TAG` each, never -f. (By id,
+# Docker refuses an image that has several tags; by tag it untags, and removes
+# the image with its last tag.) A failure is one stderr line and never stops
+# the launch.
+prune_images() {
+  local ref removed=0 failed
+  eligible_tags || {
+    printf 'could not list older sextile images; they stay for now\n' >&2
+    return 0
+  }
+  failed=$ELIG_FAILED
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    if docker image rm "$ref" >/dev/null 2>&1 </dev/null; then
+      removed=$((removed + 1))
+    else
+      failed=$((failed + 1))
+    fi
+  done <<EOF
+$ELIG_TAGS
+EOF
+  [ "$removed" -gt 0 ] && printf 'removed %s older sextile images\n' "$removed" >&2
+  [ "$failed" -gt 0 ] && printf 'could not remove %s older sextile images; they stay for now\n' "$failed" >&2
+  return 0
+}
+
+# ------------------------------------------------------------- --no-docker
+
+GO_BIN=
+ASTRO_BIN=
+ASTRO_ON_PATH=
+# find_native: GO_BIN and ASTRO_BIN, empty when missing. astrolog is looked for
+# on PATH, then in ~/.local/bin, where scripts/build-astrolog puts it
+# (ASTRO_ON_PATH is empty for that one).
+find_native() {
+  GO_BIN=$(command -v go 2>/dev/null) || GO_BIN=
+  ASTRO_BIN=
+  ASTRO_ON_PATH=
+  if ASTRO_BIN=$(command -v astrolog 2>/dev/null) && [ -n "$ASTRO_BIN" ]; then
+    ASTRO_ON_PATH=1
+    return
+  fi
+  ASTRO_BIN=
+  case ${HOME-} in
+    /*)
+      if [ -f "$HOME/.local/bin/astrolog" ] && [ -x "$HOME/.local/bin/astrolog" ]; then
+        ASTRO_BIN=$HOME/.local/bin/astrolog
+      fi ;;
+  esac
+}
+
+SHARE_DIR=
+# find_share: Astrolog's share folder (its atlas and ephemeris files), the
+# first of the places scripts/build-astrolog and the packages use that holds
+# one of them; empty when there is none. SEXTILE_TEST_SYSROOT (tests only)
+# re-roots the two system places, as for find_zone.
+find_share() {
+  local sys=${SEXTILE_TEST_SYSROOT-} d
+  SHARE_DIR=
+  for d in "~/.local/share/astrolog" "$sys/usr/local/share/astrolog" "$sys/usr/share/astrolog"; do
+    case $d in
+      '~'*)
+        case ${HOME-} in
+          /*) d=$HOME${d#'~'} ;;
+          *) continue ;;
+        esac ;;
+    esac
+    if [ -f "$d/atlas.as" ] || [ -f "$d/sepl_18.se1" ]; then
+      SHARE_DIR=$d
+      return
+    fi
+  done
+}
+
+# native_build: the app, built from this checkout, ready at NATIVE_BIN. The
+# build goes to a temporary name in its folder and is moved into place, so an
+# interrupted build never leaves a half binary that a later run would trust.
+NATIVE_BIN=
+NATIVE_MARK=.built-by-sextile-launcher
+native_build() {
+  local base dir p need= tmp out rc
+  case ${XDG_CACHE_HOME:-} in
+    '')
+      case ${HOME-} in
+        /*) base=$HOME/.cache ;;
+        *) die "HOME is not an absolute path (${HOME-unset}), so there is nowhere to keep the build; set XDG_CACHE_HOME to an absolute folder" ;;
+      esac ;;
+    /*) base=$XDG_CACHE_HOME ;;
+    *) die "XDG_CACHE_HOME is not an absolute path ($XDG_CACHE_HOME); set it to one or unset it" ;;
+  esac
+  base=${base%/}
+  dir=$base/sextile/native/$TAG
+  NATIVE_BIN=$dir/sextile
+  for p in "$base/sextile" "$base/sextile/native" "$dir" "$NATIVE_BIN"; do
+    [ -L "$p" ] && die "$p is a symlink; the launcher will not build or run through it"
+  done
+  case $(resolve_path "$dir")/ in
+    "$ROOT"/*) die "the build folder $dir is inside the Sextile checkout ($ROOT); set XDG_CACHE_HOME to a folder outside it" ;;
+  esac
+  if [ -n "$ALWAYS" ]; then
+    need=1
+    if [ "$TAG" = local ]; then
+      printf 'native build of local (no git history, so every start rebuilds)\n' >&2
+    else
+      printf 'native build of %s, uncommitted edits included\n' "$DESCRIBE" >&2
+    fi
+  fi
+  [ -n "$REBUILD" ] && need=1
+  if [ ! -f "$NATIVE_BIN" ] || [ ! -x "$NATIVE_BIN" ]; then
+    need=1
+  fi
+  if [ -z "$need" ]; then
+    step "build $NATIVE_BIN is ready"
+    return
+  fi
+  make_dir "$dir" || die "cannot create the build folder $dir"
+  tmp=$dir/.sextile.$$
+  rm -f -- "$tmp"
+  step "building Sextile with $GO_BIN; the first build takes about a minute, later ones seconds..."
+  out=$(cd -- "$ROOT" && CGO_ENABLED=0 "$GO_BIN" build -trimpath -ldflags "-X main.version=$DESCRIBE" -o "$tmp" ./cmd/sextile 2>&1)
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    rm -f -- "$tmp"
+    printf '%s\n' "$out" >&2
+    printf 'the native build failed (exit %s); Sextile was not started\n' "$rc" >&2
+    exit "$rc"
+  fi
+  # The marker says this folder is the launcher's, which prune_native checks
+  # before it removes anything. It goes down before the binary, so no binary
+  # of ours is ever left without one.
+  if ! : >"$dir/$NATIVE_MARK"; then
+    rm -f -- "$tmp"
+    die "cannot write $dir/$NATIVE_MARK"
+  fi
+  if ! mv -f -- "$tmp" "$NATIVE_BIN"; then
+    rm -f -- "$tmp"
+    die "cannot move the new build to $NATIVE_BIN"
+  fi
+  prune_native "${dir%/*}"
+}
+
+# only_build_files DIR: true when DIR holds exactly `sextile` and the marker,
+# both regular files and not symlinks.
+only_build_files() {
+  local e n=0
+  for e in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    case ${e##*/} in
+      sextile | "$NATIVE_MARK") ;;
+      *) return 1 ;;
+    esac
+    { [ -L "$e" ] || [ ! -f "$e" ]; } && return 1
+    n=$((n + 1))
+  done
+  [ "$n" -eq 2 ]
+}
+
+# prune_native NATIVE_FOLDER: once a build is in place, remove the other build
+# folders under it that this launcher made, as prune_images does for images;
+# this TAG's folder is never touched. A folder qualifies when it is a direct
+# child (not a symlink) named with the TAG characters and holds exactly the
+# binary and the marker (only_build_files). The removal happens inside the
+# folder, entered with cd -P and proved to be the folder it was named for, so
+# a name swapped for a symlink after the check cannot redirect it; it is those
+# two files and rmdir, never rm -r. A failure is one stderr line and never
+# stops the launch.
+prune_native() {
+  local phys d name removed=0 failed=0
+  phys=$(cd -P -- "$1" 2>/dev/null && pwd -P) || return 0
+  for d in "$1"/*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    name=${d##*/}
+    [ "$name" = "$TAG" ] && continue
+    case $name in *[!A-Za-z0-9_.-]*) continue ;; esac
+    only_build_files "$d" || continue
+    # SEXTILE_TEST_PRUNE_HOOK exists only for tools/launcher's tests: a command
+    # run with the candidate's path after the checks and before the removal.
+    [ -n "${SEXTILE_TEST_PRUNE_HOOK-}" ] && "$SEXTILE_TEST_PRUNE_HOOK" "$d"
+    if (
+      cd -P -- "$d" 2>/dev/null &&
+        [ "$(pwd -P)" = "$phys/$name" ] &&
+        only_build_files . &&
+        rm -f -- ./sextile "./$NATIVE_MARK" &&
+        cd -P -- .. &&
+        rmdir -- "$name"
+    ); then
+      removed=$((removed + 1))
+    else
+      failed=$((failed + 1))
+    fi
+  done
+  [ "$removed" -gt 0 ] && printf 'removed %s older native builds\n' "$removed" >&2
+  [ "$failed" -gt 0 ] && printf 'could not remove %s older native builds; they stay for now\n' "$failed" >&2
+  return 0
+}
+
+# native_run: the environment the image sets (Dockerfile, final stage), so a
+# switch between the two runs keeps the same session and preferences; then
+# the app replaces this process.
+native_run() {
+  start_wheel
+  export SEXTILE_CHARTS_DIR=$CHARTS_DIR
+  export XDG_DATA_HOME=$CHARTS_DIR/.sextile/data
+  export XDG_CONFIG_HOME=$CHARTS_DIR/.sextile/config
+  export SEXTILE_PREVIEW_MODE=serve
+  export SEXTILE_PREVIEW_ADDR=127.0.0.1:$PORT
+  export SEXTILE_LAUNCH="no-docker $DESCRIBE"
+  # XDG_DATA_HOME is the charts folder's now, so the app would not look in
+  # the folder scripts/build-astrolog installs the atlas to.
+  # A caller's own SEXTILE_ATLAS_PATH never reaches the app: it is the found
+  # share's atlas, or unset, as the image sets its own.
+  find_share
+  unset SEXTILE_ATLAS_PATH
+  [ -n "$SHARE_DIR" ] && [ -f "$SHARE_DIR/atlas.as" ] && export SEXTILE_ATLAS_PATH=$SHARE_DIR/atlas.as
+  # Astrolog's own search: ASTR800, ASTROLOG and ASTR name folders it reads
+  # settings and the atlas from, and SE_EPHE_PATH is the Swiss Ephemeris's.
+  # The image sets none of them, so a caller's never reach the app; ASTROLOG
+  # is the found share, the folder doctor reports, or unset (Astrolog's
+  # compiled folder decides).
+  unset ASTR800 ASTROLOG ASTR SE_EPHE_PATH
+  [ -n "$SHARE_DIR" ] && export ASTROLOG=$SHARE_DIR
+  [ -z "$ASTRO_ON_PATH" ] && export PATH=$HOME/.local/bin:$PATH
+  # Another window's pruning may have removed this build since native_build.
+  [ -f "$NATIVE_BIN" ] && [ -x "$NATIVE_BIN" ] ||
+    die "the native build $NATIVE_BIN is gone (another ./sextile may have removed it); run ./sextile --no-docker again"
+  exec "$NATIVE_BIN" ${FWD[@]+"${FWD[@]}"}
+}
+
+# ------------------------------------------------------------------- doctor
+
+ISSUES=0
+report() { # report NAME: print the current ST/MSG as one doctor line
+  printf '%-5s %s: %s\n' "$ST" "$1" "${DMSG:-$MSG}"
+  DMSG=
+  [ "$ST" = FAIL ] && ISSUES=$((ISSUES + 1))
+}
+
+image_state() { # sets IMG_STATE: absent, unlabelled, stale or labelled
+  local out lab com
+  IMG_STATE=absent
+  out=$(docker image inspect --format "{{index .Config.Labels \"$LABEL\"}} {{index .Config.Labels \"$COMMIT_LABEL\"}}" "$IMAGE" 2>/dev/null) || return 0
+  lab=${out%% *}
+  com=
+  case $out in
+    *' '*) com=${out#* } ;;
+  esac
+  if [ "$lab" != 1 ]; then
+    IMG_STATE=unlabelled
+  elif [ -n "$COMMIT" ] && [ "$com" != "$COMMIT" ]; then
+    IMG_STATE=stale
+  else
+    IMG_STATE=labelled
+  fi
+}
+
+# doctor_native: what ./sextile --no-docker needs. Optional, so a missing piece
+# is a note and never changes doctor's exit status.
+doctor_native() {
+  local f missing=
+  printf 'for --no-docker (optional):\n'
+  find_native
+  if [ -n "$GO_BIN" ]; then
+    ST=ok
+    MSG="found at $GO_BIN ($("$GO_BIN" version 2>&1 </dev/null | head -n 1))"
+  else
+    ST=note
+    MSG="missing; --no-docker needs Go 1.25 or newer on PATH"
+  fi
+  report go
+  if [ -z "$ASTRO_BIN" ]; then
+    ST=note
+    MSG="missing; scripts/build-astrolog installs it in ~/.local/bin (about two minutes)"
+  elif [ -n "$ASTRO_ON_PATH" ]; then
+    ST=ok
+    MSG="found at $ASTRO_BIN (on PATH)"
+  else
+    ST=ok
+    MSG="found at $ASTRO_BIN (not on PATH; --no-docker puts ~/.local/bin on the app's PATH)"
+  fi
+  report astrolog
+  find_share
+  if [ -z "$SHARE_DIR" ]; then
+    ST=note
+    MSG="missing; no sepl_18.se1 or atlas.as in ~/.local/share/astrolog, /usr/local/share/astrolog or /usr/share/astrolog (scripts/build-astrolog installs them)"
+  else
+    for f in sepl_18.se1 semo_18.se1 seas_18.se1 atlas.as; do
+      [ -f "$SHARE_DIR/$f" ] || missing="$missing $f"
+    done
+    if [ -z "$missing" ]; then
+      ST=ok
+      MSG="$(tilde "$SHARE_DIR") holds sepl_18.se1, semo_18.se1, seas_18.se1 and atlas.as"
+    else
+      ST=note
+      MSG="missing$missing in $(tilde "$SHARE_DIR"); scripts/build-astrolog installs them"
+    fi
+  fi
+  report "astrolog files"
+}
+
+run_doctor() {
+  local have_docker= daemon_ok=
+
+  check_docker
+  report docker
+  [ "$ST" = ok ] && have_docker=1
+
+  if [ -n "$have_docker" ]; then
+    check_daemon
+    if [ "$ST" = ok ]; then
+      daemon_ok=1
+      if docker version 2>/dev/null | grep -qi podman; then
+        ST=note
+        MSG="$MSG; note: docker version names Podman, whose docker shim is not supported"
+      fi
+    fi
+    report daemon
+    check_endpoint
+    report endpoint
+  else
+    ST=note
+    MSG="not checked (no docker)"
+    report daemon
+    report endpoint
+  fi
+
+  check_tag
+  if [ "$ST" = FAIL ]; then
+    report image
+  elif [ -n "$daemon_ok" ]; then
+    image_state
+    case $IMG_STATE in
+      labelled)
+        if [ -n "$ALWAYS" ]; then
+          ST=ok
+          MSG="$IMAGE exists; ./sextile rebuilds it on every start (it says nothing about its content)"
+        else
+          ST=ok
+          MSG="$IMAGE is built"
+        fi ;;
+      unlabelled)
+        ST=note
+        MSG="$IMAGE exists without the launcher's label; ./sextile builds a new one over that name" ;;
+      stale)
+        ST=note
+        MSG="$IMAGE was built from another commit; ./sextile builds a new one over that name" ;;
+      *)
+        ST=note
+        MSG="$IMAGE not built yet; ./sextile builds it" ;;
+    esac
+    report image
+  else
+    ST=note
+    MSG="$IMAGE not checked (no working docker)"
+    report image
+  fi
+
+  check_port
+  report port
+  find_opener
+  if [ -n "$OPENER" ]; then
+    ST=ok
+    MSG="http://localhost:$PORT; your browser opens on the first Ctrl+X"
+  else
+    ST=note
+    MSG="http://localhost:$PORT; no wslview or xdg-open found, so open it yourself after the first Ctrl+X"
+  fi
+  report wheel
+  check_zone
+  report "time zone"
+
+  decide_charts
+  ST=$CH_ST
+  MSG=$CH_MSG
+  report "charts folder"
+  ST=$CFL_ST
+  MSG=$CFL_MSG
+  report config
+
+  if [ -n "$daemon_ok" ] && [ -n "$IMAGE" ]; then
+    ST=note
+    if ! eligible_tags; then
+      MSG="could not list images"
+    elif [ "$ELIG_N" -gt 0 ]; then
+      MSG="$ELIG_N other images; removed at the next launch"
+      [ "$ELIG_FAILED" -eq 0 ] || MSG="$MSG; $ELIG_FAILED could not be checked (docker ps failed)"
+    elif [ "$ELIG_FAILED" -gt 0 ]; then
+      MSG="$ELIG_FAILED other images could not be checked (docker ps failed)"
+    else
+      MSG="no other images to remove"
+    fi
+  else
+    ST=note
+    MSG="not checked (no working docker)"
+  fi
+  report "other images"
+
+  doctor_native
+
+  [ "$ISSUES" -eq 0 ] && exit 0
+  exit 1
+}
+
+if [ "$MODE" = doctor ]; then
+  run_doctor
+fi
+
+# ------------------------------------------------------------------- launch
+
+if [ -n "$NATIVE" ]; then
+  # One mode per run: no docker command is run below, and a missing piece is
+  # a refusal, never a fall back to Docker.
+  find_native
+  missing=
+  [ -n "$GO_BIN" ] || missing=go
+  [ -n "$ASTRO_BIN" ] || missing=${missing:+$missing and }astrolog
+  if [ -n "$missing" ]; then
+    die "--no-docker did not find $missing; it needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)"
+  fi
+else
+  step "checking Docker (a Docker Desktop that is still starting can take a minute)..."
+  check_docker
+  [ "$ST" = FAIL ] && die "$MSG"
+  check_daemon
+  [ "$ST" = FAIL ] && die "$MSG"
+  check_endpoint
+  [ "$ST" = FAIL ] && die "$MSG"
+fi
+check_tag
+[ "$ST" = FAIL ] && die "$MSG"
+step "checking that port $PORT is free..."
+check_port
+if [ "$ST" = FAIL ] && [ -z "$PORT_SET" ]; then
+  # Another window has the default port: this one takes the next free one.
+  # An explicit --port is the operator's choice and is refused instead.
+  pick_port && ST=ok
+fi
+[ "$ST" = FAIL ] && die "$MSG"
+
+decide_charts
+if [ "$CH_ST" = FAIL ]; then
+  die "$CH_MSG"
+fi
+if [ "$CHARTS_SRC" = none ]; then
+  prompt_charts
+fi
+
+if [ -n "$NATIVE" ]; then
+  native_build
+  native_run
+fi
+
+image_state
+need=
+[ "$IMG_STATE" = labelled ] || need=1
+[ -n "$REBUILD" ] && need=1
+[ -n "$ALWAYS" ] && need=1
+
+if [ -z "$need" ]; then
+  step "image $IMAGE is ready"
+fi
+if [ -n "$need" ]; then
+  build=(build --build-arg "SEXTILE_VERSION=$DESCRIBE" --label "$LABEL=1")
+  [ -n "$COMMIT" ] && build+=(--label "$COMMIT_LABEL=$COMMIT")
+  build+=(-t "$IMAGE" "$ROOT")
+  if [ -n "$ALWAYS" ]; then
+    if [ "$TAG" = local ]; then
+      printf 'rebuilding %s (no git history, so every start checks for changes)\n' "$IMAGE" >&2
+    else
+      printf 'rebuilding %s (uncommitted changes)\n' "$IMAGE" >&2
+    fi
+    step "Docker's output is hidden unless the build fails; the first build takes a few minutes, later ones seconds..."
+    # Quiet, and Docker's layer cache makes an unchanged tree a matter of
+    # seconds; the output is shown only if the build fails.
+    bout=$(docker build -q "${build[@]:1}" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      printf '%s\n' "$bout" >&2
+      printf 'the Docker build failed (exit %s); Sextile was not started\n' "$rc" >&2
+      exit "$rc"
+    fi
+  else
+    step "building $IMAGE: the first build takes a few minutes; Docker's progress follows..."
+    docker "${build[@]}"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      printf 'the Docker build failed (exit %s); Sextile was not started\n' "$rc" >&2
+      exit "$rc"
+    fi
+  fi
+fi
+
+prune_images
+
+find_zone
+
+args=(run --rm --pull never -i)
+if [ -t 0 ] && [ -t 1 ]; then
+  args+=(-t)
+fi
+args+=(
+  --user "$(id -u):$(id -g)"
+  --mount "type=bind,source=$CHARTS_DIR,target=/charts"
+  --tmpfs /tmp
+  -p "127.0.0.1:$PORT:$PORT"
+  -e "SEXTILE_PREVIEW_ADDR=0.0.0.0:$PORT"
+  -e "SEXTILE_LAUNCH=docker $IMAGE"
+)
+[ -n "$ZONE" ] && args+=(-e "TZ=$ZONE")
+for name in TERM COLORTERM NO_COLOR SEXTILE_COLOR; do
+  exported "$name" && args+=(-e "$name")
+done
+args+=("$IMAGE")
+
+start_wheel
+# The empty-array idiom keeps bash 3.2 quiet when nothing is forwarded.
+exec docker "${args[@]}" ${FWD[@]+"${FWD[@]}"}

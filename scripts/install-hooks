@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Installs scripts/pre-push as this clone's pre-push hook.
+set -Eeuo pipefail
+cd -- "$(git rev-parse --show-toplevel)"
+hooks=$(git rev-parse --git-path hooks)
+install -m 0755 scripts/pre-push "$hooks/pre-push"
+printf 'installed %s/pre-push\n' "$hooks"

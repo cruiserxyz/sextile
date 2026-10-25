@@ -1,0 +1,100 @@
+Astrolog 8.00 chart for Sat Apr 25, 2026 12:00 (ST Zone 0W)  13:25E 52:31N
+Chart #2 comparison for Thu Sep 17, 2026  0:00 (ST Zone 0W)  13:25E 52:31N
+
+  1:     Sun (Tau) Squ with (Leo) Ascendant - orb: a1:12' - power: 17.00
+  2:     Sun (Tau) Opp with (Sco) Venus     - orb: s1:22' - power: 13.26
+  3:     Sun (Tau) Squ with [Aqu] Pluto     - orb: s2:02' - power: 11.33
+  4:   Venus (Gem) Opp with (Sag) Moon      - orb: s2:04' - power: 10.38
+  5: Ascenda (Vir) Squ with (Sag) Moon      - orb: a3:33' - power: 10.00
+  6:  Saturn (Ari) Con with (Ari) Midheaven - orb: s1:40' - power:  9.52
+  7:    Mars (Ari) Con with [Ari] Saturn    - orb: a0:29' - power:  9.30
+  8: Neptune (Ari) Tri with (Sag) Moon      - orb: s0:36' - power:  9.15
+  9:    Mars (Ari) Con with (Ari) Midheaven - orb: a1:57' - power:  9.00
+ 10: Ascenda (Vir) Con with [Leo] South Node- orb: s0:35' - power:  8.81
+ 11: Neptune (Ari) Con with [Ari] Neptune   - orb: a0:10' - power:  7.81
+ 12: Ascenda (Vir) Tri with [Tau] Chiron    - orb: s0:05' - power:  7.70
+ 13:   Pluto (Aqu) Sex with (Sag) Moon      - orb: a1:47' - power:  7.36
+ 14:   Pluto (Aqu) Con with (Aqu) Descendant- orb: a1:23' - power:  7.22
+ 15: Neptune (Ari) Tri with (Leo) Ascendant - orb: s1:00' - power:  7.18
+ 16:  Uranus (Tau) Opp with (Sag) Moon      - orb: s3:42' - power:  7.07
+ 17:    Moon (Leo) Tri with (Sag) Vertex    - orb: a1:46' - power:  6.78
+ 18: Midheav (Tau) Squ with (Leo) Jupiter   - orb: s2:25' - power:  6.53
+ 19:     Sun (Tau) Con with [Tau] Chiron    - orb: s5:15' - power:  6.17
+ 20:  Saturn (Ari) Opp with (Lib) Mercury   - orb: s1:48' - power:  5.94
+ 21:    Mars (Ari) Squ with (Can) Ceres     - orb: s0:04' - power:  5.93
+ 22:    Mars (Ari) Opp with (Lib) Mercury   - orb: a1:49' - power:  5.91
+ 23:   Pluto (Aqu) Squ with (Sco) Venus     - orb: a1:33' - power:  5.60
+ 24: Midheav (Tau) Tri with (Vir) Sun       - orb: a4:44' - power:  5.49
+ 25:   Pluto (Aqu) Con with [Aqu] Pluto     - orb: s2:13' - power:  5.46
+ 26:   Ceres (Tau) Squ with (Leo) Jupiter   - orb: a0:39' - power:  5.43
+ 27:  Saturn (Ari) Squ with (Can) East Point- orb: s0:05' - power:  5.36
+ 28: Mercury (Ari) Tri with (Leo) Jupiter   - orb: a0:48' - power:  5.30
+ 29: Descend (Pis) Con with [Aqu] North Node- orb: s0:35' - power:  5.28
+ 30:  Vertex (Cap) Tri with (Vir) Sun       - orb: s4:00' - power:  5.09
+ 31: Mercury (Ari) Con with [Ari] Saturn    - orb: s3:30' - power:  4.99
+ 32:    Moon (Leo) Con with (Leo) Jupiter   - orb: s5:50' - power:  4.73
+ 33:   Pluto (Aqu) Tri with [Gem] Uranus    - orb: a0:11' - power:  4.66
+ 34: Neptune (Ari) Sex with [Aqu] Pluto     - orb: a0:10' - power:  4.66
+ 35:  Saturn (Ari) Tri with (Sag) Moon      - orb: a4:49' - power:  4.16
+ 36:   Venus (Gem) Tri with [Aqu] Pluto     - orb: a1:38' - power:  4.13
+ 37:  Saturn (Ari) Con with [Ari] Saturn    - orb: a4:07' - power:  4.11
+ 38:  Uranus (Tau) Squ with [Aqu] North Node- orb: s0:25' - power:  4.08
+ 39:   Venus (Gem) Sex with [Ari] Neptune   - orb: a1:37' - power:  3.93
+ 40:   Venus (Gem) Tri with (Aqu) Descendant- orb: s2:28' - power:  3.88
+ 41:   Venus (Gem) Con with [Gem] Uranus    - orb: a4:03' - power:  3.78
+ 42:  Chiron (Ari) Con with [Tau] Chiron    - orb: a2:51' - power:  3.54
+ 43:  Saturn (Ari) Tri with (Leo) Ascendant - orb: a4:25' - power:  3.32
+ 44:  Uranus (Tau) Tri with (Vir) Sun       - orb: a5:50' - power:  3.09
+ 45:   Pluto (Aqu) Sex with [Ari] Neptune   - orb: s2:13' - power:  3.01
+ 46:  Saturn (Ari) Squ with (Can) Ceres     - orb: s3:33' - power:  2.96
+ 47:  Vertex (Cap) Squ with [Tau] Chiron    - orb: a1:53' - power:  2.92
+ 48:  Chiron (Ari) Squ with (Can) Mars      - orb: a3:49' - power:  2.90
+ 49:  Saturn (Ari) Sex with [Gem] Uranus    - orb: s2:50' - power:  2.85
+ 50: Descend (Pis) Tri with (Sco) Venus     - orb: a3:47' - power:  2.74
+ 51: Neptune (Ari) Sex with [Gem] Uranus    - orb: a2:35' - power:  2.72
+ 52: Jupiter (Can) Con with (Can) Mars      - orb: s5:09' - power:  2.62
+ 53:   Nadir (Sco) Tri with (Can) Mars      - orb: a3:57' - power:  2.61
+ 54:  Uranus (Tau) Tri with [Aqu] Pluto     - orb: a3:17' - power:  2.54
+ 55: Mercury (Ari) Squ with (Can) Ceres     - orb: s4:04' - power:  2.50
+ 56: Ascenda (Vir) Squ with [Gem] Uranus    - orb: a5:32' - power:  2.32
+ 57:  Saturn (Ari) Con with [Ari] Neptune   - orb: s5:16' - power:  2.23
+ 58: Neptune (Ari) Squ with [Cap] Lilith    - orb: s1:04' - power:  2.22
+ 59:  Uranus (Tau) Tri with (Aqu) Descendant- orb: s4:07' - power:  2.22
+ 60:  Uranus (Tau) Sex with [Ari] Neptune   - orb: a3:16' - power:  2.18
+ 61:    Mars (Ari) Tri with (Leo) Jupiter   - orb: a4:48' - power:  1.88
+ 62: Mercury (Ari) Con with (Ari) Midheaven - orb: a5:57' - power:  1.86
+ 63:  Vertex (Cap) Sex with (Sag) Moon      - orb: a5:32' - power:  1.81
+ 64: Jupiter (Can) Sex with (Vir) Sun       - orb: s5:57' - power:  1.79
+ 65:   Pluto (Aqu) Tri with (Lib) Nadir     - orb: s4:42' - power:  1.77
+ 66:  Vertex (Cap) Opp with (Can) Mars      - orb: s4:48' - power:  1.76
+ 67: Jupiter (Can) Squ with [Ari] Saturn    - orb: s5:32' - power:  1.67
+ 68:   Pluto (Aqu) Tri with (Lib) Mercury   - orb: s4:50' - power:  1.67
+ 69:  Vertex (Cap) Con with [Aqu] Pluto     - orb: a5:07' - power:  1.61
+ 70:  Uranus (Tau) Con with [Gem] Uranus    - orb: a5:42' - power:  1.47
+ 71: Mercury (Ari) Opp with (Lib) Mercury   - orb: s5:49' - power:  1.34
+ 72: Mercury (Ari) Tri with (Sag) Vertex    - orb: s4:52' - power:  1.27
+ 73:   Pluto (Aqu) Squ with [Tau] Chiron    - orb: s5:26' - power:  1.25
+ 74:  Vertex (Cap) Con with (Aqu) Descendant- orb: a5:57' - power:  1.05
+ 75: North N (Pis) Tri with (Can) East Point- orb: s1:14' - power:  1.02
+ 76:  Vertex (Cap) Squ with (Sco) Venus     - orb: a5:47' - power:  0.97
+ 77: Jupiter (Can) Con with (Can) Ceres     - orb: a6:06' - power:  0.95
+ 78:   Ceres (Tau) Sex with (Can) Ceres     - orb: s4:13' - power:  0.89
+ 79:    Moon (Leo) Tri with [Tau] Chiron    - orb: a7:14' - power:  0.88
+ 80: North N (Pis) Squ with [Gem] Uranus    - orb: s1:40' - power:  0.84
+ 81:   Venus (Gem) Tri with (Vir) Sun       - orb: s7:28' - power:  0.78
+ 82:  Chiron (Ari) Squ with [Aqu] Pluto     - orb: a6:05' - power:  0.73
+ 83:  Saturn (Ari) Sex with [Aqu] Pluto     - orb: s5:15' - power:  0.67
+ 84:  Vertex (Cap) Sex with [Ari] Neptune   - orb: a5:06' - power:  0.54
+ 85: Ascenda (Vir) Tri with [Cap] Lilith    - orb: a1:52' - power:  0.45
+ 86:  Chiron (Ari) Tri with (Sag) Vertex    - orb: a6:08' - power:  0.37
+ 87: East Po (Leo) Tri with [Ari] Saturn    - orb: s1:49' - power:  0.36
+ 88:     Sun (Tau) Sex with (Can) Ceres     - orb: a6:46' - power:  0.34
+ 89:  Chiron (Ari) Opp with (Sco) Venus     - orb: s6:45' - power:  0.22
+ 90:   Ceres (Tau) Tri with (Vir) Sun       - orb: s7:50' - power:  0.21
+ 91:  Chiron (Ari) Squ with (Leo) Ascendant - orb: s6:55' - power:  0.11
+
+Sum power: 363.49 - Average power: 3.99
+Con: 21   Opp:  8   Squ: 21   Tri: 28   Sex: 13
+Sun: 11   Moo: 10   Mer: 10   Ven: 11   Mar:  9   Jup:  9   Sat: 15   Ura: 14
+Nep: 12   Plu: 17   Chi: 12   Cer:  9   Nor:  4   Sou:  1   Lil:  2   Ver: 11
+Eas:  3   Asc:  9   Nad:  2   Des:  6   Mid:  5

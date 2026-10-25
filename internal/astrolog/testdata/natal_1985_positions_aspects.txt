@@ -1,0 +1,29 @@
+Astrolog 7.80 chart for Thu Mar 21, 1985 14:30 (ST Zone 0W)   0:10W 51:30N
+
+  1:     Sun (Ari) Con (Ari) Moon       - orb: +1:08' - power: 23.99 (New Moon)
+  2:    Moon (Ari) Squ (Cap) Neptune    - orb: -1:29' - power: 10.75
+  3:     Sun (Ari) Squ (Cap) Neptune    - orb: -2:38' - power: 10.19
+  4: Jupiter (Aqu) Squ (Tau) Midheaven  - orb: -0:19' - power:  9.54
+  5:     Sun (Ari) Tri [Sco] Saturn     - orb: +2:57' - power:  7.56
+  6:   Venus [Ari] Tri (Leo) Ascendant  - orb: +1:20' - power:  7.28
+  7:    Mars (Tau) Opp [Sco] Pluto      - orb: -0:24' - power:  6.78
+  8: Mercury (Ari) Con [Ari] Venus      - orb: +3:02' - power:  5.65
+  9: Mercury (Ari) Tri (Sag) Uranus     - orb: +0:00' - power:  5.40
+ 10:    Mars (Tau) Con (Tau) Midheaven  - orb: +4:08' - power:  5.11
+ 11:    Moon (Ari) Tri [Sco] Saturn     - orb: +4:06' - power:  5.10
+ 12:    Mars (Tau) Tri (Cap) Neptune    - orb: +1:04' - power:  4.57
+ 13: Neptune (Cap) Sex [Sco] Pluto      - orb: -0:40' - power:  4.27
+ 14: Mercury (Ari) Tri (Leo) Ascendant  - orb: +4:22' - power:  3.37
+ 15:   Pluto [Sco] Opp (Tau) Midheaven  - orb: -4:32' - power:  3.23
+ 16:  Uranus (Sag) Tri (Leo) Ascendant  - orb: -4:23' - power:  3.14
+ 17:   Venus [Ari] Tri (Sag) Uranus     - orb: +3:02' - power:  3.05
+ 18:    Mars (Tau) Squ (Aqu) Jupiter    - orb: -4:27' - power:  2.91
+ 19: North N [Tau] Squ (Leo) Ascendant  - orb: +1:26' - power:  2.80
+ 20:  Saturn [Sco] Squ (Leo) Ascendant  - orb: +5:35' - power:  2.42
+ 21: Jupiter (Aqu) Squ [Sco] Pluto      - orb: +4:51' - power:  2.20
+ 22: Neptune (Cap) Tri (Tau) Midheaven  - orb: +5:12' - power:  1.76
+
+Sum power: 131.05 - Average power: 5.96
+Con:  3   Opp:  2   Squ:  7   Tri:  9   Sex:  1
+Sun:  3   Moo:  3   Mer:  3   Ven:  3   Mar:  4   Jup:  3   Sat:  3   Ura:  3
+Nep:  5   Plu:  4   Nor:  1   Asc:  5   Mid:  4

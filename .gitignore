@@ -1,0 +1,10 @@
+# Go build artefacts
+/bin/
+*.test
+*.out
+/dist/
+
+# Secrets and local scratch
+.env
+/tmp/
+/*.png

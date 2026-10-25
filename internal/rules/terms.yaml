@@ -1,0 +1,207 @@
+# Every word a template shows (specs/body-details-template-poc.md § Terms): its
+# id, its display text, a readable citation and a grade. A plain term (ordinary
+# English) carries no citation; every other grade requires one.
+
+- id: elongation
+  display: elongation
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "elongation"
+  grade: secondary
+- id: longitude
+  display: longitude
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "ecliptic longitude"
+  grade: secondary
+- id: ecliptic
+  display: ecliptic
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "ecliptic"
+  grade: secondary
+- id: by-longitude
+  display: by longitude
+  grade: plain
+- id: east
+  display: east
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "eastern elongation"
+  grade: secondary
+- id: west
+  display: west
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "western elongation"
+  grade: secondary
+- id: at-conjunction
+  display: at conjunction
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "conjunction"
+  grade: secondary
+- id: inner-conjunction
+  display: inner conjunction
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "inferior conjunction"
+  grade: secondary
+- id: outer-conjunction
+  display: outer conjunction
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "superior conjunction"
+  grade: secondary
+- id: evening-star
+  display: evening star
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "evening star"
+  grade: secondary
+- id: morning-star
+  display: morning star
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "morning star"
+  grade: secondary
+- id: occidental
+  display: occidental
+  citation: Lilly, *Christian Astrology*, London 1647, p.114 (rising before the Sun = oriental)
+  grade: primary
+- id: oriental
+  display: oriental
+  citation: Lilly, *Christian Astrology*, London 1647, p.114 (rising before the Sun = oriental)
+  grade: primary
+- id: approaching
+  display: approaching the Sun
+  grade: plain
+- id: leaving
+  display: leaving the Sun
+  grade: plain
+- id: station
+  display: station
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "stationary point"
+  grade: secondary
+- id: station-retrograde
+  display: stations retrograde
+  citation: Astrolog 8.00 output tokens `S/R` / `S/D`
+  grade: secondary
+- id: station-direct
+  display: stations direct
+  citation: Astrolog 8.00 output tokens `S/R` / `S/D`
+  grade: secondary
+- id: retrograde
+  display: retrograde
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "prograde motion" (apparent sense by contrast; no direct entry found)
+  grade: snippet
+- id: direct
+  display: direct
+  citation: Paris Observatory, *Etymological Dictionary of Astronomy and Astrophysics* (Heydari-Malayeri), entry "prograde motion" (apparent sense by contrast; no direct entry found)
+  grade: snippet
+- id: magnitude
+  display: magnitude
+  citation: IAU Office of Astronomy for Education glossary, "apparent magnitude"
+  grade: secondary
+- id: lit
+  display: lit
+  citation: JPL Horizons manual, quantity 10 (illuminated fraction)
+  grade: secondary
+- id: under-the-beams
+  display: under the beams
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: not-under-the-beams
+  display: not under the beams
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: combust
+  display: combust
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: not-combust
+  display: not combust
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: cazimi
+  display: cazimi
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: not-cazimi
+  display: not cazimi
+  citation: Lilly, *Christian Astrology*, London 1647, p.113
+  grade: primary
+- id: condition
+  display: (condition)
+  grade: plain
+- id: yes
+  display: yes
+  grade: plain
+- id: no
+  display: no
+  grade: plain
+- id: last
+  display: last
+  grade: plain
+- id: next
+  display: next
+  grade: plain
+- id: now
+  display: now
+  grade: plain
+- id: phase
+  display: phase
+  grade: plain
+- id: motion
+  display: motion
+  grade: plain
+- id: eight-years
+  display: 8 years
+  grade: plain
+- id: before-birth
+  display: before birth
+  grade: plain
+- id: next-return
+  display: next return
+  grade: plain
+- id: sun
+  display: Sun
+  grade: plain
+- id: natal
+  display: natal
+  grade: plain
+- id: domicile
+  display: domicile
+  citation: Astrolog 8.00 documentation (`astrolog.htm`), the `-v` Rul. column codes R / X / d / f / -
+  grade: secondary
+- id: exaltation
+  display: exaltation
+  citation: Astrolog 8.00 documentation (`astrolog.htm`), the `-v` Rul. column codes R / X / d / f / -
+  grade: secondary
+- id: detriment
+  display: detriment
+  citation: Astrolog 8.00 documentation (`astrolog.htm`), the `-v` Rul. column codes R / X / d / f / -
+  grade: secondary
+- id: fall
+  display: fall
+  citation: Astrolog 8.00 documentation (`astrolog.htm`), the `-v` Rul. column codes R / X / d / f / -
+  grade: secondary
+- id: no-sign-dignity
+  display: no sign dignity
+  citation: Astrolog 8.00 documentation (`astrolog.htm`), the `-v` Rul. column codes R / X / d / f / -
+  grade: secondary
+- id: bound
+  display: bound
+  citation: Astrolog 8.00 source `calc.cpp:768` (the tables `-v3 4` / `-v3 3` print)
+  grade: secondary
+- id: face
+  display: face
+  citation: Astrolog 8.00 source `calc.cpp:768` (the tables `-v3 4` / `-v3 3` print)
+  grade: secondary
+- id: egyptian
+  display: Egyptian
+  citation: Astrolog 8.00 source `calc.cpp:768` (the tables `-v3 4` / `-v3 3` print)
+  grade: secondary
+- id: chaldean
+  display: Chaldean
+  citation: Astrolog 8.00 source `calc.cpp:768` (the tables `-v3 4` / `-v3 3` print)
+  grade: secondary
+- id: day-chart
+  display: day chart
+  citation: Sextile's test: the Sun's altitude above 0° (Astrolog's own lot test differs)
+  grade: convention
+- id: night-chart
+  display: night chart
+  citation: Sextile's test: the Sun's altitude above 0° (Astrolog's own lot test differs)
+  grade: convention
+- id: in-sect
+  display: in sect
+  citation: Ptolemy, *Tetrabiblos* I.7, trans. F. E. Robbins (Loeb, 1940), p.43
+  grade: translation
+- id: out-of-sect
+  display: out of sect
+  citation: Ptolemy, *Tetrabiblos* I.7, trans. F. E. Robbins (Loeb, 1940), p.43
+  grade: translation
+- id: within
+  display: within
+  grade: plain

@@ -1,0 +1,11 @@
+# The only characters a template line may hold outside its slots and section
+# markers (specs/body-details-template-poc.md P4), besides the space: no letter,
+# no digit, so every word arrives through {term:}, {rule:} or a fact.
+·
+,
+;
+:
+(
+)
+–
+—

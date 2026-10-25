@@ -1,0 +1,5 @@
+Astrolog planets and objects:
+Num. Name       Rule     Detriment Exalt Fall Esoteric Hierarchical Ray
+
+  1 Sun         Leo      Aqu       Ari   Lib  Leo      Leo          2
+  2 Moon        Can      Cap       Tau   Sco  Vir      Aqu          4

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# pre-push hook: nothing leaves this machine unchecked.
+#
+# git hands this hook the refs being pushed on stdin, one per line:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# For every ref that is not a deletion, the whole ancestry of the pushed
+# commit is validated with `./check --release <sha>` (tree, tests, crawl,
+# then every commit's message, identities and tree), and the messages the
+# push would publish are printed first so they can be read in one screen.
+# A failing check blocks the push. Install it with scripts/install-hooks.
+set -Eeuo pipefail
+cd -- "$(git rev-parse --show-toplevel)"
+CHECK=${SEXTILE_CHECK:-./check}
+zero=$(printf '0%.0s' {1..40})
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  if [ "$local_sha" = "$zero" ]; then
+    printf 'pre-push: %s is a deletion; nothing to check\n' "$remote_ref"
+    continue
+  fi
+  if [ "${remote_sha:-$zero}" = "$zero" ]; then range=$local_sha; else range="$remote_sha..$local_sha"; fi
+  printf 'pre-push: %s -> %s, the messages this push publishes:\n' "$local_ref" "$remote_ref"
+  git log --format='  %h %s' "$range" --
+  if "$CHECK" --release "$local_sha"; then
+    printf 'pre-push: %s passed ./check --release\n' "$local_sha"
+  else
+    printf 'pre-push: %s FAILED ./check --release; the push is refused\n' "$local_sha" >&2
+    status=1
+  fi
+done
+exit $status

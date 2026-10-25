@@ -1,0 +1,24 @@
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  Sextile can't start:                                                        │
+│    · Astrolog's ephemeris is not being read: every body came back at 0°      │
+│      Aries.                                                                  │
+│    · atlas.as, Astrolog's city list, could not be read.                      │
+│                                                                              │
+│  To fix it, either                                                           │
+│    · run Sextile from its Docker image, which builds Astrolog for you, or    │
+│    · install Astrolog 8.00 as README, Install and run says.                  │
+│                                                                              │
+│  Then start Sextile again.                                          q quits  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

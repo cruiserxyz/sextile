@@ -1,0 +1,42 @@
+[0mAstrolog aspects:
+No. Name         Abbrev. Angle     Orb          Description of glyph
+
+[1;33m 1 Conjunct       (Con)   0    +/- 7   degrees  Circle with extending line
+[1;34m 2 Opposite       (Opp) 180    +/- 7   degrees  Two circles joined by line
+[1;31m 3 Square         (Squ)  90    +/- 7   degrees  Quadrilateral
+[1;32m 4 Trine          (Tri) 120    +/- 7   degrees  Triangle
+[1;36m 5 Sextile        (Sex)  60    +/- 6   degrees  Six pointed asterisk
+[1;35m 6 Inconjunct     (Inc) 150    +/- 3   degrees  'K' rotated right
+[1;35m 7 SemiSextile    (SSx)  30    +/- 3   degrees  'K' rotated left
+[0;33m 8 SemiSquare     (SSq)  45    +/- 3   degrees  Acute angle
+[0;33m 9 SesquiQuadrate (Ses) 135    +/- 3   degrees  Square with extending lines
+[0;36m10 Quintile       (Qui)  72    +/- 2   degrees  Letter 'Q'
+[0;36m11 BiQuintile     (BQn) 144    +/- 2   degrees  '+' over '-'
+[0;36m12 SemiQuintile   (SQn)  36    +/- 1   degrees  '-' over '+'
+[0;31m13 Septile        (Sep)  51.43 +/- 1   degrees  Number '7'
+[0;35m14 Novile         (Nov)  40    +/- 1   degrees  Number '9'
+[0;35m15 BiNovile       (BNv)  80    +/- 1   degrees  '9' under Roman 'II'
+[0;31m16 BiSeptile      (BSp) 102.86 +/- 1   degrees  '7' under Roman 'II'
+[0;31m17 TriSeptile     (TSp) 154.29 +/- 1   degrees  '7' under Roman 'III'
+[0;35m18 QuatroNovile   (QNv) 160    +/- 1   degrees  '9' under Roman 'IV'
+[0;36m19 TreDecile      (TDc) 108    +/- 0.5 degrees  '10' under Roman 'III'
+[0;32m20 Undecile       (Un1)  32.73 +/- 0.5 degrees  Number '11'
+[0;32m21 BiUndecile     (Un2)  65.45 +/- 0.5 degrees  '11' under Roman 'II'
+[0;32m22 TriUndecile    (Un3)  98.18 +/- 0.5 degrees  '11' under Roman 'III'
+[0;32m23 QuatroUndecile (Un4) 130.91 +/- 0.5 degrees  '11' under Roman 'IV'
+[0;32m24 QuintUndecile  (Un5) 163.64 +/- 0.5 degrees  '11' under Roman 'V'
+[0m
+Unrestricted aspects in order around zodiac:
+
+[1;33mCon: Conjunct       covers  -7    to   7    - span  14   
+[1;30m     No aspect      covers   7    to  54    - span  47   
+[1;36mSex: Sextile        covers  54    to  66    - span  12   
+[1;30m     No aspect      covers  66    to  83    - span  17   
+[1;31mSqu: Square         covers  83    to  97    - span  14   
+[1;30m     No aspect      covers  97    to 113    - span  16   
+[1;32mTri: Trine          covers 113    to 127    - span  14   
+[1;30m     No aspect      covers 127    to 173    - span  46   
+[1;34mOpp: Opposite       covers 173    to 187    - span  14   
+
+[0mTotal aspects (54.00, 30.00%), Total gaps (126.00, 70.00%)
+[0m

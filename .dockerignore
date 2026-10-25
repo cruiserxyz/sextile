@@ -1,0 +1,10 @@
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!pkg/
+**/.env
+# No blanket exclude of *.as: Astrolog's own data files end in .as. These seven
+# fixtures are synthetic charts the tests read.
+!internal/astrolog/testdata/charts/*.as

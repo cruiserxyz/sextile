@@ -1,0 +1,352 @@
+Wed  1/20/2016 15:27:05     Sun (29Cap59) --> Aquarius
+Sat  1/23/2016 20:31:30   Venus (29Sag59) --> Capricorn
+Wed  2/17/2016  4:16:58   Venus (29Cap59) --> Aquarius
+Fri  2/19/2016  5:33:43     Sun (29Aqu59) --> Pisces
+Sat  3/12/2016 10:23:47   Venus (29Aqu59) --> Pisces
+Sun  3/20/2016  4:30:11     Sun (29Pis59) --> Aries (Spring Equinox)
+Tue  4/ 5/2016 16:50:28   Venus (29Pis59) --> Aries
+Tue  4/19/2016 15:29:26     Sun (29Ari59) --> Taurus
+Sat  4/30/2016  0:35:35   Venus (29Ari59) --> Taurus
+Fri  5/20/2016 14:36:29     Sun (29Tau59) --> Gemini
+Tue  5/24/2016  9:44:31   Venus (29Tau59) --> Gemini
+Mon  6/ 6/2016 21:49:20     Sun (16Gem35) Con (16Gem35) Venus (Total Solar Occultation 98%)
+Fri  6/17/2016 19:38:45   Venus (29Gem59) --> Cancer
+Mon  6/20/2016 22:34:10     Sun (29Gem59) --> Cancer (Summer Solstice)
+Tue  7/12/2016  5:34:01   Venus (29Can59) --> Leo
+Fri  7/22/2016  9:30:12     Sun (29Can59) --> Leo
+Fri  8/ 5/2016 15:26:36   Venus (29Leo59) --> Virgo
+Mon  8/22/2016 16:38:28     Sun (29Leo59) --> Virgo
+Tue  8/30/2016  2:06:33   Venus (29Vir59) --> Libra
+Thu  9/22/2016 14:21:07     Sun (29Vir59) --> Libra (Autumn Equinox)
+Fri  9/23/2016 14:50:37   Venus (29Lib59) --> Scorpio
+Tue 10/18/2016  7:00:41   Venus (29Sco59) --> Sagittarius
+Sat 10/22/2016 23:45:33     Sun (29Lib59) --> Scorpio
+Sat 11/12/2016  4:54:20   Venus (29Sag59) --> Capricorn
+Mon 11/21/2016 21:22:22     Sun (29Sco59) --> Sagittarius
+Wed 12/ 7/2016 14:51:04   Venus (29Cap59) --> Aquarius
+Wed 12/21/2016 10:44:10     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Tue  1/ 3/2017  7:46:34   Venus (29Aqu59) --> Pisces
+Thu  1/19/2017 21:23:36     Sun (29Cap59) --> Aquarius
+Fri  2/ 3/2017 15:51:13   Venus (29Pis59) --> Aries
+Sat  2/18/2017 11:31:20     Sun (29Aqu59) --> Pisces
+Sat  3/ 4/2017  9:08:52   Venus <13Ari08> S/R
+Mon  3/20/2017 10:28:38     Sun (29Pis59) --> Aries (Spring Equinox)
+Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57] Venus
+Mon  4/ 3/2017  0:25:27   Venus [ 0Ari00] <-- Pisces
+Sat  4/15/2017 10:17:47   Venus <26Pis54> S/D
+Wed  4/19/2017 21:27:01     Sun (29Ari59) --> Taurus
+Fri  4/28/2017 13:12:59   Venus (29Pis59) --> Aries
+Sat  5/20/2017 20:30:56     Sun (29Tau59) --> Gemini
+Tue  6/ 6/2017  7:26:28   Venus (29Ari59) --> Taurus
+Wed  6/21/2017  4:24:09     Sun (29Gem59) --> Cancer (Summer Solstice)
+Wed  7/ 5/2017  0:11:28   Venus (29Tau59) --> Gemini
+Sat  7/22/2017 15:15:21     Sun (29Can59) --> Leo
+Mon  7/31/2017 14:53:47   Venus (29Gem59) --> Cancer
+Tue  8/22/2017 22:20:13     Sun (29Leo59) --> Virgo
+Sat  8/26/2017  4:29:39   Venus (29Can59) --> Leo
+Wed  9/20/2017  1:15:18   Venus (29Leo59) --> Virgo
+Fri  9/22/2017 20:01:48     Sun (29Vir59) --> Libra (Autumn Equinox)
+Sat 10/14/2017 10:11:12   Venus (29Vir59) --> Libra
+Mon 10/23/2017  5:26:41     Sun (29Lib59) --> Scorpio
+Tue 11/ 7/2017 11:38:29   Venus (29Lib59) --> Scorpio
+Wed 11/22/2017  3:04:39     Sun (29Sco59) --> Sagittarius
+Fri 12/ 1/2017  9:14:03   Venus (29Sco59) --> Sagittarius
+Thu 12/21/2017 16:27:56     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Mon 12/25/2017  5:26:00   Venus (29Sag59) --> Capricorn
+Tue  1/ 9/2018  7:01:41     Sun (18Cap57) Con (18Cap57) Venus
+Thu  1/18/2018  1:43:35   Venus (29Cap59) --> Aquarius
+Sat  1/20/2018  3:09:01     Sun (29Cap59) --> Aquarius
+Sat  2/10/2018 23:19:31   Venus (29Aqu59) --> Pisces
+Sun  2/18/2018 17:18:00     Sun (29Aqu59) --> Pisces
+Tue  3/ 6/2018 23:45:26   Venus (29Pis59) --> Aries
+Tue  3/20/2018 16:15:27     Sun (29Pis59) --> Aries (Spring Equinox)
+Sat  3/31/2018  4:53:39   Venus (29Ari59) --> Taurus
+Fri  4/20/2018  3:12:33     Sun (29Ari59) --> Taurus
+Tue  4/24/2018 16:39:53   Venus (29Tau59) --> Gemini
+Sat  5/19/2018 13:10:35   Venus (29Gem59) --> Cancer
+Mon  5/21/2018  2:14:37     Sun (29Tau59) --> Gemini
+Wed  6/13/2018 21:54:04   Venus (29Can59) --> Leo
+Thu  6/21/2018 10:07:17     Sun (29Gem59) --> Cancer (Summer Solstice)
+Tue  7/10/2018  2:31:55   Venus (29Leo59) --> Virgo
+Sun  7/22/2018 21:00:20     Sun (29Can59) --> Leo
+Mon  8/ 6/2018 23:27:27   Venus (29Vir59) --> Libra
+Thu  8/23/2018  4:08:33     Sun (29Leo59) --> Virgo
+Sun  9/ 9/2018  9:25:18   Venus (29Lib59) --> Scorpio
+Sun  9/23/2018  1:54:05     Sun (29Vir59) --> Libra (Autumn Equinox)
+Fri 10/ 5/2018 19:04:18   Venus <10Sco50> S/R
+Tue 10/23/2018 11:22:23     Sun (29Lib59) --> Scorpio
+Fri 10/26/2018 14:16:06     Sun ( 3Sco06) Con [ 3Sco06] Venus
+Wed 10/31/2018 19:41:48   Venus [ 0Sco00] <-- Libra
+Fri 11/16/2018 10:51:07   Venus <25Lib14> S/D
+Thu 11/22/2018  9:01:29     Sun (29Sco59) --> Sagittarius
+Sun 12/ 2/2018 17:01:20   Venus (29Lib59) --> Scorpio
+Fri 12/21/2018 22:22:44     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Mon  1/ 7/2019 11:17:57   Venus (29Sco59) --> Sagittarius
+Sun  1/20/2019  8:59:32     Sun (29Cap59) --> Aquarius
+Sun  2/ 3/2019 22:29:13   Venus (29Sag59) --> Capricorn
+Mon  2/18/2019 23:03:56     Sun (29Aqu59) --> Pisces
+Fri  3/ 1/2019 16:45:20   Venus (29Cap59) --> Aquarius
+Wed  3/20/2019 21:58:25     Sun (29Pis59) --> Aries (Spring Equinox)
+Tue  3/26/2019 19:43:15   Venus (29Aqu59) --> Pisces
+Sat  4/20/2019  8:55:16     Sun (29Ari59) --> Taurus
+Sat  4/20/2019 16:10:32   Venus (29Pis59) --> Aries
+Wed  5/15/2019  9:45:50   Venus (29Ari59) --> Taurus
+Tue  5/21/2019  7:59:07     Sun (29Tau59) --> Gemini
+Sun  6/ 9/2019  1:36:56   Venus (29Tau59) --> Gemini
+Fri  6/21/2019 15:54:14     Sun (29Gem59) --> Cancer (Summer Solstice)
+Wed  7/ 3/2019 15:18:05   Venus (29Gem59) --> Cancer
+Tue  7/23/2019  2:50:22     Sun (29Can59) --> Leo
+Sun  7/28/2019  1:53:50   Venus (29Can59) --> Leo
+Wed  8/14/2019  6:07:20     Sun (21Leo11) Con (21Leo11) Venus
+Wed  8/21/2019  9:06:23   Venus (29Leo59) --> Virgo
+Fri  8/23/2019 10:02:00     Sun (29Leo59) --> Virgo
+Sat  9/14/2019 13:43:03   Venus (29Vir59) --> Libra
+Mon  9/23/2019  7:50:10     Sun (29Vir59) --> Libra (Autumn Equinox)
+Tue 10/ 8/2019 17:05:56   Venus (29Lib59) --> Scorpio
+Wed 10/23/2019 17:19:43     Sun (29Lib59) --> Scorpio
+Fri 11/ 1/2019 20:24:39   Venus (29Sco59) --> Sagittarius
+Fri 11/22/2019 14:58:55     Sun (29Sco59) --> Sagittarius
+Tue 11/26/2019  0:28:27   Venus (29Sag59) --> Capricorn
+Fri 12/20/2019  6:41:31   Venus (29Cap59) --> Aquarius
+Sun 12/22/2019  4:19:25     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Mon  1/13/2020 18:39:00   Venus (29Aqu59) --> Pisces
+Mon  1/20/2020 14:54:40     Sun (29Cap59) --> Aquarius
+Fri  2/ 7/2020 20:02:25   Venus (29Pis59) --> Aries
+Wed  2/19/2020  4:57:00     Sun (29Aqu59) --> Pisces
+Thu  3/ 5/2020  3:07:13   Venus (29Ari59) --> Taurus
+Fri  3/20/2020  3:49:37     Sun (29Pis59) --> Aries (Spring Equinox)
+Fri  4/ 3/2020 17:10:38   Venus (29Tau59) --> Gemini
+Sun  4/19/2020 14:45:28     Sun (29Ari59) --> Taurus
+Wed  5/13/2020  6:45:01   Venus <21Gem50> S/R
+Wed  5/20/2020 13:49:17     Sun (29Tau59) --> Gemini
+Wed  6/ 3/2020 17:43:37     Sun (13Gem35) Con [13Gem35] Venus
+Sat  6/20/2020 21:43:40     Sun (29Gem59) --> Cancer (Summer Solstice)
+Thu  6/25/2020  6:48:16   Venus < 5Gem20> S/D
+Wed  7/22/2020  8:36:52     Sun (29Can59) --> Leo
+Fri  8/ 7/2020 15:21:08   Venus (29Gem59) --> Cancer
+Sat  8/22/2020 15:44:55     Sun (29Leo59) --> Virgo
+Sun  9/ 6/2020  7:21:35   Venus (29Can59) --> Leo
+Tue  9/22/2020 13:30:38     Sun (29Vir59) --> Libra (Autumn Equinox)
+Fri 10/ 2/2020 20:47:51   Venus (29Leo59) --> Virgo
+Thu 10/22/2020 22:59:32     Sun (29Lib59) --> Scorpio
+Wed 10/28/2020  1:41:05   Venus (29Vir59) --> Libra
+Sat 11/21/2020 13:21:44   Venus (29Lib59) --> Scorpio
+Sat 11/21/2020 20:39:45     Sun (29Sco59) --> Sagittarius
+Tue 12/15/2020 16:21:20   Venus (29Sco59) --> Sagittarius
+Mon 12/21/2020 10:02:20     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Fri  1/ 8/2021 15:41:02   Venus (29Sag59) --> Capricorn
+Tue  1/19/2021 20:39:51     Sun (29Cap59) --> Aquarius
+Mon  2/ 1/2021 14:05:22   Venus (29Cap59) --> Aquarius
+Thu  2/18/2021 10:43:58     Sun (29Aqu59) --> Pisces
+Thu  2/25/2021 13:11:29   Venus (29Aqu59) --> Pisces
+Sat  3/20/2021  9:37:28     Sun (29Pis59) --> Aries (Spring Equinox)
+Sun  3/21/2021 14:16:14   Venus (29Pis59) --> Aries
+Fri  3/26/2021  6:57:42     Sun ( 5Ari50) Con ( 5Ari50) Venus
+Wed  4/14/2021 18:21:57   Venus (29Ari59) --> Taurus
+Mon  4/19/2021 20:33:24     Sun (29Ari59) --> Taurus
+Sun  5/ 9/2021  2:01:15   Venus (29Tau59) --> Gemini
+Thu  5/20/2021 19:37:06     Sun (29Tau59) --> Gemini
+Wed  6/ 2/2021 13:18:36   Venus (29Gem59) --> Cancer
+Mon  6/21/2021  3:32:09     Sun (29Gem59) --> Cancer (Summer Solstice)
+Sun  6/27/2021  4:26:53   Venus (29Can59) --> Leo
+Thu  7/22/2021  0:36:42   Venus (29Leo59) --> Virgo
+Thu  7/22/2021 14:26:25     Sun (29Can59) --> Leo
+Mon  8/16/2021  4:26:39   Venus (29Vir59) --> Libra
+Sun  8/22/2021 21:34:58     Sun (29Leo59) --> Virgo
+Fri  9/10/2021 20:39:05   Venus (29Lib59) --> Scorpio
+Wed  9/22/2021 19:21:05     Sun (29Vir59) --> Libra (Autumn Equinox)
+Thu 10/ 7/2021 11:20:59   Venus (29Sco59) --> Sagittarius
+Sat 10/23/2021  4:51:10     Sun (29Lib59) --> Scorpio
+Fri 11/ 5/2021 10:43:58   Venus (29Sag59) --> Capricorn
+Mon 11/22/2021  2:33:43     Sun (29Sco59) --> Sagittarius
+Sun 12/19/2021 10:35:45   Venus <26Cap29> S/R
+Tue 12/21/2021 15:59:18     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Sun  1/ 9/2022  0:47:32     Sun (18Cap43) Con [18Cap43] Venus
+Thu  1/20/2022  2:39:06     Sun (29Cap59) --> Aquarius
+Sat  1/29/2022  8:45:57   Venus <11Cap04> S/D
+Fri  2/18/2022 16:43:01     Sun (29Aqu59) --> Pisces
+Sun  3/ 6/2022  6:29:41   Venus (29Cap59) --> Aquarius
+Sun  3/20/2022 15:33:24     Sun (29Pis59) --> Aries (Spring Equinox)
+Tue  4/ 5/2022 15:17:38   Venus (29Aqu59) --> Pisces
+Wed  4/20/2022  2:24:16     Sun (29Ari59) --> Taurus
+Mon  5/ 2/2022 16:10:24   Venus (29Pis59) --> Aries
+Sat  5/21/2022  1:22:34     Sun (29Tau59) --> Gemini
+Sat  5/28/2022 14:46:02   Venus (29Ari59) --> Taurus
+Tue  6/21/2022  9:13:51     Sun (29Gem59) --> Cancer (Summer Solstice)
+Thu  6/23/2022  0:34:21   Venus (29Tau59) --> Gemini
+Mon  7/18/2022  1:32:13   Venus (29Gem59) --> Cancer
+Fri  7/22/2022 20:06:59     Sun (29Can59) --> Leo
+Thu  8/11/2022 18:30:08   Venus (29Can59) --> Leo
+Tue  8/23/2022  3:16:10     Sun (29Leo59) --> Virgo
+Mon  9/ 5/2022  4:05:05   Venus (29Leo59) --> Virgo
+Fri  9/23/2022  1:03:42     Sun (29Vir59) --> Libra (Autumn Equinox)
+Thu  9/29/2022  7:49:09   Venus (29Vir59) --> Libra
+Sat 10/22/2022 21:17:26     Sun (29Lib26) Con (29Lib26) Venus
+Sun 10/23/2022  7:51:55   Venus (29Lib59) --> Scorpio
+Sun 10/23/2022 10:35:41     Sun (29Lib59) --> Scorpio
+Wed 11/16/2022  6:08:33   Venus (29Sco59) --> Sagittarius
+Tue 11/22/2022  8:20:29     Sun (29Sco59) --> Sagittarius
+Sat 12/10/2022  3:54:10   Venus (29Sag59) --> Capricorn
+Wed 12/21/2022 21:48:12     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Tue  1/ 3/2023  2:09:31   Venus (29Cap59) --> Aquarius
+Fri  1/20/2023  8:29:33     Sun (29Cap59) --> Aquarius
+Fri  1/27/2023  2:32:47   Venus (29Aqu59) --> Pisces
+Sat  2/18/2023 22:34:18     Sun (29Aqu59) --> Pisces
+Mon  2/20/2023  7:55:35   Venus (29Pis59) --> Aries
+Thu  3/16/2023 22:34:10   Venus (29Ari59) --> Taurus
+Mon  3/20/2023 21:24:26     Sun (29Pis59) --> Aries (Spring Equinox)
+Tue  4/11/2023  4:47:11   Venus (29Tau59) --> Gemini
+Thu  4/20/2023  8:13:38     Sun (29Ari59) --> Taurus
+Sun  5/ 7/2023 14:24:39   Venus (29Gem59) --> Cancer
+Sun  5/21/2023  7:09:11     Sun (29Tau59) --> Gemini
+Mon  6/ 5/2023 13:46:30   Venus (29Can59) --> Leo
+Wed  6/21/2023 14:57:49     Sun (29Gem59) --> Cancer (Summer Solstice)
+Sun  7/23/2023  1:32:41   Venus <28Leo36> S/R
+Sun  7/23/2023  1:50:28     Sun (29Can59) --> Leo
+Sun  8/13/2023 11:15:36     Sun (20Leo28) Con [20Leo28] Venus
+Wed  8/23/2023  9:01:19     Sun (29Leo59) --> Virgo
+Mon  9/ 4/2023  1:20:10   Venus <12Leo12> S/D
+Sat  9/23/2023  6:49:59     Sun (29Vir59) --> Libra (Autumn Equinox)
+Mon 10/ 9/2023  1:10:37   Venus (29Leo59) --> Virgo
+Mon 10/23/2023 16:20:52     Sun (29Lib59) --> Scorpio
+Wed 11/ 8/2023  9:30:30   Venus (29Vir59) --> Libra
+Wed 11/22/2023 14:02:42     Sun (29Sco59) --> Sagittarius
+Mon 12/ 4/2023 18:50:45   Venus (29Lib59) --> Scorpio
+Fri 12/22/2023  3:27:21     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Fri 12/29/2023 20:23:40   Venus (29Sco59) --> Sagittarius
+Sat  1/20/2024 14:07:20     Sun (29Cap59) --> Aquarius
+Tue  1/23/2024  8:50:14   Venus (29Sag59) --> Capricorn
+Fri  2/16/2024 16:05:12   Venus (29Cap59) --> Aquarius
+Mon  2/19/2024  4:13:10     Sun (29Aqu59) --> Pisces
+Mon  3/11/2024 21:50:29   Venus (29Aqu59) --> Pisces
+Wed  3/20/2024  3:06:24     Sun (29Pis59) --> Aries (Spring Equinox)
+Fri  4/ 5/2024  4:00:10   Venus (29Pis59) --> Aries
+Fri  4/19/2024 13:59:45     Sun (29Ari59) --> Taurus
+Mon  4/29/2024 11:31:20   Venus (29Ari59) --> Taurus
+Mon  5/20/2024 12:59:30     Sun (29Tau59) --> Gemini
+Thu  5/23/2024 20:30:14   Venus (29Tau59) --> Gemini
+Tue  6/ 4/2024 15:33:28     Sun (14Gem29) Con (14Gem29) Venus (Total Solar Occultation 78%)
+Mon  6/17/2024  6:20:14   Venus (29Gem59) --> Cancer
+Thu  6/20/2024 20:50:59     Sun (29Gem59) --> Cancer (Summer Solstice)
+Thu  7/11/2024 16:18:49   Venus (29Can59) --> Leo
+Mon  7/22/2024  7:44:25     Sun (29Can59) --> Leo
+Mon  8/ 5/2024  2:22:54   Venus (29Leo59) --> Virgo
+Thu  8/22/2024 14:55:03     Sun (29Leo59) --> Virgo
+Thu  8/29/2024 13:22:44   Venus (29Vir59) --> Libra
+Sun  9/22/2024 12:43:39     Sun (29Vir59) --> Libra (Autumn Equinox)
+Mon  9/23/2024  2:36:11   Venus (29Lib59) --> Scorpio
+Thu 10/17/2024 19:28:22   Venus (29Sco59) --> Sagittarius
+Tue 10/22/2024 22:14:44     Sun (29Lib59) --> Scorpio
+Mon 11/11/2024 18:25:46   Venus (29Sag59) --> Capricorn
+Thu 11/21/2024 19:56:29     Sun (29Sco59) --> Sagittarius
+Sat 12/ 7/2024  6:13:21   Venus (29Cap59) --> Aquarius
+Sat 12/21/2024  9:20:34     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Fri  1/ 3/2025  3:24:06   Venus (29Aqu59) --> Pisces
+Sun  1/19/2025 20:00:07     Sun (29Cap59) --> Aquarius
+Tue  2/ 4/2025  7:57:06   Venus (29Pis59) --> Aries
+Tue  2/18/2025 10:06:34     Sun (29Aqu59) --> Pisces
+Sun  3/ 2/2025  0:36:05   Venus <10Ari50> S/R
+Thu  3/20/2025  9:01:29     Sun (29Pis59) --> Aries (Spring Equinox)
+Sun  3/23/2025  1:07:30     Sun ( 2Ari39) Con [ 2Ari39] Venus
+Thu  3/27/2025  8:40:42   Venus [ 0Ari00] <-- Pisces
+Sun  4/13/2025  1:02:21   Venus <24Pis37> S/D
+Sat  4/19/2025 19:56:01     Sun (29Ari59) --> Taurus
+Wed  4/30/2025 17:15:40   Venus (29Pis59) --> Aries
+Tue  5/20/2025 18:54:38     Sun (29Tau59) --> Gemini
+Fri  6/ 6/2025  4:42:40   Venus (29Ari59) --> Taurus
+Sat  6/21/2025  2:42:15     Sun (29Gem59) --> Cancer (Summer Solstice)
+Fri  7/ 4/2025 15:30:48   Venus (29Tau59) --> Gemini
+Tue  7/22/2025 13:29:27     Sun (29Can59) --> Leo
+Thu  7/31/2025  3:57:08   Venus (29Gem59) --> Cancer
+Fri  8/22/2025 20:33:51     Sun (29Leo59) --> Virgo
+Mon  8/25/2025 16:27:08   Venus (29Can59) --> Leo
+Fri  9/19/2025 12:39:10   Venus (29Leo59) --> Virgo
+Mon  9/22/2025 18:19:20     Sun (29Vir59) --> Libra (Autumn Equinox)
+Mon 10/13/2025 21:18:46   Venus (29Vir59) --> Libra
+Thu 10/23/2025  3:50:55     Sun (29Lib59) --> Scorpio
+Thu 11/ 6/2025 22:39:31   Venus (29Lib59) --> Scorpio
+Sat 11/22/2025  1:35:34     Sun (29Sco59) --> Sagittarius
+Sun 11/30/2025 20:13:36   Venus (29Sco59) --> Sagittarius
+Sun 12/21/2025 15:03:05     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Wed 12/24/2025 16:25:57   Venus (29Sag59) --> Capricorn
+Tue  1/ 6/2026 16:36:00     Sun (16Cap22) Con (16Cap22) Venus
+Sat  1/17/2026 12:43:24   Venus (29Cap59) --> Aquarius
+Tue  1/20/2026  1:44:56     Sun (29Cap59) --> Aquarius
+Tue  2/10/2026 10:18:38   Venus (29Aqu59) --> Pisces
+Wed  2/18/2026 15:51:55     Sun (29Aqu59) --> Pisces
+Fri  3/ 6/2026 10:45:45   Venus (29Pis59) --> Aries
+Fri  3/20/2026 14:45:57     Sun (29Pis59) --> Aries (Spring Equinox)
+Mon  3/30/2026 16:00:52   Venus (29Ari59) --> Taurus
+Mon  4/20/2026  1:39:07     Sun (29Ari59) --> Taurus
+Fri  4/24/2026  4:03:25   Venus (29Tau59) --> Gemini
+Tue  5/19/2026  1:05:17   Venus (29Gem59) --> Cancer
+Thu  5/21/2026  0:36:44     Sun (29Tau59) --> Gemini
+Sat  6/13/2026 10:46:48   Venus (29Can59) --> Leo
+Sun  6/21/2026  8:24:30     Sun (29Gem59) --> Cancer (Summer Solstice)
+Thu  7/ 9/2026 17:22:08   Venus (29Leo59) --> Virgo
+Wed  7/22/2026 19:13:05     Sun (29Can59) --> Leo
+Thu  8/ 6/2026 19:12:45   Venus (29Vir59) --> Libra
+Sun  8/23/2026  2:18:48     Sun (29Leo59) --> Virgo
+Thu  9/10/2026  8:06:59   Venus (29Lib59) --> Scorpio
+Wed  9/23/2026  0:05:13     Sun (29Vir59) --> Libra (Autumn Equinox)
+Sat 10/ 3/2026  7:15:48   Venus < 8Sco29> S/R
+Fri 10/23/2026  9:37:56     Sun (29Lib59) --> Scorpio
+Sat 10/24/2026  3:44:06     Sun ( 0Sco45) Con [ 0Sco45] Venus
+Sun 10/25/2026  9:09:49   Venus [ 0Sco00] <-- Libra
+Sat 11/14/2026  0:27:29   Venus <22Lib51> S/D
+Sun 11/22/2026  7:23:20     Sun (29Sco59) --> Sagittarius
+Fri 12/ 4/2026  8:12:28   Venus (29Lib59) --> Scorpio
+Mon 12/21/2026 20:50:14     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Thu  1/ 7/2027  8:53:25   Venus (29Sco59) --> Sagittarius
+Wed  1/20/2027  7:29:51     Sun (29Cap59) --> Aquarius
+Wed  2/ 3/2027 14:30:32   Venus (29Sag59) --> Capricorn
+Thu  2/18/2027 21:33:29     Sun (29Aqu59) --> Pisces
+Mon  3/ 1/2027  6:32:16   Venus (29Cap59) --> Aquarius
+Sat  3/20/2027 20:24:41     Sun (29Pis59) --> Aries (Spring Equinox)
+Fri  3/26/2027  8:16:32   Venus (29Aqu59) --> Pisces
+Tue  4/20/2027  3:57:05   Venus (29Pis59) --> Aries
+Tue  4/20/2027  7:17:38     Sun (29Ari59) --> Taurus
+Fri  5/14/2027 21:01:30   Venus (29Ari59) --> Taurus
+Fri  5/21/2027  6:18:14     Sun (29Tau59) --> Gemini
+Tue  6/ 8/2027 12:32:32   Venus (29Tau59) --> Gemini
+Mon  6/21/2027 14:10:50     Sun (29Gem59) --> Cancer (Summer Solstice)
+Sat  7/ 3/2027  2:01:30   Venus (29Gem59) --> Cancer
+Fri  7/23/2027  1:04:39     Sun (29Can59) --> Leo
+Tue  7/27/2027 12:30:57   Venus (29Can59) --> Leo
+Thu  8/12/2027  0:20:53     Sun (19Leo06) Con (19Leo06) Venus
+Fri  8/20/2027 19:42:44   Venus (29Leo59) --> Virgo
+Mon  8/23/2027  8:14:19     Sun (29Leo59) --> Virgo
+Tue  9/14/2027  0:24:43   Venus (29Vir59) --> Libra
+Thu  9/23/2027  6:01:43     Sun (29Vir59) --> Libra (Autumn Equinox)
+Fri 10/ 8/2027  3:59:05   Venus (29Lib59) --> Scorpio
+Sat 10/23/2027 15:32:52     Sun (29Lib59) --> Scorpio
+Mon 11/ 1/2027  7:34:33   Venus (29Sco59) --> Sagittarius
+Mon 11/22/2027 13:16:13     Sun (29Sco59) --> Sagittarius
+Thu 11/25/2027 11:59:26   Venus (29Sag59) --> Capricorn
+Sun 12/19/2027 18:40:14   Venus (29Cap59) --> Aquarius
+Wed 12/22/2027  2:42:09     Sun (29Sag59) --> Capricorn (Winter Solstice)
+Thu  1/13/2028  7:20:09   Venus (29Aqu59) --> Pisces
+Thu  1/20/2028 13:21:56     Sun (29Cap59) --> Aquarius
+Mon  2/ 7/2028 10:01:09   Venus (29Pis59) --> Aries
+Sat  2/19/2028  3:26:01     Sun (29Aqu59) --> Pisces
+Sat  3/ 4/2028 20:00:57   Venus (29Ari59) --> Taurus
+Mon  3/20/2028  2:17:08     Sun (29Pis59) --> Aries (Spring Equinox)
+Mon  4/ 3/2028 20:27:41   Venus (29Tau59) --> Gemini
+Wed  4/19/2028 13:09:29     Sun (29Ari59) --> Taurus
+Wed  5/10/2028 23:02:42   Venus <19Gem41> S/R
+Sat  5/20/2028 12:09:48     Sun (29Tau59) --> Gemini
+Thu  6/ 1/2028 10:00:18     Sun (11Gem26) Con [11Gem26] Venus
+Tue  6/20/2028 20:02:00     Sun (29Gem59) --> Cancer (Summer Solstice)
+Thu  6/22/2028 22:12:47   Venus < 3Gem10> S/D
+Sat  7/22/2028  6:53:59     Sun (29Can59) --> Leo
+Mon  8/ 7/2028 15:26:15   Venus (29Gem59) --> Cancer
+Tue  8/22/2028 14:00:55     Sun (29Leo59) --> Virgo
+Tue  9/ 5/2028 23:17:55   Venus (29Can59) --> Leo
+Fri  9/22/2028 11:45:18     Sun (29Vir59) --> Libra (Autumn Equinox)
+Mon 10/ 2/2028 10:08:11   Venus (29Leo59) --> Virgo
+Sun 10/22/2028 21:13:22     Sun (29Lib59) --> Scorpio
+Fri 10/27/2028 13:51:52   Venus (29Vir59) --> Libra
+Tue 11/21/2028  0:57:56   Venus (29Lib59) --> Scorpio
+Tue 11/21/2028 18:54:23     Sun (29Sco59) --> Sagittarius
+Fri 12/15/2028  3:38:59   Venus (29Sco59) --> Sagittarius
+Thu 12/21/2028  8:19:39     Sun (29Sag59) --> Capricorn (Winter Solstice)

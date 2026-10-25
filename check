@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# ./check: this repository's one gate.
+#
+#   ./check                 the working tree. First MESSAGES: every commit in
+#                           BASE..HEAD (BASE is origin/main, else main; the
+#                           full DAG) must pass the message, author and
+#                           committer rules, and the check stops at once when
+#                           one does not, before any expensive row. Then
+#                           astrolog present, gofmt, the chart-extension rule
+#                           (CHARTEXT), vet, go test ./..., and the crawl
+#                           (tools/crawl). It fails outright when
+#                           git, a work tree or a base ref is missing.
+#   ./check --release REV   what leaves the machine: REV's tree is extracted
+#                           into a temp directory and checked as above, then
+#                           every commit on REV's ancestry (message, author,
+#                           committer, whole tree) is crawled. The pre-push
+#                           hook, CI and the release workflow run exactly this.
+#
+# The crawl reads its rules from $SEXTILE_CRAWL_RULES (a file kept outside
+# this tree) and refuses to run without it; a missing rules file is a failure,
+# never a pass. Exit 0 only when every row passed.
+set -Eeuo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+refuse() { printf 'check: %s\n' "$*" >&2; exit 2; }
+
+MODE=tree
+REV=
+case ${1-} in
+  '') [ $# -eq 0 ] || refuse 'usage: ./check [--release REV]' ;;
+  --release)
+    [ $# -eq 2 ] || refuse '--release takes one revision'
+    MODE=release
+    REV=$2 ;;
+  *) refuse "unknown argument $1; usage: ./check [--release REV]" ;;
+esac
+
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
+
+FAILED=()
+row() { # row NAME COMMAND...
+  local name=$1; shift
+  local start end
+  start=$(date +%s)
+  if "$@"; then
+    end=$(date +%s); printf 'check: %s ok (%ds)\n' "$name" $((end - start))
+  else
+    end=$(date +%s); printf 'check: %s FAIL (%ds)\n' "$name" $((end - start)) >&2
+    FAILED+=("$name")
+  fi
+}
+
+astrolog_present() {
+  command -v astrolog >/dev/null && return 0
+  printf 'check: astrolog is not on PATH, so the live tests would skip\n' >&2
+  return 1
+}
+gofmt_clean() {
+  local unformatted
+  unformatted=$(gofmt -l .) || return 1
+  [ -z "$unformatted" ] && return 0
+  printf 'check: gofmt -l . lists:\n%s\n' "$unformatted" >&2
+  return 1
+}
+crawl_tree() { go run ./tools/crawl tree .; }
+
+# chart_extension: the rule, enforced. Sextile writes name.as, Astrolog's own
+# chart file, and recognises a chart by its first bytes, never by its name; so
+# nothing in this tree may name a chart with the retired extension, use the
+# retired chart-kind identifier or write the retired session kind word, in any
+# letter case, in text or in binary content, and no file or link may BE called
+# by the retired extension. Zero tolerance, no allowlist, and no exclusion
+# beyond the VCS directories. The patterns carry a bracket (da[t]) so that this
+# file does not match itself.
+chart_extension() {
+  local hits names rc=0 nrc=0
+  hits=$(grep -rnai --exclude-dir=.git --exclude-dir=.jj \
+    -e '\.da[t]\b' -e 'ChartKind[D]at' -e 'kind[^[:alnum:][:space:]]\?[[:space:]]*[:=][[:space:]]*[^[:alnum:][:space:]]\?da[t]\b' . 2>&1) || rc=$?
+  names=$(find . \( -name .git -o -name .jj \) -prune -o \
+    \( -type f -o -type l \) -iname '*.da[t]' -print 2>&1) || nrc=$?
+  if [ "$rc" -eq 1 ] && [ "$nrc" -eq 0 ] && [ -z "$names" ]; then
+    return 0
+  fi
+  if [ "$rc" -eq 0 ]; then
+    printf 'check: CHARTEXT: the retired chart extension, chart-kind identifier or session kind word is still named here:\n%s\n' "$hits" >&2
+  elif [ "$rc" -ne 1 ]; then
+    printf 'check: CHARTEXT: grep failed (exit %s), so the rule could not be checked:\n%s\n' "$rc" "$hits" >&2
+  fi
+  if [ "$nrc" -ne 0 ]; then
+    printf 'check: CHARTEXT: find failed (exit %s), so the rule could not be checked:\n%s\n' "$nrc" "$names" >&2
+  elif [ -n "$names" ]; then
+    printf 'check: CHARTEXT: a file or link is called by the retired chart extension:\n%s\n' "$names" >&2
+  fi
+  printf 'check: CHARTEXT: the rule: Sextile writes name.as, Astrolog'"'"'s own chart file, and recognises a chart by its first bytes, never by its name. No code, test, fixture, golden or document in this repository names a chart with the retired extension, and no file is called by it; this row refuses the token, with no exceptions.\n' >&2
+  return 1
+}
+
+# stop_row NAME COMMAND...: a row that ends the check at once when it fails,
+# for the cheap rows that guard the expensive ones.
+stop_row() {
+  local name=$1; shift
+  local start end
+  start=$(date +%s)
+  if "$@"; then
+    end=$(date +%s); printf 'check: %s ok (%ds)\n' "$name" $((end - start))
+  else
+    end=$(date +%s); printf 'check: %s FAIL (%ds)\n' "$name" $((end - start)) >&2
+    printf 'check: FAIL %s\n' "$name" >&2
+    exit 1
+  fi
+}
+
+# messages_range: the commits a push would add, checked before anything else.
+# It fails (never skips) when it cannot tell what the range is.
+messages_range() {
+  local base
+  command -v git >/dev/null 2>&1 || { printf 'check: MESSAGES needs git, which is not on PATH\n' >&2; return 1; }
+  [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || {
+    printf 'check: MESSAGES needs a git work tree, and %s is not one; plain ./check needs a git work tree, run the rows you need directly\n' "$PWD" >&2; return 1; }
+  if git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' >/dev/null; then
+    base=origin/main
+  elif git rev-parse --verify --quiet 'refs/heads/main^{commit}' >/dev/null; then
+    base=refs/heads/main
+  else
+    printf 'check: MESSAGES has no base: neither origin/main nor main exists here\n' >&2; return 1
+  fi
+  git merge-base --is-ancestor "$base" HEAD || {
+    printf 'check: MESSAGES: %s is not an ancestor of HEAD, so the range is undefined\n' "$base" >&2; return 1; }
+  go run ./tools/crawl messages HEAD "$base"
+}
+
+run_rows() {
+  row ASTROLOG astrolog_present
+  row GOFMT gofmt_clean
+  row CHARTEXT chart_extension
+  row VET go vet ./...
+  row TEST go test -count=1 -timeout 30m ./...
+  row CRAWL crawl_tree
+}
+
+if [ "$MODE" = tree ]; then
+  # A plain check is in a git work tree; nothing inherited may claim otherwise.
+  unset SEXTILE_RELEASE_REPO SEXTILE_RELEASE_REV
+  stop_row MESSAGES messages_range
+  run_rows
+else
+  FULL=$(git rev-parse --verify --quiet "$REV^{commit}") || refuse "$REV is not a commit here"
+  REPO=$(pwd -P)
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/sextile-release.XXXXXX") || refuse 'cannot make the temp directory'
+  trap 'rm -rf -- "$WORK"' EXIT
+  git archive --format=tar "$FULL" | tar -x -C "$WORK"
+  printf 'check: release %s: tree extracted to %s\n' "$REV" "$WORK"
+  # The rows run inside REV's own tree, with REV's own tools.
+  # The extracted tree has no .git, so the rows are told which repository and
+  # which full commit it came from; a row that must prove tracking asks there.
+  export SEXTILE_RELEASE_REPO="$REPO" SEXTILE_RELEASE_REV="$FULL"
+  cd "$WORK"
+  run_rows
+  row HISTORY go run ./tools/crawl history "$FULL" "$REPO"
+  cd "$REPO"
+fi
+
+if [ ${#FAILED[@]} -gt 0 ]; then
+  printf 'check: FAIL %s\n' "${FAILED[*]}" >&2
+  exit 1
+fi
+printf 'check: ok\n'

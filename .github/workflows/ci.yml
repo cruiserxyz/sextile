@@ -1,0 +1,33 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Astrolog 8.00 from the pinned archive
+        run: |
+          scripts/build-astrolog
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "SEXTILE_ATLAS_PATH=$HOME/.local/share/astrolog/atlas.as" >> "$GITHUB_ENV"
+      - name: Crawl rules from the repository secret
+        env:
+          CRAWL_RULES_B64: ${{ secrets.CRAWL_RULES_B64 }}
+        run: |
+          test -n "$CRAWL_RULES_B64" || { echo "the CRAWL_RULES_B64 secret is missing; the crawl cannot run"; exit 1; }
+          printf '%s' "$CRAWL_RULES_B64" | base64 -d > "$RUNNER_TEMP/crawl-rules.txt"
+          echo "SEXTILE_CRAWL_RULES=$RUNNER_TEMP/crawl-rules.txt" >> "$GITHUB_ENV"
+      - name: The one validation contract on the exact pushed revision
+        run: ./check --release "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: The documented install still builds
+        run: docker build -t sextile-ci .

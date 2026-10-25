@@ -1,0 +1,23 @@
+Astrolog 7.80 chart for Thu Mar 21, 1985 14:30 (ST Zone 0W)   0:10W 51:30N
+Body  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Placidus Houses
+
+Sun :  0Ari55   - 0:00' (X) [ 8th house] [-] +0.993  -  House cusp  1: 22Leo22
+Moon:  2Ari04   - 3:45' (-) [ 8th house] [f] +11.93  -  House cusp  2: 11Vir10
+Merc: 17Ari59   + 2:57' (-) [ 9th house] [d] +0.421  -  House cusp  3:  5Lib53
+Venu: 21Ari02 R + 7:55' (d) [ 9th house] [-] -0.320  -  House cusp  4:  8Sco46
+Mars:  4Tau37   + 0:09' (d) [ 9th house] [-] +0.722  -  House cusp  5: 18Sag07
+Jupi:  9Aqu05   - 0:24' (-) [ 6th house] [d] +0.186  -  House cusp  6: 24Cap03
+Satu: 27Sco57 R + 2:17' (-) [ 4th house] [d] -0.023  -  House cusp  7: 22Aqu22
+Uran: 17Sag59   - 0:00' (-) [ 4th house] [-] +0.001  -  House cusp  8: 11Pis10
+Nept:  3Cap33   + 1:08' (f) [ 5th house] [-] +0.008  -  House cusp  9:  5Ari53
+Plut:  4Sco13 R +17:11' (R) [ 3rd house] [-] -0.022  -  House cusp 10:  8Tau46
+Nort: 20Tau55 R + 0:00' (-) [10th house] [-] -0.052  -  House cusp 11: 18Gem07
+Asce: 22Leo22   + 0:00'     [ 1st house]     +252.0  -  House cusp 12: 24Can03
+Midh:  8Tau46   + 0:00'     [10th house]     +369.0
+                                                        Car Fix Mut TOT   +: 7
+                                                     Fir  4   1   1   6   -: 6
+                                                     Ear  1   3   0   4   M: 6
+                                                     Air  0   1   0   1   N: 5
+                                                     Wat  0   2   0   2   A: 2
+                                                     TOT  5   7   1  13   D: 9
+                                                                          <: 8

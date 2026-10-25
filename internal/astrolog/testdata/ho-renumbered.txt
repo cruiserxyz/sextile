@@ -1,0 +1,8 @@
+Astrolog planets and objects:
+Num. Name       Rule     Detriment Exalt Fall Esoteric Hierarchical Ray
+
+  0 Terra       Sag      Gem       Tau   Sco  Sag      Gem          3
+  7 Sun         Leo      Aqu       Ari   Lib  Leo      Leo          2
+  3 Moon        Can      Cap       Tau   Sco  Vir      Aqu          4
+ 21 North Node  Aqu      Leo       Gem   Sag
+ 99 Zeta Retic. Star #48  23Pis28   -72:28'  5.54

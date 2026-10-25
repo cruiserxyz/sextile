@@ -1,0 +1,140 @@
+== 2026-10-14 12:00 UT, color 80x24: no Details panel in this layout ==
+== 2026-10-14 12:00 UT, color 156x40: Details 80x33 ==
+[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mBodies[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m─────────────────────────────────────────────────────────╮[0m
+[38;5;240m│[0melongation         14°52′ east                                    [38;5;244mby longitude[0m[38;5;240m│[0m
+[38;5;240m│[0mphase              evening star · occidental                                  [38;5;240m│[0m
+[38;5;240m│[0m                   approaching the Sun                                        [38;5;240m│[0m
+[38;5;240m│[0munder the beams    yes                                              [38;5;244mwithin 17°[0m[38;5;240m│[0m
+[38;5;240m│[0m                   no                                               [38;5;244mwithin 12°[0m[38;5;240m│[0m
+[38;5;240m│[0mcombust            no (condition)                                 [38;5;244mwithin 8°30′[0m[38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0mmotion             retrograde                                                 [38;5;240m│[0m
+[38;5;240m│[0mstation            last Oct 3, 2026 9:16 8°29′ Sco                    [38;5;244mecliptic[0m[38;5;240m│[0m
+[38;5;240m│[0mstation            next Nov 14, 2026 1:27 22°51′ Lib                  [38;5;244mecliptic[0m[38;5;240m│[0m
+[38;5;240m│[0minner conjunction  last Mar 23, 2025 2:08 2°39′ Ari                           [38;5;240m│[0m
+[38;5;240m│[0minner conjunction  next Oct 24, 2026 5:44 0°45′ Sco                           [38;5;240m│[0m
+[38;5;240m│[0mouter conjunction  last Jan 6, 2026 17:36 16°22′ Cap                          [38;5;240m│[0m
+[38;5;240m│[0mouter conjunction  next Aug 12, 2027 2:21 19°06′ Leo                          [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0mmagnitude          −4.3 · 4% lit                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0minner conjunction  Mar 23, 2025   2°39′ Ari                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Aug 13, 2023  20°28′ Leo                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Jan  9, 2022  18°43′ Cap                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Jun  3, 2020  13°35′ Gem                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Oct 26, 2018   3°06′ Sco                                   [38;5;240m│[0m
+[38;5;240m│[0m8 years            Mar 25, 2017   4°57′ Ari · −2°18′                          [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m╰──────────────────────────────────────────────────────────────────────────────╯[0m
+== 2026-10-14 12:00 UT, never 80x24: no Details panel in this layout ==
+== 2026-10-14 12:00 UT, never 156x40: Details 80x33 ==
+╭─[0] Bodies - [Details]───────────────────────────────────────────────────────╮
+│elongation         14°52′ east                                    by longitude│
+│phase              evening star · occidental                                  │
+│                   approaching the Sun                                        │
+│under the beams    yes                                              within 17°│
+│                   no                                               within 12°│
+│combust            no (condition)                                 within 8°30′│
+│                                                                              │
+│motion             retrograde                                                 │
+│station            last Oct 3, 2026 9:16 8°29′ Sco                    ecliptic│
+│station            next Nov 14, 2026 1:27 22°51′ Lib                  ecliptic│
+│inner conjunction  last Mar 23, 2025 2:08 2°39′ Ari                           │
+│inner conjunction  next Oct 24, 2026 5:44 0°45′ Sco                           │
+│outer conjunction  last Jan 6, 2026 17:36 16°22′ Cap                          │
+│outer conjunction  next Aug 12, 2027 2:21 19°06′ Leo                          │
+│                                                                              │
+│magnitude          −4.3 · 4% lit                                              │
+│                                                                              │
+│inner conjunction  Mar 23, 2025   2°39′ Ari                                   │
+│                   Aug 13, 2023  20°28′ Leo                                   │
+│                   Jan  9, 2022  18°43′ Cap                                   │
+│                   Jun  3, 2020  13°35′ Gem                                   │
+│                   Oct 26, 2018   3°06′ Sco                                   │
+│8 years            Mar 25, 2017   4°57′ Ari · −2°18′                          │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+== 2026-10-24 05:44 Berlin, color 80x24: no Details panel in this layout ==
+== 2026-10-24 05:44 Berlin, color 156x40: Details 80x33 ==
+[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mBodies[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m─────────────────────────────────────────────────────────╮[0m
+[38;5;240m│[0melongation         0°00′ at conjunction                           [38;5;244mby longitude[0m[38;5;240m│[0m
+[38;5;240m│[0mphase              at conjunction · at conjunction                            [38;5;240m│[0m
+[38;5;240m│[0munder the beams    yes                                              [38;5;244mwithin 17°[0m[38;5;240m│[0m
+[38;5;240m│[0m                   yes                                              [38;5;244mwithin 12°[0m[38;5;240m│[0m
+[38;5;240m│[0mcombust            yes                                            [38;5;244mwithin 8°30′[0m[38;5;240m│[0m
+[38;5;240m│[0mcazimi             yes                                              [38;5;244mwithin 17′[0m[38;5;240m│[0m
+[38;5;240m│[0m                   yes                                              [38;5;244mwithin 16′[0m[38;5;240m│[0m
+[38;5;240m│[0m                   yes                                              [38;5;244mwithin 16′[0m[38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0mmotion             retrograde                                                 [38;5;240m│[0m
+[38;5;240m│[0mstation            last Oct 3, 2026 9:16 8°29′ Sco                    [38;5;244mecliptic[0m[38;5;240m│[0m
+[38;5;240m│[0mstation            next Nov 14, 2026 1:27 22°51′ Lib                  [38;5;244mecliptic[0m[38;5;240m│[0m
+[38;5;240m│[0minner conjunction  last Mar 23, 2025 2:08 2°39′ Ari                           [38;5;240m│[0m
+[38;5;240m│[0minner conjunction  next Oct 24, 2026 5:44 0°45′ Sco                           [38;5;240m│[0m
+[38;5;240m│[0mouter conjunction  last Jan 6, 2026 17:36 16°22′ Cap                          [38;5;240m│[0m
+[38;5;240m│[0mouter conjunction  next Aug 12, 2027 2:21 19°06′ Leo                          [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0mmagnitude          −4.2 · 1% lit                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0minner conjunction  Mar 23, 2025   2°39′ Ari                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Aug 13, 2023  20°28′ Leo                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Jan  9, 2022  18°43′ Cap                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Jun  3, 2020  13°35′ Gem                                   [38;5;240m│[0m
+[38;5;240m│[0m                   Oct 26, 2018   3°06′ Sco                                   [38;5;240m│[0m
+[38;5;240m│[0m8 years            Mar 25, 2017   4°57′ Ari · −2°18′                          [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m│[0m                                                                              [38;5;240m│[0m
+[38;5;240m╰──────────────────────────────────────────────────────────────────────────────╯[0m
+== 2026-10-24 05:44 Berlin, never 80x24: no Details panel in this layout ==
+== 2026-10-24 05:44 Berlin, never 156x40: Details 80x33 ==
+╭─[0] Bodies - [Details]───────────────────────────────────────────────────────╮
+│elongation         0°00′ at conjunction                           by longitude│
+│phase              at conjunction · at conjunction                            │
+│under the beams    yes                                              within 17°│
+│                   yes                                              within 12°│
+│combust            yes                                            within 8°30′│
+│cazimi             yes                                              within 17′│
+│                   yes                                              within 16′│
+│                   yes                                              within 16′│
+│                                                                              │
+│motion             retrograde                                                 │
+│station            last Oct 3, 2026 9:16 8°29′ Sco                    ecliptic│
+│station            next Nov 14, 2026 1:27 22°51′ Lib                  ecliptic│
+│inner conjunction  last Mar 23, 2025 2:08 2°39′ Ari                           │
+│inner conjunction  next Oct 24, 2026 5:44 0°45′ Sco                           │
+│outer conjunction  last Jan 6, 2026 17:36 16°22′ Cap                          │
+│outer conjunction  next Aug 12, 2027 2:21 19°06′ Leo                          │
+│                                                                              │
+│magnitude          −4.2 · 1% lit                                              │
+│                                                                              │
+│inner conjunction  Mar 23, 2025   2°39′ Ari                                   │
+│                   Aug 13, 2023  20°28′ Leo                                   │
+│                   Jan  9, 2022  18°43′ Cap                                   │
+│                   Jun  3, 2020  13°35′ Gem                                   │
+│                   Oct 26, 2018   3°06′ Sco                                   │
+│8 years            Mar 25, 2017   4°57′ Ari · −2°18′                          │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

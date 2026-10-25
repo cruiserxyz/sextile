@@ -1,0 +1,16 @@
+version: 1
+chart:
+  id: synthetic-aster
+  kind: file
+  file: synthetic-aster.as
+  name: Synthetic Aster
+  when: "1985-07-14T09:30:00Z"
+  place: Testford
+  country: TS
+  lat: 41.25
+  lon: -73.5
+  tz: America/New_York
+selection:
+  comparison: true
+  anchored_bodies: sun,moon
+  floating_bodies: mars

@@ -1,0 +1,34 @@
+Astrolog 8.00 chart for Sat Apr 25, 2026 12:00 (ST Zone 0W)  13:25E 52:31N
+
+  1:     Sun (Tau) Squ (Aqu) Pluto      - orb: a0:11' - power: 14.85
+  2:  Uranus (Tau) Squ (Vir) Ascendant  - orb: s0:09' - power: 10.94
+  3:   Venus (Gem) Squ (Vir) Ascendant  - orb: a1:29' - power:  9.45
+  4:    Moon (Leo) Squ (Tau) Midheaven  - orb: a3:24' - power:  9.18
+  5:   Venus (Gem) Con (Tau) Uranus     - orb: s1:38' - power:  6.88
+  6: Mercury (Ari) Squ (Can) Jupiter    - orb: a2:01' - power:  5.68
+  7:  Lilith (Sco) Con (Sco) Nadir      - orb: s0:23' - power:  5.63
+  8:     Sun (Tau) Tri (Vir) Ascendant  - orb: a5:09' - power:  5.31
+  9: Jupiter (Can) Tri (Sco) Nadir      - orb: s1:12' - power:  4.97
+ 10:    Mars (Ari) Con (Ari) Saturn     - orb: s3:37' - power:  4.81
+ 11:  Chiron (Ari) Tri (Vir) Ascendant  - orb: s2:57' - power:  4.50
+ 12: Mercury (Ari) Con (Ari) Mars       - orb: s3:59' - power:  4.29
+ 13:    Moon (Leo) Tri (Ari) Chiron     - orb: a4:22' - power:  4.21
+ 14:   Venus (Gem) Sex (Ari) Neptune    - orb: a1:27' - power:  4.08
+ 15:     Sun (Tau) Tri (Vir) South Node - orb: a2:03' - power:  3.30
+ 16: Neptune (Ari) Sex (Aqu) Pluto      - orb: a2:24' - power:  2.88
+ 17:  Saturn (Ari) Sex (Aqu) Pluto      - orb: s3:02' - power:  2.67
+ 18: Jupiter (Can) Tri (Sco) Lilith     - orb: s0:48' - power:  2.49
+ 19:   Venus (Gem) Tri (Aqu) Pluto      - orb: a3:51' - power:  2.42
+ 20:  Uranus (Tau) Sex (Ari) Neptune    - orb: a3:06' - power:  2.31
+ 21:  Saturn (Ari) Con (Ari) Neptune    - orb: s5:26' - power:  2.01
+ 22:    Moon (Leo) Con (Vir) Ascendant  - orb: s7:20' - power:  1.87
+ 23:    Moon (Leo) Tri (Ari) Mercury    - orb: s6:38' - power:  1.77
+ 24:    Moon (Leo) Squ (Tau) Uranus     - orb: a7:10' - power:  1.36
+ 25:    Mars (Ari) Squ (Can) Jupiter    - orb: a6:01' - power:  1.11
+ 26:  Uranus (Tau) Tri (Aqu) Pluto      - orb: a5:30' - power:  1.02
+
+Sum power: 120.00 - Average power: 4.62
+Con:  6   Opp:  0   Squ:  7   Tri:  9   Sex:  4
+Sun:  3   Moo:  5   Mer:  3   Ven:  4   Mar:  3   Jup:  4   Sat:  3   Ura:  5
+Nep:  4   Plu:  5   Chi:  2   Nor:  0   Sou:  1   Lil:  2   Asc:  5   Nad:  2
+Des:  0   Mid:  1

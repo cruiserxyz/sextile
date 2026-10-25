@@ -1,0 +1,337 @@
+{
+  "_provenance": "Every chart in the examples below is constructed synthetic data for demonstrating a switch.",
+  "capabilities": {
+    "astrolog-positions-baseline-invocation": {
+      "argv_template": "-qj {julian_day} -zl {lon_degmin} {lat_degmin} -c {house_code} {sidereal_switch_optional} {body_restriction_switches} -v0",
+      "examples": [
+        "Baseline body positions for a Munich subject born 1991-11-04 at 13:00 local (Placidus, tropical): astrolog -qj 2448565.000000 -zl 11:34E 48:08N -c 0 -v0",
+        "Sidereal baseline for a Sydney-born subject (whole-sign houses): astrolog -qj 2459580.500000 -zl 151:12E 33:52S -c 14 -s -v0",
+        "Quick-birth fallback for a New York subject at 7:45 am on 4 July 1976 with DST flagged: astrolog -qb 7 4 1976 7:45am 1 5W 73:56W 40:43N -c 0 -v0"
+      ],
+      "gotchas": [
+        "The quick-birth time anchor carries a standalone DST flag and integer-hour offset; if the subject's zone lookup never populated a base offset or DST rule, the invocation silently drifts by an hour rather than failing loudly.",
+        "Coordinate formatting rounds to whole arcminutes, so two subjects within ~1 km of each other produce identical argv — don't rely on the command string as a precise locator.",
+        "Biwheel and multi-chart layers reorder the base parameters (location must precede the time anchor); copy-pasting a single-subject invocation into a multi-wheel context without reshuffling causes astrolog to ignore either the location or the second anchor.",
+        "Body-restriction switches are position-sensitive relative to the mode switch: appending extra on/off toggles after -v0 can flip the output mode or silently re-enable bodies the caller meant to suppress."
+      ],
+      "heuristics": [
+        "Prefer the Julian-day form (-qj <jd>) over the quick-birth form (-qb ...) for any single-subject calculation so the invocation is DST-independent.",
+        "When using -qj, always follow it with -zl <lon> <lat> so angle-dependent outputs have a reference location.",
+        "Emit coordinates as degrees:arcminutes with a cardinal suffix (E/W for longitude, N/S for latitude); never pass decimal degrees.",
+        "Always emit the house-system switch -c <code> explicitly, even when the subject uses the built-in default, so the invocation is self-describing.",
+        "Tropical zodiac is the implicit default and emits no switch; sidereal requires the -s switch.",
+        "For a baseline body-position listing, close the invocation with -v0 (positions plus relative velocity), not bare -v.",
+        "Layer body-restriction toggles (per-object on/off switches) before the final output-mode switch so mode selection is the last thing astrolog sees."
+      ],
+      "hidden_constants": [
+        {
+          "justification": "Baseline body listing is emitted with the velocity-aware body-positions mode rather than the plain bodies switch.",
+          "name": "default_output_mode_switch",
+          "value": "-v0"
+        },
+        {
+          "justification": "Placidus maps to house-code 0 and is the default when the subject does not override it.",
+          "name": "default_house_code",
+          "value": 0
+        },
+        {
+          "justification": "Julian-day argument is formatted with six decimal places, giving sub-second resolution.",
+          "name": "julian_day_decimal_precision",
+          "value": 6
+        },
+        {
+          "justification": "Longitude and latitude are truncated-then-rounded to whole arcminutes (~1.8 km at the equator) before formatting.",
+          "name": "coordinate_rounding_unit_arcminutes",
+          "value": 1
+        },
+        {
+          "justification": "When longitude or latitude is within 1e-4 of zero, the cardinal letter defaults to E or N respectively.",
+          "name": "greenwich_equator_default_direction",
+          "value": "E/N"
+        },
+        {
+          "justification": "Internally-stored base offset uses the opposite sign of the standard convention; any conversion to the readable E/W form must negate.",
+          "name": "timezone_offset_sign_inversion",
+          "value": true
+        }
+      ],
+      "intent": "Assemble the astrolog command-line that produces the default body-position listing for one subject at a given moment and place.",
+      "parse_rules": [],
+      "post_conditions": [
+        "Stdout contains a tabular body listing whose rows cover each object left enabled by the body-restriction switches.",
+        "Every body row carries an ecliptic longitude expressed as sign plus degrees plus arcminutes and a signed relative velocity.",
+        "Exit status is zero on success; any non-zero status with empty stdout signals a malformed invocation (missing location, bad JD, unknown house code, etc.).",
+        "The argv must include exactly one time anchor (either a Julian-day anchor or a quick-birth anchor, never both) and exactly one output-mode switch.",
+        "When coordinates are present, they match the degrees:arcminutes plus cardinal-letter shape; decimal degrees must not leak through."
+      ]
+    },
+    "first-call-state-presentation": {
+      "argv_template": "astrolog -qj {jd_ut} -zl {lon_deg_east} {lat_deg_north}",
+      "evidence_used": [
+        "20260419T163333Z--first-meaningful-result"
+      ],
+      "examples": [
+        "Compute the first-call transits chart at the acquired place for the current moment (UT JD derived from wall clock in Go; PlaceInfo lat/lon already resolved by a one-time -zN at atlas-modal Enter): astrolog -qj 2461150.19 -zl 8.7333 52.85",
+        "Compute the natal chart for a stored last-used birth moment and location (Unit #1 natal-SET branch; PlaceInfo from the chart record, not re-resolved): astrolog -qj 2446232.0208 -zl 11.567 48.133"
+      ],
+      "gotchas": [
+        "The first-call chart path never feeds a city string at render time — acquisition already produced PlaceInfo (lat, lon, tz, IANA) via one-time -zN; subsequent chart computes feed those coordinates through -zl. Re-invoking -zN on every render would re-hit the atlas and silently drop offline capability.",
+        "The aspect panel's A/S suffix is computed by a finite-difference probe (orb tighter at t+ε = applying), NOT from astrolog's orb sign — that sign is geometric (side-of-exact), not direction. Do not 'flip' astrolog's raw output; it never encoded applying/separating in the first place (verified vs astrolog 7.80; see docs D13).",
+        "Column count in the aspect panel is a function of the terminal width and the 15-char cell size; making the pane narrower silently truncates low-strength aspects off the right edge rather than scrolling — the data is not lost, just invisible."
+      ],
+      "heuristics": [
+        "Sextile opens into exactly one of three stable states, driven by store contents — not by argv, not by ambient environment. natal-SET (store has a last-used Chart): render that Chart's natal positions with current-moment transits overlaid, composed at ui via tea.Batch fan-in-once (MINDSET §16). natal-UNSET with store.Location populated: render a here-now chart at the stored place. natal-UNSET with no stored location: open the centered atlas-pick modal over an empty shell.",
+        "Location acquisition (cold-start cascade, natal-UNSET) is a one-time astrolog -v -n -zN <city> at atlas-modal Enter. Its output is parsed into PlaceInfo (lat, lon, tz, IANA name) and persisted to store.Location. All subsequent chart computes for the session feed those coordinates through -qj {jd_ut} -zl {lon} {lat} — no further -zN calls.",
+        "Atlas-modal preseed is a narrow current-Linux-host convenience: if time.Local.String()'s IANA last segment is plausible as a city name, preseed the modal's fzf filter with it; otherwise open a bare modal. No tz→atlas-city alias table is baked; the preseed is a string hint only and the user completes the pick.",
+        "Body rendering uses a fixed order: the ten luminaries/planets, then Chiron, then the lunar nodes (north then south), then Lilith; the four angles (Ascendant, Midheaven, Descendant, Imum Coeli) are always pinned as a separate block at the bottom of the table.",
+        "Aspects are sorted by strength (power) descending before laying out column-major (top-to-bottom, then left-to-right) into fixed 15-character cells; the applying/separating flag comes from a finite-difference orb probe at t+ε, not from astrolog's geometric orb sign."
+      ],
+      "hidden_constants": [
+        {
+          "justification": "Trace shows exactly 14 regular body rows (Sun through Lilith) before the angle block, matching the canonical luminaries+planets+Chiron+nodes+Lilith set.",
+          "name": "default_body_set_count",
+          "value": 14
+        },
+        {
+          "justification": "Four angles are always rendered in fixed order regardless of chart: Ascendant, Midheaven, Descendant, Imum Coeli.",
+          "name": "angle_row_count",
+          "value": 4
+        },
+        {
+          "justification": "Aspect text is formatted to fit a 15-character cell so a 120-column pane yields seven columns per row, confirmed by the seven-per-row layout in the observed aspects panel.",
+          "name": "aspect_cell_width_chars",
+          "value": 15
+        },
+        {
+          "justification": "Single-space gutter between aspect cells, visible in the trace as single-space separation between 15-char aspect tokens.",
+          "name": "aspect_cell_gutter_chars",
+          "value": 1
+        },
+        {
+          "justification": "Trace shows the U+211E prescription-like glyph appended directly after the minute mark for retrograde bodies (e.g. Lilith in Scorpio in the first frame).",
+          "name": "retrograde_glyph",
+          "value": "℞"
+        }
+      ],
+      "intent": "Produce the data that populates the first stable state Sextile renders after cold start. Three branches keyed off store (natal + location), never off environment or machine-tz fallbacks: natal-SET renders the stored Chart's natal positions with current-moment transits overlaid; natal-UNSET with stored location renders a here-now chart at that place; natal-UNSET with no stored location opens the atlas-pick modal. All chart computes for the session use coordinates resolved by a one-time astrolog -zN at modal Enter; no re-resolution per render.",
+      "observed_state_snapshot": {
+        "frame_at_t": 0.598,
+        "from_trace": "20260419T163333Z--first-meaningful-result",
+        "shape": {
+          "angle_rows": 4,
+          "aspect_cell_width_chars": 15,
+          "aspect_cells_per_row": 7,
+          "aspect_rows": 4,
+          "aspect_sort": "strength_desc",
+          "body_row_columns": [
+            "symbol",
+            "name_truncated_7",
+            "sign_truncated_5",
+            "deg_min",
+            "velocity_bar",
+            "house_string"
+          ],
+          "body_rows_before_angles": 14,
+          "header_fields": [
+            "weekday_abbr",
+            "month_abbr",
+            "day",
+            "year",
+            "hh_mm",
+            "tz_abbr",
+            "place"
+          ],
+          "header_rows": 1,
+          "house_string_width_chars": 18
+        }
+      },
+      "parse_rules": [
+        {
+          "captures": [
+            "symbol",
+            "body",
+            "sign",
+            "deg",
+            "min",
+            "retro"
+          ],
+          "regex": "^\\s*(?P<symbol>\\S+)\\s+(?P<body>[A-Za-z ]+?)\\s+(?P<sign>[A-Z][a-z]{2,4})\\s+(?P<deg>\\d{1,2})°(?P<min>\\d{2})'(?P<retro>[℞R]?)"
+        },
+        {
+          "captures": [
+            "angle",
+            "sign",
+            "deg",
+            "min"
+          ],
+          "regex": "^(?P<angle>Ascendant|Midheaven|Descendant|Imum Coeli)\\s+(?P<sign>[A-Z][a-z]{2,4})\\s+(?P<deg>\\d{1,2})°(?P<min>\\d{2})'"
+        },
+        {
+          "captures": [
+            "sym1",
+            "aspect",
+            "sym2",
+            "orb_deg",
+            "orb_min",
+            "phase"
+          ],
+          "regex": "(?P<sym1>\\S)\\s+(?P<aspect>[☌☍△□⚹⚺⚻])\\s+(?P<sym2>\\S)\\s+\\((?P<orb_deg>\\d{1,2})°(?P<orb_min>\\d{2})'(?P<phase>[AS])\\)"
+        }
+      ],
+      "post_conditions": [
+        "Output must contain every body in the default set plus all four angles — exactly 18 position rows in total for a non-harmonic first frame.",
+        "Every parsed body row yields a degree in [0,30) and a minute in [0,60); a violation indicates a malformed position line.",
+        "Every aspect entry must reference two bodies that also appear in the position list (no dangling symbols).",
+        "The aspects list, after the producer's sort, must be monotonically non-increasing in strength.",
+        "The rendered header's place string equals the name field of the PlaceInfo resolved at acquisition (from the one-time astrolog -zN output for the picked city); no synthetic fallback string is substituted, and the place string never changes mid-session without a subsequent acquisition."
+      ]
+    },
+    "intent-rules-keystroke-to-ir": {
+      "argv_template": "(no astrolog invocation — this capability produces an intent token that downstream packages translate into an astrolog command line; a typical downstream rendering looks like: astrolog -qb {yyyy} {mm} {dd} {hh.hhhh} {zone} {lat} {lon} -n0 -Yn0 {extra_switches})",
+      "examples": [
+        "User taps the day-forward letter while on the chart panel with no modal open, yielding the time-nudge intent, which the recipe renders as: astrolog -qb 1990 5 14 12.5 0 52.37 4.89 -n0 -Yn0",
+        "User taps the transit-search letter while focused on a body row, which eventually issues: astrolog -qb 1990 5 14 12.5 0 52.37 4.89 -dm -n0 -Yn0",
+        "User presses the space bar on a second chart row while one wheel is already pinned, causing selection count to rise to 2 and a multi-wheel bake like: astrolog -qb 1990 5 14 12.5 0 52.37 4.89 -r2 1995 8 3 9.0 0 52.37 4.89 -n0 -Yn0"
+      ],
+      "gotchas": [
+        "The first-match-wins traversal is stable: if two rows share the same key and context but differ only in guard, swapping their order silently changes which one wins when both pass.",
+        "View-only rows are invisible outside their declared view even when the key is unambiguous globally — a user on a different panel sees nothing happen and gets no feedback.",
+        "The shifted variant of a chord lives as a separate row; if the shift modifier is ever normalised away upstream, the shifted intent becomes unreachable without any error.",
+        "Modal-active suppresses almost every binding via the universal predicate; forgetting to clear that flag after a modal dismissal strands the user with a seemingly dead keyboard.",
+        "Time nudges are hard-coded durations, not calendar-aware: a year step is 8760 hours, which drifts on leap years and surprises anyone expecting civil-calendar arithmetic.",
+        "The pinned-wheel guard blocks the toggle silently once the cap is hit — there is no rejected-intent event, just no intent at all."
+      ],
+      "heuristics": [
+        "Evaluate rows in declared order and accept the first whose key, modifier, context, view-focus, and guard chain all hold — later duplicates are dead weight.",
+        "Treat a null/absent guard as unconditionally satisfied; never fabricate one.",
+        "Rows flagged view-only apply only when the currently focused view name equals the row's context tag; global rows without that flag apply everywhere.",
+        "Build the interaction snapshot fresh at every keystroke from registry, modal, and view state; never cache it across ticks.",
+        "When the modal-active flag is set, suppress nearly every intent except the modal's own escape/submit keys (the universal NoModal predicate gates the majority of bindings).",
+        "Generate the ten time-nudge rows programmatically from a signed-duration table — lowercase letter = forward, uppercase = backward, magnitudes year/month/day/hour/minute.",
+        "Keep the upper bound on pinned wheels at the hidden numeric constant below; exceeding it silently drops the toggle-pin intent via guard failure.",
+        "Expose a separate lookup that enumerates every binding valid in a given view — consumers use it to render help overlays without re-running dispatch."
+      ],
+      "hidden_constants": [
+        {
+          "justification": "The multi-wheel cap baked into the selection guard, matching astrolog's -r2..-r6 range.",
+          "name": "max_pinned_wheels",
+          "value": 6
+        },
+        {
+          "justification": "One Julian year approximated as 24*365 hours, used as the coarsest forward/backward time step.",
+          "name": "year_nudge_duration",
+          "value": "8760h"
+        },
+        {
+          "justification": "30-day month approximation used for month-scale time navigation.",
+          "name": "month_nudge_duration",
+          "value": "720h"
+        },
+        {
+          "justification": "Day-scale time step.",
+          "name": "day_nudge_duration",
+          "value": "24h"
+        },
+        {
+          "justification": "Hour-scale time step.",
+          "name": "hour_nudge_duration",
+          "value": "1h"
+        },
+        {
+          "justification": "Finest time step emitted by the default binding set.",
+          "name": "minute_nudge_duration",
+          "value": "1m"
+        },
+        {
+          "justification": "Raw modifier-mask value the table uses to distinguish shifted chords from their bare counterparts; pulled from the terminal key layer.",
+          "name": "shift_modifier_bit",
+          "value": 4
+        },
+        {
+          "justification": "Offset added to non-rune key codes so arrows/delete stay disjoint from ASCII rune space in the match function.",
+          "name": "rune_escape_base",
+          "value": 256
+        },
+        {
+          "justification": "The finite set of focusable panel names against which view-only rows are compared.",
+          "name": "focused_view_names",
+          "value": [
+            "chart",
+            "bodies",
+            "aspects",
+            "details",
+            "log"
+          ]
+        },
+        {
+          "justification": "The three scopes a binding row may declare; any other string is dead code.",
+          "name": "context_tags",
+          "value": [
+            "global",
+            "chart",
+            "bodies"
+          ]
+        },
+        {
+          "justification": "Closed vocabulary of declared side-effect classes each row may advertise; used for docs and test assertions, not control flow.",
+          "name": "effect_tags",
+          "value": [
+            "mutate_selection",
+            "spawn_modal",
+            "run_recipe",
+            "bake_chart",
+            "generate_image",
+            "navigate_time",
+            "navigate_view",
+            "tree_mutation",
+            "clipboard",
+            "config",
+            "quit",
+            "toggle_overlay"
+          ]
+        }
+      ],
+      "intent": "Translate a raw keystroke plus current interaction snapshot into a named intent token by scanning an ordered table of binding rows whose guard predicates pass.",
+      "parse_rules": [
+        {
+          "captures": [
+            "sign",
+            "hours",
+            "minutes",
+            "seconds"
+          ],
+          "regex": "^time-nav-(?P<sign>-?)(?P<hours>\\d+)h(?P<minutes>\\d+)m(?P<seconds>\\d+)s$"
+        },
+        {
+          "captures": [
+            "direction"
+          ],
+          "regex": "^cycle-(prev|next)-chart$"
+        },
+        {
+          "captures": [
+            "direction"
+          ],
+          "regex": "^fixed-wheel-(next|prev)-sign$"
+        },
+        {
+          "captures": [
+            "target"
+          ],
+          "regex": "^toggle-(pin|collapse|help)$"
+        }
+      ],
+      "post_conditions": [
+        "Exactly one intent token is produced per keystroke, or none — never two.",
+        "The emitted intent's declared effect tags are a subset of the fixed effect-tag vocabulary above.",
+        "When a modal is flagged active, no intent with side-effects outside the modal surface is emitted.",
+        "The pinned-wheel count never exceeds the hidden max_pinned_wheels constant after a toggle-pin intent resolves.",
+        "Time-nudge intents parse back to a signed duration whose absolute value is one of the five nudge constants.",
+        "Help/enumeration queries by view never include rows whose context tag contradicts the queried view.",
+        "Undo/redo intents fire only when the corresponding history stack is non-empty at dispatch time.",
+        "The transit-search intent fires only when the bodies panel is focused and a specific celestial body is highlighted."
+      ]
+    }
+  },
+  "schema_version": 1
+}

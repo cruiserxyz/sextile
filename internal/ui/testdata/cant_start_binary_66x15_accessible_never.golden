@@ -1,0 +1,15 @@
+                                                                  
++----------------------------------------------------------------+
+|                                                                |
+|  Sextile can't start: the astrolog binary was not found.       |
+|                                                                |
+|  To fix it, either                                             |
+|    · run Sextile from its Docker image, which builds Astrolog  |
+|      for you, or                                               |
+|    · install Astrolog 8.00 as README, Install and run says.    |
+|                                                                |
+|  Then start Sextile again.                            q quits  |
+|                                                                |
++----------------------------------------------------------------+
+                                                                  
+                                                                  

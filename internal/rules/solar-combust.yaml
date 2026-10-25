@@ -1,0 +1,26 @@
+# Rule solar.combust (specs/venus-tab-cycle.md § Rules and terms). The 1647
+# source holds combustion only "in the same Signe where the Sun is in", so the
+# row carries that condition. Ids and labels name the criterion, never the
+# author (specs/details-reading-contract.md R4); the citation is the
+# attribution. Not shipped: 8° (no traditional source found; a modern rounding
+# of 8°30′); al-Bīrūnī's 6°/7° (they differ by side of the Sun, §§461-462,
+# which this kind cannot state yet).
+rule: solar.combust
+kind: within
+measure: elongation.lon.abs
+verdict: combust
+otherwise: not-combust
+rows:
+  - id: solar.combust/8.5
+    label: same sign
+    threshold: 8°30′
+    inclusive: yes
+    condition:
+      fact: sign.same-as-sun
+      equals: yes
+    citation:
+      author: William Lilly
+      work: Christian Astrology
+      edition: London 1647
+      locator: p.113
+    grade: primary

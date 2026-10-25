@@ -1,0 +1,24 @@
+[0m[1;37mAstrolog 8.00 chart for Sat Jun 15, 1985 12:00 (ST Zone 0W)  11ø34E 48ø08N
+[0m[1;30mBody  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Whole Houses
+
+[1;31mSun : [1;32m24Gem19[0m   - 0ø00' (-)[1;31m [ 9th house] [0m[-] +0.969  -  [1;31mHouse cusp  1: [1;32m 0Lib00[0m[0m
+[1;34mMoon: [1;33m20Tau38[0m   + 0ø15' (X)[1;34m [ 8th house] [0m[f] +0.905  -  [1;33mHouse cusp  2: [1;34m 0Sco00[0m[0m
+[1;32mMerc: [1;34m 3Can50[0m   + 1ø44' (-)[1;33m [10th house] [0m[-] +2.106  -  [1;32mHouse cusp  3: [1;31m 0Sag00[0m[0m
+[1;32mVenu: [1;33m 8Tau36[0m   - 2ø44' (R)[1;34m [ 8th house] [0m[d] +0.988  -  [1;34mHouse cusp  4: [1;33m 0Cap00[0m[0m
+[1;31mMars: [1;34m 4Can01[0m   + 0ø52' (f)[1;33m [10th house] [0m[X] +1.267  -  [1;31mHouse cusp  5: [1;32m 0Aqu00[0m[0m
+[1;31mJupi: [1;32m16Aqu47[0m R - 0ø41' (-)[1;31m [ 5th house] [0m[-] -0.404  -  [1;33mHouse cusp  6: [1;34m 0Pis00[0m[0m
+[1;33mSatu: [1;34m22Sco42[0m R + 2ø18' (-)[1;33m [ 2nd house] [0m[-] -1.725  -  [1;32mHouse cusp  7: [1;31m 0Ari00[0m[0m
+[1;32mUran: [1;31m15Sag37[0m R - 0ø01' (-)[1;32m [ 3rd house] [0m[-] -3.455  -  [1;34mHouse cusp  8: [1;33m 0Tau00[0m[0m
+[1;34mNept: [1;33m 2Cap27[0m R + 1ø09' (f)[1;34m [ 4th house] [0m[X] -4.453  -  [1;31mHouse cusp  9: [1;32m 0Gem00[0m[0m
+[1;34mPlut: [1;34m 2Sco07[0m R +17ø02' (R)[1;33m [ 2nd house] [0m[d] -3.597  -  [1;33mHouse cusp 10: [1;34m 0Can00[0m[0m
+[1;35mChir: [1;32m10Gem04[0m   - 4ø10' (d)[1;31m [ 9th house] [0m[R] +3.962  -  [1;32mHouse cusp 11: [1;31m 0Leo00[0m[0m
+[0;36mNort: [1;33m17Tau52[0m   + 0ø00' (-)[1;34m [ 8th house] [0m[-] +0.104  -  [1;34mHouse cusp 12: [1;33m 0Vir00[0m[0m
+[0;36mSout: [1;34m17Sco52[0m   + 0ø00' (-)[1;33m [ 2nd house] [0m[-] +0.104[0m
+[0;36mLili: [1;31m27Ari47[0m R - 1ø47' (-)[1;32m [ 7th house] [0m[-] -1.486     Car Fix Mut TOT[0m   +: 7
+[1;31mAsce: [1;32m 3Lib52[0m   + 0ø00'    [1;31m [ 1st house] [0m    +0.734[1;31m  Fir  2   0   1   3[0m[0m   -:11
+[1;34mNadi: [1;33m 4Cap50[0m   + 0ø00'    [1;34m [ 4th house] [0m    +0.918[1;33m  Ear  2   3   0   5[0m[1;33m   M: 8
+[1;32mDesc: [1;31m 3Ari52[0m   + 0ø00'    [1;32m [ 7th house] [0m    +0.734[1;32m  Air  1   1   2   4[0m[1;34m   N: 6
+[1;33mMidh: [1;34m 4Can50[0m   + 0ø00'    [1;33m [10th house] [0m    +0.918[1;34m  Wat  3   3   0   6[0m[1;31m   A: 6
+                                                   [0m  TOT  8   7   3  18[1;32m   D: 8
+                                                                          [0m<:10
+[0m

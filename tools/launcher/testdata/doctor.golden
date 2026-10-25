@@ -1,0 +1,51 @@
+=== doctor-clean ===
+ok    docker: found at $FAKEBIN/docker
+ok    daemon: version 29.7.2 (needs 28+)
+ok    endpoint: unix:///var/run/docker.sock
+ok    image: localhost/sextile:v0.1.0-rc.1 is built
+ok    port: 5307 is free
+note  wheel: http://localhost:5307; no wslview or xdg-open found, so open it yourself after the first Ctrl+X
+ok    time zone: Europe/Amsterdam
+ok    charts folder: $TMP/charts (remembered in the config)
+ok    config: $XDG/sextile/launcher.conf
+note  other images: 1 other images; removed at the next launch
+for --no-docker (optional):
+note  go: missing; --no-docker needs Go 1.25 or newer on PATH
+note  astrolog: missing; scripts/build-astrolog installs it in ~/.local/bin (about two minutes)
+note  astrolog files: missing; no sepl_18.se1 or atlas.as in ~/.local/share/astrolog, /usr/local/share/astrolog or /usr/share/astrolog (scripts/build-astrolog installs them)
+[exit 0]
+
+=== doctor-port-busy ===
+ok    docker: found at $FAKEBIN/docker
+ok    daemon: version 29.7.2 (needs 28+)
+ok    endpoint: unix:///var/run/docker.sock
+ok    image: localhost/sextile:v0.1.0-rc.1 is built
+FAIL  port: 5307 in use; ./sextile --port 5308
+note  wheel: http://localhost:5307; no wslview or xdg-open found, so open it yourself after the first Ctrl+X
+ok    time zone: Europe/Amsterdam
+ok    charts folder: $TMP/charts (remembered in the config)
+ok    config: $XDG/sextile/launcher.conf
+note  other images: 1 other images; removed at the next launch
+for --no-docker (optional):
+note  go: missing; --no-docker needs Go 1.25 or newer on PATH
+note  astrolog: missing; scripts/build-astrolog installs it in ~/.local/bin (about two minutes)
+note  astrolog files: missing; no sepl_18.se1 or atlas.as in ~/.local/share/astrolog, /usr/local/share/astrolog or /usr/share/astrolog (scripts/build-astrolog installs them)
+[exit 1]
+
+=== doctor-no-docker ===
+FAIL  docker: Docker was not found on PATH; install it from https://docs.docker.com/get-docker/
+note  daemon: not checked (no docker)
+note  endpoint: not checked (no docker)
+note  image: localhost/sextile:v0.1.0-rc.1 not checked (no working docker)
+ok    port: 5307 is free
+note  wheel: http://localhost:5307; no wslview or xdg-open found, so open it yourself after the first Ctrl+X
+ok    time zone: Europe/Amsterdam
+ok    charts folder: $TMP/charts (remembered in the config)
+ok    config: $XDG/sextile/launcher.conf
+note  other images: not checked (no working docker)
+for --no-docker (optional):
+note  go: missing; --no-docker needs Go 1.25 or newer on PATH
+note  astrolog: missing; scripts/build-astrolog installs it in ~/.local/bin (about two minutes)
+note  astrolog files: missing; no sepl_18.se1 or atlas.as in ~/.local/share/astrolog, /usr/local/share/astrolog or /usr/share/astrolog (scripts/build-astrolog installs them)
+[exit 1]
+

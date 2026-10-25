@@ -1,0 +1,40 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Release notes exist for this tag, or there is no release
+        run: go run ./tools/releasenotes "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+      - name: Astrolog 8.00 from the pinned archive
+        run: |
+          scripts/build-astrolog
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "SEXTILE_ATLAS_PATH=$HOME/.local/share/astrolog/atlas.as" >> "$GITHUB_ENV"
+      - name: Crawl rules from the repository secret
+        env:
+          CRAWL_RULES_B64: ${{ secrets.CRAWL_RULES_B64 }}
+        run: |
+          test -n "$CRAWL_RULES_B64" || { echo "the CRAWL_RULES_B64 secret is missing; the crawl cannot run"; exit 1; }
+          printf '%s' "$CRAWL_RULES_B64" | base64 -d > "$RUNNER_TEMP/crawl-rules.txt"
+          echo "SEXTILE_CRAWL_RULES=$RUNNER_TEMP/crawl-rules.txt" >> "$GITHUB_ENV"
+      - name: The one validation contract on the tagged revision and its whole ancestry
+        run: ./check --release "$GITHUB_REF_NAME"
+      - name: The documented install builds at this tag
+        run: docker build --build-arg SEXTILE_VERSION="$GITHUB_REF_NAME" -t sextile-release .
+      - name: Publish the release with the changelog section as its body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --title "Sextile $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" $pre

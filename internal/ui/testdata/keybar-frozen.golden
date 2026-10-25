@@ -1,0 +1,36 @@
+== 80 accessible details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                               
+== 80 accessible details=true ==
+ Next panel: → | Timeline: enter | Select: space | ... | Help: ? | Quit: q      
+== 80 color-always details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                               
+== 80 color-always details=true ==
+ Next panel: → | Timeline: enter | Select: space | … | Help: ? | Quit: q        
+== 80 color-never details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                               
+== 80 color-never details=true ==
+ Next panel: → | Timeline: enter | Select: space | … | Help: ? | Quit: q        
+== 132 accessible details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                   
+== 132 accessible details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | ... | Help: ? | Quit: q                
+== 132 color-always details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                   
+== 132 color-always details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | … | Help: ? | Quit: q 
+== 132 color-never details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                   
+== 132 color-never details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | … | Help: ? | Quit: q 
+== 200 accessible details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                                                                                       
+== 200 accessible details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | Remove: del | Focus: 1/2/3 | Scroll details: ⌃⇞⌃⇟ | Help: ? | Quit: q                     
+== 200 color-always details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                                                                                       
+== 200 color-always details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | Remove: del | Focus: 1/2/3 | Scroll details: ⌃⇞⌃⇟ | Help: ? | Quit: q                     
+== 200 color-never details=false ==
+ Next panel: → | Focus: 1/2/3 | Help: ? | Quit: q                                                                                                                                                       
+== 200 color-never details=true ==
+ Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | Remove: del | Focus: 1/2/3 | Scroll details: ⌃⇞⌃⇟ | Help: ? | Quit: q                     

@@ -1,0 +1,105 @@
+#!/bin/sh
+# scripts/install: put Sextile v0.1.0 in ~/sextile, then say how to start it.
+#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.0/scripts/install | sh
+# It checks that git and a running Docker exist, then clones the v0.1.0 tag
+# (depth 1) of github.com/cruiserxyz/sextile into $SEXTILE_DIR (default
+# ~/sextile). It never overwrites a folder, never uses sudo, never reads
+# its standard input and never starts Sextile; ./sextile does the rest.
+
+set -eu
+
+TAG=v0.1.0
+REPO_URL=https://github.com/cruiserxyz/sextile.git
+GET_DOCKER=https://docs.docker.com/get-docker/
+
+# A refusal: the reason on stderr, nothing written, exit 2.
+die() {
+  printf '%s\n' "$*" >&2
+  exit 2
+}
+
+# A failure after the checks passed: exit 1.
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+# quote PATH: PATH as one word a shell reads back unchanged.
+quote() {
+  rest=$1
+  out=
+  while :; do
+    case $rest in
+      *\'*)
+        out=$out${rest%%\'*}"'\\''"
+        rest=${rest#*\'}
+        ;;
+      *)
+        out=$out$rest
+        break
+        ;;
+    esac
+  done
+  printf "'%s'" "$out"
+}
+
+# The whole script is this one function, called on the last line, so a
+# download cut short can run nothing.
+main() {
+  [ $# -eq 0 ] || die "scripts/install takes no arguments; set SEXTILE_DIR to choose the folder."
+
+  system=$(uname -s </dev/null)
+  case $system in
+    Linux | Darwin) ;;
+    *) die "Docker is the install, on Linux or macOS, and on Windows from a WSL terminal; this system reports $system." ;;
+  esac
+
+  command -v git >/dev/null 2>&1 || die "git was not found on PATH; install git and run this again."
+  command -v docker >/dev/null 2>&1 || die "Docker was not found on PATH; install it from $GET_DOCKER and run this again."
+  docker info </dev/null >/dev/null 2>&1 || die "Docker is installed but its daemon did not answer (docker info failed); start Docker and run this again."
+
+  dir=${SEXTILE_DIR:-}
+  if [ -z "$dir" ]; then
+    [ -n "${HOME:-}" ] || die "HOME is not set; set SEXTILE_DIR to the folder to install into."
+    dir=$HOME/sextile
+  fi
+
+  # git must never ask a question, and nothing it runs may read our stdin.
+  GIT_TERMINAL_PROMPT=0
+  export GIT_TERMINAL_PROMPT
+
+  if [ -e "$dir" ]; then
+    origin=
+    if [ -e "$dir/.git" ]; then
+      origin=$(git -C "$dir" config --get remote.origin.url </dev/null 2>/dev/null) || origin=
+    fi
+    case $origin in
+      "$REPO_URL" | "${REPO_URL%.git}") ;;
+      *) die "$dir already exists and is not a clone of ${REPO_URL%.git}; it was left untouched. Set SEXTILE_DIR to another folder." ;;
+    esac
+    printf 'Updating the clone in %s to %s ...\n' "$dir" "$TAG"
+    git -C "$dir" fetch --quiet origin "refs/tags/$TAG:refs/tags/$TAG" </dev/null ||
+      fail "git could not fetch $TAG into $dir; your files were not changed."
+    git -C "$dir" checkout --quiet --detach "refs/tags/$TAG" </dev/null ||
+      fail "git could not check out $TAG in $dir (local changes in the way?); nothing was deleted."
+  else
+    printf 'Cloning Sextile %s into %s ...\n' "$TAG" "$dir"
+    git -c advice.detachedHead=false clone --branch "$TAG" --depth 1 -- "$REPO_URL" "$dir" </dev/null ||
+      fail "git could not clone $REPO_URL at $TAG; nothing was installed."
+  fi
+
+  got=$(git -C "$dir" describe --tags --exact-match </dev/null 2>/dev/null) || got=
+  [ "$got" = "$TAG" ] || fail "$dir is not at $TAG after the clone (git describe says '$got'); do not use it."
+
+  if [ -n "${HOME:-}" ] && [ "$dir" = "$HOME/sextile" ]; then
+    shown='~/sextile'
+  else
+    shown=$(quote "$dir")
+  fi
+  printf '\nSextile %s is in %s.\n' "$TAG" "$shown"
+  printf 'To see whether this machine is ready, run ./sextile doctor in that folder.\n'
+  printf 'To start Sextile, run:\n'
+  printf 'cd %s && ./sextile\n' "$shown"
+}
+
+main "$@"

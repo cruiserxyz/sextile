@@ -1,0 +1,43 @@
+# Rule solar.cazimi (specs/venus-tab-cycle.md § Rules and terms). The line is
+# omitted only when no row holds; when any row holds every row renders its
+# verdict, so the 1647 source's 17′ against its own 16′ stays visible.
+# Longitude only: none of these texts states latitude, and the by-longitude
+# term says so. Ids and labels name the criterion, never the author
+# (specs/details-reading-contract.md R4); the citation is the attribution.
+rule: solar.cazimi
+kind: within
+measure: elongation.lon.abs
+verdict: cazimi
+otherwise: not-cazimi
+omit_when_none_hold: yes
+rows:
+  - id: solar.cazimi/17m
+    label: general
+    threshold: 17′
+    inclusive: yes
+    citation:
+      author: William Lilly
+      work: Christian Astrology
+      edition: London 1647
+      locator: p.113
+    grade: primary
+  - id: solar.cazimi/16m
+    label: horary
+    threshold: 16′
+    inclusive: yes
+    citation:
+      author: William Lilly
+      work: Christian Astrology
+      edition: London 1647
+      locator: p.300, aphorism 26
+    grade: primary
+  - id: solar.cazimi/16m-under
+    label: strict
+    threshold: 16′
+    inclusive: no
+    citation:
+      author: al-Bīrūnī
+      work: The Book of Instruction in the Elements of the Art of Astrology
+      edition: trans. R. Ramsay Wright, London 1934
+      locator: §461
+    grade: translation

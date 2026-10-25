@@ -1,0 +1,44 @@
+Astrolog 8.00 chart for Sat Apr 25, 2026 12:00 (ST Zone 0W)  13:25E 52:31N
+
+  1:     Sun (Tau) Squ (Aqu) Pluto      - orb: a0:11' - power: 14.85
+  2:  Uranus (Tau) Squ (Vir) Ascendant  - orb: s0:09' - power: 10.94
+  3:   Venus (Gem) Squ (Vir) Ascendant  - orb: a1:29' - power:  9.45
+  4:    Moon (Leo) Squ (Tau) Midheaven  - orb: a3:24' - power:  9.18
+  5:   Venus (Gem) Con (Tau) Uranus     - orb: s1:38' - power:  6.88
+  6: Mercury (Ari) Squ (Can) Jupiter    - orb: a2:01' - power:  5.68
+  7:  Lilith (Sco) Con (Sco) Nadir      - orb: s0:23' - power:  5.63
+  8:   Ceres (Tau) Con (Tau) Midheaven  - orb: s3:05' - power:  5.58
+  9:     Sun (Tau) Tri (Vir) Ascendant  - orb: a5:09' - power:  5.31
+ 10: Jupiter (Can) Tri (Sco) Nadir      - orb: s1:12' - power:  4.97
+ 11:    Mars (Ari) Con (Ari) Saturn     - orb: s3:37' - power:  4.81
+ 12:  Chiron (Ari) Tri (Vir) Ascendant  - orb: s2:57' - power:  4.50
+ 13: Mercury (Ari) Con (Ari) Mars       - orb: s3:59' - power:  4.29
+ 14:    Moon (Leo) Tri (Ari) Chiron     - orb: a4:22' - power:  4.21
+ 15:   Venus (Gem) Sex (Ari) Neptune    - orb: a1:27' - power:  4.08
+ 16:  Chiron (Ari) Squ (Cap) Vertex     - orb: s0:58' - power:  3.44
+ 17:     Sun (Tau) Tri (Vir) South Node - orb: a2:03' - power:  3.30
+ 18: Jupiter (Can) Sex (Tau) Ceres      - orb: a1:53' - power:  3.09
+ 19: Neptune (Ari) Sex (Aqu) Pluto      - orb: a2:24' - power:  2.88
+ 20:  Saturn (Ari) Sex (Aqu) Pluto      - orb: s3:02' - power:  2.67
+ 21:  Uranus (Tau) Tri (Cap) Vertex     - orb: a1:49' - power:  2.66
+ 22: Jupiter (Can) Tri (Sco) Lilith     - orb: s0:48' - power:  2.49
+ 23:   Venus (Gem) Tri (Aqu) Pluto      - orb: a3:51' - power:  2.42
+ 24:  Uranus (Tau) Sex (Ari) Neptune    - orb: a3:06' - power:  2.31
+ 25:    Moon (Leo) Squ (Tau) Ceres      - orb: s6:30' - power:  2.25
+ 26:   Venus (Gem) Tri (Cap) Vertex     - orb: a3:28' - power:  2.12
+ 27:  Saturn (Ari) Con (Ari) Neptune    - orb: s5:26' - power:  2.01
+ 28:    Moon (Leo) Con (Vir) Ascendant  - orb: s7:20' - power:  1.87
+ 29:    Moon (Leo) Tri (Ari) Mercury    - orb: s6:38' - power:  1.77
+ 30:     Sun (Tau) Squ (Cap) Vertex     - orb: a7:09' - power:  1.44
+ 31:    Moon (Leo) Squ (Tau) Uranus     - orb: a7:10' - power:  1.36
+ 32:    Mars (Ari) Squ (Can) Jupiter    - orb: a6:01' - power:  1.11
+ 33:  Uranus (Tau) Tri (Aqu) Pluto      - orb: a5:30' - power:  1.02
+ 34: Mercury (Ari) Tri (Leo) East Point - orb: a1:40' - power:  0.68
+ 35: Neptune (Ari) Sex (Cap) Vertex     - orb: a4:56' - power:  0.64
+ 36:   Ceres (Tau) Squ (Leo) East Point - orb: a1:49' - power:  0.32
+
+Sum power: 142.21 - Average power: 3.95
+Con:  7   Opp:  0   Squ: 11   Tri: 12   Sex:  6
+Sun:  4   Moo:  6   Mer:  4   Ven:  5   Mar:  3   Jup:  5   Sat:  3   Ura:  6
+Nep:  5   Plu:  5   Chi:  3   Cer:  4   Nor:  0   Sou:  1   Lil:  2   Ver:  5
+Eas:  2   Asc:  5   Nad:  2   Des:  0   Mid:  2

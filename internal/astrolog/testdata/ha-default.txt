@@ -1,0 +1,41 @@
+Astrolog aspects:
+No. Name         Abbrev. Angle     Orb          Description of glyph
+
+ 1 Conjunct       (Con)   0    +/- 7   degrees  Circle with extending line
+ 2 Opposite       (Opp) 180    +/- 7   degrees  Two circles joined by line
+ 3 Square         (Squ)  90    +/- 7   degrees  Quadrilateral
+ 4 Trine          (Tri) 120    +/- 7   degrees  Triangle
+ 5 Sextile        (Sex)  60    +/- 6   degrees  Six pointed asterisk
+ 6 Inconjunct     (Inc) 150    +/- 3   degrees  'K' rotated right
+ 7 SemiSextile    (SSx)  30    +/- 3   degrees  'K' rotated left
+ 8 SemiSquare     (SSq)  45    +/- 3   degrees  Acute angle
+ 9 SesquiQuadrate (Ses) 135    +/- 3   degrees  Square with extending lines
+10 Quintile       (Qui)  72    +/- 2   degrees  Letter 'Q'
+11 BiQuintile     (BQn) 144    +/- 2   degrees  '+' over '-'
+12 SemiQuintile   (SQn)  36    +/- 1   degrees  '-' over '+'
+13 Septile        (Sep)  51.43 +/- 1   degrees  Number '7'
+14 Novile         (Nov)  40    +/- 1   degrees  Number '9'
+15 BiNovile       (BNv)  80    +/- 1   degrees  '9' under Roman 'II'
+16 BiSeptile      (BSp) 102.86 +/- 1   degrees  '7' under Roman 'II'
+17 TriSeptile     (TSp) 154.29 +/- 1   degrees  '7' under Roman 'III'
+18 QuatroNovile   (QNv) 160    +/- 1   degrees  '9' under Roman 'IV'
+19 TreDecile      (TDc) 108    +/- 0.5 degrees  '10' under Roman 'III'
+20 Undecile       (Un1)  32.73 +/- 0.5 degrees  Number '11'
+21 BiUndecile     (Un2)  65.45 +/- 0.5 degrees  '11' under Roman 'II'
+22 TriUndecile    (Un3)  98.18 +/- 0.5 degrees  '11' under Roman 'III'
+23 QuatroUndecile (Un4) 130.91 +/- 0.5 degrees  '11' under Roman 'IV'
+24 QuintUndecile  (Un5) 163.64 +/- 0.5 degrees  '11' under Roman 'V'
+
+Unrestricted aspects in order around zodiac:
+
+Con: Conjunct       covers  -7    to   7    - span  14   
+     No aspect      covers   7    to  54    - span  47   
+Sex: Sextile        covers  54    to  66    - span  12   
+     No aspect      covers  66    to  83    - span  17   
+Squ: Square         covers  83    to  97    - span  14   
+     No aspect      covers  97    to 113    - span  16   
+Tri: Trine          covers 113    to 127    - span  14   
+     No aspect      covers 127    to 173    - span  46   
+Opp: Opposite       covers 173    to 187    - span  14   
+
+Total aspects (54.00, 30.00%), Total gaps (126.00, 70.00%)

@@ -1,0 +1,33 @@
+# Rule solar.beams (specs/body-details-template-poc.md § Rules rows): one row
+# per attribution, each with its readable citation and evidence grade. Ids and
+# labels name the criterion, never the author: the screen stays neutral
+# (specs/details-reading-contract.md R4); the citation below is the attribution. Not
+# shipped: any 15° row (a visibility limit, not a beams rule, Bouché-Leclercq
+# 1899 p.111 n.3) and al-Bīrūnī's 12° (§461; his inferior planets differ by
+# side of the Sun, §462, a condition this kind cannot state yet).
+rule: solar.beams
+kind: within
+measure: elongation.lon.abs
+verdict: under-the-beams
+otherwise: not-under-the-beams
+rows:
+  - id: solar.beams/17
+    label: general
+    threshold: 17°
+    inclusive: no
+    citation:
+      author: William Lilly
+      work: Christian Astrology
+      edition: London 1647
+      locator: p.113
+    grade: primary
+  - id: solar.beams/12
+    label: horary
+    threshold: 12°
+    inclusive: yes
+    citation:
+      author: William Lilly
+      work: Christian Astrology
+      edition: London 1647
+      locator: p.300, aphorism 26
+    grade: primary
