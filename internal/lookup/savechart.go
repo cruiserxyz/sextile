@@ -91,13 +91,7 @@ func SaveFloatingChart(ctx context.Context, dir, name string, when time.Time, pl
 	// The place is the slot's, never typed in the prompt, so an over-long one
 	// is cut where reports cut theirs and the caller says so; a name is the
 	// operator's and is refused by ChartRecord instead.
-	placeLabel := place.Display()
-	placeCut := ""
-	if cut := astrolog.CutLabel(placeLabel); cut != placeLabel {
-		// Astrolog rewrites a double quote inside -zi, so the report names the
-		// label as written (RecordLabel), not as cut.
-		placeLabel, placeCut = cut, astrolog.RecordLabel(cut)
-	}
+	placeLabel, placeCut := savedPlaceLabel(place)
 	record, err := astrolog.ChartRecord(ctx, astrolog.ChartToSave{
 		Name:  name,
 		Place: placeLabel,
@@ -179,4 +173,16 @@ func atlasCanPlace(lon, lat float64) bool {
 	}
 	_, ok := location.Nearest(atlas, lon, lat)
 	return ok
+}
+
+// savedPlaceLabel is the -zi place label a save writes for place: its Display,
+// cut where reports cut theirs. cut is the label as astrolog records it
+// (RecordLabel, since astrolog rewrites a double quote inside -zi) when the
+// cut changed it, else "".
+func savedPlaceLabel(place location.PlaceInfo) (label, cut string) {
+	label = place.Display()
+	if c := astrolog.CutLabel(label); c != label {
+		return c, astrolog.RecordLabel(c)
+	}
+	return label, ""
 }

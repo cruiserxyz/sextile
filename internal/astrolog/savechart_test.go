@@ -4,6 +4,7 @@ package astrolog
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -409,5 +410,47 @@ func TestSavedRecordIsReadableByAstrologAgain(t *testing.T) {
 	}
 	if _, err := ResolveChartFile(context.Background(), path); err != nil {
 		t.Fatalf("astrolog cannot read back the record it wrote: %v\n%s", err, record)
+	}
+}
+
+// A saved chart's coordinates are astrolog's whole arc-minutes: it writes the
+// -qb line itself and cuts anything finer, so seconds passed to -zl never reach
+// the file. What Sextile owns is the rounding on the way in, which keeps a
+// reopened chart within half an arc-minute of the point it was saved at, and
+// the reader, which takes the older degree:minute form and the seconds forms
+// alike.
+func TestSaveChartCoordinatesStayWithinHalfAnArcMinute(t *testing.T) {
+	const berlinLon, berlinLat = 13.4105, 52.5244 // the atlas's Berlin, DE
+	record, err := ChartRecord(context.Background(), ChartToSave{
+		Name: "Berlin Person", Place: "Berlin, DE",
+		When: time.Date(1987, 3, 14, 16, 30, 0, 0, amsterdam()),
+		Lon:  berlinLon, Lat: berlinLat,
+	})
+	if err != nil {
+		t.Fatalf("ChartRecord: %v", err)
+	}
+	got := qbFields(t, record)
+	if len(got) < 9 {
+		t.Fatalf("-qb fields = %q, want the moment, zone, longitude and latitude", got)
+	}
+	lon, lat := parseDegMin(got[len(got)-2]), parseDegMin(got[len(got)-1])
+	if d := math.Abs(lon-berlinLon) * 60; d > 0.5 {
+		t.Errorf("longitude %q reads back %.2f arc-minutes from %v, want at most 0.5", got[len(got)-2], d, berlinLon)
+	}
+	if d := math.Abs(lat-berlinLat) * 60; d > 0.5 {
+		t.Errorf("latitude %q reads back %.2f arc-minutes from %v, want at most 0.5", got[len(got)-1], d, berlinLat)
+	}
+	for _, c := range []struct {
+		in   string
+		want float64
+	}{
+		{"13:25E", 13 + 25.0/60},
+		{"13:24:59E", 13 + 24.0/60 + 59.0/3600},
+		{"52:31'30N", 52 + 31.0/60 + 30.0/3600},
+		{"12:30W", -(12 + 30.0/60)},
+	} {
+		if g := parseDegMin(c.in); math.Abs(g-c.want) > 1e-9 {
+			t.Errorf("parseDegMin(%q) = %v, want %v", c.in, g, c.want)
+		}
 	}
 }

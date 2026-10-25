@@ -49,7 +49,7 @@ Whole Sign in the Lahiri zodiac. There is no bare sidereal tag: a sidereal chart
 All 22 house systems and 11 zodiacs are in the [reference](docs/REFERENCE.md#frame-codes). `Ctrl+H` chooses the houses and
 `Ctrl+Z` the zodiac of the focused chart only; type to filter, and the popup names the chart. `Enter` applies
 the one under the cursor and `Esc` leaves the chart as it was; the chart file is never written, and your choices are back when you quit and reopen. `,` `c` `d`
-makes the floating chart's frame your default, so every chart whose file names no house system opens in it. If your terminal
+makes the floating chart's frame your default, so every chart whose file names no house system opens in it; charts that are open when you press it keep the frame they show. If your terminal
 keeps those keys for itself, `,` then `h` or `,` then `z` do the same.
 
 In a comparison, the aspects are read in the houses and zodiac of the chart named on the right of the Aspects title, `② in ①`
@@ -66,10 +66,10 @@ angular, succedent and cadent. `,` `c` `d` keeps this too, with your city and fr
 You need Docker 28 or newer, running. Linux and Windows (from a WSL terminal) are tested; macOS is expected to work but untested.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.0/scripts/install | sh
+curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.1/scripts/install | sh
 ```
 
-The [install script](scripts/install) is short and worth a read. It checks that git and Docker are there, clones Sextile 0.1.0
+The [install script](scripts/install) is short and worth a read. It checks that git and Docker are there, clones Sextile 0.1.1
 into `~/sextile` (`SEXTILE_DIR` chooses another place), moves an existing Sextile clone to that release, refuses any other
 existing folder, prints the start command, and starts nothing.
 

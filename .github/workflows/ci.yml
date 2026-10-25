@@ -28,6 +28,8 @@ jobs:
           printf '%s' "$CRAWL_RULES_B64" | base64 -d > "$RUNNER_TEMP/crawl-rules.txt"
           echo "SEXTILE_CRAWL_RULES=$RUNNER_TEMP/crawl-rules.txt" >> "$GITHUB_ENV"
       - name: The one validation contract on the exact pushed revision
-        run: ./check --release "${{ github.event.pull_request.head.sha || github.sha }}"
+        run: |
+          shellcheck -V
+          ./check --release "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: The documented install still builds
         run: docker build -t sextile-ci .

@@ -5,6 +5,25 @@ rest one outcome per bullet, then what still limits use and what an upgrade
 changes for you. Astrolog computes every astrological value Sextile shows.
 The format follows Keep a Changelog; versions are semantic, tagged vX.Y.Z.
 
+## [0.1.1] - 2026-10-25
+
+A chart saved with `Ctrl+S` reopens under the city it was saved in. In 0.1.0 a
+city with a district listed close by in Astrolog's atlas could come back under
+the district's name: a chart saved in Berlin reopened as Mitte, DE. Now the
+place name stored in the chart file decides among the atlas places within one
+arc-minute of its coordinates, and a chart file without a place name opens as
+before. Charts already saved with 0.1.0 reopen under their own city too.
+
+Save defaults (`,` `c` `d`) no longer changes the charts you have open. In
+0.1.0 every open chart whose file names no house system came back after a
+restart in the saved house system and zodiac; now each keeps the frame it
+showed, and only the floating chart on a fresh start and charts opened
+afterwards take the saved default. In a second window Save defaults refuses,
+because the first window keeps the session.
+
+0.1.0 was cut but never tagged: its public check failed on GitHub's runner,
+and the fixes are in 0.1.1. Upgrading needs nothing else.
+
 ## [0.1.0] - 2026-10-25
 
 Sextile 0.1.0 opens your Astrolog chart files in the terminal and compares each

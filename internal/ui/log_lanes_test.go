@@ -1020,7 +1020,7 @@ func TestANoteIsReachableAtTheSmallerWidth(t *testing.T) {
 }
 
 // logErrorLine is the error lane for a sentence the caller words in full. It
-// has exactly the two call sites below, by function name, and it adds nothing
+// has exactly the call sites below, by function name, and it adds nothing
 // to what it is given: no "Couldn't" form, no full stop.
 func checkErrorLineMembership(t *testing.T) {
 	t.Helper()
@@ -1028,7 +1028,7 @@ func checkErrorLineMembership(t *testing.T) {
 	for _, site := range callSites(t, "logErrorLine") {
 		got[site.enclosing]++
 	}
-	want := map[string]int{"saveDefaultCity": 1, "applyDefaultCitySaved": 1}
+	want := map[string]int{"saveDefaultCity": 2, "applyDefaultCitySaved": 1}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("logErrorLine is called from %v, want exactly %v", got, want)
 	}

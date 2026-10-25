@@ -364,6 +364,9 @@ type DefaultCitySavedMsg struct {
 	Frame      string
 	FrameSaved bool
 	FrameErr   error
+	// Open is the frame every chart open at the keypress was shown in, for
+	// the ones that had no record (openFramesNow). A save that lands keeps them.
+	Open []store.FrameRecord
 }
 
 // saveDefaultCityCmd writes place, then the house display form, then the frame
@@ -371,9 +374,9 @@ type DefaultCitySavedMsg struct {
 // through the store. It is the only door to the stored city, the stored house
 // display and the stored frame: a start, a pick in the atlas, a choice in the
 // popup and a quit write nothing there.
-func saveDefaultCityCmd(place location.PlaceInfo, form houseForm, houses recipe.HouseSystem, zodiac recipe.Zodiac) tea.Cmd {
+func saveDefaultCityCmd(place location.PlaceInfo, form houseForm, houses recipe.HouseSystem, zodiac recipe.Zodiac, open []store.FrameRecord) tea.Cmd {
 	return func() tea.Msg {
-		msg := DefaultCitySavedMsg{Place: place, Err: store.SetLocation(place)}
+		msg := DefaultCitySavedMsg{Place: place, Err: store.SetLocation(place), Open: open}
 		if msg.Err != nil {
 			return msg
 		}
@@ -392,8 +395,13 @@ func saveDefaultCityCmd(place location.PlaceInfo, form houseForm, houses recipe.
 
 // saveDefaultCity is `<leader> c d`: it keeps the current city, the house
 // display and the floating chart's house system and zodiac as the defaults.
-// With no city chosen yet there is nothing to keep, and nothing is written.
+// With no city chosen yet there is nothing to keep, and nothing is written. A
+// second window writes nothing either: the session that has to keep the open
+// charts' frames (applyDefaultCitySaved) is the first window's.
 func (m Model) saveDefaultCity() (tea.Model, tea.Cmd) {
+	if m.cfg.SecondWindow {
+		return m.logErrorLine("Save defaults is for the first window, which keeps the session; this window keeps nothing"), nil
+	}
 	if !m.place.HasTimezone() {
 		return m.logErrorLine("default city not saved: no city chosen yet"), nil
 	}
@@ -402,7 +410,7 @@ func (m Model) saveDefaultCity() (tea.Model, tea.Cmd) {
 		f := m.slots.Floating()
 		floating = &f
 	}
-	return m, saveDefaultCityCmd(m.place, m.houseDisplay, m.ownHouses(floating).hs, m.ownZodiac(floating))
+	return m, saveDefaultCityCmd(m.place, m.houseDisplay, m.ownHouses(floating).hs, m.ownZodiac(floating), m.openFramesNow())
 }
 
 // applyDefaultCitySaved logs the outcome of a save, and when everything was
@@ -431,6 +439,18 @@ func applyDefaultCitySaved(m Model, msg DefaultCitySavedMsg) (Model, tea.Cmd) {
 			m = m.logNote("default frame saved", "%s", msg.Frame)
 		}
 		m = m.logNote("default city saved", "%s", msg.Place.Display())
+	}
+	if msg.FrameSaved && failed == "" {
+		// The default is for the floating chart on a fresh start and for charts
+		// opened later: every chart open at the keypress keeps the frame it showed. The
+		// default stays saved when this write fails; a quit retries it.
+		var added bool
+		if m, added = m.keepFrames(msg.Open); added {
+			if err := m.writeSessionNow(); err != nil {
+				cause, _, _ := strings.Cut(err.Error(), "\n")
+				failed = "open charts' frames not kept: " + cause
+			}
+		}
 	}
 	if failed != "" {
 		return m.logErrorLine(failed), nil

@@ -10,6 +10,70 @@ import (
 	"testing"
 )
 
+// fakeAstrolog answers the ASTROLOG row's probes the way a complete Astrolog
+// 8.00 does, and breaks one thing when FAKE_ASTROLOG_BREAK names it:
+// semo_12 (the Moon in 1500 comes back from the fallback, with no message,
+// as a real install without that file does), sepl_12 (the same for Pluto and
+// the Moon; a missing semo_18 or sepl_18 moves the 1500 Moon too),
+// seas_12, seas_18 and Eris (Astrolog's "not found" line, and the body at
+// 0Ari00), semo_18 and sepl_18 (the same silent fallback for the 1990 chart),
+// damaged (the Swiss Ephemeris "damaged" line), exit1 (a failing exit status
+// with no message), hang (the version probe never answers).
+const fakeAstrolog = `#!/bin/sh
+b=${FAKE_ASTROLOG_BREAK-}
+case " $* " in
+*" -Hc "*)
+  [ "$b" = hang ] && exec sleep 30
+  echo "|                        ** Astrolog version 8.00 **                       |"
+  exit 0 ;;
+*" 1500 "*)
+  moon="23Aqu15'00\""; pluto="22Sco53'50\""; chiron="21Gem40'31\""
+  case $b in
+  semo_12 | sepl_12) moon="23Aqu15'03\"" ;;
+  semo_18 | sepl_18) moon="23Aqu14'59\"" ;;
+  esac
+  [ "$b" = sepl_12 ] && pluto="22Sco53'35\""
+  if [ "$b" = seas_12 ]; then
+    echo "SwissEph file 'seas_12.se1' not found in PATH '.;:'"; chiron="0Ari00'00\""
+  fi
+  [ "$b" = damaged ] && echo "Ephemeris file seas_12.se1 is damaged (0h)."
+  echo "Astrolog 8.00: Mon Jun 15, 1500"
+  echo "Moon: $moon   - 5:04'33\" (-)"
+  echo "Plut: $pluto R +13:33'13\" (R)"
+  echo "Chir: $chiron   - 5:13'45\" (d)"
+  [ "$b" = exit1 ] && exit 1
+  exit 0 ;;
+*" 1990 "*" -R0 1 2 3 "*)
+  sun="+0.9550731 +0.0000263"; moon="+13.475105 +0.9099220"; chiron="16Can05'31\""
+  [ "$b" = sepl_18 ] && sun="+0.9550718 +0.0000263"
+  [ "$b" = sepl_18 -o "$b" = semo_18 ] && moon="+13.475086 +0.9098571"
+  if [ "$b" = seas_18 ]; then
+    echo "SwissEph file 'seas_18.se1' not found in PATH '.;:'"; chiron="0Ari00'00\""
+  fi
+  echo "Sun : 24Gem25'40\" + 0:00'00\" (-) $sun"
+  echo "Moon: 19Pis33'04\" + 3:25'19\" (-) $moon"
+  echo "Chir: $chiron - 6:15'56\" (-)"
+  exit 0 ;;
+*" -R0 "*)
+  case " $* " in
+  *" 43 "*) n=Hygi; f=se00010s ;;   *" 45 "*) n=Eris; f=s136199s ;;
+  *" 46 "*) n=Haum; f=s136108s ;;   *" 47 "*) n=Make; f=s136472s ;;
+  *" 48 "*) n=Gong; f=s225088s ;;   *" 49 "*) n=Quao; f=se50000s ;;
+  *" 50 "*) n=Sedn; f=se90377s ;;   *" 51 "*) n=Orcu; f=se90482s ;;
+  esac
+  [ "$b" = "$n" ] && echo "SwissEph file '$f.se1' not found in PATH '.;:'"
+  echo "$n: 17Ari31'47\" -17:17'14\" (d)"
+  exit 0 ;;
+esac
+echo "Sun : 24Gem19   - 0:00' (-)"
+`
+
+// fakeShellcheck lints as much as the ASTROLOG-style probe needs: the
+// unquoted $1 of the known-bad snippet is SC2086, anything else is clean.
+const fakeShellcheck = `#!/bin/sh
+if grep -q 'echo \$1' ; then echo "SC2086 (info): Double quote to prevent globbing"; exit 1; fi
+`
+
 // Synthetic rules, as in the crawl's own tests: the words the real rules deny
 // must not appear in this repository.
 const checkRules = `# synthetic rules for the check script's tests
@@ -28,6 +92,7 @@ type checkTree struct {
 	dir string
 	env []string
 	log string
+	bin string
 }
 
 func (c checkTree) git(args ...string) string {
@@ -71,7 +136,8 @@ func newCheckTree(t *testing.T) checkTree {
 	}
 	write(filepath.Join(bin, "go"), "#!/bin/sh\nif [ \"$1\" = run ]; then exec \""+realGo+"\" \"$@\"; fi\nif [ \"$1\" = test ]; then printf 'repo=%s\\nrev=%s\\n' \"${SEXTILE_RELEASE_REPO-<unset>}\" \"${SEXTILE_RELEASE_REV-<unset>}\" > \"$ROWS_LOG.env\"; fi\necho \"go $*\" >> \"$ROWS_LOG\"\n", 0o755)
 	write(filepath.Join(bin, "gofmt"), "#!/bin/sh\necho \"gofmt $*\" >> \"$ROWS_LOG\"\n", 0o755)
-	write(filepath.Join(bin, "astrolog"), "#!/bin/sh\nexit 0\n", 0o755)
+	write(filepath.Join(bin, "astrolog"), fakeAstrolog, 0o755)
+	write(filepath.Join(bin, "shellcheck"), fakeShellcheck, 0o755)
 
 	rules := []byte(checkRules)
 	rulesPath := filepath.Join(t.TempDir(), "rules.txt")
@@ -91,7 +157,7 @@ func newCheckTree(t *testing.T) checkTree {
 	}
 	write(filepath.Join(dir, "go.mod"), "module example.invalid/checktree\n\ngo 1.21\n", 0o644)
 
-	c := checkTree{t: t, dir: dir, log: log}
+	c := checkTree{t: t, dir: dir, log: log, bin: bin}
 	c.env = []string{
 		"PATH=" + bin + ":" + os.Getenv("PATH"),
 		"ROWS_LOG=" + log,
@@ -236,5 +302,111 @@ func TestReleaseRowsKnowTheirCommit(t *testing.T) {
 	}
 	if want := "repo=<unset>\nrev=<unset>\n"; string(b) != want {
 		t.Fatalf("plain rows saw\n%swant\n%s", b, want)
+	}
+}
+
+// withBreak is the tree with the fake astrolog broken in one way.
+func (c checkTree) withBreak(what string) checkTree {
+	c.env = append(append([]string{}, c.env...), "FAKE_ASTROLOG_BREAK="+what)
+	return c
+}
+
+// TestCheckProvesTheAstrologData: the ASTROLOG row is not satisfied by an
+// astrolog that merely exists. A complete one passes; one missing a single
+// data file, damaged, failing or hanging fails the row and the refusal names
+// what is wrong, per file. Without sepl_12 or semo_12 the real Astrolog says
+// nothing and falls back, so those two are told apart by arc-second values.
+func TestCheckProvesTheAstrologData(t *testing.T) {
+	t.Run("complete", func(t *testing.T) {
+		out, code := newCheckTree(t).run()
+		if code != 0 || !strings.Contains(out, "check: ASTROLOG ok") {
+			t.Fatalf("a complete astrolog must pass, got %d\n%s", code, out)
+		}
+	})
+	for _, tc := range []struct{ brk, want string }{
+		{"semo_12", "semo_12.se1 (the Moon in 1500)"},
+		{"sepl_12", "sepl_12.se1 (the planets in 1500)"},
+		{"seas_12", "seas_12.se1 (Chiron in 1500)"},
+		{"semo_18", "semo_18.se1 (the Moon in 1990)"},
+		{"sepl_18", "sepl_18.se1 (the planets in 1990)"},
+		{"seas_18", "seas_18.se1 (Chiron in 1990)"},
+		{"damaged", "seas_12.se1 (Chiron in 1500)"},
+		{"Eris", "s136199s.se1 (Eris)"},
+	} {
+		t.Run("missing "+tc.brk, func(t *testing.T) {
+			out, code := newCheckTree(t).withBreak(tc.brk).run()
+			if code != 1 || !strings.Contains(out, "check: ASTROLOG FAIL") ||
+				!strings.Contains(out, "lacks its ephemeris files ("+tc.want+"); scripts/build-astrolog installs a complete one") {
+				t.Fatalf("an astrolog broken at %s must fail the ASTROLOG row naming %q, got %d\n%s", tc.brk, tc.want, code, out)
+			}
+		})
+	}
+	t.Run("exit status", func(t *testing.T) {
+		out, code := newCheckTree(t).withBreak("exit1").run()
+		if code != 1 || !strings.Contains(out, "check: ASTROLOG FAIL") || !strings.Contains(out, "failed its self-checks (the 1500 chart: exit 1)") {
+			t.Fatalf("a failing exit status with no message must fail the row, got %d\n%s", code, out)
+		}
+	})
+	t.Run("hang", func(t *testing.T) {
+		c := newCheckTree(t).withBreak("hang")
+		c.env = append(c.env, "CHECK_TEST_PROBE_SECONDS=1")
+		out, code := c.run()
+		if code != 1 || !strings.Contains(out, "check: ASTROLOG FAIL") || !strings.Contains(out, "failed its self-checks (the version: timed out after 1s)") {
+			t.Fatalf("a hanging astrolog must be refused by the watchdog, got %d\n%s", code, out)
+		}
+	})
+}
+
+// pathWithout is a directory of links to every command on PATH except name,
+// for a test of what ./check does when name is not installed.
+func pathWithout(t *testing.T, name string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+		entries, _ := os.ReadDir(d)
+		for _, e := range entries {
+			if e.Name() == name {
+				continue
+			}
+			_ = os.Symlink(filepath.Join(d, e.Name()), filepath.Join(dir, e.Name())) // the first on PATH wins
+		}
+	}
+	return dir
+}
+
+// TestReleaseCheckRefusesWithoutShellcheck: the installer's shell check skips
+// when shellcheck is absent, so ./check --release must not run without it;
+// plain ./check keeps its behaviour.
+func TestReleaseCheckRefusesWithoutShellcheck(t *testing.T) {
+	c := newCheckTree(t)
+	if err := os.Remove(filepath.Join(c.bin, "shellcheck")); err != nil {
+		t.Fatal(err)
+	}
+	c.env[0] = "PATH=" + c.bin + ":" + pathWithout(t, "shellcheck")
+	out, code := c.run("--release", "HEAD")
+	if code != 1 || !strings.Contains(out, "check: shellcheck is not on PATH, so the installer's shell check would skip") ||
+		!strings.Contains(out, "check: FAIL SHELLCHECK") || c.rows() != "" {
+		t.Fatalf("want an immediate failure without shellcheck, got %d\n%s", code, out)
+	}
+	if out, code := c.run(); code != 0 {
+		t.Fatalf("plain check must not need shellcheck, got %d\n%s", code, out)
+	}
+	// with shellcheck present the release check goes on
+	c = newCheckTree(t)
+	if out, code := c.run("--release", "HEAD"); code != 0 || !strings.Contains(out, "check: SHELLCHECK ok") {
+		t.Fatalf("a release check with shellcheck must pass, got %d\n%s", code, out)
+	}
+}
+
+// TestReleaseCheckRefusesAShellcheckThatDoesNotLint: a shim named shellcheck
+// that exits 0 would let the installer's shell check pass without checking.
+func TestReleaseCheckRefusesAShellcheckThatDoesNotLint(t *testing.T) {
+	c := newCheckTree(t)
+	if err := os.WriteFile(filepath.Join(c.bin, "shellcheck"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, code := c.run("--release", "HEAD")
+	if code != 1 || !strings.Contains(out, "check: shellcheck on PATH does not lint (") || !strings.Contains(out, "check: FAIL SHELLCHECK") || c.rows() != "" {
+		t.Fatalf("a shellcheck shim that exits 0 must be refused, got %d\n%s", code, out)
 	}
 }

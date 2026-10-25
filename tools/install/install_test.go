@@ -20,10 +20,22 @@ import (
 	"testing"
 )
 
-const (
-	tag     = "v0.1.0"
-	repoURL = "https://github.com/cruiserxyz/sextile.git"
-)
+const repoURL = "https://github.com/cruiserxyz/sextile.git"
+
+// tag is the release scripts/install clones, read from its TAG= line, so a
+// release bumps the script and these tests follow; I1-5 ties that line to
+// CHANGELOG.md's newest dated section.
+var tag = func() string {
+	b, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install"))
+	if err != nil {
+		panic(err)
+	}
+	m := regexp.MustCompile(`(?m)^TAG=(v[0-9.]+)$`).FindSubmatch(b)
+	if m == nil {
+		panic("scripts/install has no TAG= line")
+	}
+	return string(m[1])
+}()
 
 func repoFile(t *testing.T, rel string) string {
 	t.Helper()

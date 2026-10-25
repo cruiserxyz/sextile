@@ -22,6 +22,7 @@ func TestRunIsolatesTheChartLibraryOverrides(t *testing.T) {
 		"XDG_CACHE_HOME":         "/operator/home/.cache",
 		"SEXTILE_CHARTS_DIR":     "/operator/real/client-charts",
 		"SEXTILE_DEV_CHARTS_DIR": "/repo/test_charts",
+		"SEXTILE_ATLAS_PATH":     "/operator/atlas/atlas.as",
 	} {
 		t.Setenv(k, v) // recorded so the harness restores it after this test
 	}
@@ -31,7 +32,8 @@ func TestRunIsolatesTheChartLibraryOverrides(t *testing.T) {
 	code := Run(func() int {
 		inside = map[string]string{}
 		for _, k := range []string{"HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME",
-			"XDG_STATE_HOME", "XDG_CACHE_HOME", "SEXTILE_CHARTS_DIR", "SEXTILE_DEV_CHARTS_DIR"} {
+			"XDG_STATE_HOME", "XDG_CACHE_HOME", "SEXTILE_CHARTS_DIR", "SEXTILE_DEV_CHARTS_DIR",
+			"SEXTILE_ATLAS_PATH"} {
 			inside[k] = os.Getenv(k)
 		}
 		sandbox = os.Getenv("HOME")
@@ -66,10 +68,9 @@ func TestRunIsolatesTheChartLibraryOverrides(t *testing.T) {
 	}
 	// The atlas is deliberately NOT redirected: it is read-only reference data
 	// the .as translation genuinely needs, and there is no copy in a sandbox.
-	if _, ok := os.LookupEnv("SEXTILE_ATLAS_PATH"); ok {
-		if inside["SEXTILE_ATLAS_PATH"] != os.Getenv("SEXTILE_ATLAS_PATH") {
-			t.Error("SEXTILE_ATLAS_PATH must pass through: tests need the real atlas")
-		}
+	if got := inside["SEXTILE_ATLAS_PATH"]; got != "/operator/atlas/atlas.as" {
+		t.Errorf("SEXTILE_ATLAS_PATH = %q inside the sandbox, want it passed through: "+
+			"tests need the real atlas", got)
 	}
 	_ = filepath.Join // keep the import honest if the assertions above change
 }

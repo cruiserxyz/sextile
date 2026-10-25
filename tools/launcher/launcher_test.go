@@ -2227,10 +2227,14 @@ func codeBlocks(lines []string) [][]string {
 	return all
 }
 
-// The README's Install and run leads with the one-line installer, then the
-// launcher it ends at, doctor first.
+// The README's Install and run leads with the one-line installer, at the tag
+// scripts/install clones, then the launcher it ends at, doctor first.
 func TestReadmeLeadsWithLauncher(t *testing.T) {
-	const url = "https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.0/scripts/install"
+	m := regexp.MustCompile(`(?m)^TAG=(v[0-9.]+)$`).FindStringSubmatch(repoFile(t, "scripts/install"))
+	if m == nil {
+		t.Fatal("scripts/install has no TAG= line")
+	}
+	url := "https://raw.githubusercontent.com/cruiserxyz/sextile/" + m[1] + "/scripts/install"
 	got := codeBlocks(section(t, repoFile(t, "README.md"), "Install and run"))
 	want := [][]string{
 		{"curl -fsSL " + url + " | sh"},

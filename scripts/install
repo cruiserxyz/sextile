@@ -1,14 +1,14 @@
 #!/bin/sh
-# scripts/install: put Sextile v0.1.0 in ~/sextile, then say how to start it.
-#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.0/scripts/install | sh
-# It checks that git and a running Docker exist, then clones the v0.1.0 tag
+# scripts/install: put Sextile v0.1.1 in ~/sextile, then say how to start it.
+#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.1/scripts/install | sh
+# It checks that git and a running Docker exist, then clones the v0.1.1 tag
 # (depth 1) of github.com/cruiserxyz/sextile into $SEXTILE_DIR (default
 # ~/sextile). It never overwrites a folder, never uses sudo, never reads
 # its standard input and never starts Sextile; ./sextile does the rest.
 
 set -eu
 
-TAG=v0.1.0
+TAG=v0.1.1
 REPO_URL=https://github.com/cruiserxyz/sextile.git
 GET_DOCKER=https://docs.docker.com/get-docker/
 
@@ -48,6 +48,7 @@ quote() {
 main() {
   [ $# -eq 0 ] || die "scripts/install takes no arguments; set SEXTILE_DIR to choose the folder."
 
+  # shellcheck disable=SC2217 # uname reads no stdin, but this script never lets a command read the piped installer
   system=$(uname -s </dev/null)
   case $system in
     Linux | Darwin) ;;
@@ -92,6 +93,7 @@ main() {
   [ "$got" = "$TAG" ] || fail "$dir is not at $TAG after the clone (git describe says '$got'); do not use it."
 
   if [ -n "${HOME:-}" ] && [ "$dir" = "$HOME/sextile" ]; then
+    # shellcheck disable=SC2088 # a display string for the operator, never expanded
     shown='~/sextile'
   else
     shown=$(quote "$dir")

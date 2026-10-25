@@ -1,7 +1,7 @@
 # Sextile reference
 
 The [README](../README.md) gets you to a first session. This page holds the rest: what each panel shows, every
-key, the install routes and their options, where Sextile keeps what, and its limits. It describes Sextile 0.1.0.
+key, the install routes and their options, where Sextile keeps what, and its limits. It describes Sextile 0.1.1.
 
 - [The screen](#the-screen)
 - [Keys](#keys)
@@ -255,7 +255,7 @@ The README's [Install and run](../README.md#install-and-run) fetches Sextile wit
 - `./sextile --charts-dir DIR` uses another charts folder for one run, `./sextile --port 5308` another port, `./sextile --no-open` leaves the browser closed, and `./sextile --rebuild` builds the image again. Anything after `--` goes to Sextile itself.
 - After a launch, `./sextile` removes older `localhost/sextile` images that it built itself and that no container uses; other images are never touched.
 - `./sextile doctor` says what is wrong (Docker, the port, the charts folder) without changing anything.
-- Your time zone is passed in so the first run can propose your city. A proposed city is named in the Log; choose another with Ctrl+L or keep it as your default with `, c d`, which keeps your house display (`, a`) with it, and the floating chart's house system and zodiac as the frame a chart that names none opens in; a city chosen with Ctrl+L lasts for the session only. Chart times always use each chart's own place.
+- Your time zone is passed in so the first run can propose your city. A proposed city is named in the Log; choose another with Ctrl+L or keep it as your default with `, c d`, which keeps your house display (`, a`) with it, and the floating chart's house system and zodiac as the frame a chart that names none opens in (charts already open keep the frame they show, and a second window refuses `, c d`); a city chosen with Ctrl+L lasts for the session only. Chart times always use each chart's own place.
 - Times and dates follow a `clock:` block in `preferences.yaml` (where it lives is under [The wheel](#the-wheel)): `hours: 24` (default) or `12`, and `dates: month-first` (default) or `day-first`, each on its own indented line. It is read when Sextile starts.
 
 ### By hand
@@ -303,7 +303,7 @@ Requires Go 1.25 or newer and a C compiler for Astrolog. `scripts/build-astrolog
 - **Backups.** A retitled chart's previous file, in `<charts folder>/.sextile/backup`.
 - **Charts you save.** New `name.as` files in the charts folder; nothing is overwritten.
 - **Preferences.** `preferences.yaml` (with Docker or `./sextile --no-docker`, `<charts folder>/.sextile/config/sextile/preferences.yaml`;
-  started by hand, `~/.config/sextile/preferences.yaml`): the default city, house display and frame that `, c d` keeps (the frame is a `frame:` block
+  started by hand, `~/.config/sextile/preferences.yaml`): the default city, house display and frame that `, c d` keeps for the floating chart on a fresh start and for charts opened afterwards (the frame is a `frame:` block
   with `houses:`, Astrolog's name for the house system, and `zodiac:`, `tropical` or `sidereal <name>`), the
   `clock:` block and `wheel_format`.
 - **The launcher's memory.** `~/.config/sextile/` remembers which charts folder `./sextile` uses.

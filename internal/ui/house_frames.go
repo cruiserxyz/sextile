@@ -523,6 +523,88 @@ func (m Model) chooseFrame(slotIdx int, c frameChoice) (Model, tea.Cmd) {
 	return m.recastHouses()
 }
 
+// openFramesNow is what Save defaults freezes: for every open anchored chart
+// that has a file, the houses and zodiac it is shown in at this moment, for each
+// of the two it has no record of its own (none, or one made for another chart
+// moment). Each entry is a record naming only those fields, with the chart's
+// file and moment. The defaults are not applied to the model by a save, so what
+// ownHouses and ownZodiac answer is what the row tag shows. The floating slot
+// and a chart with no file have no entry.
+func (m Model) openFramesNow() []store.FrameRecord {
+	if m.slots == nil {
+		return nil
+	}
+	var out []store.FrameRecord
+	for _, s := range m.slots.All() {
+		file := slotFile(s)
+		if file == "" {
+			continue
+		}
+		moment := m.chartMoment(s)
+		rec, had := m.frames.find(file, false)
+		if had && !rec.When.Equal(moment) {
+			// A record made for another chart carries nothing over to this one.
+			rec = store.FrameRecord{}
+		}
+		keep := store.FrameRecord{File: file, When: moment}
+		if own := m.ownHouses(s); !rec.HasHouses && !own.unresolved {
+			keep.Houses, keep.HasHouses, keep.From = own.hs, true, store.FrameFromChosen
+		}
+		if !rec.HasZodiac {
+			keep.Zodiac, keep.HasZodiac = m.ownZodiac(s).RecordName(), true
+		}
+		if keep.HasHouses || keep.HasZodiac {
+			out = append(out, keep)
+		}
+	}
+	return out
+}
+
+// keepFrames writes the entries openFramesNow made when Save defaults was
+// pressed, for the charts that are still open with the same file and moment:
+// a chart opened since is not one of them and takes the default. An entry
+// fills only what the chart still has no record of, with the frame it had at
+// the keypress, and a record that exists is never changed. It reports whether a
+// record was added.
+func (m Model) keepFrames(snapshot []store.FrameRecord) (Model, bool) {
+	if m.slots == nil {
+		return m, false
+	}
+	added := false
+	for _, e := range snapshot {
+		open := false
+		for _, s := range m.slots.All() {
+			if slotFile(s) == e.File && m.chartMoment(s).Equal(e.When) {
+				open = true
+				break
+			}
+		}
+		if !open {
+			continue
+		}
+		rec, had := m.frames.find(e.File, false)
+		if had && !rec.When.Equal(e.When) {
+			rec = store.FrameRecord{}
+		}
+		changed := false
+		if e.HasHouses && !rec.HasHouses {
+			rec.Houses, rec.HasHouses, rec.From = e.Houses, true, e.From
+			changed = true
+		}
+		if e.HasZodiac && !rec.HasZodiac {
+			rec.Zodiac, rec.HasZodiac = e.Zodiac, true
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		rec.File, rec.Floating, rec.When = e.File, false, e.When
+		m.frames = m.frames.with(rec)
+		added = true
+	}
+	return m, added
+}
+
 // recastHouses recasts everything on screen after the house system or zodiac a
 // chart is shown in changed: the text frame and its columns, Details, the timeline's
 // searches and an open wheel.

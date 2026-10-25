@@ -218,7 +218,7 @@ func ResolvePickedChartIn(ctx context.Context, dir string, c store.NamedChart) (
 		// atlas, or a city near them, the file is not castable as a listing row
 		// either; the label stays empty rather than half-filled.
 		if atlas, err := loadAtlas(); err == nil {
-			if city, ok := location.Nearest(atlas, cf.Lon, cf.Lat); ok {
+			if city, ok := location.NearestNamed(atlas, cf.Lon, cf.Lat, cf.PlaceLabel); ok {
 				picked.Place = location.PlaceInfo{Name: city.Name, Country: city.Country, Lat: cf.Lat, Lon: cf.Lon, TZ: city.TZ}
 				picked.HasPlace = true
 				if cf.Name != "" {
@@ -327,7 +327,7 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 			drop(e.Name(), "not a chart astrolog can read")
 			continue
 		}
-		place, ok := location.Nearest(atlas, h.Lon, h.Lat)
+		place, ok := location.NearestNamed(atlas, h.Lon, h.Lat, h.PlaceLabel)
 		if !ok {
 			drop(e.Name(), "no known city near its coordinates")
 			continue

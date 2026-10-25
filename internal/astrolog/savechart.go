@@ -37,6 +37,12 @@ type ChartToSave struct {
 // Astrolog writes the record rather than Sextile formatting one, which is the
 // whole point: the dialect, the field order and the rounding are then astrolog's
 // own and cannot drift from what astrolog reads back.
+//
+// The coordinates in that record are whole arc-minutes, and the floor is
+// astrolog's: its writer cuts anything finer than a minute from -zl, so seconds
+// passed here never reach the file (13:24:59E is written 13:24E). Sextile
+// rounds to the nearest minute first, which keeps a reopened chart within half
+// an arc-minute of where it was saved.
 func ChartRecord(ctx context.Context, c ChartToSave) ([]byte, error) {
 	// A label carrying a control character is refused before anything is
 	// spawned. The record astrolog writes is LINE-BASED: a newline inside the

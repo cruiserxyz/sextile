@@ -5,8 +5,9 @@ Bug reports and pull requests are welcome on GitHub.
 
 ## Before you open a pull request
 
-- `./check` must pass: it runs gofmt, go vet, the tests (Astrolog 8.00 on PATH; `scripts/build-astrolog`
-  installs it) and the repository's content rules.
+- `./check` must pass: it runs gofmt, go vet, the tests and the repository's content rules. It needs Astrolog 8.00
+  on PATH with its complete data, including the 1200-1800 and dwarf-planet ephemeris files (`scripts/build-astrolog`
+  installs it, and `./check` refuses an Astrolog without them). `./check --release` also needs `shellcheck`.
 - Commit messages: `area: imperative subject` of at most 60 characters, a blank line, then one paragraph that
   says why. No trailers.
 - Never compute a position, aspect, dignity or house in Go; never add a cache in the Astrolog path; never let a

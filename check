@@ -6,7 +6,7 @@
 #                           full DAG) must pass the message, author and
 #                           committer rules, and the check stops at once when
 #                           one does not, before any expensive row. Then
-#                           astrolog present, gofmt, the chart-extension rule
+#                           astrolog present with its complete data, gofmt, the chart-extension rule
 #                           (CHARTEXT), vet, go test ./..., and the crawl
 #                           (tools/crawl). It fails outright when
 #                           git, a work tree or a base ref is missing.
@@ -15,6 +15,8 @@
 #                           every commit on REV's ancestry (message, author,
 #                           committer, whole tree) is crawled. The pre-push
 #                           hook, CI and the release workflow run exactly this.
+#                           It also needs shellcheck on PATH, so the
+#                           installer's shell check can never skip.
 #
 # The crawl reads its rules from $SEXTILE_CRAWL_RULES (a file kept outside
 # this tree) and refuses to run without it; a missing rules file is a failure,
@@ -50,9 +52,126 @@ row() { # row NAME COMMAND...
   fi
 }
 
+# probe: run a command with no stdin, output (both streams) in PROBE_OUT, and
+# fail with PROBE_WHY set when it exits nonzero or runs past the watchdog,
+# which kills it after PROBE_SECONDS. A background process and a sleeping
+# watchdog rather than timeout(1), which stock macOS lacks.
+PROBE_SECONDS=${CHECK_TEST_PROBE_SECONDS:-60}
+probe() {
+  local out pid dog rc=0
+  PROBE_OUT= PROBE_WHY=
+  out=$(mktemp "${TMPDIR:-/tmp}/sextile-probe.XXXXXX") || { PROBE_WHY='no temp file'; return 1; }
+  "$@" >"$out" 2>&1 </dev/null &
+  pid=$!
+  ( sleep "$PROBE_SECONDS"; kill -9 "$pid" 2>/dev/null && : >"$out.timeout" ) >/dev/null 2>&1 &
+  dog=$!
+  wait "$pid" || rc=$?
+  kill "$dog" 2>/dev/null || true
+  wait "$dog" 2>/dev/null || true
+  PROBE_OUT=$(cat "$out")
+  if [ -e "$out.timeout" ]; then
+    PROBE_WHY="timed out after ${PROBE_SECONDS}s"
+  elif [ "$rc" -ne 0 ]; then
+    PROBE_WHY="exit $rc"
+  fi
+  rm -f "$out" "$out.timeout"
+  [ -z "$PROBE_WHY" ]
+}
+
+# astrolog_present: the Astrolog on PATH is 8.00 and loads the data files
+# scripts/build-astrolog installs. It runs that script's own version and
+# baseline self-checks, then one chart per data file group, and refuses on a
+# nonzero exit, a timeout, Astrolog's "not found" or "damaged" line, or a body
+# row missing from the output.
+#   1500 chart, the planets, the Moon and Chiron: sepl_12, semo_12, seas_12.
+#   1990 chart, the same bodies: sepl_18, semo_18, seas_18.
+#   1990 chart, one body per run: Hygiea (object 43) se00010s, Eris (45)
+#   s136199s, Haumea (46) s136108s, Makemake (47) s136472s, Gonggong (48)
+#   s225088s, Quaoar (49) se50000s, Sedna (50) se90377s, Orcus (51) se90482s.
+# Astrolog announces a missing seas_12, seas_18 or dwarf-planet file, but it
+# falls back without a word when a sepl or semo file is absent, so those four
+# are proved by values only the files give (Astrolog 8.00, -b0):
+#   sepl_12: Pluto in 1500 at 22Sco53'50" (the fallback gives 53'35").
+#   sepl_18: the Sun's velocity in 1990, +0.9550731 (fallback +0.9550718).
+#   semo_18: the Moon's velocity in 1990, +13.475105 (fallback +13.475086),
+#            blamed on semo_18 only when the Sun's is right, since a missing
+#            sepl_18 moves the Moon too.
+#   semo_12: the Moon in 1500 at 23Aqu15'00" (fallback 15'03"), blamed on
+#            semo_12 only when nothing above explains it, since a missing
+#            sepl_12, semo_18 or sepl_18 moves it as well (14'59").
+# So with two of those files missing the refusal may name one; fixing it and
+# running again names the next. These 14 files are proved to load and
+# compute here; the rest of the share, and that a file is byte-identical to
+# the pinned one, are not.
 astrolog_present() {
-  command -v astrolog >/dev/null && return 0
-  printf 'check: astrolog is not on PATH, so the live tests would skip\n' >&2
+  local files= other= n f b name sepl12= moon12= moon18=
+  if ! command -v astrolog >/dev/null; then
+    printf 'check: astrolog is not on PATH, so the live tests would skip\n' >&2
+    return 1
+  fi
+  if ! probe astrolog -Hc; then
+    other="the version: $PROBE_WHY"
+  else
+    case $PROBE_OUT in *'Astrolog version 8.00'*) ;; *) other='the version: not Astrolog 8.00' ;; esac
+  fi
+  if ! probe astrolog -qa 6 15 1990 14:30 5:00 122W 37N; then
+    other=${other:+$other; }"the baseline chart: $PROBE_WHY"
+  else
+    case $PROBE_OUT in *'Sun :'*Gem*) ;; *) other=${other:+$other; }'the baseline chart: no Sun in Gemini' ;; esac
+  fi
+  if ! probe astrolog -qa 6 15 1500 12:00 0:00 0W 51N -R0 1 2 3 4 5 6 7 8 9 10 11 -b0; then
+    other=${other:+$other; }"the 1500 chart: $PROBE_WHY"
+  else
+    case $PROBE_OUT in
+      *'not found'* | *'NOT FOUND'* | *'amaged'*) files=${files:+$files; }'seas_12.se1 (Chiron in 1500)' ;;
+      *) case $PROBE_OUT in *'Chir:'*) ;; *) other=${other:+$other; }'the 1500 chart: no Chiron row' ;; esac ;;
+    esac
+    case $PROBE_OUT in *"Plut: 22Sco53'50\""*) ;; *) files=${files:+$files; }'sepl_12.se1 (the planets in 1500)'; sepl12=1 ;; esac
+    case $PROBE_OUT in *"Moon: 23Aqu15'00\""*) ;; *) moon12=1 ;; esac
+  fi
+  if ! probe astrolog -qa 6 15 1990 14:30 5:00 122W 37N -R0 1 2 3 4 5 6 7 8 9 10 11 -b0; then
+    other=${other:+$other; }"the 1990 chart: $PROBE_WHY"
+  else
+    case $PROBE_OUT in
+      *'not found'* | *'NOT FOUND'* | *'amaged'*) files=${files:+$files; }'seas_18.se1 (Chiron in 1990)' ;;
+      *) case $PROBE_OUT in *'Chir:'*) ;; *) other=${other:+$other; }'the 1990 chart: no Chiron row' ;; esac ;;
+    esac
+    case $PROBE_OUT in *'+13.475105 +0.9099220'*) ;; *) moon18=1 ;; esac
+    case $PROBE_OUT in
+      *'+0.9550731 +0.0000263'*) [ -z "$moon18" ] || files=${files:+$files; }'semo_18.se1 (the Moon in 1990)' ;;
+      *) files=${files:+$files; }'sepl_18.se1 (the planets in 1990)' ;;
+    esac
+    if [ -n "$moon12" ] && [ -z "$sepl12$moon18" ]; then files=${files:+$files; }'semo_12.se1 (the Moon in 1500)'; fi
+  fi
+  for b in '43 Hygi se00010s Hygiea' '45 Eris s136199s Eris' '46 Haum s136108s Haumea' \
+           '47 Make s136472s Makemake' '48 Gong s225088s Gonggong' '49 Quao se50000s Quaoar' \
+           '50 Sedn se90377s Sedna' '51 Orcu se90482s Orcus'; do
+    set -- $b; n=$1; f=$3; name=$4
+    if ! probe astrolog -qa 6 15 1990 14:30 5:00 122W 37N -R0 "$n"; then
+      other=${other:+$other; }"the $name chart: $PROBE_WHY"
+      continue
+    fi
+    case $PROBE_OUT in
+      *'not found'* | *'NOT FOUND'* | *'amaged'*) files=${files:+$files; }"$f.se1 ($name)" ;;
+      *"$2:"*) ;;
+      *) other=${other:+$other; }"the $name chart: no $name row" ;;
+    esac
+  done
+  [ -z "$files" ] || printf 'check: the Astrolog on PATH lacks its ephemeris files (%s); scripts/build-astrolog installs a complete one\n' "$files" >&2
+  [ -z "$other" ] || printf 'check: the Astrolog on PATH failed its self-checks (%s); scripts/build-astrolog installs a complete one\n' "$other" >&2
+  [ -z "$files$other" ]
+}
+# shellcheck_present: ./check --release only. Without a working shellcheck the
+# installer's shell check skips or proves nothing, and a release check must
+# not. It has to flag a known-bad snippet (SC2086) to count as present.
+shellcheck_present() {
+  local out rc=0
+  command -v shellcheck >/dev/null || {
+    printf 'check: shellcheck is not on PATH, so the installer'"'"'s shell check would skip\n' >&2
+    return 1; }
+  out=$(printf '#!/bin/sh\necho $1\n' | shellcheck -s sh - 2>&1) || rc=$?
+  case $out in *SC2086*) [ "$rc" -ne 0 ] && return 0 ;; esac
+  printf 'check: shellcheck on PATH does not lint (a known-bad snippet gave exit %s and %s)\n' "$rc" "${out:-no output}" >&2
   return 1
 }
 gofmt_clean() {
@@ -144,6 +263,7 @@ if [ "$MODE" = tree ]; then
   stop_row MESSAGES messages_range
   run_rows
 else
+  stop_row SHELLCHECK shellcheck_present
   FULL=$(git rev-parse --verify --quiet "$REV^{commit}") || refuse "$REV is not a commit here"
   REPO=$(pwd -P)
   WORK=$(mktemp -d "${TMPDIR:-/tmp}/sextile-release.XXXXXX") || refuse 'cannot make the temp directory'
