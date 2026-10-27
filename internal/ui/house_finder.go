@@ -185,9 +185,9 @@ func houseFinderTitle(name, base string, cfg Config, termW int) string {
 // that decides the comparison. The comparison clause gives way first.
 func finderTitle(prefix, name, base string, cfg Config, termW int) string {
 	const mid = " — comparison uses "
-	// The box is clamp(termW/2, 60, 90) wide; its top edge keeps four cells
-	// for the corners and one for the focus mark.
-	budget := clamp(termW/2, 60, 90) - 5
+	// The box is as wide as its content, and at least as wide as the title up
+	// to modalTitleBudget; beyond that the title is cut.
+	budget := modalTitleBudget(termW)
 	w := ansi.StringWidth
 	if base == "" {
 		return prefix + cutRight(name, budget-w(prefix), cfg)
@@ -247,6 +247,7 @@ func renderHouseFinder(f houseFinderState, cfg Config, termW, termH int) string 
 	pos := listPosition{Cursor: f.cursor, Total: len(f.matches)}
 	return renderModalBox(modalBox{
 		Title:    houseFinderTitle(f.name, "", cfg, termW),
+		Fit:      houseFit(f, cfg),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			rows, off, _ := f.houseWindow(height)
@@ -256,6 +257,33 @@ func renderHouseFinder(f houseFinderState, cfg Config, termW, termH int) string 
 	}, cfg, termW, termH, func(width, height int) string {
 		return renderPinnedBody(pinnedBody{Rows: houseFinderRows(f, cfg, width, height)}, width, height)
 	})
+}
+
+// houseFit is the finder's size: wide enough for the longest house system and
+// as tall as all of them and the rule that sets the pinned seven apart from the
+// rest while no search is typed. A search leaves rows blank.
+func houseFit(f houseFinderState, cfg Config) modalFit {
+	// Every system and the rule (drawn while no search is typed).
+	fit := modalFit{Rows: recipe.HouseSystemCount + 1}
+	for h := recipe.HouseSystem(0); int(h) < recipe.HouseSystemCount; h++ {
+		fit.Width = max(fit.Width, listRowWidth(houseRow(h, false, false), cfg))
+	}
+	return fit
+}
+
+// houseRow is one house system as the finder lists it.
+func houseRow(h recipe.HouseSystem, current, cursor bool) listRowSpec {
+	// The mark is two cells: the dot and the room a wide-drawn dot spills into.
+	mark := "  "
+	if current {
+		mark = "● "
+	}
+	return listRowSpec{
+		Left:   lookup.HouseName(h),
+		Right:  []string{lookup.HouseCode(h), mark},
+		Cursor: cursor,
+		Pinned: true,
+	}
 }
 
 // houseFinderRows renders the visible systems: name on the left, the tag code
@@ -268,25 +296,12 @@ func houseFinderRows(f houseFinderState, cfg Config, width, height int) []string
 		return []string{listNote("(no matching house systems)", width, cfg)}
 	}
 	rows, off, rule := f.houseWindow(height)
-	sepCh := "─"
-	if cfg.useASCII() {
-		sepCh = "-"
-	}
 	out := make([]string, 0, len(rows)+1)
 	for i, h := range rows {
 		if rule && off+i == len(housePinned) {
-			out = append(out, listNote(strings.Repeat(sepCh, width), width, cfg))
+			out = append(out, listRule(cfg, width))
 		}
-		mark := " "
-		if h == f.current {
-			mark = "●"
-		}
-		out = append(out, listRow(listRowSpec{
-			Left:   lookup.HouseName(h),
-			Right:  []string{lookup.HouseCode(h), mark},
-			Cursor: off+i == f.cursor,
-			Pinned: true,
-		}, cfg, width))
+		out = append(out, listRow(houseRow(h, h == f.current, off+i == f.cursor), cfg, width))
 	}
 	return out
 }

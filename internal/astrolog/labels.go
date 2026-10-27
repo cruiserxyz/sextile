@@ -86,7 +86,7 @@ func (e *LabelTooLongError) Error() string {
 	if w != "" {
 		w = strings.ToUpper(w[:1]) + w[1:]
 	}
-	return fmt.Sprintf("%s too long for Astrolog: %d of at most %d bytes (accented letters count as 2)", w, e.Bytes, maxLabelBytes)
+	return fmt.Sprintf("%s too long: %d of %d bytes (é counts 2)", w, e.Bytes, maxLabelBytes)
 }
 
 // CheckLabelLength is nil for a label of at most MaxLabelBytes bytes.

@@ -84,9 +84,14 @@ COPY --from=astrolog /usr/local/bin/astrolog /usr/local/bin/astrolog
 COPY --from=astrolog /usr/local/share/astrolog /usr/local/share/astrolog
 COPY --from=gobuild /out/sextile /usr/local/bin/sextile
 USER 65532:65532
+# The three XDG folders default into the charts folder, so a hand-written
+# `docker run -v ~/charts:/charts` keeps its session, preferences and data
+# there. The `sextile` launcher overrides all three with -e and mounts folders
+# of the person's own XDG places instead.
 ENV SEXTILE_CHARTS_DIR=/charts \
     SEXTILE_PREVIEW_MODE=serve \
     SEXTILE_PREVIEW_ADDR=0.0.0.0:5307 \
+    XDG_STATE_HOME=/charts/.sextile/state \
     XDG_DATA_HOME=/charts/.sextile/data \
     XDG_CONFIG_HOME=/charts/.sextile/config \
     SEXTILE_ATLAS_PATH=/usr/local/share/astrolog/atlas.as

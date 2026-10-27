@@ -1,88 +1,98 @@
 == unprobed row under the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------+
-|                                                          |
-|  Search bodies: █                                        |
-|  ------------------------------------------------------  |
-|    [◐] Planets         (11)                              |
-|    [○] Points & angles (0)                               |
-|    [○] Asteroids       (5)                               |
-|    [○] Uranians        (0)                               |
-|    [○] Other           (24)                              |
-|  ------------------------------------------------------  |
-|  [1m[7m> [✓] Moon                                            [0m  |
-|  2 of 40 selected - ● all ◐ some ○ none Sun Moon         |
-|                                                          |
-+--------------------------------------------------8 of 45-+
++-[1m>Bodies[0m--------------------------------------------------------+
+|                                                                |
+|  Search bodies: █                                              |
+|  ------------------------------------------------------------  |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
+|  ------------------------------------------------------------  |
+|  [1m[7m> [✓] Moon                                                  [0m  |
+|  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
+|                                                                |
+|                                                                |
++--------------------------------------------------------8 of 45-+
 == marked row under the cursor (no room for the missing-file line at 80x24) ==
-+-[1m>Bodies[0m--------------------------------------------------+
-|                                                          |
-|  Search bodies: █                                        |
-|  ------------------------------------------------------  |
-|    [◐] Planets         (11)                              |
-|    [○] Points & angles (0)                               |
-|    [○] Asteroids       (5)                               |
-|    [○] Uranians        (0)                               |
-|    [○] Other           (24)                              |
-|  ------------------------------------------------------  |
-|  [1m[7m> [ ] ! Ceres                                         [0m  |
-|  2 of 40 selected - ● all ◐ some ○ none Sun Moon         |
-|                                                          |
-+-------------------------------------------------18 of 45-+
++-[1m>Bodies[0m--------------------------------------------------------+
+|                                                                |
+|  Search bodies: █                                              |
+|  ------------------------------------------------------------  |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
+|  ------------------------------------------------------------  |
+|  [1m[7m> [ ] ! Ceres                                               [0m  |
+|  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
+|  Ceres can't be drawn: no ephemeris file se00010s.se1          |
+|                                                                |
++-------------------------------------------------------18 of 45-+
 == marked row away from the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------+
-|                                                          |
-|  Search bodies: █                                        |
-|  ------------------------------------------------------  |
-|    [◐] Planets         (11)                              |
-|    [○] Points & angles (0)                               |
-|    [○] Asteroids       (5)                               |
-|    [○] Uranians        (0)                               |
-|    [○] Other           (24)                              |
-|  ------------------------------------------------------  |
-|  [1m[7m> [✓] Sun                                             [0m  |
-|  2 of 40 selected - ● all ◐ some ○ none Sun Moon         |
-|                                                          |
-+--------------------------------------------------7 of 45-+
++-[1m>Bodies[0m--------------------------------------------------------+
+|                                                                |
+|  Search bodies: █                                              |
+|  ------------------------------------------------------------  |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
+|  ------------------------------------------------------------  |
+|  [1m[7m> [✓] Sun                                                   [0m  |
+|  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
+|                                                                |
+|                                                                |
++--------------------------------------------------------7 of 45-+
 == a long file name (no room for the line at 80x24) ==
-+-[1m>Bodies[0m--------------------------------------------------+
-|                                                          |
-|  Search bodies: █                                        |
-|  ------------------------------------------------------  |
-|    [◐] Planets         (11)                              |
-|    [○] Points & angles (0)                               |
-|    [○] Asteroids       (5)                               |
-|    [○] Uranians        (0)                               |
-|    [○] Other           (24)                              |
-|  ------------------------------------------------------  |
-|  [1m[7m> [ ] ! Ceres                                         [0m  |
-|  2 of 40 selected - ● all ◐ some ○ none Sun Moon         |
-|                                                          |
-+-------------------------------------------------18 of 45-+
++-[1m>Bodies[0m--------------------------------------------------------+
+|                                                                |
+|  Search bodies: █                                              |
+|  ------------------------------------------------------------  |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
+|  ------------------------------------------------------------  |
+|  [1m[7m> [ ] ! Ceres                                               [0m  |
+|  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
+|  Ceres can't be drawn: no ephemeris file se_a_very_long_ep...  |
+|                                                                |
++-------------------------------------------------------18 of 45-+
 == scrolled list, marked row under the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------+
-|                                                          |
-|  Search bodies: █                                        |
-|  ------------------------------------------------------  |
-|    [◐] Planets         (11)                              |
-|    [○] Points & angles (0)                               |
-|    [○] Asteroids       (5)                               |
-|    [○] Uranians        (0)                               |
-|    [○] Other           (24)                              |
-|  ------------------------------------------------------  |
-|  [1m[7m> [ ] ! Asteroid 30                                   [0m  |
-|  2 of 40 selected - ● all ◐ some ○ none Sun Moon         |
-|                                                          |
-+-------------------------------------------------36 of 45-+
++-[1m>Bodies[0m--------------------------------------------------------+
+|                                                                |
+|  Search bodies: █                                              |
+|  ------------------------------------------------------------  |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
+|  ------------------------------------------------------------  |
+|  [1m[7m> [ ] ! Asteroid 30                                         [0m  |
+|  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
+|  Asteroid 30 can't be drawn: no ephemeris file se00010s.se1    |
+|                                                                |
++-------------------------------------------------------36 of 45-+
 == marked row under the cursor, with the missing-file line (132x40) ==
 +-[1m>Bodies[0m--------------------------------------------------------+
 |                                                                |
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
-|    [◐] Planets         (11)                                    |
-|    [○] Points & angles (0)                                     |
-|    [○] Asteroids       (5)                                     |
-|    [○] Uranians        (0)                                     |
-|    [○] Other           (24)                                    |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
 |  ------------------------------------------------------------  |
 |  [1m[7m> [ ] ! Ceres                                               [0m  |
 |    [ ] Pallas                                                  |
@@ -95,12 +105,14 @@
 |    [ ] Asteroid 20                                             #
 |    [ ] Asteroid 21                                             #
 |    [ ] Asteroid 22                                             #
-|    [ ] Asteroid 23                                             |
+|    [ ] Asteroid 23                                             #
 |    [ ] Asteroid 24                                             |
 |    [ ] Asteroid 25                                             |
 |    [ ] Asteroid 26                                             |
 |    [ ] Asteroid 27                                             |
+|    [ ] Asteroid 28                                             |
 |  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
+|                                                                |
 |  Ceres can't be drawn: no ephemeris file se00010s.se1          |
 |                                                                |
 +-------------------------------------------------------18 of 45-+
@@ -109,29 +121,31 @@
 |                                                                |
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
-|    [◐] Planets         (11)                                    |
-|    [○] Points & angles (0)                                     |
-|    [○] Asteroids       (5)                                     |
-|    [○] Uranians        (0)                                     |
-|    [○] Other           (24)                                    |
+|    [◐ ] Planets         (11)                                   |
+|    [○ ] Points & angles (0)                                    |
+|    [○ ] Asteroids       (5)                                    |
+|    [○ ] Uranians        (0)                                    |
+|    [○ ] Other           (24)                                   |
 |  ------------------------------------------------------------  |
 |  [1m[7m> [ ] ! Ceres                                               [0m  |
 |    [ ] Pallas                                                  |
 |    [ ] Juno                                                    |
 |    [ ] Vesta                                                   |
-|    [ ] Asteroid 16                                             |
+|    [ ] Asteroid 16                                             #
 |    [ ] Asteroid 17                                             #
 |    [ ] Asteroid 18                                             #
 |    [ ] Asteroid 19                                             #
 |    [ ] Asteroid 20                                             #
 |    [ ] Asteroid 21                                             #
-|    [ ] Asteroid 22                                             #
+|    [ ] Asteroid 22                                             |
 |    [ ] Asteroid 23                                             |
 |    [ ] Asteroid 24                                             |
 |    [ ] Asteroid 25                                             |
 |    [ ] Asteroid 26                                             |
-|    [ ] Asteroid 27                                             |
 |  2 of 40 selected - ● all ◐ some ○ none Sun Moon               |
-|  Ceres can't be drawn: no ephemeris file se_a_very_long_ep...  |
+|                                                                |
+|  Ceres can't be drawn: no ephemeris file                       |
+|  se_a_very_long_ephemeris_file_name_for_one_asteroid.se1,      |
+|  second.se1                                                    |
 |                                                                |
 +-------------------------------------------------------18 of 45-+

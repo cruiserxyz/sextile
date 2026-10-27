@@ -525,8 +525,8 @@ func TestHouseThenZodiacBothSurviveReload(t *testing.T) {
 // the same entry still applies, and the file is kept aside.
 func TestUnknownZodiacPreservesValidHouseChoice(t *testing.T) {
 	sessionSandbox(t)
-	seedSession(t, "version: 3\nfloating:\n  selected: false\nframes:\n"+
-		"  - file: good.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Koch\n    from: chosen\n    zodiac: Lahiri\n")
+	seedSession(t, hereText("version: 3\nfloating:\n  selected: false\nframes:\n"+
+		"  - file: good.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Koch\n    from: chosen\n    zodiac: Lahiri\n"))
 	m := startedModel(t, withLocation(realPerimeter(t)))
 	rec, ok := m.frames.find("good.as", false)
 	if !ok || !rec.HasHouses || rec.Houses != recipe.Koch {

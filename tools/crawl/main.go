@@ -74,7 +74,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	}
 	rulesPath := getenv(envRules)
 	if rulesPath == "" {
-		fmt.Fprintf(stderr, "crawl: %s is not set; the crawl cannot run without its rules\n", envRules)
+		fmt.Fprintf(stderr, "crawl: %s is not set. The crawl cannot run without its rules\n", envRules)
 		return 2
 	}
 	r, err := loadRules(rulesPath)
@@ -221,7 +221,7 @@ func loadRules(path string) (*rules, error) {
 		}
 	}
 	if len(r.deny) == 0 {
-		return nil, errors.New("the rules file has no deny rule; refusing to run with nothing to deny")
+		return nil, errors.New("the rules file has no deny rule. Refusing to run with nothing to deny")
 	}
 	if r.author == "" {
 		return nil, errors.New("the rules file names no author")
@@ -235,7 +235,7 @@ func (r *rules) checkPin(pin []byte) error {
 		want = want[:i]
 	}
 	if want != r.hash {
-		return fmt.Errorf("the rules file's hash %s does not match the pin in %s (%s); a changed rules file needs a visible change here", r.hash[:12], pinPath, want)
+		return fmt.Errorf("the rules file's hash %s does not match the pin in %s (%s). A changed rules file needs a visible change here", r.hash[:12], pinPath, want)
 	}
 	return nil
 }
@@ -443,7 +443,7 @@ func crawlMessages(dir, rev, base string, r *rules) ([]string, error) {
 		return nil, err
 	}
 	if _, err := git(dir, "merge-base", "--is-ancestor", baseSHA, revSHA); err != nil {
-		return nil, fmt.Errorf("%s is not an ancestor of %s; the range is not defined", base, rev)
+		return nil, fmt.Errorf("%s is not an ancestor of %s. The range is not defined", base, rev)
 	}
 	if err := pinAt(dir, revSHA, r); err != nil {
 		return nil, err

@@ -84,7 +84,7 @@ func TestStartLogsNoResolverCandidates(t *testing.T) {
 // carries no mark.
 func TestGuessedStartLogsOnce(t *testing.T) {
 	m, _ := guessedStart(t)
-	want := "city: Amsterdam, NL, from the time zone; , c d saves it"
+	want := "city: Amsterdam, NL, from the time zone — , c d saves it"
 	n := 0
 	for _, l := range m.logLines {
 		if l.text == want && l.lane == laneNote {

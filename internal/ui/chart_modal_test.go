@@ -136,8 +136,10 @@ func TestApplyChartPicked_ResolvesBeforeAnchoring(t *testing.T) {
 	if st.commitFloor != st.wantID || st.commitFloor == 0 {
 		t.Errorf("commitFloor = %d, wantID = %d — identity change must floor queued results at the new want", st.commitFloor, st.wantID)
 	}
-	if mode := selectComputeMode(got); mode != computeModeOverlay {
-		t.Errorf("selectComputeMode = %v, want overlay after a chart pick", mode)
+	// Opening a chart selects nothing, so no comparison is engaged: the
+	// focused anchored chart computes alone until the operator selects a pair.
+	if mode := selectComputeMode(got); mode != computeModeNatalSingle {
+		t.Errorf("selectComputeMode = %v, want the single natal chart after a chart pick", mode)
 	}
 }
 

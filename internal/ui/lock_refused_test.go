@@ -118,7 +118,7 @@ func TestLockRefusalQuitWritesNoSession(t *testing.T) {
 		"open":   &store.LockError{Kind: store.LockOpen, Path: "/x/sextile.lock", Err: syscall.EACCES},
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			m := lockRefusedSized(t, Config{}, err, 80, 24)
 			m.slots = readyModelWithSlots(t, berlinP).slots
 			for _, k := range []tea.KeyMsg{escRunes("q"), escKey(tea.KeyCtrlC)} {

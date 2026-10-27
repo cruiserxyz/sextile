@@ -262,7 +262,7 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 		// stdout of a call Astrolog warned on is not parsed and not returned.
 		warned := &WarnedError{Stderr: stderr.String()}
 		if err != nil {
-			return "", command, fmt.Errorf("%w; %w", warned, err)
+			return "", command, fmt.Errorf("%w — %w", warned, err)
 		}
 		return "", command, warned
 	}

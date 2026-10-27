@@ -15,8 +15,8 @@ import (
 )
 
 // A launch that finds the instance lock held by another window runs as a
-// second window: it restores the session that window keeps and never writes
-// it (cmd/sextile/main.go, Config.SecondWindow).
+// second window: it starts empty and never writes the general session
+// (cmd/sextile/main.go, Config.SecondWindow).
 
 func sessionDirNames(t *testing.T) []string {
 	t.Helper()
@@ -79,15 +79,16 @@ func TestSecondWindowQuitLeavesTheSessionFile(t *testing.T) {
 	}
 }
 
-// A second window reads a refused session file and leaves it where it is:
-// moving it aside is the holder's job, and the file is the holder's.
+// A second window leaves a refused session file where it is: moving it aside
+// is the holder's job, and the file is the holder's. Since named sessions a
+// second window does not read the general session at all (it starts empty).
 func TestSecondWindowLeavesARefusedSessionInPlace(t *testing.T) {
 	sessionSandbox(t)
 	const refused = "version: 99\n"
 	seedSession(t, refused)
 	p := readPerimeterCmd(true)().(ingest.StartupPerimeterReadMsg)
-	if p.SessionErr == nil {
-		t.Fatal("premise: the session was not refused")
+	if p.HasSession || p.SessionErr != nil {
+		t.Fatalf("a second window read the general session: has %v err %v", p.HasSession, p.SessionErr)
 	}
 	if got := fileText(t, store.SessionPath()); got != refused {
 		t.Errorf("the refused file changed: %q", got)

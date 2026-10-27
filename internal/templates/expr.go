@@ -112,7 +112,7 @@ func parseExpr(text string, ctx *loadCtx, ordinal int) (e *exprSlot, err error) 
 		}
 	}()
 	if len(text) > MaxSlotBytes {
-		return nil, fmt.Errorf("a slot is %d bytes; the most is %d", len(text), MaxSlotBytes)
+		return nil, fmt.Errorf("a slot is %d bytes. The most is %d", len(text), MaxSlotBytes)
 	}
 	p := &parser{ctx: ctx}
 	p.toks = p.lex(text)
@@ -126,9 +126,9 @@ func parseExpr(text string, ctx *loadCtx, ordinal int) (e *exprSlot, err error) 
 	switch root.typ {
 	case tTerm, tVal, tShown:
 	case tCat:
-		p.fail("a category fact may only be compared, not shown by an expression; the slot's result must be a term or a value fact key")
+		p.fail("a category fact may only be compared, not shown by an expression. The slot's result must be a term or a value fact key")
 	default:
-		p.fail("the slot's result is %s; it must be a term or a value fact key", root.typ)
+		p.fail("the slot's result is %s. It must be a term or a value fact key", root.typ)
 	}
 	return &exprSlot{root: root, refs: p.refs, n: ordinal}, nil
 }
@@ -238,7 +238,7 @@ func (p *parser) cond() *node {
 	}
 	p.pos++
 	if test.typ != tBool {
-		p.fail("the test of ? : is %s; it must be true/false", test.typ)
+		p.fail("the test of ? : is %s. It must be true/false", test.typ)
 	}
 	p.enter()
 	a := p.cond()
@@ -249,9 +249,9 @@ func (p *parser) cond() *node {
 		switch br.typ {
 		case tTerm, tVal, tShown:
 		case tCat:
-			p.fail("a branch of ? : is a category fact; a category fact may only be compared, a branch must be a term or a value fact key")
+			p.fail("a branch of ? : is a category fact. A category fact may only be compared, a branch must be a term or a value fact key")
 		default:
-			p.fail("a branch of ? : is %s; it must be a term or a value fact key", br.typ)
+			p.fail("a branch of ? : is %s. It must be a term or a value fact key", br.typ)
 		}
 		for _, id := range resultTerms(br) {
 			if p.ctx.reserved[id] {
@@ -328,7 +328,7 @@ func (p *parser) cmp() *node {
 		cat, term = r, l
 	}
 	if cat.op != "fact" || cat.typ != tCat || term.typ != tTerm || term.op != "call" || term.s != "term" {
-		p.fail("`%s` compares a category fact with term(...); found %s and %s", op, l.typ, r.typ)
+		p.fail("`%s` compares a category fact with term(...). Found %s and %s", op, l.typ, r.typ)
 	}
 	n := &node{op: "eq", kids: []*node{cat, term}, typ: tBool}
 	if op == "!=" {

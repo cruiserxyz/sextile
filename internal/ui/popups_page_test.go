@@ -230,9 +230,9 @@ func TestOpenChartPagesWithUnreadableBlock(t *testing.T) {
 	}
 }
 
-// A5: Bodies chooser. The probe's status line takes a list row while the cursor
-// is on a body Astrolog cannot draw; a page whose destination shows it keeps the
-// cursor on screen.
+// A5: Bodies chooser. The probe's note about a body Astrolog cannot draw has the
+// message zone of its own, so it takes no list row; a page whose destination
+// shows it keeps the cursor on screen all the same.
 func TestBodiesChooserPagesOntoTheProbeStatusRow(t *testing.T) {
 	var o pageOwner
 	for _, c := range popupOwners() {

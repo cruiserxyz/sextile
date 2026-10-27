@@ -43,8 +43,12 @@ const (
 	startupHouseOpen     startupState = "house-open"
 	startupZodiacOpen    startupState = "zodiac-open"
 	startupDisplayOpen   startupState = "display-open"
-	startupComputing     startupState = "computing"
-	startupReady         startupState = "ready"
+	startupSessionsOpen  startupState = "sessions-open"
+	// startupSessionNameOpen is the Sessions list's name field: Save as, or a
+	// rename (sessions_popup.go).
+	startupSessionNameOpen startupState = "session-name-open"
+	startupComputing       startupState = "computing"
+	startupReady           startupState = "ready"
 )
 
 // AtlasLoadedMsg is the result of the cold-start atlas read. Index is nil
@@ -399,8 +403,8 @@ func saveDefaultCityCmd(place location.PlaceInfo, form houseForm, houses recipe.
 // second window writes nothing either: the session that has to keep the open
 // charts' frames (applyDefaultCitySaved) is the first window's.
 func (m Model) saveDefaultCity() (tea.Model, tea.Cmd) {
-	if m.cfg.SecondWindow {
-		return m.logErrorLine("Save defaults is for the first window, which keeps the session; this window keeps nothing"), nil
+	if !m.ownsSession() {
+		return m.logErrorLine("Save defaults is for the first window, which keeps the session. This window keeps nothing"), nil
 	}
 	if !m.place.HasTimezone() {
 		return m.logErrorLine("default city not saved: no city chosen yet"), nil
@@ -447,8 +451,11 @@ func applyDefaultCitySaved(m Model, msg DefaultCitySavedMsg) (Model, tea.Cmd) {
 		var added bool
 		if m, added = m.keepFrames(msg.Open); added {
 			if err := m.writeSessionNow(); err != nil {
-				cause, _, _ := strings.Cut(err.Error(), "\n")
-				failed = "open charts' frames not kept: " + cause
+				var outside bool
+				if m, outside = m.sessionChangedOutside(err); !outside {
+					cause, _, _ := strings.Cut(err.Error(), "\n")
+					failed = "open charts' frames not kept: " + cause
+				}
 			}
 		}
 	}
@@ -1066,6 +1073,13 @@ func computeNatalSingleCmd(ctx context.Context, runID, wantID uint64, probers *l
 // If the atlas has not yet loaded, the perimeter sits pending until
 // AtlasLoadedMsg arrives; resolution runs once both signals are in.
 func applyStartupPerimeter(m Model, msg ingest.StartupPerimeterReadMsg) (Model, tea.Cmd) {
+	if msg.HasSession && msg.SessionErr == nil && !sessionBelongsHere(msg) {
+		// One session is shared by every charts folder, but it is only ever
+		// opened in the folder it was saved in: a same-named chart in another
+		// folder may be another client's copy. Nothing of it is restored.
+		msg.HasSession, msg.Session = false, store.Session{}
+		m = m.logNote("session", "the saved session belongs to another charts folder and was not opened")
+	}
 	m.pendingPerimeter = &msg
 	// The keyboard configuration needs neither the atlas nor a resolved
 	// location, so it applies here rather than waiting on resolution. It
@@ -1079,7 +1093,7 @@ func applyStartupPerimeter(m Model, msg ingest.StartupPerimeterReadMsg) (Model, 
 	// A refused session file was moved aside (or not) by the read itself; say so
 	// now, so a quit from the city modal still reports a failed keep (C4).
 	m = m.reportSessionKeep(msg.SessionKeep)
-	if !m.cfg.SecondWindow {
+	if !m.cfg.SecondWindow || m.named.running() {
 		return maybeResolveStartup(m)
 	}
 	// A second window says once, on the Log and in the key bar, that what is
@@ -1161,7 +1175,7 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 	m.place = locRes.Place
 	m.placeGuessed = locRes.Source == "iana-preseed"
 	if m.placeGuessed {
-		m = m.logNote("city", "%s, from the time zone; , c d saves it", locRes.Place.Display())
+		m = m.logNote("city", "%s, from the time zone — , c d saves it", locRes.Place.Display())
 	}
 
 	// Construct the workspace: one floating slot at (now, resolved place).
@@ -1289,6 +1303,9 @@ func applyChartsLoaded(m Model, msg ChartsLoadedMsg) (Model, tea.Cmd) {
 		m = m.logError("Couldn't find atlas.as. Put it beside Astrolog and restart.")
 	}
 	m.picker.refilter()
+	if m.picker.fit.Width == 0 {
+		m.picker.fit = chartFit(m.picker, m.cfg)
+	}
 	if m.picker.land != "" {
 		// A rename reloads the library and puts the cursor back on the chart
 		// it renamed (the specification C4.3).

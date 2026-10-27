@@ -93,7 +93,7 @@ func AtlasPath() (string, error) {
 
 	return "", fmt.Errorf(
 		"atlas.as not found in any of: %s — set SEXTILE_ATLAS_PATH to override, "+
-			"or drop a copy next to the sextile binary; %w",
+			"or drop a copy next to the sextile binary: %w",
 		strings.Join(tried, ", "),
 		os.ErrNotExist,
 	)
@@ -209,7 +209,7 @@ func LoadAtlas(path string) ([]PlaceInfo, error) {
 	// format as a missing one, and leave every chart unplaceable with no clue
 	// why.
 	if len(entries) == 0 && looksLikeData > 0 {
-		return nil, fmt.Errorf("atlas %q: %d rows look like data but none are tab-separated into at least 4 columns (lon, lat, country, name); this parser reads astrolog's tab-separated atlas.as", path, looksLikeData)
+		return nil, fmt.Errorf("atlas %q: %d rows look like data but none are tab-separated into at least 4 columns (lon, lat, country, name). This parser reads astrolog's tab-separated atlas.as", path, looksLikeData)
 	}
 
 	return entries, nil

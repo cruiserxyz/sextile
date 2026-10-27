@@ -42,12 +42,21 @@ func titleLibrary(t *testing.T, fixtures []string, extra map[string]string) stri
 			t.Fatal(err)
 		}
 	}
+	legacy := false
 	for f, b := range extra {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0o700); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, f), []byte(b), 0o600); err != nil {
 			t.Fatal(err)
+		}
+		legacy = legacy || strings.HasPrefix(f, ".sextile/")
+	}
+	if legacy {
+		// A backup already held arrives the way a real one does: 0.1.1 kept
+		// it in <charts>/.sextile/backup, and the launch copies it out.
+		if r := store.MigrateLegacyState(dir); len(r.Copied) == 0 {
+			t.Fatalf("premise: the seeded backup was not copied: %+v", r)
 		}
 	}
 	return dir
@@ -93,7 +102,7 @@ func fileText(t *testing.T, path string) string {
 
 // backupFile is where the backup of the chart at path is kept.
 func backupFile(path string) string {
-	return filepath.Join(filepath.Dir(path), store.ChartBackupRel(filepath.Base(path)))
+	return filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))
 }
 
 func noBackup(t *testing.T, path string) {
@@ -295,9 +304,9 @@ func TestTitledChartAnchorsUnderItsNewTitle(t *testing.T) {
 // it.
 func TestTitleWriteLogLine(t *testing.T) {
 	t.Run("first write", func(t *testing.T) {
-		titleLibrary(t, []string{"Equinox-2026-09.as"}, nil)
+		dir := titleLibrary(t, []string{"Equinox-2026-09.as"}, nil)
 		m := titleEquinox(t, "Constructed One")
-		assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as .sextile/backup/Equinox-2026-09.as)`)
+		assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(dir, "Equinox-2026-09.as")+`)`)
 	})
 	t.Run("backup already there", func(t *testing.T) {
 		titleLibrary(t, []string{"Equinox-2026-09.as"}, map[string]string{".sextile/backup/Equinox-2026-09.as": "an older original\n"})
@@ -381,6 +390,9 @@ func titleFrame(m Model) string {
 // without.
 func TestTitleFormTasteFrames(t *testing.T) {
 	forceColor(t)
+	// The backup folder the confirm step names is an absolute path: pin it, so
+	// the frame is the same on every machine.
+	t.Setenv("XDG_DATA_HOME", "/data/op/.local/share")
 	equinox := store.NamedChart{ID: "equinox-2026-09", Name: "Equinox-2026-09", Untitled: true, PlaceLabel: "Bremen, Germany",
 		Place:  location.PlaceInfo{Name: "Bremen", Country: "DE", Lat: 53.07, Lon: 8.8, TZ: "Europe/Berlin"},
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Equinox-2026-09.as"}}
@@ -391,7 +403,7 @@ func TestTitleFormTasteFrames(t *testing.T) {
 	typed.form.fields[0].value = "Constructed One"
 	refused := titleFormState{form: newTitleForm(noplace), chart: noplace, refusal: emptyPlaceRefusal}
 	refused.form.fields[0].value = "Constructed One"
-	confirming := titleFormState{form: newTitleForm(equinox), chart: equinox, confirming: true}
+	confirming := titleFormState{form: newTitleForm(equinox), chart: equinox, confirming: true, dir: "/data/op/Clients"}
 	confirming.form.fields[0].value = "Constructed One"
 	held := confirming
 	held.backupHeld = true
@@ -490,7 +502,7 @@ func TestTitleWriteWithoutAFreshRowAnchorsNothing(t *testing.T) {
 	if m.startup != startupChartOpen || m.picker.loaded || next == nil {
 		t.Errorf("want the picker reloading: startup %s, loaded %v, cmd %v", m.startup, m.picker.loaded, next != nil)
 	}
-	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as .sextile/backup/Equinox-2026-09.as)`)
+	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
 }
 
 // ---- S2: the title is confirmed before any file is touched ----
@@ -537,6 +549,12 @@ func confirmWorld(t *testing.T, extra map[string]string) (dir string, roots []st
 	return dir, []string{dir, store.SessionDir(), store.PreferencesPath()}
 }
 
+// unspaced drops every space and line break, so a path the popup wrapped
+// mid-word still reads as itself.
+func unspaced(s string) string {
+	return strings.Join(strings.Fields(s), "")
+}
+
 // flat reads a frame back as one run of words, so a sentence wrapped across
 // lines still reads as itself.
 func flat(frame string) string {
@@ -557,14 +575,14 @@ func toConfirm(t *testing.T, title string) (Model, tea.Cmd) {
 }
 
 func TestConfirmNamesTheFileAndBackup(t *testing.T) {
-	confirmWorld(t, nil)
+	dir, _ := confirmWorld(t, nil)
 	m, _ := toConfirm(t, "Constructed One")
 	if m.startup != startupTitleOpen || !m.title.confirming {
 		t.Fatalf("startup %s, confirming %v; want the title popup in its second step", m.startup, m.title.confirming)
 	}
 	frame := flat(titleFrame(m))
-	for _, want := range []string{"Equinox-2026-09.as", "keep the previous file in .sextile/backup.", "Press Enter to save the title, or Esc to go back."} {
-		if !strings.Contains(frame, want) {
+	for _, want := range []string{"Equinox-2026-09.as", "keep the previous file in " + store.ChartBackupFolderDisplay(dir) + ".", "Press Enter to save the title, or Esc to go back."} {
+		if !strings.Contains(unspaced(frame), unspaced(want)) {
 			t.Errorf("the second step does not say %q:\n%s", want, titleFrame(m))
 		}
 	}
@@ -631,7 +649,7 @@ func TestConfirmSaveKeepsTheOriginal(t *testing.T) {
 	if got := fileText(t, backupFile(path)); got != original {
 		t.Errorf("the backup of Equinox-2026-09.as is not the original:\n%s", got)
 	}
-	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as .sextile/backup/Equinox-2026-09.as)`)
+	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
 }
 
 func TestConfirmWhenBackupHeld(t *testing.T) {
@@ -646,7 +664,7 @@ func TestConfirmWhenBackupHeld(t *testing.T) {
 	if !m.title.confirming {
 		t.Fatal("the second step is not open")
 	}
-	if frame := flat(titleFrame(m)); !strings.Contains(frame, "Its first original is already in .sextile/backup and stays there.") {
+	if frame := flat(titleFrame(m)); !strings.Contains(unspaced(frame), unspaced("Its first original is already in "+store.ChartBackupFolderDisplay(dir)+" and stays there.")) {
 		t.Errorf("the popup does not say the backup stays:\n%s", titleFrame(m))
 	}
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -669,8 +687,10 @@ func TestConfirmWhenBackupHeld(t *testing.T) {
 }
 
 func TestConfirmRefusesAnUnusableBackup(t *testing.T) {
-	dir, roots := confirmWorld(t, nil)
-	if err := os.MkdirAll(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as")), 0o700); err != nil {
+	// This folder's own backup folder (another chart's backup put it there),
+	// whose entry for the chart is a directory.
+	dir, roots := confirmWorld(t, map[string]string{".sextile/backup/Other.as": "another original\n"})
+	if err := os.Mkdir(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	m := openedPicker(t)
@@ -681,8 +701,7 @@ func TestConfirmRefusesAnUnusableBackup(t *testing.T) {
 	if cmd != nil || m.title.confirming || m.title.saving {
 		t.Fatalf("cmd %v, confirming %v, saving %v; want a refusal in the form", cmd != nil, m.title.confirming, m.title.saving)
 	}
-	want := ".sextile/backup/Equinox-2026-09.as is not a file, so nothing can be saved"
-	if m.title.refusal != want || !strings.Contains(flat(titleFrame(m)), want) {
+	if want := backupRefusal; m.title.refusal != want || !strings.Contains(unspaced(flat(titleFrame(m))), unspaced(want)) {
 		t.Errorf("refusal = %q, want %q drawn in the form", m.title.refusal, want)
 	}
 	if after := diskSnapshot(t, roots...); after != before {
@@ -721,7 +740,7 @@ func TestConfirmWritesWhereItShowed(t *testing.T) {
 	if got := fileText(t, filepath.Join(dir, "Equinox-2026-09.as")); !strings.Contains(got, "Constructed One") {
 		t.Error("the directory shown at the confirm step was not written")
 	}
-	if _, err := os.Stat(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); err != nil {
+	if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); err != nil {
 		t.Errorf("no backup where the popup said: %v", err)
 	}
 	if after := diskSnapshot(t, other); after != otherBefore {
@@ -748,12 +767,12 @@ func TestConfirmFramesAndBar(t *testing.T) {
 				}
 			}
 			words := flat(frame)
-			backupWords := "keep the previous file in .sextile/backup."
+			backupWords := "keep the previous file in " + store.ChartBackupFolderDisplay("") + "."
 			if held {
-				backupWords = "is already in .sextile/backup and stays there."
+				backupWords = "is already in " + store.ChartBackupFolderDisplay("") + " and stays there."
 			}
 			for _, want := range []string{"Constructed Client With A Long Name.as", backupWords, "Press Enter to save the title, or Esc to go back."} {
-				if !strings.Contains(words, want) {
+				if !strings.Contains(unspaced(words), unspaced(want)) {
 					t.Errorf("held %v %dx%d: %q is cut:\n%s", held, size[0], size[1], want, frame)
 				}
 			}
@@ -844,9 +863,10 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 	}
 }
 
-// D4. A retitle keeps the previous file under <charts>/.sextile/backup, where
-// the library never looks: the folder listing shows no ghost chart, and the
-// confirm step names the backup folder rather than a sibling file.
+// D4. A retitle keeps the previous file in its backup folder outside the
+// charts folder (store.BackupDir), so the listing shows no ghost chart and
+// the charts folder gains nothing; the confirm step names the backup folder
+// rather than a sibling file.
 func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	dir, _ := confirmWorld(t, nil)
 	path := filepath.Join(dir, "Equinox-2026-09.as")
@@ -857,7 +877,7 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 		t.Fatal("the second step is not open")
 	}
 	frame := flat(titleFrame(m))
-	if !strings.Contains(frame, "keep the previous file in .sextile/backup.") || strings.Contains(frame, ".bak") {
+	if !strings.Contains(unspaced(frame), unspaced("keep the previous file in "+store.ChartBackupFolderDisplay(dir)+".")) || strings.Contains(frame, ".bak") {
 		t.Errorf("the confirm step must name the backup folder and no .bak file:\n%s", titleFrame(m))
 	}
 
@@ -865,7 +885,7 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	m, next := runCmd(t, m, cmd)
 	runToAnchor(t, m, next)
 
-	if got := fileText(t, filepath.Join(dir, ".sextile", "backup", "Equinox-2026-09.as")); got != original {
+	if got := fileText(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); got != original {
 		t.Errorf("the backup does not hold the old bytes:\n%s", got)
 	}
 	if got := fileText(t, path); got == original || !strings.Contains(got, "Constructed One") {
@@ -879,8 +899,8 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if got := strings.Join(names, ","); got != ".sextile,Equinox-2026-09.as" {
-		t.Errorf("the charts folder holds %q, want only the chart and the hidden .sextile", got)
+	if got := strings.Join(names, ","); got != "Equinox-2026-09.as" {
+		t.Errorf("the charts folder holds %q, want only the chart", got)
 	}
 	lib, err := lookup.LoadChartLibraryIn(dir)
 	if err != nil {

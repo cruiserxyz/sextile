@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/location"
 )
@@ -112,18 +113,42 @@ func renderAtlasModal(state atlasModalState, cfg Config, termW, termH int) strin
 	if state.index != nil && state.loadErr == nil && state.filterText != "" {
 		pos.Total = len(state.matches)
 	}
-	return renderModalBox(modalBox{
+	box := modalBox{
 		Title:    popupTitleCity,
+		Fit:      atlasFit(),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			_, offset := state.windowAt(state.cursor, height)
 			return viewport{Total: pos.Total, Visible: height, Offset: offset}, 0
 		},
 		FilterText: state.filterText,
-	}, cfg, termW, termH, func(width, height int) string {
+	}
+	// A name the row had to cut is shown whole in the bottom edge, where the
+	// counter is, for as long as the cursor is on it.
+	if pos.Total > 0 && state.cursor < len(state.matches) {
+		p := state.matches[state.cursor]
+		row := listRowSpec{Left: p.Name, Right: []string{p.Country}}
+		if w := modalContentWidth(box, cfg, termW); listRowWidth(row, cfg) > w {
+			pos.Text = cutRight(p.Name, w+modalChromeWidth-4, cfg)
+		}
+	}
+	return renderModalBox(box, cfg, termW, termH, func(width, height int) string {
 		return renderResultList(state, cfg, width, height)
 	})
 }
+
+// atlasFit is the place picker's size, and it is always the same: as wide as
+// its hint line, and eight rows tall (operator, 2026-10-27: a popup's size is
+// decided once, when it opens, and never changes while it is open). The atlas
+// has 33,627 places and one of 57 cells, so no size follows its content: a
+// longer name is cut with the cut mark, and while its row is under the cursor
+// the box's bottom edge shows the name.
+func atlasFit() modalFit {
+	return modalFit{Width: ansi.StringWidth(atlasTypeHint), Rows: atlasRows}
+}
+
+// atlasRows is the result rows the City list always has.
+const atlasRows = 8
 
 // atlasTypeHint is the empty chooser's line: what to type, with a query that
 // ranks its example first. No comma: the search key is `name country`.

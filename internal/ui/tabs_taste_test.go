@@ -115,6 +115,7 @@ func renderPairSequence(t *testing.T) map[string]string {
 		LocationCandidate: location.Candidate{Source: "stored-location", Place: birth},
 		Session:           v1(&store.SessionChart{ID: "fixture-one", Name: "Constructed One", When: time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Place: berlin}, true, true, nil, nil),
 		HasSession:        true,
+		FolderID:          testFolderID,
 	})
 	setPair := func(on bool) {
 		m, _ := setPairSelection(tm.(Model), on)

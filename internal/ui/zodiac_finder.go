@@ -128,6 +128,7 @@ func renderZodiacFinder(f zodiacFinderState, cfg Config, termW, termH int) strin
 	pos := listPosition{Cursor: f.cursor, Total: len(f.matches)}
 	return renderModalBox(modalBox{
 		Title:    zodiacFinderTitle(f.name, "", cfg, termW),
+		Fit:      zodiacFit(f, cfg),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			rows, off := f.windowAt(f.cursor, height)
@@ -137,6 +138,35 @@ func renderZodiacFinder(f zodiacFinderState, cfg Config, termW, termH int) strin
 	}, cfg, termW, termH, func(width, height int) string {
 		return renderPinnedBody(pinnedBody{Rows: zodiacFinderRows(f, cfg, width, height)}, width, height)
 	})
+}
+
+// zodiacFit is the finder's size: wide enough for the longest zodiac of all
+// and as tall as all of them; a search leaves rows blank.
+func zodiacFit(f zodiacFinderState, cfg Config) modalFit {
+	fit := modalFit{Rows: recipe.ZodiacCount}
+	for z := recipe.Zodiac(0); int(z) < recipe.ZodiacCount; z++ {
+		fit.Width = max(fit.Width, listRowWidth(zodiacRow(z, false, false, cfg), cfg))
+	}
+	return fit
+}
+
+// zodiacRow is one zodiac as the finder lists it.
+func zodiacRow(z recipe.Zodiac, current, cursor bool, cfg Config) listRowSpec {
+	// The mark is two cells: the dot and the room a wide-drawn dot spills into.
+	mark := "  "
+	if current {
+		mark = "● "
+	}
+	left := z.Name()
+	if gloss := lookup.ZodiacOffsetText(z); gloss != "" {
+		left += strings.Repeat(" ", max(zodiacNameColumn-ansi.StringWidth(left), 1)) + gloss
+	}
+	return listRowSpec{
+		Left:   left,
+		Right:  []string{lookup.ZodiacCode(z), mark},
+		Cursor: cursor,
+		Pinned: true,
+	}
 }
 
 // zodiacNameColumn is the width a row gives the zodiac's name before the
@@ -156,20 +186,7 @@ func zodiacFinderRows(f zodiacFinderState, cfg Config, width, height int) []stri
 	rows, off := f.windowAt(f.cursor, height)
 	out := make([]string, 0, len(rows))
 	for i, z := range rows {
-		mark := " "
-		if z == f.current {
-			mark = "●"
-		}
-		left := z.Name()
-		if gloss := lookup.ZodiacOffsetText(z); gloss != "" {
-			left += strings.Repeat(" ", max(zodiacNameColumn-ansi.StringWidth(left), 1)) + gloss
-		}
-		out = append(out, listRow(listRowSpec{
-			Left:   left,
-			Right:  []string{lookup.ZodiacCode(z), mark},
-			Cursor: off+i == f.cursor,
-			Pinned: true,
-		}, cfg, width))
+		out = append(out, listRow(zodiacRow(z, z == f.current, off+i == f.cursor, cfg), cfg, width))
 	}
 	return out
 }

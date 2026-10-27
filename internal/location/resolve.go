@@ -41,13 +41,13 @@ func Resolve(candidates []Candidate, atlas []Indexed) (Resolution, error) {
 		}
 		if c.Place.LatPresent != c.Place.LonPresent {
 			warnings = append(warnings,
-				fmt.Sprintf("candidate %q: only one of lat/lon supplied; falling through", c.Source))
+				fmt.Sprintf("candidate %q: only one of lat/lon supplied. Falling through", c.Source))
 			continue
 		}
 		if c.Place.HasCoords() {
 			if c.Place.TZ == "" {
 				warnings = append(warnings,
-					fmt.Sprintf("candidate %q: coords present but no tz; downstream compute will need one",
+					fmt.Sprintf("candidate %q: coords present but no tz. Downstream compute will need one",
 						c.Source))
 			}
 			return Resolution{
@@ -65,12 +65,12 @@ func Resolve(candidates []Candidate, atlas []Indexed) (Resolution, error) {
 		// No coords. Atlas lookup is the only path.
 		if c.Place.Name == "" {
 			warnings = append(warnings,
-				fmt.Sprintf("candidate %q: no coords and no name; falling through", c.Source))
+				fmt.Sprintf("candidate %q: no coords and no name. Falling through", c.Source))
 			continue
 		}
 		if atlas == nil {
 			warnings = append(warnings,
-				fmt.Sprintf("candidate %q: name-only and atlas not loaded; falling through", c.Source))
+				fmt.Sprintf("candidate %q: name-only and atlas not loaded. Falling through", c.Source))
 			continue
 		}
 		query := c.Place.Name
@@ -83,13 +83,13 @@ func Resolve(candidates []Candidate, atlas []Indexed) (Resolution, error) {
 		matches, _ := Filter(atlas, query, 0)
 		if len(matches) == 0 {
 			warnings = append(warnings,
-				fmt.Sprintf("candidate %q: %q not found in atlas; falling through", c.Source, c.Place.Name))
+				fmt.Sprintf("candidate %q: %q not found in atlas. Falling through", c.Source, c.Place.Name))
 			continue
 		}
 		narrowed, how := narrowMatches(matches, c.Place)
 		if len(narrowed) > 1 {
 			warnings = append(warnings, fmt.Sprintf(
-				"candidate %q: %q is ambiguous — %d atlas entries match%s (e.g. %s and %s); "+
+				"candidate %q: %q is ambiguous — %d atlas entries match%s (e.g. %s and %s) — "+
 					"refusing to guess, falling through",
 				c.Source, c.Place.Name, len(narrowed), how,
 				narrowed[0].Display(), narrowed[1].Display()))

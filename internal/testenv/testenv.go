@@ -66,6 +66,14 @@ func Run(run func() int) int {
 		"XDG_CACHE_HOME":         filepath.Join(dir, ".cache"),
 		"SEXTILE_CHARTS_DIR":     filepath.Join(dir, ".local", "share", "sextile", "charts"),
 		"SEXTILE_DEV_CHARTS_DIR": "",
+		// The launcher's contract: with SEXTILE_LAUNCH set, the host path
+		// decides which folder's backups and session a run uses. A test
+		// started from a launched shell must not key on the operator's own
+		// charts folder.
+		"SEXTILE_LAUNCH":             "",
+		"SEXTILE_CHARTS_HOST_PATH":   "",
+		"SEXTILE_BACKUP_HOST_PATH":   "",
+		"SEXTILE_SESSIONS_HOST_PATH": "",
 	} {
 		if err := os.Setenv(k, v); err != nil {
 			fmt.Fprintf(os.Stderr, "testenv: cannot set %s: %v\n", k, err)

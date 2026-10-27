@@ -147,7 +147,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 		}
 		if e.zodBad {
 			// Only the field goes; the entry keeps whatever else it has.
-			notes = append(notes, "a frames entry's zodiac is not one this build knows; the field was dropped")
+			notes = append(notes, "a frames entry's zodiac is not one this build knows. The field was dropped")
 			dropped++
 			r.HasZodiac, r.Zodiac = false, ""
 		}

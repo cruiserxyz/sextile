@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,6 +54,13 @@ type chartPickerState struct {
 	prior      startupState       // view to restore on Esc (captured at open)
 	now        time.Time          // today, for the age beside each name; zero shows no age
 	land       string             // the file the cursor lands on when the next load arrives (a renamed chart); "" for none
+
+	// fit is the picker's size, decided once: when the first load of this
+	// opening arrives, for everything the library holds then. A chart that
+	// appears later does not resize the box; the list scrolls, and the next
+	// opening sizes for it. Zero until then (the loading line has no size to
+	// keep).
+	fit modalFit
 }
 
 // maxChartResults caps a filtered result set. A curated chart library is small,
@@ -142,6 +150,7 @@ func renderChartModal(state chartPickerState, cfg Config, termW, termH int) stri
 	}
 	return renderModalBox(modalBox{
 		Title:    popupTitleOpenChart,
+		Fit:      state.fitOrNow(cfg),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			block := chartBlockHeight(state, height)
@@ -152,6 +161,50 @@ func renderChartModal(state chartPickerState, cfg Config, termW, termH int) stri
 	}, cfg, termW, termH, func(width, height int) string {
 		return renderChartResultList(state, cfg, width, height)
 	})
+}
+
+// fitOrNow is the size the picker was given when it opened, or, before the
+// first load has given it one, the size of what it shows now.
+func (s chartPickerState) fitOrNow(cfg Config) modalFit {
+	if s.fit.Width > 0 {
+		return s.fit
+	}
+	return chartFit(s, cfg)
+}
+
+// chartFit is the picker's size for everything the library holds: wide enough
+// for the widest chart and for the unreadable files' lines up to a sentence;
+// as tall as every chart and the unreadable files' block. The block keeps no
+// more rows than the charts have, so a long list of unreadable files does not
+// stretch the box (chartBlockHeight reserves them by the same rule).
+func chartFit(state chartPickerState, cfg Config) modalFit {
+	switch {
+	case state.loadErr != nil:
+		w, rows := fitMessage(fmt.Sprintf("(charts unavailable: %v)", state.loadErr), searchLineWidth("Search: "))
+		return modalFit{Width: w, Rows: rows}
+	case !state.loaded:
+		return modalFit{Width: 1, Rows: 1} // "(loading charts…)"
+	}
+	fit := modalFit{Width: 1}
+	for _, c := range state.charts {
+		fit.Width = max(fit.Width, listRowWidth(chartRow(c, false, state.now), cfg))
+	}
+	drops := chartDropLines(state.drops)
+	for _, l := range drops {
+		fit.Width = max(fit.Width, min(ansi.StringWidth(l), modalProseWidth))
+	}
+	block := 1 // the charts, or the one line that says there are none
+	switch {
+	case len(state.charts) == 0 && len(drops) > 0:
+		block = 0
+	case len(state.charts) > 0:
+		block = len(state.charts)
+	}
+	fit.Rows = block + len(drops)
+	if len(state.charts) > 0 {
+		fit.Rows = block + min(len(drops), block)
+	}
+	return fit
 }
 
 // renderChartResultList lays the list out in two blocks: the pickable charts,
@@ -171,6 +224,10 @@ func renderChartResultList(state chartPickerState, cfg Config, width, height int
 	block := chartBlockHeight(state, height)
 	lines := make([]string, 0, height)
 	lines = append(lines, chartRows(state, cfg, width, block)...)
+	// The unreadable files keep the foot of the list, whatever the filter left.
+	for len(lines) < block {
+		lines = append(lines, listNote("", width, cfg))
+	}
 	lines = append(lines, chartDropBlock(fitDropLines(chartDropLines(state.drops), height-block), cfg, width)...)
 	return listBlock(lines, width, height)
 }

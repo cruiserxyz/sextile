@@ -94,6 +94,10 @@ func openRenameForm(m Model, c store.NamedChart) Model {
 // untitled.
 const emptyPlaceRefusal = "Add a place to save this title."
 
+// backupRefusal is the second step's refusal when the folder keeps the chart's
+// original somewhere that cannot hold it. One line of the narrowest form.
+const backupRefusal = "This file can't keep its original, so nothing was saved."
+
 // titlePlaceField is the form's Place field.
 const titlePlaceField = 1
 
@@ -210,7 +214,7 @@ func confirmTitle(m Model) (tea.Model, tea.Cmd) {
 	dir := store.ChartsDir()
 	held, err := store.ChartBackupState(dir, m.title.chart.Source.File)
 	if err != nil {
-		m.title.refusal = store.ChartBackupRel(m.title.chart.Source.File) + " is not a file, so nothing can be saved"
+		m.title.refusal = backupRefusal
 		return m, nil
 	}
 	m.title.dir, m.title.backupHeld, m.title.confirming = dir, held, true
@@ -431,9 +435,22 @@ func renderTitleForm(state titleFormState, cfg Config, termW, termH int) string 
 	if state.confirming {
 		info = confirmInfo(state)
 	}
+	// The box holds for both steps, whichever is showing: the second step's
+	// text is sized with the directory it will name.
+	later := state
+	later.confirming = true
+	if later.dir == "" {
+		later.dir = store.ChartsDir()
+	}
+	alt := [][]string{titleInfo(state.chart, state.rename, cfg)}
+	for _, held := range []bool{false, true} {
+		later.backupHeld = held
+		alt = append(alt, confirmInfo(later))
+	}
 	return renderForm(state.form, formView{
 		Title:    popupTitleChartTitle,
 		Info:     info,
+		Alt:      alt,
 		WrapInfo: true,
 		Refusal:  state.refusal,
 	}, cfg, termW, termH)
@@ -444,9 +461,10 @@ func renderTitleForm(state titleFormState, cfg Config, termW, termH int) string 
 // stays file-free; the file belongs to this step.
 func confirmInfo(state titleFormState) []string {
 	file := filepath.Base(state.chart.Source.File)
-	sentence := "Saving this title will update " + file + " and keep the previous file in " + store.ChartBackupFolderRel() + "."
+	folder := store.ChartBackupFolderDisplay(state.dir)
+	sentence := "Saving this title will update " + file + " and keep the previous file in " + folder + "."
 	if state.backupHeld {
-		sentence = "Saving this title will update " + file + ". Its first original is already in " + store.ChartBackupFolderRel() + " and stays there."
+		sentence = "Saving this title will update " + file + ". Its first original is already in " + folder + " and stays there."
 	}
 	return []string{sentence, "Press Enter to save the title, or Esc to go back."}
 }

@@ -20,7 +20,7 @@ import (
 // lockSandbox points the session at a fresh directory and returns the lock path.
 func lockSandbox(t *testing.T) string {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	return filepath.Join(SessionDir(), instanceLockFile)
 }
 

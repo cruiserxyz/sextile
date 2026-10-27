@@ -66,6 +66,7 @@ func defaultLeaderMap() []leaderBinding {
 		{Seq: []string{"h"}, ID: BindingHouses},
 		{Seq: []string{"z"}, ID: BindingZodiac},
 		{Seq: []string{"a"}, ID: BindingHouseDisplay},
+		{Seq: []string{"o"}, ID: BindingSessions},
 		{Seq: []string{"c", "d"}, ID: BindingSaveCity},
 	}
 }
@@ -253,10 +254,10 @@ func (m Model) applyKeyConfig(cfg store.KeysConfig) Model {
 	}
 	switch {
 	case isStrandingKey(cfg.Leader):
-		return m.logNote("preferences", "keys.leader %q ignored: %s are the only ways out; leader stays %q",
+		return m.logNote("preferences", "keys.leader %q ignored: %s are the only ways out — leader stays %q",
 			cfg.Leader, showSeq(strandingKeys()), m.leaderKey)
 	case utf8.RuneCountInString(cfg.Leader) != 1:
-		return m.logNote("preferences", "keys.leader %q ignored: a leader is one key; leader stays %q",
+		return m.logNote("preferences", "keys.leader %q ignored: a leader is one key — leader stays %q",
 			cfg.Leader, m.leaderKey)
 	}
 	if shadowed := shadowedBinding(m.keys, cfg.Leader); shadowed != "" {
@@ -330,6 +331,8 @@ func (m Model) runLeaderAction(id BindingID) (tea.Model, tea.Cmd) {
 		return m.saveDefaultCity()
 	case BindingHouseDisplay:
 		return openHouseDisplay(m)
+	case BindingSessions:
+		return openSessionsList(m)
 	}
 	return m, nil
 }

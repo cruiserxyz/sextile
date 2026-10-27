@@ -156,7 +156,7 @@ func moveOff(path, dir, kept string, before os.FileInfo) SessionKeep {
 		os.Remove(aside)
 		return SessionKeep{Kept: kept, Problem: "it changed at launch"}
 	}
-	return SessionKeep{Kept: kept, Problem: "it changed at launch; it is kept as " + filepath.Base(aside)}
+	return SessionKeep{Kept: kept, Problem: "it changed at launch. It is kept as " + filepath.Base(aside)}
 }
 
 // notRegular names why a path cannot be moved aside, or "" for a plain file.

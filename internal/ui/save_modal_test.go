@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/store"
 )
 
 // saveBase is a ready model with the FLOATING slot focused (cursorIdx 1 over
@@ -540,7 +541,7 @@ func TestSavedChartAnchorsAtAFormerlyPoisonedCity(t *testing.T) {
 // U3 1: on an anchored chart ⌃s and `,s` change nothing, write no Log line,
 // and the key bar says why.
 func TestSaveOnAnAnchoredChartSaysWhy(t *testing.T) {
-	const want = "Only Now can be saved as a new chart; focus Now first."
+	const want = "Only Now can be saved as a new chart. Focus Now first."
 	for _, name := range []string{"ctrl+s", "leader s"} {
 		t.Run(name, func(t *testing.T) {
 			m := saveBase(t)
@@ -598,5 +599,52 @@ func TestSaveWritesDotAs(t *testing.T) {
 	added := m.logLines[before:]
 	if len(added) != 1 || !strings.Contains(added[0].text, want) {
 		t.Errorf("the log line %+v does not name %s", added, want)
+	}
+}
+
+// The operator's rule (2026-10-26): a save opens the new chart right away, the
+// way Ctrl+O would -- an anchored slot with the cursor on it, the Charts panel
+// focused, nothing selected, the floating chart where it was, and the slot IS
+// the saved file.
+func TestSaveOpensTheNewChartFocused(t *testing.T) {
+	m := saveBase(t)
+	floatTime := m.slots.Floating().Time
+	anchoredBefore := m.slots.AnchoredCount()
+	selectedBefore := m.slots.SelectedCount()
+
+	m = openSave(t, m)
+	m = typeInto(m, "Open Me")
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = tm.(Model)
+	tm, cmd = m.Update(cmd())
+	m = tm.(Model)
+	if cmd == nil {
+		t.Fatal("a finished save dispatched no open of the new chart")
+	}
+	resolved, ok := cmd().(ChartResolvedMsg)
+	if !ok {
+		t.Fatalf("the open returned %T, want ChartResolvedMsg", cmd())
+	}
+	tm, _ = m.Update(resolved)
+	m = tm.(Model)
+
+	if got := m.slots.AnchoredCount(); got != anchoredBefore+1 {
+		t.Fatalf("anchored count = %d, want %d", got, anchoredBefore+1)
+	}
+	if m.cursorIdx != m.slots.AnchoredCount()-1 {
+		t.Errorf("cursor = %d, want the new slot (%d)", m.cursorIdx, m.slots.AnchoredCount()-1)
+	}
+	if m.focused != PanelChart {
+		t.Errorf("focused panel = %v, want the Chart panel", m.focused)
+	}
+	if got := m.slots.SelectedCount(); got != selectedBefore {
+		t.Errorf("selected count = %d, want %d: opening never selects", got, selectedBefore)
+	}
+	rec := focusedRecord(m)
+	if rec.ID != "open-me" || rec.Source.Kind != store.ChartKindFile || rec.Source.File != "open-me.as" {
+		t.Errorf("the slot is %+v, want the saved file open-me.as", rec)
+	}
+	if !m.slots.Floating().Time.Equal(floatTime) {
+		t.Errorf("the floating chart moved: %v -> %v", floatTime, m.slots.Floating().Time)
 	}
 }

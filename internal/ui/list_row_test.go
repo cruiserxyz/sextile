@@ -329,7 +329,7 @@ func TestAspectRowColumns(t *testing.T) {
 	st := openAspectModal(testRegistry(), recipe.AspectPolicy{})
 	sq := testRegistry()[3]
 	for _, width := range []int{54, 70, 86} {
-		got := listRow(aspectRow(st, sq, false, width), plainCfg, width)
+		got := listRow(aspectRow(st, plainCfg, sq, false, width), plainCfg, width)
 		want := fmt.Sprintf("%-3s   %6.2f°   orb %4.1f", sq.Abbrev, sq.Angle, sq.Orb)
 		if !strings.HasSuffix(got, want) {
 			t.Errorf("width %d: aspect row = %q, want it to end %q — abbreviation, angle, orb, in that order", width, got, want)
@@ -343,8 +343,11 @@ func TestAspectRowColumns(t *testing.T) {
 	// ever shortens. The marker, abbreviation and angle stay whole.
 	long := sq
 	long.Name = "Sesquiquadrate-ish long"
+	// The orb leaves every row of a list together, at the width its widest
+	// row (here this one, in the registry) no longer fits whole.
+	st = openAspectModal(append(testRegistry(), long), recipe.AspectPolicy{})
 	for _, width := range []int{30, 44} {
-		got := ansi.Strip(listRow(aspectRow(st, long, true, width), plainCfg, width))
+		got := ansi.Strip(listRow(aspectRow(st, plainCfg, long, true, width), plainCfg, width))
 		if strings.Contains(got, "orb") {
 			t.Errorf("width %d: the orb must drop first: %q", width, got)
 		}

@@ -103,7 +103,7 @@ func TestSaveDefaultsFrameFailureIsOneErrorLine(t *testing.T) {
 	}
 	m = deliver(m, cmd)
 
-	want := "default frame not saved: store: preferences.yaml has 'frame: retired-default', not a block; the frame was not saved"
+	want := "default frame not saved: store: preferences.yaml has 'frame: retired-default', not a block. The frame was not saved"
 	if lastLine(m).text != want || lastLine(m).lane != laneError {
 		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 	}

@@ -181,6 +181,7 @@ func captureFirstTransitCheck(t *testing.T) []demoFrame {
 		LocationCandidate: location.Candidate{Source: "stored-location", Place: raw},
 		Session:           v1(&store.SessionChart{ID: "constructed-demo", Name: "Constructed Demo", When: demoBirth, Place: demoPlace}, true, true, nil, nil),
 		HasSession:        true,
+		FolderID:          testFolderID,
 	})
 	commit(now.overlayFrame())
 

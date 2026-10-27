@@ -13,9 +13,19 @@ import (
 // addAnchor adds an anchored slot holding no named chart: the old
 // Slots.WithAnchor for a test that needs a moment and a place and nothing
 // else. With no anchored slot selected it selects the new slot and the
-// floating one, as WithAnchor did.
+// floating one, as WithAnchor did. The store no longer does this on its own
+// (opening a chart selects nothing), so the helper states it for the tests
+// that were written for a ready comparison.
 func addAnchor(s *store.Slots, when time.Time, place location.PlaceInfo) error {
-	return s.AddAnchored(store.SessionChart{}, when, place)
+	first := s.Baseline() == nil
+	if err := s.AddAnchored(store.SessionChart{}, when, place); err != nil {
+		return err
+	}
+	if first {
+		s.SetSlotSelected(s.AnchoredCount()-1, true)
+		s.SetSlotSelected(s.AnchoredCount(), true)
+	}
+	return nil
 }
 
 // firstAnchor is the first anchored slot, or nil: what Slots.Anchored() was
@@ -33,7 +43,7 @@ func firstAnchor(s *store.Slots) *store.Slot {
 // It exists so the restore tests written for one-chart sessions state their
 // input in the terms they always did (the specification C15).
 func v1(chart *store.SessionChart, usable, comparison bool, anchored, floating []aspect.Body, unknown ...string) store.Session {
-	s := store.Session{Version: 1, FloatingBodies: floating, UnknownBodies: unknown}
+	s := store.Session{Version: 1, Folder: testFolderID, FloatingBodies: floating, UnknownBodies: unknown}
 	if chart != nil {
 		s.Slots = []store.SessionSlot{{Chart: *chart, Usable: usable, Selected: comparison, Bodies: anchored}}
 		s.FloatingSelected = usable && comparison
@@ -69,8 +79,8 @@ func setAnchor(m Model, handle store.AnchorChart) {
 
 // listWorkspace is a workspace of n anchored charts with distinct synthetic
 // names, moments and places, above the floating slot at the frozen test moment.
-// With n >= 1 the first anchored slot and the floating slot are selected (the
-// add default).
+// With n >= 1 the first anchored slot and the floating slot are selected
+// explicitly here, because adding a chart selects nothing.
 func listWorkspace(t *testing.T, n int) *store.Slots {
 	t.Helper()
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
@@ -88,6 +98,10 @@ func listWorkspace(t *testing.T, n int) *store.Slots {
 		if err := slots.AddAnchored(chart, when, place); err != nil {
 			t.Fatalf("AddAnchored(%d): %v", i, err)
 		}
+	}
+	if n >= 1 { // adding selects nothing: select the first anchored slot and the floating slot
+		slots.ToggleSlotSelection(0)
+		slots.ToggleSlotSelection(n)
 	}
 	return slots
 }

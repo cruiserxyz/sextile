@@ -264,6 +264,7 @@ func renderAspectModal(state aspectModalState, cfg Config, termW, termH int) str
 	pos := listPosition{Cursor: state.cursor, Total: familyRows() + len(state.matches)}
 	return renderModalBox(modalBox{
 		Title:    popupTitleAspects,
+		Fit:      aspectFit(state, cfg),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			h := height - aspectPinnedRows()
@@ -279,6 +280,31 @@ func renderAspectModal(state aspectModalState, cfg Config, termW, termH int) str
 	})
 }
 
+// aspectFit is the chooser's size, decided when it opens for everything it
+// could show: wide enough for the widest aspect row of the registry, orb and
+// all; as tall as the family block, its rule and every aspect. A filter leaves
+// rows blank; it does not resize the box.
+func aspectFit(state aspectModalState, cfg Config) modalFit {
+	fit := modalFit{Width: 1, Rows: aspectPinnedRows() + max(len(state.registry), 1)}
+	for _, f := range aspect.Families() {
+		fit.Width = max(fit.Width, listRowWidth(aspectFamilyRow(state, f, false), cfg))
+	}
+	fit.Width = max(fit.Width, aspectFullWidth(state, cfg))
+	return fit
+}
+
+// aspectFullWidth is the width at which every aspect row keeps its orb: the
+// widest row of the registry with all three right cells. Below it the orb is
+// left off of every row, so the name keeps its room and the columns stay one
+// column.
+func aspectFullWidth(state aspectModalState, cfg Config) int {
+	w := 0
+	for _, r := range state.registry {
+		w = max(w, listRowWidth(aspectRowWith(state, r, false, true), cfg))
+	}
+	return w
+}
+
 // aspectFamilyRows renders the pinned block. The count and the glyph both come
 // from familyMembers, which already follows the filter — deriving the count
 // here separately is how they came to disagree, showing `(1)` beside `◐` for a
@@ -289,20 +315,24 @@ func renderAspectModal(state aspectModalState, cfg Config, termW, termH int) str
 func aspectFamilyRows(state aspectModalState, cfg Config, width int) []string {
 	rows := make([]string, 0, familyRows())
 	for i, f := range aspect.Families() {
-		mark := "○"
-		switch state.familyState(f) {
-		case familyAll:
-			mark = "●"
-		case familyPartial:
-			mark = "◐"
-		}
-		n := len(state.familyMembers(f))
-		rows = append(rows, listRow(listRowSpec{
-			Left:   fmt.Sprintf("[%s] %-10s (%d)", mark, f.Name(), n),
-			Cursor: state.cursor == i,
-		}, cfg, width))
+		rows = append(rows, listRow(aspectFamilyRow(state, f, state.cursor == i), cfg, width))
 	}
 	return rows
+}
+
+// aspectFamilyRow is one family of the pinned block.
+func aspectFamilyRow(state aspectModalState, f aspect.Family, cursor bool) listRowSpec {
+	mark := "○"
+	switch state.familyState(f) {
+	case familyAll:
+		mark = "●"
+	case familyPartial:
+		mark = "◐"
+	}
+	return listRowSpec{
+		Left:   fmt.Sprintf("[%s ] %-10s (%d)", mark, f.Name(), len(state.familyMembers(f))),
+		Cursor: cursor,
+	}
 }
 
 // aspectListRows renders the filtered list.
@@ -331,9 +361,10 @@ func aspectListRows(state aspectModalState, cfg Config, width, height int) []str
 	listCursor := state.cursor - base
 	visible, offset := state.windowAt(listCursor, height)
 	rows := make([]string, 0, len(visible))
+	withOrb := width >= aspectFullWidth(state, cfg)
 	for i, r := range visible {
 		onCursor := listCursor >= 0 && offset+i == listCursor
-		rows = append(rows, listRow(aspectRow(state, r, onCursor, width), cfg, width))
+		rows = append(rows, listRow(aspectRowWith(state, r, onCursor, withOrb), cfg, width))
 	}
 	return rows
 }
@@ -347,7 +378,13 @@ func aspectListRows(state aspectModalState, cfg Config, width, height int) []str
 // unavailable at every width — including the widths where the orb column itself
 // has been dropped, which is exactly where the operator would otherwise have no
 // way to tell (C14).
-func aspectRow(state aspectModalState, r aspect.RegistryAspect, onCursor bool, width int) listRowSpec {
+func aspectRow(state aspectModalState, cfg Config, r aspect.RegistryAspect, onCursor bool, width int) listRowSpec {
+	return aspectRowWith(state, r, onCursor, width >= aspectFullWidth(state, cfg))
+}
+
+// aspectRowWith is aspectRow once the list has decided whether its rows keep
+// the orb: the decision is the list's, so every row of it has the same columns.
+func aspectRowWith(state aspectModalState, r aspect.RegistryAspect, onCursor, withOrb bool) listRowSpec {
 	mark := " "
 	switch {
 	case !r.CountsAnything():
@@ -356,7 +393,7 @@ func aspectRow(state aspectModalState, r aspect.RegistryAspect, onCursor bool, w
 		mark = "✓"
 	}
 	right := []string{fmt.Sprintf("%-3s", r.Abbrev), fmt.Sprintf("%6.2f°", r.Angle)}
-	if width >= aspectRowFullWidth {
+	if withOrb {
 		right = append(right, fmt.Sprintf("orb %4.1f", r.Orb))
 	}
 	return listRowSpec{
@@ -366,13 +403,6 @@ func aspectRow(state aspectModalState, r aspect.RegistryAspect, onCursor bool, w
 		Pinned: true,
 	}
 }
-
-// aspectRowFullWidth is the width at which the orb still fits beside the
-// widest name in Astrolog's registry (14 cells): the cursor column, the tick
-// box, the name, and the three right cells with their gaps. Below it the orb
-// is left off, so the name keeps its room. Every cell is fixed-width by its
-// format, which is why this is arithmetic and not a measurement.
-const aspectRowFullWidth = 2 + 4 + 14 + listRowGap + 3 + listRowGap + 7 + listRowGap + 8
 
 // updateAspectModalKey handles one keystroke. The caller in model.go has
 // already gated on the modal being open.

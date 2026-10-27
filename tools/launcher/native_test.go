@@ -32,7 +32,7 @@ fi
 IFS= read -r -d '' body <<'MARKER'
 #!/usr/bin/env bash
 echo MARKER-RAN
-for v in SEXTILE_CHARTS_DIR XDG_DATA_HOME XDG_CONFIG_HOME SEXTILE_PREVIEW_MODE SEXTILE_PREVIEW_ADDR SEXTILE_LAUNCH SEXTILE_ATLAS_PATH ASTR800 ASTROLOG ASTR SE_EPHE_PATH; do
+for v in SEXTILE_CHARTS_DIR SEXTILE_CHARTS_HOST_PATH XDG_DATA_HOME XDG_CONFIG_HOME XDG_STATE_HOME SEXTILE_PREVIEW_MODE SEXTILE_PREVIEW_ADDR SEXTILE_LAUNCH SEXTILE_ATLAS_PATH ASTR800 ASTROLOG ASTR SE_EPHE_PATH; do
   echo "$v=${!v-<unset>}"
 done
 echo "PATH=$PATH"
@@ -128,12 +128,14 @@ func TestNoDockerBuildsOnceAndRuns(t *testing.T) {
 	r.noDockerCalls()
 	env, got := marker(t, res.stdout)
 	for k, want := range map[string]string{
-		"SEXTILE_CHARTS_DIR":   charts,
-		"XDG_DATA_HOME":        charts + "/.sextile/data",
-		"XDG_CONFIG_HOME":      charts + "/.sextile/config",
-		"SEXTILE_PREVIEW_MODE": "serve",
-		"SEXTILE_PREVIEW_ADDR": "127.0.0.1:" + p,
-		"SEXTILE_LAUNCH":       "no-docker v0.1.0-rc.1",
+		"SEXTILE_CHARTS_DIR":       charts,
+		"SEXTILE_CHARTS_HOST_PATH": charts,
+		"XDG_DATA_HOME":            "<unset>",
+		"XDG_CONFIG_HOME":          r.xdg,
+		"XDG_STATE_HOME":           "<unset>",
+		"SEXTILE_PREVIEW_MODE":     "serve",
+		"SEXTILE_PREVIEW_ADDR":     "127.0.0.1:" + p,
+		"SEXTILE_LAUNCH":           "no-docker v0.1.0-rc.1",
 	} {
 		if env[k] != want {
 			t.Errorf("%s = %q, want %q", k, env[k], want)
@@ -233,6 +235,43 @@ func TestNoDockerFindsAstrologInLocalBin(t *testing.T) {
 	r.noDockerCalls()
 }
 
+// The native run no longer points the app's XDG folders into the charts
+// folder: the person's own XDG values reach the app unchanged (the app then
+// keeps its session, preferences and backups in the XDG places), and the app is
+// told the physical charts folder so it can tell one folder from another.
+func TestNoDockerLeavesXDGAlone(t *testing.T) {
+	r := newRig(t)
+	r.withGo()
+	r.withAstrolog(false)
+	real := r.mkdir("real charts")
+	link := filepath.Join(r.root, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	st, cf, da := r.mkdir("x/state"), r.mkdir("x/config"), r.mkdir("x/data")
+	r.setenv("XDG_STATE_HOME", st)
+	r.setenv("XDG_CONFIG_HOME", cf)
+	r.setenv("XDG_DATA_HOME", da)
+	res := r.run("--no-docker", "--charts-dir", link, "--no-open")
+	r.mustSucceed(res)
+	env, _ := marker(t, res.stdout)
+	for k, want := range map[string]string{
+		"XDG_STATE_HOME":           st,
+		"XDG_CONFIG_HOME":          cf,
+		"XDG_DATA_HOME":            da,
+		"SEXTILE_CHARTS_DIR":       real,
+		"SEXTILE_CHARTS_HOST_PATH": real,
+	} {
+		if env[k] != want {
+			t.Errorf("%s = %q, want %q", k, env[k], want)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(real, ".sextile")); err == nil {
+		t.Error("the charts folder must not get a .sextile folder from the launcher")
+	}
+	r.noDockerCalls()
+}
+
 // An atlas path left in the caller's environment never reaches the native
 // app: the launcher sets it from the share folder it found, or clears it.
 func TestNoDockerClearsAnInheritedAtlasPath(t *testing.T) {
@@ -268,7 +307,7 @@ func TestNoDockerFailedBuildLeavesNothingToTrust(t *testing.T) {
 		t.Fatalf("exit %d, want go's status 3\n%s", res.code, res.stderr)
 	}
 	contains(t, res.stderr, "fake go: build failed")
-	contains(t, res.stderr, "the native build failed (exit 3); Sextile was not started")
+	contains(t, res.stderr, "the native build failed (exit 3) — Sextile was not started")
 	entries, _ := os.ReadDir(filepath.Dir(r.nativeBin("v0.1.0-rc.1")))
 	if len(entries) != 0 {
 		t.Fatalf("a failed build left %d entries in the cache folder", len(entries))
@@ -284,7 +323,7 @@ func TestNoDockerFailedBuildLeavesNothingToTrust(t *testing.T) {
 // N2: a missing piece is one refusal that names it, exit 2, no docker command
 // and no fall back, even though a working docker is on PATH.
 func TestNoDockerMissingPieceRefused(t *testing.T) {
-	const tail = "; it needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)\n"
+	const tail = ". It needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)\n"
 	cases := []struct {
 		name     string
 		goOn     bool
@@ -608,7 +647,7 @@ func TestNoDockerPruneFailureIsNotFatal(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(stuck, 0o755) })
 	res := r.run("--no-docker", "--charts-dir", r.mkdir("c"), "--no-open")
 	r.mustSucceed(res)
-	contains(t, res.stderr, "could not remove 1 older native builds; they stay for now\n")
+	contains(t, res.stderr, "could not remove 1 older native builds. They stay for now\n")
 	if !exists(filepath.Join(stuck, "sextile")) {
 		t.Errorf("the stuck build is left in place")
 	}
@@ -659,7 +698,7 @@ ln -s ` + outside + ` "$1"
 	if !exists(victim) {
 		t.Errorf("the swapped-in symlink must stay")
 	}
-	contains(t, res.stderr, "could not remove 1 older native builds; they stay for now\n")
+	contains(t, res.stderr, "could not remove 1 older native builds. They stay for now\n")
 }
 
 // A folder holding the marker alone, or the binary alone, is not a complete
@@ -698,7 +737,7 @@ func TestNoDockerSaysWhenTheBuildVanishedBeforeRunning(t *testing.T) {
 	r.hook(`rm -f ` + cur + "\n")
 	res := r.run("--no-docker", "--charts-dir", r.mkdir("c"), "--no-open")
 	r.mustExit2(res)
-	if want := "the native build " + cur + " is gone (another ./sextile may have removed it); run ./sextile --no-docker again\n"; !strings.HasSuffix(res.stderr, want) {
+	if want := "the native build " + cur + " is gone (another sextile may have removed it). Run sextile --no-docker again\n"; !strings.HasSuffix(res.stderr, want) {
 		t.Errorf("stderr %q does not end with %q", res.stderr, want)
 	}
 	if res.stdout != "" {

@@ -95,24 +95,45 @@ func renderHouseDisplay(st houseDisplayState, cfg Config, termW, termH int) stri
 	return renderModalBox(modalBox{
 		Title:   popupTitleDisplay,
 		NoInput: true,
-		FitRows: houseDisplayRows,
+		Fit:     houseDisplayFit(cfg),
 	}, cfg, termW, termH, func(width, height int) string {
 		return listBlock(houseDisplayLines(st, cfg, width, height), width, height)
 	})
 }
 
-// houseDisplayRows is the rows the popup needs: the four forms, the dotted
-// line, and the fullest form's description, comparing note, blank line and
-// example. It is the same whichever form is focused, so the box never changes
-// height while the cursor moves.
-func houseDisplayRows(width int) int {
+// houseDisplayFit is the popup's size: as wide as the widest of the four rows,
+// the descriptions wrapped at modalProseWidth, the comparing note and the
+// example, over all four forms, and as tall as the fullest form needs at that
+// width, so the box holds its size while the cursor moves (operator,
+// 2026-10-27: a popup's size is decided when it opens). A form with less to say
+// leaves rows blank.
+func houseDisplayFit(cfg Config) modalFit {
+	widest := func(s string) int {
+		w := 0
+		for _, l := range strings.Split(ansi.Wordwrap(s, modalProseWidth, ""), "\n") {
+			w = max(w, ansi.StringWidth(l))
+		}
+		return w
+	}
+	w := widest(houseComparingNote)
+	for _, info := range houseForms {
+		w = max(w, listRowWidth(listRowSpec{Left: radioMark(true, cfg) + " " + info.title}, cfg),
+			widest(info.description), ansi.StringWidth(houseExampleRow(info.form, cfg)))
+	}
 	rows := 0
 	for _, info := range houseForms {
-		desc := strings.Split(ansi.Wordwrap(info.description, width, ""), "\n")
-		note := strings.Split(ansi.Wordwrap(houseComparingNote, width, ""), "\n")
-		rows = max(rows, len(desc)+len(note)+2)
+		rows = max(rows, houseDisplayRows(info, w))
 	}
-	return len(houseForms) + 1 + rows
+	return modalFit{Width: w, Rows: rows}
+}
+
+// houseDisplayRows is the rows the popup needs for this form: the four forms,
+// the dotted line, and the form's description, the comparing note, a blank line
+// and the example.
+func houseDisplayRows(info houseFormInfo, width int) int {
+	desc := strings.Split(ansi.Wordwrap(info.description, width, ""), "\n")
+	note := strings.Split(ansi.Wordwrap(houseComparingNote, width, ""), "\n")
+	return len(houseForms) + 1 + len(desc) + len(note) + 2
 }
 
 // radioMark is the mark of a row: the filled one for the chosen form, in
@@ -137,11 +158,7 @@ func houseDisplayLines(st houseDisplayState, cfg Config, width, height int) []st
 			Cursor: i == st.list.cursor,
 		}, cfg, width))
 	}
-	divider := "┄"
-	if cfg.useASCII() {
-		divider = "-"
-	}
-	lines = append(lines, strings.Repeat(divider, width))
+	lines = append(lines, listRule(cfg, width))
 
 	focus := houseForms[min(max(st.list.cursor, 0), len(houseForms)-1)]
 	return append(lines, houseDisplayDescription(focus, cfg, width, height-len(lines))...)

@@ -14,7 +14,7 @@ func TestReferenceSaysSelectedBodiesShowOnlyThemselves(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	const row = "| `Space` | Select the focused chart or body; two selected charts engage comparison; selected bodies show only themselves on the chart's wheel, aspects and report (nothing selected shows all) |"
+	const row = "| `Space` | Select the focused chart or body. Two selected charts engage comparison. Selected bodies show only themselves on the chart's wheel, aspects and report (nothing selected shows all) |"
 	if strings.Count(text, row) != 1 {
 		t.Errorf("the reference page does not carry the Space row exactly once:\n%s", row)
 	}

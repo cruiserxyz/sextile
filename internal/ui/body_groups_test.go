@@ -73,11 +73,11 @@ func TestBodyGroupRowsComeFirst(t *testing.T) {
 					t.Errorf("group row %d = %q, want %q with (%d)", i, l, g.name, g.n)
 				}
 			}
-			if !strings.Contains(lines[first], "[◐] Planets") {
-				t.Errorf("Planets holds the ticked Sun and others, so it reads [◐]: %q", lines[first])
+			if !strings.Contains(lines[first], "[◐ ] Planets") {
+				t.Errorf("Planets holds the ticked Sun and others, so it reads [◐ ]: %q", lines[first])
 			}
-			if !strings.Contains(lines[first+1], "[○] Points & angles") {
-				t.Errorf("an untouched group reads [○]: %q", lines[first+1])
+			if !strings.Contains(lines[first+1], "[○ ] Points & angles") {
+				t.Errorf("an untouched group reads [○ ]: %q", lines[first+1])
 			}
 			if !onlyDashes(lines[first+5]) {
 				t.Errorf("the line after the group rows = %q, want the dashed rule", lines[first+5])

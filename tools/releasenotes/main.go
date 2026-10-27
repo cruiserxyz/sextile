@@ -97,7 +97,7 @@ func extract(r io.Reader, version string, final bool) (string, error) {
 		return "", fmt.Errorf("the section %s is empty", heading)
 	}
 	if final && !datedRE.MatchString(strings.TrimPrefix(found, heading)) {
-		return "", fmt.Errorf("the section %s has no release date (%q); write \"%s - YYYY-MM-DD\" before tagging a final release", heading, found, heading)
+		return "", fmt.Errorf("the section %s has no release date (%q). Write \"%s - YYYY-MM-DD\" before tagging a final release", heading, found, heading)
 	}
 	first := strings.SplitN(text, "\n", 2)[0]
 	if notSentenceRE.MatchString(first) {

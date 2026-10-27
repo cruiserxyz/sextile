@@ -621,7 +621,7 @@ func TestReadmeComparisonSentence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sentence = "Comparison reads `X in Y`: the chart under the cursor (X) is the one you read, and the Aspects tab, with `[` and `]`, picks the chart it is read against (Y), whose houses and zodiac frame the comparison; now is never Y."
+	const sentence = "Comparison reads `X in Y`: the chart under the cursor (X) is the one you read, and the Aspects tab, with `[` and `]`, picks the chart it is read against (Y), whose houses and zodiac frame the comparison — now is never Y."
 	if strings.Count(string(ref), sentence) != 1 {
 		t.Errorf("the reference page does not carry the comparison sentence exactly once:\n%s", sentence)
 	}

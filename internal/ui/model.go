@@ -181,6 +181,14 @@ type Model struct {
 	// to read): the file is the astrologer's, so no session is written.
 	sessionKept bool
 
+	// named is the named session this window runs; zero while it runs the
+	// general one (sessions_popup.go). sessions is the Sessions list.
+	named    namedRun
+	sessions sessionsPopupState
+	// sessionGen numbers the named-session opens; a load that is not the
+	// latest one is dropped.
+	sessionGen int
+
 	// pendingRechecks maps the slot a startup re-check was ISSUED against to the
 	// slot that holds its chart now, across the city changes that rebuild every
 	// slot as a new object. It holds only re-checks still pending — an entry goes
@@ -360,6 +368,17 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 		// First, so a frame always says what ran.
 		m = m.logNote("launcher", "%s", text)
 	}
+	if cfg.Migration != "" {
+		m = m.logNote("state", "%s", cfg.Migration)
+	}
+	// A launch with --session runs that named session, whose lock main took;
+	// one it could not open says why, once.
+	if cfg.NamedSession != nil {
+		m.named = namedRun{file: cfg.NamedSession.File(), name: cfg.NamedSessionName, lock: cfg.NamedSession}
+	}
+	if cfg.SessionNote != "" {
+		m = m.logNote("session", "%s", cfg.SessionNote)
+	}
 	if cfg.InstanceLockUnsupported {
 		// The one time the operator hears that a second copy cannot be told
 		// apart from this one (the specification C6).
@@ -395,7 +414,7 @@ func (m Model) Init() tea.Cmd {
 	// and running it first is what makes "Astrolog is not installed" the FIRST
 	// line rather than a line that may or may not beat the compute failure it
 	// explains. Everything after it still starts together.
-	return tea.Sequence(probeAstrologCmd(), tea.Batch(readPerimeterCmd(m.cfg.SecondWindow), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
+	return tea.Sequence(probeAstrologCmd(), tea.Batch(m.perimeterCmd(), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
 }
 
 // Update is the program's one entry. The work a minute tick starts is quiet in
@@ -521,6 +540,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = applySaveDone(m, msg)
 		return m, cmd
+	case NamedSessionLoadedMsg:
+		var cmd tea.Cmd
+		m, cmd = applyNamedSessionLoaded(m, msg)
+		return m, cmd
 	case RenameReadMsg:
 		return applyRenameRead(m, msg)
 	case TitleWrittenMsg:
@@ -593,6 +616,10 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return updateZodiacFinderKey(m, msg)
 	case ownerDisplay:
 		return updateHouseDisplayKey(m, msg)
+	case ownerSessions:
+		return updateSessionsKey(m, msg)
+	case ownerSessionName:
+		return updateSessionNameKey(m, msg)
 	case ownerSaveChart:
 		return updateSaveModalKey(m, msg)
 	case ownerChartTitle:
@@ -1853,7 +1880,7 @@ func (m Model) logWheelOpen(url string) Model {
 
 // logWheelClosed appends the line that says the wheel server was stopped.
 func (m Model) logWheelClosed() Model {
-	return m.appendLog(laneWheelClosed, "Wheel closed; Ctrl+X opens it again")
+	return m.appendLog(laneWheelClosed, "Wheel closed. Ctrl+X opens it again")
 }
 
 // logError appends an error line: a failure of something the operator asked
@@ -2074,13 +2101,17 @@ func (m Model) modalOpen() bool {
 // transitions startup has to ask which job it is doing.
 func (m Model) startupShowsModal() bool {
 	switch m.startup {
-	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupDisplayOpen, startupSaveOpen, startupTitleOpen:
+	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupDisplayOpen, startupSessionsOpen, startupSessionNameOpen, startupSaveOpen, startupTitleOpen:
 		return true
 	}
 	return false
 }
 
-func (m Model) View() string {
+// View is the frame, finished: every glyph a terminal may draw wide has a space
+// of its own style after it (glyph_room.go).
+func (m Model) View() string { return paintGlyphRoom(m.viewFrame()) }
+
+func (m Model) viewFrame() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
@@ -2133,6 +2164,12 @@ func (m Model) View() string {
 	if m.startup == startupAspectOpen {
 		modal := renderAspectModal(m.aspectModal, m.cfg, m.width, m.height)
 		return placeCentered(composed, modal, m.width, m.height)
+	}
+	if m.startup == startupSessionsOpen {
+		return placeCentered(composed, renderSessions(m, m.width, m.height), m.width, m.height)
+	}
+	if m.startup == startupSessionNameOpen {
+		return placeCentered(composed, renderSessionName(m, m.width, m.height), m.width, m.height)
 	}
 	return composed
 }

@@ -1,14 +1,11 @@
-+-[1m>Open chart[0m----------------------------------------------+
-|                                                          |
-|  Search: █                                               |
-|  ------------------------------------------------------  |
-|  [1m[7m> Constructed One                         Test Bay, TS[0m  |
-|    Great Conjunction                         Berlin, DE  |
-|    Constructed Two                         Test Bay, TS  |
-|  ! broken.yaml  —  no birth time                         |
-|  ! truncated.yaml  —  unreadable YAML                    |
-|                                                          |
-|                                                          |
-|                                                          |
-|                                                          |
-+---------------------------------------------------1 of 3-+
++-[1m>Open chart[0m----------------------------+
+|                                        |
+|  Search: █                             |
+|  ------------------------------------  |
+|  [1m[7m> Constructed One       Test Bay, TS[0m  |
+|    Great Conjunction       Berlin, DE  |
+|    Constructed Two       Test Bay, TS  |
+|  ! broken.yaml  —  no birth time       |
+|  ! truncated.yaml  —  unreadable YAML  |
+|                                        |
++---------------------------------1 of 3-+

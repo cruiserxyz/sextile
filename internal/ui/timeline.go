@@ -929,7 +929,7 @@ var detailsRefused = map[BindingID]string{
 	BindingSlotMoveUp:    "reorders the charts",
 	BindingSlotMoveDown:  "reorders the charts",
 	BindingSlotDelete:    "removes a chart",
-	BindingAttach:        "Details is already attached; attaching again resets what leaving restores",
+	BindingAttach:        "Details is already attached. Attaching again resets what leaving restores",
 }
 
 // passDetailsKeyToMain is a key Details does not answer itself: the main

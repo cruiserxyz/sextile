@@ -45,13 +45,13 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	// Before the workspace exists there is nothing to remember, and writing an
 	// empty session would erase a real one for a launch the operator quit out
 	// of before it finished starting. A second window writes none at all.
-	if m.slots != nil && !m.sessionKept && m.ownsSession() {
+	if m.slots != nil && (m.named.running() || !m.sessionKept) && m.ownsSession() {
 		// No frame after this one could show a failure, so it is kept on the
 		// model and printed on standard error once the screen is restored
 		// (the specification A7). The write leaves the previous
 		// session intact on its own.
-		if err := store.SaveSession(m.sessionSnapshot()); err != nil {
-			m.sessionWriteErr = &SessionWriteError{Path: store.SessionPath(), Err: err}
+		if err := m.saveRunningSession(); err != nil {
+			m.sessionWriteErr = &SessionWriteError{Path: m.runningSessionPath(), Err: err}
 		}
 	}
 	// The rendered wheel is a named client's chart held by a localhost server.
@@ -61,15 +61,61 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-// ownsSession reports whether this window may write the session file. A launch
-// the instance lock refused owns nothing, and neither does a second window:
-// the session belongs to the window that holds the lock.
+// sessionBelongsHere reports whether the session read at startup was saved in
+// the charts folder this launch uses. A session that names no folder belongs
+// nowhere: the one-time copy of an old session stamps the folder it came from.
+func sessionBelongsHere(p ingest.StartupPerimeterReadMsg) bool {
+	return p.Session.Folder != "" && p.Session.Folder == p.FolderID
+}
+
+// ownsSession reports whether this window may write the session it runs. A
+// launch the instance lock refused owns nothing. A second window owns nothing
+// either -- the general session belongs to the window that holds its lock --
+// until it saves or opens a named session, whose lock it then holds.
 func (m Model) ownsSession() bool {
-	return !m.cantStart.locked() && !m.cfg.SecondWindow
+	if m.cantStart.locked() || m.named.kept {
+		return false
+	}
+	return m.named.running() || !m.cfg.SecondWindow
 }
 
 // errSecondWindow is a session write asked of a second window.
 var errSecondWindow = errors.New("another Sextile window keeps the session")
+
+// saveRunningSession writes the session this window runs: the named one when
+// it runs one, else the general one. A window that owns no session writes
+// nothing, and so does one whose chosen session is still being opened.
+func (m Model) saveRunningSession() error {
+	if m.slots == nil || !m.ownsSession() || m.named.pending {
+		return nil
+	}
+	if m.named.running() {
+		return store.SaveNamedSession(m.named.lock, m.named.name, m.sessionSnapshot())
+	}
+	if m.sessionKept {
+		return nil
+	}
+	return store.SaveSession(m.sessionSnapshot())
+}
+
+// runningSessionPath is the file saveRunningSession writes.
+func (m Model) runningSessionPath() string {
+	if m.named.running() {
+		return store.NamedSessionPath(m.named.file)
+	}
+	return store.SessionPath()
+}
+
+// releaseRunningLock lets go of the lock of the session this window runs, as
+// it goes on to run another: a window holds exactly one.
+func (m Model) releaseRunningLock() {
+	switch {
+	case m.named.running():
+		m.named.lock.Release()
+	case !m.cfg.SecondWindow:
+		store.ReleaseInstanceLock()
+	}
+}
 
 // SessionWriteError is a session that could not be written at quit: the
 // file, and why.
@@ -119,6 +165,7 @@ func (m Model) sessionSnapshot() store.Session {
 	all := m.slots.All()
 	floating := len(all) - 1
 	s := store.Session{
+		Folder:           store.FolderID(store.ChartsDir()),
 		FloatingSelected: m.slots.SlotSelected(floating),
 		FloatingBodies:   m.slots.SelectedBodies(floating),
 		Frames:           m.frameRecordsToSave(),
@@ -173,6 +220,11 @@ func (m Model) reportSessionKeep(k store.SessionKeep) Model {
 func (m Model) restoreSession(p ingest.StartupPerimeterReadMsg) (Model, bool) {
 	m = m.loadFrames(p)
 	if p.SessionErr != nil {
+		// A named session --session admitted and the launch's read then refused
+		// (it changed in between): it is kept untouched, never saved over.
+		if m.named.running() {
+			m.named.kept = true
+		}
 		// The file exists and this build must not act on it. Startup proceeds
 		// exactly as if there were none. The launch's read already moved the
 		// file aside (reportSessionKeep), so the next quit writes a new one.
@@ -250,8 +302,8 @@ func (m Model) anchorFromSession(rec store.SessionChart) (Model, bool) {
 // applySessionSelections marks what the operator had marked, and runs LAST in
 // startup — after the session has had its turn at anchoring.
 //
-// Adding a chart selects it by default; the session is the authority on what
-// was selected, so every selection is cleared and then set as it was written,
+// Adding a chart selects nothing; the session is the authority on what was
+// selected, so every selection is cleared and then set as it was written,
 // at most MaxSelectedSlots of them. The store keeps the first six when it reads
 // a file; a hand-built session is held to the same cap here, and either way the
 // count that was turned off is one Log error line. Marks of an entry that was
@@ -679,4 +731,26 @@ const logIdentWidth = 24
 // rather than misread a truncation as the whole name.
 func logIdent(s string, cfg Config) string {
 	return cutRight(s, logIdentWidth, cfg)
+}
+
+// sessionPrefill is the name Save as offers (sessions_popup.go): the title of
+// the first selected anchored chart in the Chart panel's order; else of the
+// first anchored chart; else nothing. It reads the selection here, with the
+// rest of what a session keeps, to name what is saved, not to display it.
+func (m Model) sessionPrefill() string {
+	if m.slots == nil {
+		return ""
+	}
+	all := m.slots.All()
+	for i := 0; i < m.slots.AnchoredCount(); i++ {
+		if m.slots.SlotSelected(i) && all[i].Chart.Name != "" {
+			return all[i].Chart.Name
+		}
+	}
+	for i := 0; i < m.slots.AnchoredCount(); i++ {
+		if all[i].Chart.Name != "" {
+			return all[i].Chart.Name
+		}
+	}
+	return ""
 }

@@ -297,7 +297,7 @@ func TestSessionWriteFailureIsReported(t *testing.T) {
 			if err := os.WriteFile(blocker, nil, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("XDG_DATA_HOME", blocker)
+			t.Setenv("XDG_STATE_HOME", blocker)
 			m := escBase(t)
 			m.focused = PanelChart
 			tm, cmd := m.Update(keyMsgFor(t, k))
@@ -323,7 +323,7 @@ func TestSessionWriteFailureIsReported(t *testing.T) {
 		}
 	})
 	t.Run("written", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		m := escBase(t)
 		tm, _ := m.Update(keyMsgFor(t, "q"))
 		if err := tm.(Model).SessionWriteError(); err != nil {
@@ -408,8 +408,8 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m := titling(t)
 		gen := m.titleGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
-		land(t, m, TitleWrittenMsg{Gen: gen, Chart: keysUntitled(), Result: lookup.Retitled{File: "keys-untitled.as", Name: "Constructed", Backup: ".sextile/backup/keys-untitled.as"}},
-			`chart: titled keys-untitled.as as "Constructed" (original kept as .sextile/backup/keys-untitled.as)`)
+		land(t, m, TitleWrittenMsg{Gen: gen, Chart: keysUntitled(), Result: lookup.Retitled{File: "keys-untitled.as", Name: "Constructed", Backup: "/data/op/.local/share/sextile/backup/0f/keys-untitled.as"}},
+			`chart: titled keys-untitled.as as "Constructed" (original kept as /data/op/.local/share/sextile/backup/0f/keys-untitled.as)`)
 	})
 	t.Run("title failed", func(t *testing.T) {
 		m := titling(t)

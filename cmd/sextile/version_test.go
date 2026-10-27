@@ -161,7 +161,9 @@ func runVersionBinary(t *testing.T, bin string, vr versionRun) versionResult {
 	// --version that touches preferences, the session or a chart file hangs.
 	for _, f := range []string{
 		filepath.Join(dirs["XDG_CONFIG_HOME"], "sextile", "preferences.yaml"),
+		filepath.Join(dirs["XDG_STATE_HOME"], "sextile", "session", "session.yaml"),
 		filepath.Join(dirs["XDG_DATA_HOME"], "sextile", "session", "session.yaml"),
+		filepath.Join(dirs["CHARTS"], ".sextile", "data", "sextile", "session", "session.yaml"),
 		filepath.Join(dirs["CHARTS"], "client.as"),
 	} {
 		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
@@ -172,7 +174,7 @@ func runVersionBinary(t *testing.T, bin string, vr versionRun) versionResult {
 		}
 	}
 	if vr.heldLock {
-		holdSessionLock(t, dirs["XDG_DATA_HOME"])
+		holdSessionLock(t, dirs["XDG_STATE_HOME"])
 	}
 	before := fingerprint(t, root)
 	cwd := root
@@ -227,14 +229,14 @@ func runVersionBinary(t *testing.T, bin string, vr versionRun) versionResult {
 	return res
 }
 
-// holdSessionLock takes the instance lock on dataHome's session folder from a
+// holdSessionLock takes the instance lock on stateHome's session folder from a
 // descriptor this test owns, writing a pid as the real holder does, and keeps
 // it until the test ends. It does not import the store: the lock is a file
 // contract (the specification), and a test that called the store's own
 // function could not notice the store changing it.
-func holdSessionLock(t *testing.T, dataHome string) {
+func holdSessionLock(t *testing.T, stateHome string) {
 	t.Helper()
-	dir := filepath.Join(dataHome, "sextile", "session")
+	dir := filepath.Join(stateHome, "sextile", "session")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

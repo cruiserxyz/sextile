@@ -766,9 +766,9 @@ func TestReplacedChartDoesNotInheritHouseChoice(t *testing.T) {
 // C11b (ui half).
 func TestInvalidFrameEntryIsLogged(t *testing.T) {
 	sessionSandbox(t)
-	seedSession(t, "version: 3\nfloating:\n  selected: false\nframes:\n"+
+	seedSession(t, hereText("version: 3\nfloating:\n  selected: false\nframes:\n"+
 		"  - file: good.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Koch\n    from: chosen\n"+
-		"  - file: bad.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Nonsense\n    from: chosen\n")
+		"  - file: bad.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Nonsense\n    from: chosen\n"))
 	m := startedModel(t, withLocation(realPerimeter(t)))
 	if n := logHas(m, "frames entry was dropped"); n != 1 {
 		t.Errorf("the dropped entry was named %d times, want once: %v", n, m.logLines)
@@ -1182,7 +1182,7 @@ func TestRestoredChartFirstCastUsesFileSystem(t *testing.T) {
 		t.Fatalf("fixture: the file reads as %+v (%v), want Koch", read, err)
 	}
 	rec := store.SessionChart{ID: row.ID, Name: row.Name, When: read.When, Place: row.Place, Source: row.Source}
-	if err := store.SaveSession(store.Session{FloatingSelected: true, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+	if err := store.SaveSession(here(store.Session{FloatingSelected: true, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 		t.Fatal(err)
 	}
 	spy := stubHouseLookups(t)
@@ -1289,7 +1289,7 @@ func restoredK(t *testing.T, read func(context.Context, string) (lookup.PickedCh
 		t.Fatal(err)
 	}
 	rec := store.SessionChart{ID: row.ID, Name: row.Name, When: real.When, Place: row.Place, Source: row.Source}
-	if err := store.SaveSession(store.Session{FloatingSelected: true, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+	if err := store.SaveSession(here(store.Session{FloatingSelected: true, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 		t.Fatal(err)
 	}
 	spy := stubHouseLookups(t)

@@ -615,12 +615,14 @@ func TestComparisonTitleStyledLikeAnyTitle(t *testing.T) {
 	// Amended by selected-charts-compare C1: the strip is `Aspects - ② in ①`
 	// with the pair tab active, so the active tab is the green run and the
 	// other tab the plain title gray.
-	if !strings.Contains(line, "\x1b[1;92m② in ①\x1b[0m") || !strings.Contains(line, "\x1b[38;5;252mAspects\x1b[0m") {
+	// The title ends with a glyph a terminal may draw wide, so its space is part
+	// of the run: "② in ① ".
+	if !strings.Contains(line, "\x1b[1;92m② in ① \x1b[0m") || !strings.Contains(line, "\x1b[38;5;252mAspects\x1b[0m") {
 		t.Errorf("focused active tab not bold green beside a plain Aspects tab: %q", line)
 	}
 	m.focused = PanelChart
 	line = aspectsTopBorder(t, m)
-	if !strings.Contains(line, "\x1b[92m② in ①\x1b[0m") || !strings.Contains(line, "\x1b[38;5;252mAspects\x1b[0m") {
+	if !strings.Contains(line, "\x1b[92m② in ① \x1b[0m") || !strings.Contains(line, "\x1b[38;5;252mAspects\x1b[0m") {
 		t.Errorf("unfocused active tab not plain green beside a plain Aspects tab: %q", line)
 	}
 }

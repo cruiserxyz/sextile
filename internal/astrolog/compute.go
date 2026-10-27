@@ -102,7 +102,7 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 	}
 	inv := plan.Invocations[0]
 	if inv.Parser != ParseCrossAspects {
-		return payload.CrossAspectOutput{}, fmt.Errorf("astrolog: ComputeCrossAspects: spec source is not a Comparison; use ComputeChart for a single chart")
+		return payload.CrossAspectOutput{}, fmt.Errorf("astrolog: ComputeCrossAspects: spec source is not a Comparison. Use ComputeChart for a single chart")
 	}
 	// Commands accumulate in spawn order — the ephemeris probe first, then
 	// the relationship run — and every return after a spawn started carries

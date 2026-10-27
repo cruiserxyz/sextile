@@ -180,11 +180,15 @@ func TestFormFocusCycle(t *testing.T) {
 	}
 }
 
-// C2.7: the box keeps its size across values, placeholders, a refusal, the
-// focused field and a value too long for its line.
+// C2.7: the box keeps its size across values, placeholders, the focused field,
+// a value too long for its line and a refusal: the form keeps one empty line
+// under its info from the moment it opens, a refusal appears in that line, and
+// one too long for it is cut (operator, 2026-10-27: a popup's size is decided
+// when it opens and never changes while it is open).
 func TestFormBoxSizeStable(t *testing.T) {
 	forceColor(t)
 	long := strings.Repeat("Constructed Very Long Title ", 6)
+	const refusal = "Constructed.as changed since the list was read — reopen the picker"
 	states := []struct {
 		name    string
 		f       form
@@ -193,17 +197,14 @@ func TestFormBoxSizeStable(t *testing.T) {
 		{"placeholders", twoFieldForm(), ""},
 		{"typed", typeIntoForm(twoFieldForm(), formRunes("Constructed One")), ""},
 		{"second-focused", typeIntoForm(twoFieldForm(), keyFormTab, formRunes("Bremen")), ""},
-		{"refused", typeIntoForm(twoFieldForm(), formRunes("Constructed One")), "Constructed.as changed since the list was read — reopen the picker"},
 		{"too-long", typeIntoForm(twoFieldForm(), formRunes(long)), ""},
+		{"refused", typeIntoForm(twoFieldForm(), formRunes("Constructed One")), refusal},
+		{"refused, longer than its line", typeIntoForm(twoFieldForm(), formRunes("Constructed One")), refusal + " and then a good deal more than one line holds"},
 	}
 	for _, cfg := range []Config{{Color: ColorAlways}, {Accessible: true, Color: ColorNever}} {
 		var wantLines, wantWidth int
 		for i, s := range states {
-			frame := renderForm(s.f, formView{
-				Title:   "Test form",
-				Info:    []string{"Fixture.as"},
-				Refusal: s.refusal,
-			}, cfg, 80, 24)
+			frame := renderForm(s.f, formView{Title: "Test form", Info: []string{"Fixture.as"}, Refusal: s.refusal}, cfg, 80, 24)
 			lines := strings.Split(frame, "\n")
 			width := 0
 			for _, l := range lines {
@@ -214,8 +215,10 @@ func TestFormBoxSizeStable(t *testing.T) {
 				continue
 			}
 			if len(lines) != wantLines || width != wantWidth {
-				t.Errorf("%+v %s: %d lines × %d wide, want %d × %d as at rest:\n%s",
-					cfg, s.name, len(lines), width, wantLines, wantWidth, frame)
+				t.Errorf("%+v %s: %d lines × %d wide, want %d × %d as at rest:\n%s", cfg, s.name, len(lines), width, wantLines, wantWidth, frame)
+			}
+			if s.refusal != "" && !strings.Contains(ansi.Strip(frame), ansi.Strip(refusal[:30])) {
+				t.Errorf("%+v %s: the refusal is not in the form:\n%s", cfg, s.name, frame)
 			}
 		}
 	}
@@ -226,12 +229,12 @@ func TestFormBoxSizeStable(t *testing.T) {
 		t.Errorf("long value line = %q, want the label, an ellipsis, and the tail ending at the cursor", line)
 	}
 
-	// A two-field form is the same outer size as the one-field save prompt:
-	// the list area gives up the row the second field takes.
+	// A two-field form is one line taller than the one-field save prompt: the
+	// second field is a line of its own, and nothing else is added.
 	one := strings.Split(renderSaveModal(saveModalState{form: newSaveForm(), dest: tasteSaveDest}, Config{Accessible: true, Color: ColorNever}, 80, 24), "\n")
 	two := strings.Split(formFrame(twoFieldForm(), Config{Accessible: true, Color: ColorNever}), "\n")
-	if len(one) != len(two) {
-		t.Errorf("one-field box is %d lines, two-field box %d; want equal", len(one), len(two))
+	if len(two) != len(one)+1 {
+		t.Errorf("one-field box is %d lines, two-field box %d; want one more (the field)", len(one), len(two))
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
 )
@@ -57,7 +58,9 @@ func TestAspectPopupRuleSitsBetweenGroupsAndList(t *testing.T) {
 				// The search separator above the families is a '-' rule in
 				// accessible mode; only the line right under `All` counts.
 				run := ruleRun(lines[all+1], mode.glyph)
-				if len(run) == 0 || len([]rune(run)) < 40 {
+				// The rule spans the box's content, as wide as the search
+				// separator above the families.
+				if boxContent := ansi.StringWidth(lines[0]) - 6; len([]rune(run)) != boxContent {
 					t.Fatalf("line under the `All` row is not a %q rule:\n%s", mode.glyph, strings.Join(lines, "\n"))
 				}
 				if !strings.Contains(lines[all+2], "Aspect01") {

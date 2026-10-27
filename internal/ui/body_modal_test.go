@@ -316,7 +316,7 @@ func TestBodyLegendMarksAreTheGroupRowMarks(t *testing.T) {
 	}{{nil, groupMarkNone}, {[]int{1}, groupMarkSome}} {
 		st := openBodyModal(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: c.sel}, nil)
 		row := bodyGroupRows(st, Config{}, 60)[0]
-		if !strings.Contains(row, "["+c.mark+"]") {
+		if !strings.Contains(row, "["+c.mark+" ]") {
 			t.Errorf("Planets row = %q, want mark %q", row, c.mark)
 		}
 	}
@@ -325,7 +325,7 @@ func TestBodyLegendMarksAreTheGroupRowMarks(t *testing.T) {
 		all = append(all, i)
 	}
 	st := openBodyModal(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: all}, nil)
-	if row := bodyGroupRows(st, Config{}, 60)[0]; !strings.Contains(row, "["+groupMarkAll+"]") {
+	if row := bodyGroupRows(st, Config{}, 60)[0]; !strings.Contains(row, "["+groupMarkAll+" ]") {
 		t.Errorf("Planets row = %q, want mark %q", row, groupMarkAll)
 	}
 }
@@ -342,7 +342,7 @@ func TestBodiesSearchLineSaysBodies(t *testing.T) {
 	if !strings.Contains(city, "Search: ber█") || strings.Contains(city, "Search bodies") {
 		t.Errorf("the City input line changed:\n%s", city)
 	}
-	plain := ansi.Strip(renderModalBox(modalBox{Title: popupTitleCity, FilterText: "x"}, Config{Accessible: true}, 132, 40,
+	plain := ansi.Strip(renderModalBox(modalBox{Title: popupTitleCity, FilterText: "x", Fit: modalFit{Width: 1, Rows: 1}}, Config{Accessible: true}, 132, 40,
 		func(w, h int) string { return "" }))
 	if !strings.Contains(plain, "Search: x█") {
 		t.Errorf("the default prompt is not `Search: `:\n%s", plain)

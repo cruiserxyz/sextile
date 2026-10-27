@@ -483,8 +483,8 @@ func TestPopupMarksAnUndrawableBody(t *testing.T) {
 					status = i
 				}
 			}
-			if bar < 0 || status != bar+1 {
-				t.Fatalf("the status line %q must sit directly below the tag bar (bar %d, status %d):\n%s", want, bar, status, frame)
+			if bar < 0 || status != bar+2 || strings.TrimSpace(strings.Trim(lines[bar+1], "|│ ")) != "" {
+				t.Fatalf("the status line %q must sit in the message zone: a blank row below the tag bar, then the note (bar %d, status %d):\n%s", want, bar, status, frame)
 			}
 
 			// Away from the cursor the row stays marked and the line goes.

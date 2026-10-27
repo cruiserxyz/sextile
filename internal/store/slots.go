@@ -62,21 +62,15 @@ func NewSlots(when time.Time, place location.PlaceInfo) (*Slots, error) {
 // AddAnchored appends an anchored slot directly above the floating slot.
 // Refuses, leaving the list unchanged, if place lacks an IANA timezone.
 //
-// When no anchored slot is selected the new slot and the floating slot are
-// both selected — the first-load comparison. Otherwise the new slot is
-// unselected and no selection changes.
+// The new slot arrives unselected and no selection changes: selection is only
+// ever made by the user.
 func (s *Slots) AddAnchored(chart SessionChart, when time.Time, place location.PlaceInfo) error {
 	if !place.HasTimezone() {
 		return errors.New("store: Slots.AddAnchored: place.TZ required")
 	}
-	first := s.Baseline() == nil
 	chart.When = when
 	chart.Place = place
 	slot := &Slot{Time: when, Location: place, Chart: chart}
-	if first {
-		slot.selected = true
-		s.floating.selected = true
-	}
 	s.anchored = append(s.anchored, slot)
 	return nil
 }

@@ -277,7 +277,7 @@ func readRule(root *node, into map[string]Rule) error {
 		return err
 	}
 	if r.Kind != "within" {
-		return fmt.Errorf("rule %s: kind %q is not built (only within; interval, table and composite are reserved)", r.ID, r.Kind)
+		return fmt.Errorf("rule %s: kind %q is not built (only within, interval, table and composite are reserved)", r.ID, r.Kind)
 	}
 	if rows.list == nil || len(rows.list) == 0 {
 		return fmt.Errorf("rule %s: rows must be a non-empty list", r.ID)
@@ -334,12 +334,12 @@ func readRow(item *node, rule string) (Row, error) {
 	if surname := authorSurname(row.Citation.Author); surname != "" {
 		for _, s := range []string{row.ID, row.Label} {
 			if strings.Contains(strings.ToLower(s), surname) {
-				return row, fmt.Errorf("row %s: %q names the author (%s); ids and labels name the criterion, the citation names the author", row.ID, s, row.Citation.Author)
+				return row, fmt.Errorf("row %s: %q names the author (%s). Ids and labels name the criterion, the citation names the author", row.ID, s, row.Citation.Author)
 			}
 		}
 	}
 	if row.Grade == "plain" {
-		return row, fmt.Errorf("row %s: a rule row cites a source; plain is for terms", row.ID)
+		return row, fmt.Errorf("row %s: a rule row cites a source. Plain is for terms", row.ID)
 	}
 	if bodies != nil {
 		if bodies.list == nil || len(bodies.list) == 0 {

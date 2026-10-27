@@ -251,6 +251,11 @@ func TestTtyFlag(t *testing.T) {
 
 // ------------------------------------------------------------------- C16
 
+// xdgCharts is the first suggestion of the prompt in a home with no XDG_DATA_HOME.
+func (r *rig) xdgCharts() string {
+	return filepath.Join(r.home, ".local", "share", "sextile", "charts")
+}
+
 func prepareHome(t *testing.T, r *rig, docs bool) {
 	t.Helper()
 	if docs {
@@ -259,36 +264,45 @@ func prepareHome(t *testing.T, r *rig, docs bool) {
 }
 
 func TestFirstRunPrompt(t *testing.T) {
-	t.Run("Enter is 1", func(t *testing.T) {
+	// Choice 1 is where bin/sextile keeps charts by default, on every system,
+	// before the folder exists; choice 2 is the Documents folder's Sextile.
+	t.Run("1 is the XDG charts folder when it does not exist yet", func(t *testing.T) {
 		r := newRig(t)
-		prepareHome(t, r, true)
+		if _, err := os.Stat(filepath.Join(r.home, ".local")); err == nil {
+			t.Fatal("setup: the home should have no .local")
+		}
 		out, code := r.answer(nil, [2]string{choose, "\n"})
 		if code != 0 {
 			t.Fatalf("exit %d\n%s", code, out)
 		}
-		want := filepath.Join(r.home, ".charts")
+		want := filepath.Join(r.home, ".local", "share", "sextile", "charts")
 		if got := mountSource(t, r.find("run")); got != want {
 			t.Fatalf("mounted %q want %q", got, want)
 		}
 		contains(t, out, "Which folder?")
-		contains(t, out, "1) ~/.charts")
-		contains(t, out, "2) ~/Documents/charts")
+		contains(t, out, "1) ~/.local/share/sextile/charts")
+		contains(t, out, "new folder")
+		contains(t, out, "2) ~/Documents/Sextile")
 		contains(t, out, "3) another folder")
-		contains(t, out, "charts folder: "+want+" (created); remembered in "+r.confPath())
+		contains(t, out, "charts folder: "+want+" (created), remembered in "+r.confPath())
+		for _, gone := range []string{"~/.charts", "Documents/charts"} {
+			if strings.Contains(out, gone) {
+				t.Fatalf("the old suggestion %s is still offered:\n%s", gone, out)
+			}
+		}
 	})
 
-	t.Run("a Linux home offers bin/sextile's folder as 2", func(t *testing.T) {
+	t.Run("1 is the folder bin/sextile uses, so both ways of running agree", func(t *testing.T) {
 		r := newRig(t)
-		prepareHome(t, r, true)
-		mustMkdir(t, filepath.Join(r.home, ".local", "share"))
-		out, code := r.answer(nil, [2]string{choose, "2\n"})
+		for _, n := range []string{"a.as", "b.as"} {
+			mustWrite(t, filepath.Join(r.home, ".local", "share", "sextile", "charts", n), "@AI780\n", 0o644)
+		}
+		out, code := r.answer(nil, [2]string{choose, "1\n"})
 		if code != 0 {
 			t.Fatalf("exit %d\n%s", code, out)
 		}
-		contains(t, out, "1) ~/.charts")
-		contains(t, out, "2) ~/.local/share/sextile/charts")
-		contains(t, out, "3) ~/Documents/charts")
-		contains(t, out, "4) another folder")
+		contains(t, out, "holds 2 charts")
+		contains(t, out, "(exists)")
 		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, ".local", "share", "sextile", "charts"); got != want {
 			t.Fatalf("mounted %q want %q", got, want)
 		}
@@ -298,7 +312,7 @@ func TestFirstRunPrompt(t *testing.T) {
 		r := newRig(t)
 		data := r.mkdir("data")
 		r.setenv("XDG_DATA_HOME", data)
-		out, code := r.answer(nil, [2]string{choose, "2\n"})
+		out, code := r.answer(nil, [2]string{choose, "1\n"})
 		if code != 0 {
 			t.Fatalf("exit %d\n%s", code, out)
 		}
@@ -308,38 +322,82 @@ func TestFirstRunPrompt(t *testing.T) {
 		}
 	})
 
-	t.Run("a relative XDG_DATA_HOME and no ~/.local/share: not offered", func(t *testing.T) {
+	t.Run("a relative XDG_DATA_HOME is not a place", func(t *testing.T) {
 		r := newRig(t)
 		r.setenv("XDG_DATA_HOME", "rel/data")
 		out, code := r.answer(nil, [2]string{choose, "\n"})
 		if code != 0 {
 			t.Fatalf("exit %d\n%s", code, out)
 		}
-		if strings.Contains(out, "sextile/charts") || !strings.Contains(out, "2) another folder") {
-			t.Fatalf("the data folder is offered only when it exists:\n%s", out)
+		if strings.Contains(out, "rel/data") {
+			t.Fatalf("a relative data folder is offered:\n%s", out)
 		}
-	})
-
-	t.Run("2 is Documents", func(t *testing.T) {
-		r := newRig(t)
-		prepareHome(t, r, true)
-		_, code := r.answer(nil, [2]string{choose, "2\n"})
-		if code != 0 {
-			t.Fatal("failed")
-		}
-		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, "Documents", "charts"); got != want {
+		contains(t, out, "1) ~/.local/share/sextile/charts")
+		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, ".local", "share", "sextile", "charts"); got != want {
 			t.Fatalf("mounted %q want %q", got, want)
 		}
 	})
 
-	t.Run("no Documents, no option 2", func(t *testing.T) {
+	t.Run("2 is Sextile in the Documents folder", func(t *testing.T) {
 		r := newRig(t)
-		out, code := r.answer(nil, [2]string{choose, "\n"})
+		prepareHome(t, r, true)
+		out, code := r.answer(nil, [2]string{choose, "2\n"})
 		if code != 0 {
 			t.Fatalf("exit %d\n%s", code, out)
 		}
-		if strings.Contains(out, "Documents") || !strings.Contains(out, "2) another folder") {
-			t.Fatalf("option 2 is Documents only when ~/Documents exists:\n%s", out)
+		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, "Documents", "Sextile"); got != want {
+			t.Fatalf("mounted %q want %q", got, want)
+		}
+		contains(t, out, "(created)")
+	})
+
+	t.Run("2 is offered, and made, when ~/Documents does not exist", func(t *testing.T) {
+		r := newRig(t)
+		out, code := r.answer(nil, [2]string{choose, "2\n"})
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, out)
+		}
+		contains(t, out, "2) ~/Documents/Sextile")
+		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, "Documents", "Sextile"); got != want {
+			t.Fatalf("mounted %q want %q", got, want)
+		}
+	})
+
+	t.Run("an absolute XDG_DOCUMENTS_DIR is the documents folder", func(t *testing.T) {
+		r := newRig(t)
+		docs := r.mkdir("my docs")
+		r.setenv("XDG_DOCUMENTS_DIR", docs)
+		out, code := r.answer(nil, [2]string{choose, "2\n"})
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, out)
+		}
+		if got, want := mountSource(t, r.find("run")), filepath.Join(docs, "Sextile"); got != want {
+			t.Fatalf("mounted %q want %q", got, want)
+		}
+	})
+
+	t.Run("a relative XDG_DOCUMENTS_DIR is not a place", func(t *testing.T) {
+		r := newRig(t)
+		r.setenv("XDG_DOCUMENTS_DIR", "rel/docs")
+		out, code := r.answer(nil, [2]string{choose, "2\n"})
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, out)
+		}
+		if strings.Contains(out, "rel/docs") {
+			t.Fatalf("a relative documents folder is offered:\n%s", out)
+		}
+		if got, want := mountSource(t, r.find("run")), filepath.Join(r.home, "Documents", "Sextile"); got != want {
+			t.Fatalf("mounted %q want %q", got, want)
+		}
+	})
+
+	t.Run("user-dirs.dirs is not read", func(t *testing.T) {
+		r := newRig(t)
+		mustWrite(t, filepath.Join(r.xdg, "user-dirs.dirs"), "XDG_DOCUMENTS_DIR=\"$HOME/Papers\"\n", 0o644)
+		mustWrite(t, filepath.Join(r.home, ".config", "user-dirs.dirs"), "XDG_DOCUMENTS_DIR=\"$HOME/Papers\"\n", 0o644)
+		out, code := r.answer(nil, [2]string{choose, "\n"})
+		if code != 0 || strings.Contains(out, "Papers") {
+			t.Fatalf("exit %d, a user-dirs.dirs setting was followed:\n%s", code, out)
 		}
 	})
 
@@ -347,9 +405,9 @@ func TestFirstRunPrompt(t *testing.T) {
 		r := newRig(t)
 		prepareHome(t, r, true)
 		for _, n := range []string{"a.as", "b.as", "c.as"} {
-			mustWrite(t, filepath.Join(r.home, ".charts", n), "@AI780\n", 0o644)
+			mustWrite(t, filepath.Join(r.xdgCharts(), n), "@AI780\n", 0o644)
 		}
-		mustWrite(t, filepath.Join(r.home, ".charts", "notes.txt"), "x", 0o644)
+		mustWrite(t, filepath.Join(r.xdgCharts(), "notes.txt"), "x", 0o644)
 		out, code := r.answer(nil, [2]string{choose, "\n"})
 		if code != 0 {
 			t.Fatal("failed")
@@ -360,7 +418,7 @@ func TestFirstRunPrompt(t *testing.T) {
 
 	t.Run("an empty existing folder", func(t *testing.T) {
 		r := newRig(t)
-		mustMkdir(t, filepath.Join(r.home, ".charts"))
+		mustMkdir(t, r.xdgCharts())
 		out, _ := r.answer(nil, [2]string{choose, "\n"})
 		contains(t, out, "exists, no charts yet")
 	})
@@ -410,7 +468,7 @@ func TestFirstRunPrompt(t *testing.T) {
 func TestLauncherCountsChartsByHeader(t *testing.T) {
 	r := newRig(t)
 	prepareHome(t, r, true)
-	dir := filepath.Join(r.home, ".charts")
+	dir := r.xdgCharts()
 	for _, n := range []string{"a.as", "b.as", "c.legacy"} {
 		mustWrite(t, filepath.Join(dir, n), "@AI780  ; Astrolog chart info.\n", 0o644)
 	}
@@ -439,7 +497,7 @@ func TestPromptRefusesFolderInsideClone(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("want exit 2, got %d\n%s", code, out)
 	}
-	contains(t, out, filepath.Join(r.clone, "charts")+" is inside the Sextile checkout ("+r.clone+"); keep client charts outside it")
+	contains(t, out, filepath.Join(r.clone, "charts")+" is inside the Sextile checkout ("+r.clone+"). Keep client charts outside it")
 	if _, err := os.Stat(filepath.Join(r.clone, "charts")); err == nil {
 		t.Fatal("the folder inside the clone was created")
 	}
@@ -483,8 +541,8 @@ func TestPromptCreatesFolder(t *testing.T) {
 
 	// An existing chosen folder is left as it is.
 	r2 := newRig(t)
-	existing := filepath.Join(r2.home, ".charts")
-	if err := os.Mkdir(existing, 0o755); err != nil {
+	existing := r2.xdgCharts()
+	if err := os.MkdirAll(existing, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(existing, 0o755); err != nil {
@@ -544,12 +602,13 @@ func TestPromptWritesConfig(t *testing.T) {
 	}
 
 	// C23: the launcher wrote the config and the folder chosen at the prompt
-	// (the folder and its new parents, as folders) and nothing else, anywhere
+	// (the folder and its new parents, as folders) and the empty state folders the
+	// app is given, and nothing else, anywhere
 	// under the temporary root: no file in the clone, HOME or the charts folder.
 	after := snapshot(t, r.root)
 	confDir := filepath.Dir(r.confPath())
 	if bad := unexpectedWrites(before, after, func(entry, path string) bool {
-		if path == confDir || path == r.confPath() {
+		if path == confDir || path == r.confPath() || r.stateFolderMade(entry, path) {
 			return true
 		}
 		if strings.HasPrefix(path, confDir+string(filepath.Separator)+".launcher.conf.") {
@@ -658,12 +717,14 @@ func TestPromptBadAnswer(t *testing.T) {
 		t.Fatalf("a good third answer is accepted, got exit %d", code)
 	}
 
-	// Without ~/Documents the range is 1-2: 3 is bad.
+	// The menu is always 1, 2 or 3 (another folder): 4 is bad, and the
+	// complaint names the range.
 	r3 := newRig(t)
-	out, code = r3.answer(nil, [2]string{choose, "3\n"}, [2]string{choose, "3\n"}, [2]string{choose, "3\n"})
+	out, code = r3.answer(nil, [2]string{choose, "4\n"}, [2]string{choose, "4\n"}, [2]string{choose, "4\n"})
 	if code != 2 {
-		t.Fatalf("with two options, 3 is not an answer; exit %d\n%s", code, out)
+		t.Fatalf("with three options, 4 is not an answer; exit %d\n%s", code, out)
 	}
+	contains(t, out, "Please answer 1, 2 or 3.")
 
 	// End of input is a refusal, not a loop.
 	r4 := newRig(t)
@@ -673,7 +734,7 @@ func TestPromptBadAnswer(t *testing.T) {
 	if _, code := s.finish(); code != 2 {
 		t.Fatalf("EOF at the prompt: exit %d", code)
 	}
-	if _, err := os.Stat(filepath.Join(r4.home, ".charts")); err == nil {
+	if _, err := os.Stat(filepath.Join(r4.home, ".local")); err == nil {
 		t.Fatal("EOF must create nothing")
 	}
 }
@@ -841,23 +902,20 @@ func TestPromptGolden(t *testing.T) {
 	var sb strings.Builder
 
 	r := newRig(t)
-	prepareHome(t, r, true)
 	out, code := r.answer(nil, [2]string{choose, "\n"})
-	sb.WriteString(r.frame("first-run-empty (Enter)", out, code))
+	sb.WriteString(r.frame("first-run-empty (Enter, the XDG folder does not exist yet)", out, code))
 
 	r = newRig(t)
-	prepareHome(t, r, true)
 	for _, n := range []string{"Alice.as", "Bob.as", "Carol.as"} {
-		mustWrite(t, filepath.Join(r.home, ".charts", n), "@AI780\n", 0o644)
+		mustWrite(t, filepath.Join(r.xdgCharts(), n), "@AI780\n", 0o644)
 	}
 	out, code = r.answer(nil, [2]string{choose, "\n"})
-	sb.WriteString(r.frame("first-run-existing (Enter, ~/.charts holds 3 charts)", out, code))
+	sb.WriteString(r.frame("first-run-existing (Enter, ~/.local/share/sextile/charts holds 3 charts)", out, code))
 
 	r = newRig(t)
 	prepareHome(t, r, true)
-	mustMkdir(t, filepath.Join(r.home, ".local", "share"))
 	out, code = r.answer(nil, [2]string{choose, "2\n"})
-	sb.WriteString(r.frame("first-run-linux-home (2, ~/.local/share exists)", out, code))
+	sb.WriteString(r.frame("first-run-documents (2, ~/Documents exists)", out, code))
 
 	r = newRig(t)
 	prepareHome(t, r, true)

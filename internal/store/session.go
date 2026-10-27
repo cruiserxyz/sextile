@@ -153,6 +153,12 @@ type Session struct {
 	// the line it says when its one chart cannot.
 	Version int
 
+	// Folder is the FolderID of the charts folder this session was saved in,
+	// written as a top-level `folder:` line. A session is restored only in
+	// the folder it names; one that names none is restored nowhere. Additive:
+	// a reader before 0.1.2 ignores the line as an unknown top-level key.
+	Folder string
+
 	Slots []SessionSlot
 
 	// FloatingSelected is whether the floating slot was selected.
@@ -200,33 +206,41 @@ func SessionPath() string {
 // chart was named would lose operator state for a reason the operator cannot
 // see.
 func SaveSession(s Session) error {
-	path := SessionPath()
-	dir := filepath.Dir(path)
-	if err := mkdirAllSynced(dir, 0o755); err != nil {
+	dir, err := ensureSessionDir()
+	if err != nil {
 		return fmt.Errorf("store: SaveSession: mkdir: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, "session.*.yaml.tmp")
+	return replaceSessionFile("SaveSession", dir, sessionFile, formatSession(s))
+}
+
+// replaceSessionFile gives dir/name the bytes text, whole: a same-directory
+// tmpfile, synced, then renamed over the name. It is the session writer's own
+// way of replacing the one file it owns -- the general session, or the named
+// session a window runs and holds the lock of.
+func replaceSessionFile(op, dir, name, text string) error {
+	path := filepath.Join(dir, name)
+	tmp, err := os.CreateTemp(dir, strings.TrimSuffix(name, ".yaml")+".*.yaml.tmp")
 	if err != nil {
-		return fmt.Errorf("store: SaveSession: tmpfile: %w", err)
+		return fmt.Errorf("store: %s: tmpfile: %w", op, err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath) // safe no-op after a successful rename
 
-	if _, err := tmp.WriteString(formatSession(s)); err != nil {
+	if _, err := tmp.WriteString(text); err != nil {
 		tmp.Close()
-		return fmt.Errorf("store: SaveSession: write: %w", err)
+		return fmt.Errorf("store: %s: write: %w", op, err)
 	}
 	// Synced before the rename, so a power cut cannot leave the new name
 	// holding bytes that never reached the disk.
 	if err := syncTemp(tmp); err != nil {
 		tmp.Close()
-		return fmt.Errorf("store: SaveSession: sync: %w", err)
+		return fmt.Errorf("store: %s: sync: %w", op, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("store: SaveSession: close: %w", err)
+		return fmt.Errorf("store: %s: close: %w", op, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("store: SaveSession: rename: %w", err)
+		return fmt.Errorf("store: %s: rename: %w", op, err)
 	}
 	syncDir(dir) // the new name itself, not only its bytes
 	return nil
@@ -244,6 +258,9 @@ func SaveSession(s Session) error {
 func formatSession(s Session) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "version: %d\n", sessionVersion)
+	if validFolderID(s.Folder) {
+		fmt.Fprintf(&b, "folder: %s\n", s.Folder)
+	}
 	if len(s.Slots) > 0 {
 		b.WriteString("charts:\n")
 	}
@@ -347,7 +364,27 @@ func parseSessionFile(path string, b []byte) (Session, bool, error) {
 	if err != nil {
 		return Session{}, false, fmt.Errorf("store: LoadSession: %s: %w", path, err)
 	}
+	s.Folder = sessionFolder(text)
 	return s, true, nil
+}
+
+// folderIDPattern is a FolderID as the writer emits it: 64 lowercase hex.
+var folderIDPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func validFolderID(id string) bool { return folderIDPattern.MatchString(id) }
+
+// sessionFolder is the value of the first column-zero `folder:` line, when it
+// is a FolderID in the writer's form; anything else is no folder at all.
+func sessionFolder(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "folder: "); ok {
+			if validFolderID(v) {
+				return v
+			}
+			return ""
+		}
+	}
+	return ""
 }
 
 // sessionWhen is the writer's own form of a moment: RFC 3339 in UTC, whose year
@@ -406,7 +443,7 @@ func checkSessionVersion(v int) error {
 	case v >= 1 && v <= sessionVersion:
 		return nil
 	case v > sessionVersion:
-		return fmt.Errorf("written by a newer Sextile (generation %d; this build reads 1 to %d)", v, sessionVersion)
+		return fmt.Errorf("written by a newer Sextile (generation %d, this build reads 1 to %d)", v, sessionVersion)
 	default:
 		return fmt.Errorf("unreadable generation %d", v)
 	}

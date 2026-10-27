@@ -13,13 +13,13 @@ import (
 // perimeterSandbox isolates every file the cold-start read touches: the chart
 // library on its top-precedence tier (the rule
 // invariants.TestTestsIsolateChartsDirOnTopTier holds down), the session under
-// XDG_DATA_HOME, and preferences.yaml under XDG_CONFIG_HOME. Without all three
+// XDG_STATE_HOME, and preferences.yaml under XDG_CONFIG_HOME. Without all three
 // the test reads the operator's own files.
 func perimeterSandbox(t *testing.T) (chartsDir, sessionDir string) {
 	t.Helper()
 	root := t.TempDir()
 	chartsDir = filepath.Join(root, "charts")
-	sessionDir = filepath.Join(root, "data", "sextile", "session")
+	sessionDir = filepath.Join(root, "state", "sextile", "session")
 	for _, d := range []string{chartsDir, sessionDir, filepath.Join(root, "config")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -28,6 +28,7 @@ func perimeterSandbox(t *testing.T) (chartsDir, sessionDir string) {
 	t.Setenv("SEXTILE_CHARTS_DIR", chartsDir)
 	t.Setenv("SEXTILE_DEV_CHARTS_DIR", "")
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("HOME", root)
 	return chartsDir, sessionDir

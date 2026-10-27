@@ -186,7 +186,7 @@ func (r RenderSpec) validate() error {
 		return fmt.Errorf("recipe: RenderSpec: unknown image format %d", r.Format)
 	}
 	if r.Width <= 0 {
-		return fmt.Errorf("recipe: RenderSpec: Width must be > 0 (got %d); use DefaultWheelRender", r.Width)
+		return fmt.Errorf("recipe: RenderSpec: Width must be > 0 (got %d). Use DefaultWheelRender", r.Width)
 	}
 	if r.SymbolScale < 0 || r.TextScale < 0 {
 		return fmt.Errorf("recipe: RenderSpec: scales must be >= 0 (SymbolScale=%d TextScale=%d)", r.SymbolScale, r.TextScale)

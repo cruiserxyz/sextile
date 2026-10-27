@@ -215,7 +215,7 @@ func TestSaveDefaultsRefusesInASecondWindow(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("`,c d` scheduled a save in a second window")
 	}
-	want := "Save defaults is for the first window, which keeps the session; this window keeps nothing"
+	want := "Save defaults is for the first window, which keeps the session. This window keeps nothing"
 	if lastLine(m).text != want || lastLine(m).lane != laneError {
 		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 	}

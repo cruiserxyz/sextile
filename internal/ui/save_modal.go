@@ -212,9 +212,19 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 	// holds the error lane to a closed set of "Couldn't …" sentences, and
 	// widening it so a SUCCESS could appear there would cost the lane the
 	// meaning that makes it worth reading.
-	m.startup = m.save.prior
+	prior, dest := m.save.prior, m.save.dest
+	m.startup = prior
 	m.save = saveModalState{}
-	return m.logSaved(msg.Saved), nil
+	m = m.logSaved(msg.Saved)
+	// The new chart opens right away, by the path Ctrl+O takes: the file just
+	// written is read back and anchored, the cursor rests on it, nothing is
+	// selected. A file already open is jumped to, as a pick of it would.
+	m.picker.prior = prior
+	return resolvePickIn(m, dest, store.NamedChart{
+		ID:     msg.Saved.ID,
+		Name:   msg.Saved.Name,
+		Source: store.ChartSource{Kind: store.ChartKindFile, File: msg.Saved.File},
+	})
 }
 
 // logSaved is the one line a finished save writes, open or late.

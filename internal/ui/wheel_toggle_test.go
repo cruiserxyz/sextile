@@ -122,7 +122,7 @@ func TestCtrlXTogglesPreviewClosed(t *testing.T) {
 	if !refused(addr) {
 		t.Error("the wheel still answers after the second Ctrl+X")
 	}
-	if got := lanesText(m, laneWheelClosed); len(got) != 1 || got[0] != "Wheel closed; Ctrl+X opens it again" {
+	if got := lanesText(m, laneWheelClosed); len(got) != 1 || got[0] != "Wheel closed. Ctrl+X opens it again" {
 		t.Errorf("closed lines = %q, want exactly the one", got)
 	}
 	if n := len(lanesText(m, laneError)); n != 0 || m.errorUnseen {

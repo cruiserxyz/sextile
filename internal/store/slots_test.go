@@ -77,8 +77,13 @@ func TestSlots_AddAnchored_AddsNatalAhead(t *testing.T) {
 	if !all[1].Floating {
 		t.Error("All()[1] should be the floating slot")
 	}
+	if slots.ComparisonSelected() {
+		t.Error("adding an anchored slot must not select anything")
+	}
+	slots.ToggleSlotSelection(0)
+	slots.ToggleSlotSelection(1)
 	if !slots.ComparisonSelected() {
-		t.Error("new anchored workspace should derive its default comparison from selected pair")
+		t.Error("comparison should derive from the selected pair")
 	}
 }
 
@@ -94,6 +99,8 @@ func TestSlots_SelectionIsStoreOwnedAndPerSlot(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddAnchored: %v", err)
 	}
+	slots.ToggleSlotSelection(0) // adding selects nothing; select the pair explicitly
+	slots.ToggleSlotSelection(1)
 
 	if selected, ok := slots.ToggleSlotSelection(0); !ok || selected {
 		t.Fatalf("toggle anchored selection = (%v, %v), want (false, true)", selected, ok)
@@ -141,6 +148,8 @@ func TestSlots_CopySelectionsFromPreservesWorkspaceRoles(t *testing.T) {
 	if err := previous.AddAnchored(SessionChart{}, time.Date(1990, 1, 1, 14, 0, 0, 0, time.UTC), anchorPlace); err != nil {
 		t.Fatalf("AddAnchored(previous): %v", err)
 	}
+	previous.ToggleSlotSelection(0) // adding selects nothing; select the pair explicitly
+	previous.ToggleSlotSelection(1)
 	previous.ToggleSlotSelection(1) // floating off; anchor remains on
 	previous.ToggleBodySelection(0, aspect.Sun)
 	previous.ToggleBodySelection(1, aspect.Moon)
@@ -341,6 +350,10 @@ func listSlots(t *testing.T, n int) *Slots {
 			t.Fatalf("AddAnchored(%d): %v", i, err)
 		}
 	}
+	if n >= 1 { // adding selects nothing: select the 1st anchored slot and the floating slot
+		slots.ToggleSlotSelection(0)
+		slots.ToggleSlotSelection(n)
+	}
 	return slots
 }
 
@@ -406,25 +419,23 @@ func TestOnlyFloatingTimeMoves(t *testing.T) {
 	}
 }
 
-// C4: the first chart added selects itself and the floating slot; later ones
-// arrive unselected and disturb nothing.
-func TestAddSelectionDefaults(t *testing.T) {
+// Opening a chart selects nothing: selection is only ever made by the user
+// (operator, 2026-10-26).
+func TestAddLeavesSelectionAlone(t *testing.T) {
 	slots := listSlots(t, 0)
 	if err := slots.AddAnchored(SessionChart{ID: "a"}, time.Unix(0, 0), location.PlaceInfo{Name: "p", TZ: "UTC"}); err != nil {
 		t.Fatal(err)
 	}
-	if !slots.SlotSelected(0) || !slots.SlotSelected(1) || !slots.ComparisonSelected() {
-		t.Errorf("first add: added=%v floating=%v, want both selected", slots.SlotSelected(0), slots.SlotSelected(1))
+	if slots.SlotSelected(0) || slots.SlotSelected(1) || slots.ComparisonSelected() {
+		t.Errorf("first add: added=%v floating=%v comparison=%v, want nothing selected",
+			slots.SlotSelected(0), slots.SlotSelected(1), slots.ComparisonSelected())
 	}
-
-	// One anchored selected: the next arrives unselected and nothing else moves.
-	slots.ToggleSlotSelection(1) // floating off
 	if err := slots.AddAnchored(SessionChart{ID: "b"}, time.Unix(0, 0), location.PlaceInfo{Name: "p", TZ: "UTC"}); err != nil {
 		t.Fatal(err)
 	}
-	if !slots.SlotSelected(0) || slots.SlotSelected(1) || slots.SlotSelected(2) {
-		t.Errorf("second add: slots 0,1,2 selected = %v,%v,%v, want true,false,false",
-			slots.SlotSelected(0), slots.SlotSelected(1), slots.SlotSelected(2))
+	if slots.SlotSelected(0) || slots.SlotSelected(1) || slots.SlotSelected(2) || slots.ComparisonSelected() {
+		t.Errorf("second add: slots 0,1,2 selected = %v,%v,%v comparison=%v, want all false",
+			slots.SlotSelected(0), slots.SlotSelected(1), slots.SlotSelected(2), slots.ComparisonSelected())
 	}
 }
 

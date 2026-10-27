@@ -77,15 +77,26 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 	m := saveBase(t)
 	typed := strings.Repeat("é", 28)
 	m, _ = submitSave(t, m, typed)
-	want := "Name too long for Astrolog: 56 of at most 54 bytes (accented letters count as 2)"
+	want := "Name too long: 56 of 54 bytes (é counts 2)"
 	if m.save.refusal != want {
 		t.Fatalf("refusal = %q, want %q", m.save.refusal, want)
 	}
-	flat := strings.Join(strings.Fields(renderSaveModal(m.save, m.cfg, 80, 24)), " ")
-	for _, part := range []string{"Name too long for Astrolog: 56 of at most 54 bytes", "(accented letters count as 2)", strings.Repeat("é", 20)} {
+	// The prompt's own words, with the box's edges taken off each line: a
+	// sentence wrapped inside the box still reads as one.
+	var inner []string
+	for _, l := range strings.Split(renderSaveModal(m.save, m.cfg, 80, 24), "\n") {
+		inner = append(inner, strings.Trim(l, "|│+╭╮╰╯─- "))
+	}
+	flat := strings.Join(strings.Fields(strings.Join(inner, " ")), " ")
+	for _, part := range []string{"Name too long: 56 of 54 bytes (é counts 2)", strings.Repeat("é", 20)} {
 		if !strings.Contains(flat, part) {
 			t.Errorf("the prompt at 80x24 does not show %q:\n%s", part, flat)
 		}
+	}
+	// It is one row of the message zone, and the box does not grow for it.
+	rested := renderSaveModal(saveModalState{form: m.save.form, dest: m.save.dest}, m.cfg, 80, 24)
+	if a, b := strings.Count(rested, "\n"), strings.Count(renderSaveModal(m.save, m.cfg, 80, 24), "\n"); a != b {
+		t.Errorf("the refusal changed the prompt's height: %d lines, then %d", a+1, b+1)
 	}
 	// the title form says the same for its fields
 	titleLibrary(t, nil, map[string]string{"NoPlace.as": noPlaceChart})
@@ -98,7 +109,7 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("a 70-byte place dispatched a write")
 	}
-	if !strings.HasPrefix(tm.title.refusal, "Place too long for Astrolog: 70 of at most 54 bytes") {
+	if !strings.HasPrefix(tm.title.refusal, "Place too long: 70 of 54 bytes") {
 		t.Errorf("title refusal = %q", tm.title.refusal)
 	}
 	if tm.title.form.focus != titlePlaceField || !strings.Contains(titleFrame(tm), strings.Repeat("p", 20)) {
@@ -146,8 +157,8 @@ func TestRenameRefusesALongName(t *testing.T) {
 		title, place string
 		want         string
 	}{
-		{"title", strings.Repeat("t", 55), "Bremen", "Title too long for Astrolog: 55 of at most 54 bytes"},
-		{"place", "Fine", strings.Repeat("é", 28), "Place too long for Astrolog: 56 of at most 54 bytes"},
+		{"title", strings.Repeat("t", 55), "Bremen", "Title too long: 55 of 54 bytes"},
+		{"place", "Fine", strings.Repeat("é", 28), "Place too long: 56 of 54 bytes"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := titleLibrary(t, nil, map[string]string{"NoPlace.as": noPlaceChart})

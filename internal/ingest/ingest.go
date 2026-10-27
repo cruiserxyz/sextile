@@ -39,6 +39,10 @@ type StartupPerimeterReadMsg struct {
 	// it was moved to, or why it was left alone. Zero for an accepted file.
 	SessionKeep store.SessionKeep
 
+	// FolderID is the current charts folder's identity (store.FolderID). The
+	// UI restores a session only when the session names this folder.
+	FolderID string
+
 	// Keys is the keys: block exactly as the store read it — values with
 	// presence markers and the entries it refused. ingest does not
 	// interpret it: the UI resolves defaults, decides refusals, and writes
@@ -105,12 +109,22 @@ func ReadStartupPerimeter() tea.Cmd {
 }
 
 // ReadStartupPerimeterReadOnly is ReadStartupPerimeter for a second window:
-// the session file belongs to the window holding the instance lock, so it is
-// read with store.LoadSession, which never moves a refused file aside.
+// the general session belongs to the window holding the instance lock, so a
+// second window does not read it at all and starts empty. Its file, refused
+// or not, is left exactly as it is.
 func ReadStartupPerimeterReadOnly() tea.Cmd {
 	return readStartupPerimeter(func() (store.Session, bool, store.SessionKeep, error) {
-		s, ok, err := store.LoadSession()
-		return s, ok, store.SessionKeep{}, err
+		return store.Session{}, false, store.SessionKeep{}, nil
+	})
+}
+
+// ReadStartupPerimeterNamed is ReadStartupPerimeter for a launch that runs the
+// named session kept in file (--session): that session is read instead of the
+// general one.
+func ReadStartupPerimeterNamed(file string) tea.Cmd {
+	return readStartupPerimeter(func() (store.Session, bool, store.SessionKeep, error) {
+		s, _, err := store.LoadNamedSession(file)
+		return s, err == nil, store.SessionKeep{}, err
 	})
 }
 
@@ -122,6 +136,7 @@ func readStartupPerimeter(loadSession func() (store.Session, bool, store.Session
 			msg.LocationCandidate = cand
 		}
 		msg.Session, msg.HasSession, msg.SessionKeep, msg.SessionErr = loadSession()
+		msg.FolderID = store.FolderID(store.ChartsDir())
 		return msg
 	}
 }

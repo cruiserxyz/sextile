@@ -274,9 +274,9 @@ func TestRenameWritesAndReturnsToPicker(t *testing.T) {
 				t.Errorf("the file does not carry the new title and place:\n%s", fileText(t, path))
 			}
 			if fileText(t, backupFile(path)) != original {
-				t.Error("the original was not kept under .sextile/backup")
+				t.Error("the original was not kept in the backup folder")
 			}
-			assertOneChartLine(t, m, `chart: titled Titled.as as "`+title+`" (original kept as .sextile/backup/Titled.as)`)
+			assertOneChartLine(t, m, `chart: titled Titled.as as "`+title+`" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Titled.as")+`)`)
 		})
 	}
 }

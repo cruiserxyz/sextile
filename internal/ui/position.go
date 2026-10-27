@@ -21,10 +21,18 @@ import (
 type listPosition struct {
 	Cursor int
 	Total  int
+
+	// Text, when set, is drawn in the counter's place: the full name of the
+	// row under the cursor when the row had to cut it (the City list). It is
+	// the caller's to fit to the edge.
+	Text string
 }
 
 // text is the counter as drawn.
 func (p listPosition) text() string {
+	if p.Text != "" {
+		return p.Text
+	}
 	if p.Total <= 0 {
 		return "0 of 0"
 	}

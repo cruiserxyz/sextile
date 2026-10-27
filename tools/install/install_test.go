@@ -165,6 +165,13 @@ func newRig(t *testing.T, withGit, withDocker bool) *rig {
 		}
 	}
 	write("uname", fakeUname)
+	// The script writes a file and a folder, so it needs the tools that do;
+	// they are the real ones, linked in, because PATH holds only this folder.
+	for _, n := range []string{"mkdir", "chmod", "mv"} {
+		if err := os.Symlink(look(t, n), filepath.Join(r.bin, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if withGit {
 		write("git", fakeGit)
 	}
@@ -271,6 +278,16 @@ func (r *rig) leaked() string {
 	return string(b)
 }
 
+// appDir is where the script clones when SEXTILE_DIR and XDG_DATA_HOME are unset.
+func (r *rig) appDir() string {
+	return filepath.Join(r.home, ".local", "share", "sextile", "app")
+}
+
+// wrapperPath is the command the script writes.
+func (r *rig) wrapperPath() string {
+	return filepath.Join(r.home, ".local", "bin", "sextile")
+}
+
 func (r *rig) exists(p string) bool {
 	_, err := os.Lstat(p)
 	return err == nil
@@ -297,39 +314,58 @@ func eq(t *testing.T, what string, got, want any) {
 
 // ---------------------------------------------------------------- I1-1
 
-func TestInstallRefusesWhenGitOrDockerIsMissing(t *testing.T) {
-	cases := []struct {
-		name       string
-		git, dock  bool
-		env        []string
-		want       string
-		gitCallsOK bool
+func TestInstallNeedsGitButOnlyWarnsAboutDocker(t *testing.T) {
+	t.Run("no git refuses", func(t *testing.T) {
+		r := newRig(t, false, true)
+		res := r.runScript()
+		if res.code != 2 {
+			t.Fatalf("exit %d, want 2\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		if !strings.Contains(res.stderr, "git was not found") {
+			t.Fatalf("stderr lacks the git sentence:\n%s", res.stderr)
+		}
+		if n := strings.Count(strings.TrimRight(res.stderr, "\n"), "\n"); n != 0 || res.stdout != "" {
+			t.Fatalf("want one sentence on stderr and nothing on stdout:\nstdout %q\nstderr %q", res.stdout, res.stderr)
+		}
+		if r.exists(filepath.Join(r.home, ".local")) || r.exists(filepath.Join(r.home, "sextile")) {
+			t.Fatal("a folder was written before git was found")
+		}
+		if g := r.callsOf("clone"); len(g) != 0 {
+			t.Fatalf("git cloned: %q", g)
+		}
+	})
+	for _, c := range []struct {
+		name string
+		dock bool
+		env  []string
+		want string
 	}{
-		{"no git", false, true, nil, "git was not found", true},
-		{"no docker", true, false, nil, "https://docs.docker.com/get-docker/", false},
-		{"daemon down", true, true, []string{"FAKE_DOCKER_INFO_EXIT=1"}, "daemon did not answer", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			r := newRig(t, c.git, c.dock)
+		{"no docker", false, nil, "Docker was not found"},
+		{"daemon down", true, []string{"FAKE_DOCKER_INFO_EXIT=1"}, "daemon did not answer"},
+	} {
+		t.Run(c.name+" warns and installs", func(t *testing.T) {
+			r := newRig(t, true, c.dock)
 			res := r.runScript(c.env...)
-			if res.code != 2 {
-				t.Fatalf("exit %d, want 2\n%s%s", res.code, res.stdout, res.stderr)
+			if res.code != 0 {
+				t.Fatalf("exit %d, want 0\n%s%s", res.code, res.stdout, res.stderr)
 			}
-			if !strings.Contains(res.stderr, c.want) {
-				t.Fatalf("stderr lacks %q:\n%s", c.want, res.stderr)
+			for _, w := range []string{c.want, "https://docs.docker.com/get-docker/", "sextile --no-docker", "go and astrolog", "sextile doctor"} {
+				if !strings.Contains(res.stderr, w) {
+					t.Fatalf("the warning lacks %q:\n%s", w, res.stderr)
+				}
 			}
-			if n := strings.Count(strings.TrimRight(res.stderr, "\n"), "\n"); n != 0 || res.stdout != "" {
-				t.Fatalf("want one sentence on stderr and nothing on stdout:\nstdout %q\nstderr %q", res.stdout, res.stderr)
+			if len(r.callsOf("clone")) != 1 || !r.exists(r.wrapperPath()) {
+				t.Fatalf("the install did not go on: %q", r.calls())
 			}
-			if r.exists(filepath.Join(r.home, "sextile")) {
-				t.Fatal("a folder was written before the prerequisites passed")
-			}
-			if g := r.callsOf("clone"); len(g) != 0 {
-				t.Fatalf("git cloned: %q", g)
-			}
+			eq(t, "the last line", res.lastLine(), "sextile")
 		})
 	}
+	t.Run("a working docker says nothing", func(t *testing.T) {
+		r := newRig(t, true, true)
+		if res := r.runScript(); res.code != 0 || res.stderr != "" {
+			t.Fatalf("exit %d, stderr %q", res.code, res.stderr)
+		}
+	})
 }
 
 func TestInstallRefusesAnotherSystem(t *testing.T) {
@@ -364,7 +400,7 @@ func TestInstallClonesTheTagIntoHome(t *testing.T) {
 	if res.code != 0 {
 		t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
 	}
-	dir := filepath.Join(r.home, "sextile")
+	dir := r.appDir()
 	clones := r.callsOf("clone")
 	if len(clones) != 1 {
 		t.Fatalf("want one clone, got %q", r.calls())
@@ -376,9 +412,12 @@ func TestInstallClonesTheTagIntoHome(t *testing.T) {
 		t.Fatalf("want git describe once, got %q", r.calls())
 	}
 	eq(t, "the verification", desc[0], []string{"-C", dir, "describe", "--tags", "--exact-match"})
-	eq(t, "the last line", res.lastLine(), "cd ~/sextile && ./sextile")
-	if !strings.Contains(res.stdout, "./sextile doctor") {
-		t.Fatalf("stdout does not name ./sextile doctor:\n%s", res.stdout)
+	eq(t, "the last line", res.lastLine(), "sextile")
+	if !strings.Contains(res.stdout, "sextile doctor") || strings.Contains(res.stdout, "./sextile") || strings.Contains(res.stdout, "cd ") {
+		t.Fatalf("stdout must name sextile doctor and sextile, with no cd and no ./:\n%s", res.stdout)
+	}
+	if r.exists(filepath.Join(r.home, "sextile")) {
+		t.Fatal("it also wrote ~/sextile")
 	}
 	if !r.exists(filepath.Join(dir, ".git")) {
 		t.Fatal("no clone on disk")
@@ -404,11 +443,11 @@ func TestInstallFailsWhenTheCloneIsNotAtTheTag(t *testing.T) {
 	if !strings.Contains(res.stderr, "is not at "+tag) {
 		t.Fatalf("stderr: %q", res.stderr)
 	}
-	if strings.Contains(res.stdout, "cd ~/sextile && ./sextile") {
-		t.Fatalf("it told the reader to start a wrong tree:\n%s", res.stdout)
+	if strings.Contains(res.stdout, "To start Sextile") || r.exists(r.wrapperPath()) {
+		t.Fatalf("it told the reader to start, or wrote the command for, a wrong tree:\n%s", res.stdout)
 	}
 	r = newRig(t, true, true)
-	if res := r.runScript("FAKE_CLONE_EXIT=128"); res.code != 1 || strings.Contains(res.stdout, "./sextile") {
+	if res := r.runScript("FAKE_CLONE_EXIT=128"); res.code != 1 || strings.Contains(res.stdout, "To start Sextile") || r.exists(r.wrapperPath()) {
 		t.Fatalf("a failed clone: exit %d\n%s%s", res.code, res.stdout, res.stderr)
 	}
 }
@@ -419,7 +458,7 @@ func TestInstallUpdatesAnExistingClone(t *testing.T) {
 	for _, origin := range []string{repoURL, strings.TrimSuffix(repoURL, ".git")} {
 		t.Run(origin, func(t *testing.T) {
 			r := newRig(t, true, true)
-			dir := filepath.Join(r.home, "sextile")
+			dir := r.appDir()
 			r.mkClone(dir, origin, "main")
 			mine := filepath.Join(dir, "my-notes.txt")
 			if err := os.WriteFile(mine, []byte("keep\n"), 0o644); err != nil {
@@ -439,7 +478,10 @@ func TestInstallUpdatesAnExistingClone(t *testing.T) {
 			if b, err := os.ReadFile(mine); err != nil || string(b) != "keep\n" {
 				t.Fatalf("a file of the user's changed: %q %v", b, err)
 			}
-			eq(t, "the last line", res.lastLine(), "cd ~/sextile && ./sextile")
+			eq(t, "the last line", res.lastLine(), "sextile")
+			if !r.exists(r.wrapperPath()) {
+				t.Fatal("the command was not written for the updated clone")
+			}
 		})
 	}
 }
@@ -463,7 +505,10 @@ func TestInstallRefusesAFolderThatIsNotItsClone(t *testing.T) {
 	for name, setup := range setups {
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t, true, true)
-			dir := filepath.Join(r.home, "sextile")
+			dir := r.appDir()
+			if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
 			setup(r, dir)
 			if st, err := os.Stat(dir); err == nil && st.IsDir() {
 				if err := os.WriteFile(filepath.Join(dir, "precious.txt"), []byte("mine\n"), 0o644); err != nil {
@@ -485,6 +530,9 @@ func TestInstallRefusesAFolderThatIsNotItsClone(t *testing.T) {
 			if b, err := os.ReadFile(filepath.Join(dir, "precious.txt")); name != "a file" && (err != nil || string(b) != "mine\n") {
 				t.Fatalf("the folder was touched: %q %v", b, err)
 			}
+			if r.exists(r.wrapperPath()) {
+				t.Fatal("a command was written for a folder that is not ours")
+			}
 		})
 	}
 }
@@ -504,21 +552,291 @@ func TestInstallHonoursSextileDirWithSpacesAndQuotes(t *testing.T) {
 			if len(clones) != 1 || clones[0][len(clones[0])-1] != dir {
 				t.Fatalf("the clone's target is not the one path %q: %q", dir, clones)
 			}
-			if r.exists(filepath.Join(r.home, "sextile")) {
-				t.Fatal("it also wrote ~/sextile")
+			if r.exists(filepath.Join(r.home, "sextile")) || r.exists(r.appDir()) {
+				t.Fatal("it also wrote the default folders")
 			}
-			last := res.lastLine()
-			const tail = " && ./sextile"
-			if !strings.HasPrefix(last, "cd ") || !strings.HasSuffix(last, tail) {
-				t.Fatalf("last line %q", last)
+			eq(t, "the last line", res.lastLine(), "sextile")
+			// The command the script wrote must reach the launcher in that
+			// folder, whatever the folder's name holds: stand a launcher in
+			// the fake clone and run the wrapper.
+			launcher := filepath.Join(dir, "sextile")
+			if err := os.WriteFile(launcher, []byte("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\n"), 0o755); err != nil {
+				t.Fatal(err)
 			}
-			word := strings.TrimSuffix(strings.TrimPrefix(last, "cd "), tail)
-			out, err := exec.Command(look(t, "sh"), "-c", "printf %s "+word).Output()
-			if err != nil || string(out) != dir {
-				t.Fatalf("a shell reads %q back as %q (%v), want %q", word, out, err, dir)
+			cmd := exec.Command(r.wrapperPath(), "doctor", "--charts-dir", "a b'c")
+			cmd.Env = []string{"PATH=" + r.bin, "HOME=" + r.home}
+			out, err := cmd.CombinedOutput()
+			if err != nil || string(out) != "doctor\n--charts-dir\na b'c\n" {
+				t.Fatalf("the wrapper ran %q (%v), want the launcher in %q with the arguments kept", out, err, dir)
 			}
 		})
 	}
+}
+
+// ---------------------------------------------------------------- the command
+
+const wrapperMarker = "# Sextile command, written by its install script"
+
+func wrapperText(dir string) string {
+	q := "'" + strings.ReplaceAll(dir+"/sextile", "'", `'\''`) + "'"
+	return "#!/bin/sh\n" + wrapperMarker + "\nexec " + q + " \"$@\"\n"
+}
+
+// rcFiles writes a startup file of each shell the script might name, so a test
+// can prove none of them changed.
+func rcFiles(t *testing.T, home string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	for _, n := range []string{".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile"} {
+		body := "# mine: " + n + "\nalias ll='ls -l'\n"
+		if err := os.WriteFile(filepath.Join(home, n), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		files[n] = body
+	}
+	return files
+}
+
+func sameFiles(t *testing.T, home string, want map[string]string) {
+	t.Helper()
+	for n, body := range want {
+		if b, err := os.ReadFile(filepath.Join(home, n)); err != nil || string(b) != body {
+			t.Fatalf("%s changed: %q %v", n, b, err)
+		}
+	}
+	ents, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		if _, ok := want[e.Name()]; !ok && strings.HasPrefix(e.Name(), ".") && strings.Contains(e.Name(), "rc") {
+			t.Fatalf("a startup file appeared: %s", e.Name())
+		}
+	}
+}
+
+func TestInstallWritesWrapperAndPrintsPathLine(t *testing.T) {
+	t.Run("clone under XDG_DATA_HOME, wrapper exact, PATH line, rc files untouched", func(t *testing.T) {
+		r := newRig(t, true, true)
+		rc := rcFiles(t, r.home)
+		data := filepath.Join(r.work, "data home")
+		res := r.runScript("XDG_DATA_HOME="+data, "SHELL=/bin/zsh")
+		if res.code != 0 {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		dir := filepath.Join(data, "sextile", "app")
+		clones := r.callsOf("clone")
+		if len(clones) != 1 || clones[0][len(clones[0])-1] != dir {
+			t.Fatalf("the clone is not in %q: %q", dir, clones)
+		}
+		b, err := os.ReadFile(r.wrapperPath())
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, "the wrapper", string(b), wrapperText(dir))
+		if st, _ := os.Stat(r.wrapperPath()); st.Mode().Perm() != 0o755 {
+			t.Fatalf("the wrapper's mode is %v, want 0755", st.Mode().Perm())
+		}
+		for _, w := range []string{`export PATH="$HOME/.local/bin:$PATH"`, "~/.zshrc", "~/.local/bin/sextile"} {
+			if !strings.Contains(res.stdout, w) {
+				t.Fatalf("stdout lacks %q:\n%s", w, res.stdout)
+			}
+		}
+		eq(t, "the last line", res.lastLine(), "sextile")
+		sameFiles(t, r.home, rc)
+	})
+
+	t.Run("the file named follows the shell", func(t *testing.T) {
+		for shell, file := range map[string]string{"/bin/bash": "~/.bashrc", "/usr/bin/zsh": "~/.zshrc", "/bin/dash": "~/.profile", "": "~/.profile"} {
+			r := newRig(t, true, true)
+			rc := rcFiles(t, r.home)
+			env := []string{"SHELL=" + shell}
+			res := r.runScript(env...)
+			if res.code != 0 || !strings.Contains(res.stdout, "put this line in "+file) {
+				t.Fatalf("SHELL=%q: exit %d, want the file %s named\n%s%s", shell, res.code, file, res.stdout, res.stderr)
+			}
+			sameFiles(t, r.home, rc)
+		}
+	})
+
+	t.Run("no PATH line when ~/.local/bin is on PATH", func(t *testing.T) {
+		r := newRig(t, true, true)
+		res := r.runPath(r.bin+":"+filepath.Join(r.home, ".local", "bin"), look(t, "sh"), nil, nil, scriptPath(t))
+		if res.code != 0 || strings.Contains(res.stdout, "export PATH") || strings.Contains(res.stdout, "right now") {
+			t.Fatalf("exit %d, it explained a PATH that is fine:\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		eq(t, "the last line", res.lastLine(), "sextile")
+	})
+
+	t.Run("a relative XDG_DATA_HOME is not a place", func(t *testing.T) {
+		r := newRig(t, true, true)
+		if res := r.runScript("XDG_DATA_HOME=rel/data"); res.code != 0 {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		clones := r.callsOf("clone")
+		if len(clones) != 1 || clones[0][len(clones[0])-1] != r.appDir() {
+			t.Fatalf("the clone is not in %q: %q", r.appDir(), clones)
+		}
+	})
+
+	t.Run("one of its own wrappers is replaced, and the command follows SEXTILE_DIR", func(t *testing.T) {
+		r := newRig(t, true, true)
+		if res := r.runScript(); res.code != 0 {
+			t.Fatalf("first: exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		other := filepath.Join(r.work, "elsewhere")
+		if res := r.runScript("SEXTILE_DIR=" + other); res.code != 0 {
+			t.Fatalf("second: exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		b, err := os.ReadFile(r.wrapperPath())
+		if err != nil || string(b) != wrapperText(other) {
+			t.Fatalf("the wrapper is %q (%v), want it to name %s", b, err, other)
+		}
+	})
+}
+
+func TestInstallRefusesAForeignCommand(t *testing.T) {
+	setups := map[string]func(t *testing.T, r *rig, path string){
+		"someone else's script": func(t *testing.T, r *rig, path string) {
+			if err := os.WriteFile(path, []byte("#!/bin/sh\necho mine\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"the marker on the wrong line": func(t *testing.T, r *rig, path string) {
+			if err := os.WriteFile(path, []byte(wrapperMarker+"\n#!/bin/sh\nexec true\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a near marker": func(t *testing.T, r *rig, path string) {
+			if err := os.WriteFile(path, []byte("#!/bin/sh\n"+wrapperMarker+" \nexec true\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"an empty file": func(t *testing.T, r *rig, path string) {
+			if err := os.WriteFile(path, nil, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a symlink to the launcher": func(t *testing.T, r *rig, path string) {
+			target := filepath.Join(r.work, "launcher")
+			if err := os.WriteFile(target, []byte("#!/bin/bash\n# ./sextile: the launcher\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, path); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a dangling symlink": func(t *testing.T, r *rig, path string) {
+			if err := os.Symlink(filepath.Join(r.work, "nothing"), path); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a folder": func(t *testing.T, r *rig, path string) {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, setup := range setups {
+		t.Run(name, func(t *testing.T) {
+			r := newRig(t, true, true)
+			if err := os.MkdirAll(filepath.Dir(r.wrapperPath()), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			setup(t, r, r.wrapperPath())
+			before, _ := os.Lstat(r.wrapperPath())
+			var content []byte
+			if before.Mode().IsRegular() {
+				content, _ = os.ReadFile(r.wrapperPath())
+			}
+			res := r.runScript()
+			if res.code == 0 {
+				t.Fatalf("it installed over %s\n%s%s", name, res.stdout, res.stderr)
+			}
+			if res.code != 2 || res.stdout != "" || !strings.Contains(res.stderr, r.wrapperPath()) {
+				t.Fatalf("want exit 2, nothing on stdout, and the file named: exit %d\nstdout %q\nstderr %q", res.code, res.stdout, res.stderr)
+			}
+			if n := len(r.callsOf("clone")) + len(r.callsOf("fetch")) + len(r.callsOf("checkout")); n != 0 {
+				t.Fatalf("git changed something before the refusal: %q", r.calls())
+			}
+			if r.exists(r.appDir()) {
+				t.Fatal("the clone was made although the command could not be written")
+			}
+			after, err := os.Lstat(r.wrapperPath())
+			if err != nil || after.Mode() != before.Mode() || after.Size() != before.Size() {
+				t.Fatalf("%s changed: %v %v", r.wrapperPath(), after, err)
+			}
+			if before.Mode().IsRegular() {
+				if b, _ := os.ReadFile(r.wrapperPath()); string(b) != string(content) {
+					t.Fatalf("the file's content changed: %q", b)
+				}
+			}
+		})
+	}
+}
+
+func TestInstallNotesTheOldClone(t *testing.T) {
+	old := func(r *rig) string { return filepath.Join(r.home, "sextile") }
+	t.Run("an old clone is named and left alone", func(t *testing.T) {
+		r := newRig(t, true, true)
+		r.mkClone(old(r), repoURL, "v0.1.0")
+		mine := filepath.Join(old(r), "my-notes.txt")
+		if err := os.WriteFile(mine, []byte("keep\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		res := r.runScript()
+		if res.code != 0 {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+		var line string
+		for _, l := range strings.Split(res.stdout, "\n") {
+			if strings.Contains(l, "~/sextile") {
+				line = l
+			}
+		}
+		for _, w := range []string{"no longer used", "left as it is", "remove"} {
+			if !strings.Contains(line, w) {
+				t.Fatalf("the line about ~/sextile lacks %q: %q\n%s", w, line, res.stdout)
+			}
+		}
+		for _, verb := range []string{"fetch", "checkout"} {
+			for _, c := range r.callsOf(verb) {
+				if strings.Contains(strings.Join(c, " "), old(r)) {
+					t.Fatalf("git %s touched the old clone: %q", verb, c)
+				}
+			}
+		}
+		if b, err := os.ReadFile(mine); err != nil || string(b) != "keep\n" {
+			t.Fatalf("a file in the old clone changed: %q %v", b, err)
+		}
+		if b, _ := os.ReadFile(filepath.Join(old(r), ".git", "fake-tag")); string(b) != "v0.1.0\n" {
+			t.Fatalf("the old clone moved to %q", b)
+		}
+		eq(t, "the last line", res.lastLine(), "sextile")
+	})
+	t.Run("no note when SEXTILE_DIR is set", func(t *testing.T) {
+		r := newRig(t, true, true)
+		r.mkClone(old(r), repoURL, "v0.1.0")
+		res := r.runScript("SEXTILE_DIR=" + filepath.Join(r.work, "here"))
+		if res.code != 0 || strings.Contains(res.stdout, "~/sextile") {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+	})
+	t.Run("no note for a folder that is not a Sextile clone", func(t *testing.T) {
+		r := newRig(t, true, true)
+		r.mkClone(old(r), "https://example.invalid/other.git", "main")
+		res := r.runScript()
+		if res.code != 0 || strings.Contains(res.stdout, "~/sextile") {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+	})
+	t.Run("no note without an old folder", func(t *testing.T) {
+		r := newRig(t, true, true)
+		res := r.runScript()
+		if res.code != 0 || strings.Contains(res.stdout, "~/sextile") {
+			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
+		}
+	})
 }
 
 // ---------------------------------------------------------------- I1-5
@@ -596,7 +914,7 @@ func TestInstallIsPOSIXShAndRunsUnderEveryShell(t *testing.T) {
 			}
 			r := newRig(t, true, true)
 			res := r.run(shell, nil, nil, scriptPath(t))
-			if res.code != 0 || res.lastLine() != "cd ~/sextile && ./sextile" {
+			if res.code != 0 || res.lastLine() != "sextile" {
 				t.Fatalf("%s: exit %d\n%s%s", name, res.code, res.stdout, res.stderr)
 			}
 		})
@@ -664,7 +982,7 @@ func TestInstallNeverReadsStdin(t *testing.T) {
 	t.Run("the script is stdin", func(t *testing.T) {
 		r := newRig(t, true, true)
 		res := r.run(look(t, "sh"), []byte(repoFile(t, "scripts/install")), nil)
-		if res.code != 0 || res.lastLine() != "cd ~/sextile && ./sextile" {
+		if res.code != 0 || res.lastLine() != "sextile" {
 			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
 		}
 		if got := r.leaked(); got != "" {
@@ -692,7 +1010,7 @@ func TestInstallRunsNothingWhenTheDownloadIsCut(t *testing.T) {
 		if c := r.calls(); len(c) != 0 {
 			t.Fatalf("a download cut after line %d ran %q (exit %d)\n%s", n, c, res.code, res.stderr)
 		}
-		if r.exists(filepath.Join(r.home, "sextile")) || res.stdout != "" {
+		if r.exists(filepath.Join(r.home, "sextile")) || r.exists(filepath.Join(r.home, ".local")) || res.stdout != "" {
 			t.Fatalf("a download cut after line %d wrote or printed: %q", n, res.stdout)
 		}
 		cut++
@@ -785,7 +1103,7 @@ func TestInstallWithRealGit(t *testing.T) {
 		if res.code != 0 {
 			t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
 		}
-		dir := filepath.Join(r.home, "sextile")
+		dir := r.appDir()
 		eq(t, "describe", g(dir, "describe", "--tags", "--exact-match"), tag)
 		eq(t, "shallow", g(dir, "rev-parse", "--is-shallow-repository"), "true")
 		eq(t, "commits", g(dir, "rev-list", "--count", "HEAD"), "1")
@@ -793,12 +1111,12 @@ func TestInstallWithRealGit(t *testing.T) {
 		if r.exists(filepath.Join(dir, "two.txt")) {
 			t.Fatal("the clone has a file from after the tag")
 		}
-		eq(t, "the last line", res.lastLine(), "cd ~/sextile && ./sextile")
+		eq(t, "the last line", res.lastLine(), "sextile")
 	})
 
 	t.Run("existing clone moves to the tag", func(t *testing.T) {
 		r, _, g := newReal(t)
-		dir := filepath.Join(r.home, "sextile")
+		dir := r.appDir()
 		g(r.home, "clone", "-q", repoURL, dir)
 		if !r.exists(filepath.Join(dir, "two.txt")) {
 			t.Fatal("setup: the clone should start ahead of the tag")
@@ -820,7 +1138,7 @@ func TestInstallWithRealGit(t *testing.T) {
 
 	t.Run("local changes in the way are kept", func(t *testing.T) {
 		r, _, g := newReal(t)
-		dir := filepath.Join(r.home, "sextile")
+		dir := r.appDir()
 		g(r.home, "clone", "-q", repoURL, dir)
 		// two.txt is tracked on main and absent at the tag, so a careless
 		// checkout would delete the user's edit of it.
@@ -832,7 +1150,7 @@ func TestInstallWithRealGit(t *testing.T) {
 		if b, _ := os.ReadFile(two); string(b) != "my uncommitted edit\n" {
 			t.Fatalf("an edit of the user's was lost: %q (exit %d)\n%s", b, res.code, res.stderr)
 		}
-		if res.code == 0 && strings.Contains(res.stdout, "./sextile") {
+		if res.code == 0 && strings.Contains(res.stdout, "To start Sextile") {
 			t.Fatalf("it reported success with the edit in the way:\n%s", res.stdout)
 		}
 	})

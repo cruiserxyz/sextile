@@ -14,7 +14,7 @@ func TestHouseDisplayDocs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := "| `,` `a` | How the Bodies house column is drawn ([House display](#house-display)): angularity at a glance (the default), true quadrants, plain number, or number + angularity; `,` `c` `d` keeps it with the city, along with the floating chart's house system and zodiac |"
+	row := "| `,` `a` | How the Bodies house column is drawn ([House display](#house-display)): angularity at a glance (the default), true quadrants, plain number, or number + angularity — `,` `c` `d` keeps it with the city, along with the floating chart's house system and zodiac |"
 	if !strings.Contains(string(readme), row) {
 		t.Errorf("the reference page's Keys table lacks the `, a` row:\n%s", row)
 	}

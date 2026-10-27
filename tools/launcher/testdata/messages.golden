@@ -7,11 +7,11 @@ rebuilding localhost/sextile:v0.1.0-rc.1-dirty (uncommitted changes)
 [exit 0]
 
 === busy port ===
-port 5307 is in use; run ./sextile --port 5308
+port 5307 is in use. Run sextile --port 5308
 [exit 2]
 
 === no terminal, no folder chosen ===
-no charts folder is chosen and there is no terminal to ask; run ./sextile --charts-dir DIR
+no charts folder is chosen and there is no terminal to ask. Run sextile --charts-dir DIR
 [exit 2]
 
 === remote endpoint ===
@@ -19,44 +19,44 @@ only a local Docker is supported (this endpoint is tcp://build-host:2375): Sexti
 [exit 2]
 
 === config: relative XDG_CONFIG_HOME ===
-XDG_CONFIG_HOME is not an absolute path (relative/cfg); set it to one or unset it
+XDG_CONFIG_HOME is not an absolute path (relative/cfg). Set it to one or unset it
 [exit 2]
 
 === config: inside the clone ===
-the config location $CLONE/cfg/sextile/launcher.conf is inside the Sextile checkout ($CLONE); set XDG_CONFIG_HOME to a folder outside it
+the config location $CLONE/cfg/sextile/launcher.conf is inside the Sextile checkout ($CLONE). Set XDG_CONFIG_HOME to a folder outside it
 [exit 2]
 
 === config: folder is a symlink ===
-the config folder $XDG/sextile is a symlink; the launcher will not read or write through it
+the config folder $XDG/sextile is a symlink. The launcher will not read or write through it
 [exit 2]
 
 === config: not valid ===
-the config file $XDG/sextile/launcher.conf is not valid: it must hold exactly one line, charts-dir=<absolute folder>; fix it or delete it to be asked again
+the config file $XDG/sextile/launcher.conf is not valid: it must hold exactly one line, charts-dir=<absolute folder>. Fix it or delete it to be asked again
 [exit 2]
 
 === config: remembered folder is gone ===
-the remembered charts folder $TMP/usb/charts (from $XDG/sextile/launcher.conf) does not exist; Sextile will not create it again, in case a disk is not mounted. Restore it, fix the file, or delete the file to be asked again
+the remembered charts folder $TMP/usb/charts (from $XDG/sextile/launcher.conf) does not exist — Sextile will not create it again, in case a disk is not mounted. Restore it, fix the file, or delete the file to be asked again
 [exit 2]
 
 === docker: permission denied ===
-you cannot reach the Docker daemon (permission denied on its socket); join the docker group (https://docs.docker.com/engine/install/linux-postinstall/) or start Docker Desktop
+you cannot reach the Docker daemon (permission denied on its socket). Join the docker group (https://docs.docker.com/engine/install/linux-postinstall/) or start Docker Desktop
 [exit 2]
 
 === forwarded --charts-dir ===
---charts-dir=/elsewhere would override the charts folder this launcher mounts; use ./sextile --charts-dir DIR (before any --)
+--charts-dir=/elsewhere would override the charts folder this launcher mounts. Use sextile --charts-dir DIR (before any --)
 [exit 2]
 
 === --no-docker: go absent ===
---no-docker did not find go; it needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)
+--no-docker did not find go. It needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)
 [exit 2]
 
 === --no-docker: go and astrolog absent ===
---no-docker did not find go and astrolog; it needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)
+--no-docker did not find go and astrolog. It needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)
 [exit 2]
 
 === --no-docker: the build fails ===
 fake go: build failed
-the native build failed (exit 3); Sextile was not started
+the native build failed (exit 3) — Sextile was not started
 [exit 3]
 
 === --no-docker: no git history ===

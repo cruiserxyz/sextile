@@ -76,6 +76,17 @@ func screenshotScene(t *testing.T) string {
 	m.width, m.height = screenshotCols, screenshotRows
 
 	m = pickLive(t, m, file)
+	// Opening selects nothing: select the opened chart and the floating chart
+	// with Space, then return the cursor to the opened chart.
+	for _, k := range []tea.KeyMsg{
+		{Type: tea.KeySpace},
+		{Type: tea.KeyDown},
+		{Type: tea.KeySpace},
+		{Type: tea.KeyUp},
+	} {
+		u, cmd := m.Update(k)
+		m = pumpPatient(t, u.(Model), cmd)
+	}
 	// `0` cycles Details to its Timeline tab (the floating chart is in the
 	// selected group, so the tab lists the month), the first enter attaches it
 	// with the cursor on the row nearest the floating moment (Venus's return

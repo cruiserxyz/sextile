@@ -15,7 +15,7 @@ import (
 // second window rather than refusing.
 func TestHeldLockStartsASecondWindow(t *testing.T) {
 	data := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("XDG_STATE_HOME", data)
 	holdSessionLock(t, data)
 	lock, err := store.AcquireInstanceLock()
 	var held *store.LockHeldError
@@ -35,7 +35,7 @@ func TestHeldLockStartsASecondWindow(t *testing.T) {
 // unsupported filesystem runs and says so, and every error refuses as it is.
 func TestOtherLockOutcomesAreUnchanged(t *testing.T) {
 	data := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("XDG_STATE_HOME", data)
 	lock, err := store.AcquireInstanceLock()
 	if err != nil {
 		t.Fatalf("premise: a free lock was refused: %v", err)
@@ -49,7 +49,7 @@ func TestOtherLockOutcomesAreUnchanged(t *testing.T) {
 
 	// A real refusal: a FIFO where the lock file belongs is not safe to use.
 	fifoData := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", fifoData)
+	t.Setenv("XDG_STATE_HOME", fifoData)
 	dir := filepath.Join(fifoData, "sextile", "session")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

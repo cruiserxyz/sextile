@@ -157,6 +157,12 @@ func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss
 			segment = titleStyle.Render(mark) + segment
 		}
 	}
+	// A title that ends with a glyph a terminal may draw wide is given its space
+	// before the dashes ("② in ① ─"), or the glyph would spill onto the border.
+	// The cell is a real one: trailing, below, is what is left of the width.
+	if endsWithRoomyGlyph(segment) {
+		segment += " "
+	}
 	segW := lipgloss.Width(segment)
 
 	trailing := width - 2 - 1 - segW

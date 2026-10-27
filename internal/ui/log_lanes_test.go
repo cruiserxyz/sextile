@@ -559,6 +559,9 @@ func TestErrorLaneMembership(t *testing.T) {
 		// A body template tab's facts (the specification P5).
 		"Couldn't compute the %s tab. %s":                   1,
 		"Couldn't copy the Details panel to the clipboard.": 1,
+		// Save as and opening a named session save the session the window ran
+		// first; a failure of that write is said (sessions_popup.go).
+		"Couldn't save the session this window ran. Its file could not be written.": 2,
 	}
 	got := map[string]int{}
 	for _, site := range callSites(t, "logError") {

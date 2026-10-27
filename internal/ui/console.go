@@ -86,16 +86,16 @@ const noticeDuration = 3 * time.Second
 
 // The key bar's notices: a key that did nothing, or a copy that did not land.
 const (
-	noticeOnlyNow       = "Only Now can be saved as a new chart; focus Now first."
+	noticeOnlyNow       = "Only Now can be saved as a new chart. Focus Now first."
 	noticeNothingCopy   = "Nothing to copy"
 	noticeCopyFailed    = "Copy failed: the clipboard is unavailable."
 	noticeDefaultsSaved = "Defaults saved"
 	// noticeSecondWindow is shown once, when a second window starts.
-	noticeSecondWindow = "Another Sextile window keeps the session; this window's changes are not kept between runs."
+	noticeSecondWindow = "Another Sextile window runs the general session. This one keeps nothing until saved as a named session."
 )
 
 // secondWindowNote is the same on the Log's note lane, after its scope.
-const secondWindowNote = "another Sextile window keeps the session; this window's changes are not kept between runs"
+const secondWindowNote = "another Sextile window runs the general session. This window started empty and keeps nothing until you save it as a named session"
 
 // limitedViewPrefix opens the notice a terminal too small for Details shows.
 const limitedViewPrefix = "Limited view: "

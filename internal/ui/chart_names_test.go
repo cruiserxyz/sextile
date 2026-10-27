@@ -254,6 +254,9 @@ func TestDetailsReportsNameTheirCharts(t *testing.T) {
 					}
 				}
 			} else {
+				// Opening selects nothing: select the pair, as the operator would.
+				m.slots.SetSlotSelected(0, true)
+				m.slots.SetSlotSelected(m.slots.AnchoredCount(), true)
 				m.cursorIdx = m.slots.AnchoredCount() // the floating slot: the pair ② in ① is its tab
 			}
 			m.base = nil
@@ -540,7 +543,7 @@ func TestUntitledChartSendsNoNameAfterPickAndRestore(t *testing.T) {
 		t.Helper()
 		sessionSandbox(t)
 		titleLibrary(t, nil, files)
-		if err := store.SaveSession(store.Session{FloatingSelected: false, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+		if err := store.SaveSession(here(store.Session{FloatingSelected: false, Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 			t.Fatal(err)
 		}
 		spy := spyOnLabels(t)
@@ -602,7 +605,7 @@ func TestMissingRestoredSourceNeverEmitsSnapshotName(t *testing.T) {
 	place := location.PlaceInfo{Name: "Amsterdam", Country: "NL", Lat: 52.3667, Lon: 4.8833, TZ: "Europe/Amsterdam"}
 	rec := store.SessionChart{ID: "gone", Name: "Snapshot Client", When: when, Place: place,
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Gone.as"}}
-	if err := store.SaveSession(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+	if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 		t.Fatal(err)
 	}
 	spy := spyOnLabels(t)
@@ -1102,7 +1105,7 @@ func TestRestoredChartNamesItselfAfterTheRecheck(t *testing.T) {
 	}
 	place := row.Place
 	rec := store.SessionChart{ID: row.ID, Name: row.Name, When: real.When, Place: row.Place, Source: row.Source}
-	if err := store.SaveSession(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+	if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 		t.Fatal(err)
 	}
 	var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))
@@ -1197,7 +1200,7 @@ func TestRestoreRecheckReadsNameAndMomentTogether(t *testing.T) {
 			t.Fatal(err)
 		}
 		rec := store.SessionChart{ID: row.ID, Name: row.Name, When: real.When, Place: row.Place, Source: row.Source}
-		if err := store.SaveSession(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}}); err != nil {
+		if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 			t.Fatal(err)
 		}
 		var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))

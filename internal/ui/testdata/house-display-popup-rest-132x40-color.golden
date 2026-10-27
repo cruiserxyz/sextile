@@ -1,16 +1,16 @@
-[92m╭─[0m[1;92mHouse display[0m[92m──────────────────────────────────────────────────╮[0m
-[92m│[0m                                                                [92m│[0m
-[92m│[0m  [1;44m(•) Angularity at a glance                                  [0m  [92m│[0m
-[92m│[0m  ( ) True quadrants                                            [92m│[0m
-[92m│[0m  ( ) Plain number                                              [92m│[0m
-[92m│[0m  ( ) Number + angularity                                       [92m│[0m
-[92m│[0m  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  [92m│[0m
-[92m│[0m  Houses grouped around the four angles: Ascendant, IC,         [92m│[0m
-[92m│[0m  Descendant, Midheaven. In each group the middle cell is       [92m│[0m
-[92m│[0m  angular, the right succedent, the left cadent.                [92m│[0m
-[92m│[0m  Comparing: the chart's own house faint, the house in the      [92m│[0m
-[92m│[0m  compared chart bold.                                          [92m│[0m
-[92m│[0m                                                                [92m│[0m
-[92m│[0m  ☽ Moon      Cap 15°30'  [38;5;27m███[0m     |  [2m5[0m|   | [1m10[0m                  [92m│[0m
-[92m│[0m                                                                [92m│[0m
-[92m╰────────────────────────────────────────────────────────────────╯[0m
+[92m╭─[0m[1;92mHouse display[0m[92m─────────────────────────────────────────────────╮[0m
+[92m│[0m                                                               [92m│[0m
+[92m│[0m  [1;44m(•) Angularity at a glance                                 [0m  [92m│[0m
+[92m│[0m  ( ) True quadrants                                           [92m│[0m
+[92m│[0m  ( ) Plain number                                             [92m│[0m
+[92m│[0m  ( ) Number + angularity                                      [92m│[0m
+[92m│[0m  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈  [92m│[0m
+[92m│[0m  Houses grouped around the four angles: Ascendant, IC,        [92m│[0m
+[92m│[0m  Descendant, Midheaven. In each group the middle cell is      [92m│[0m
+[92m│[0m  angular, the right succedent, the left cadent.               [92m│[0m
+[92m│[0m  Comparing: the chart's own house faint, the house in the     [92m│[0m
+[92m│[0m  compared chart bold.                                         [92m│[0m
+[92m│[0m                                                               [92m│[0m
+[92m│[0m  ☽ Moon      Cap 15°30'  [38;5;27m███[0m     |  [2m5[0m|   | [1m10[0m                 [92m│[0m
+[92m│[0m                                                               [92m│[0m
+[92m╰───────────────────────────────────────────────────────────────╯[0m

@@ -36,7 +36,7 @@ func (m Model) applyWheelFormat(c store.WheelFormatConfig) Model {
 		default:
 			if m.wheelFormatRefused != c.Value {
 				m.wheelFormatRefused = c.Value
-				m = m.logNote("preferences", "wheel_format %q refused: expected svg or png; svg stands", c.Value)
+				m = m.logNote("preferences", "wheel_format %q refused: expected svg or png — svg stands", c.Value)
 			}
 		}
 	}

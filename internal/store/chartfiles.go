@@ -18,7 +18,8 @@ import (
 //
 // None of them composes a byte of a chart. Astrolog writes every record whole,
 // into a temp file one of these created; these only swap that file in and
-// keep the original once under `<charts>/.sextile/backup/<file>`. They parse
+// keep the original once under BackupDir(<charts>)/<file>, outside the
+// charts folder. They parse
 // nothing: whether a record is right is decided in internal/lookup, before any
 // of them is called.
 
@@ -69,34 +70,29 @@ var (
 )
 
 // A chart is known by its first bytes, so a backup (which holds the chart's
-// bytes) must never sit where the library lists. It lives in a hidden folder
-// of the charts folder, which the library never reads: one backup per chart,
-// under the chart's own file name.
-const (
-	chartStateDir  = ".sextile"
-	chartBackupSub = "backup"
-)
+// bytes) must never sit where the library lists. It lives outside the charts
+// folder altogether, in BackupDir(dir): one folder per charts folder, one
+// backup per chart, under the chart's own file name.
+const chartBackupSub = "backup"
 
-// ChartBackupRel is where a chart's backup is kept, relative to the charts
-// folder: `.sextile/backup/<file>`. It is what the operator is told.
-func ChartBackupRel(file string) string {
-	return filepath.Join(chartStateDir, chartBackupSub, filepath.Base(file))
-}
-
-// ChartBackupFolderRel is the folder that holds every backup, relative to the
-// charts folder.
-func ChartBackupFolderRel() string {
-	return filepath.Join(chartStateDir, chartBackupSub)
+// backupParts are the folders below the XDG data base that lead to dir's
+// backup folder. Every one of them must be a real folder, never a link.
+func backupParts(dir string) []string {
+	return []string{"sextile", chartBackupSub, FolderID(dir)}
 }
 
 // ChartBackupState reports, without writing, whether dir's backup of file
 // already exists: absent is false, a regular file is true, and anything else
 // is an error, because ReplaceChartWithBackup would refuse it.
 func ChartBackupState(dir, file string) (held bool, err error) {
-	if err := checkBackupParents(dir); err != nil {
+	folder, exists, err := checkBackupFolder(dir)
+	if err != nil {
 		return false, fmt.Errorf("store: ChartBackupState: %w", err)
 	}
-	bak := filepath.Join(dir, ChartBackupRel(file))
+	if !exists {
+		return false, nil
+	}
+	bak := filepath.Join(folder, filepath.Base(file))
 	fi, err := os.Lstat(bak)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -104,58 +100,44 @@ func ChartBackupState(dir, file string) (held bool, err error) {
 	case err != nil:
 		return false, fmt.Errorf("store: ChartBackupState: %w", err)
 	case !fi.Mode().IsRegular():
-		return false, fmt.Errorf("store: ChartBackupState: %s is not a file", ChartBackupRel(file))
+		return false, fmt.Errorf("store: ChartBackupState: %s is not a file", bak)
 	}
 	return true, nil
 }
 
-// checkBackupParents refuses a `.sextile` or `.sextile/backup` that exists and
-// is not a real folder (a link, a file). It runs BEFORE any backup file is
-// looked at or trusted: a link there could lead anywhere, and a backup found
+// checkBackupFolder refuses a backup folder (or a folder on the way to it)
+// that exists and is not a real folder. It runs BEFORE any backup file is
+// looked at or trusted: a link could lead anywhere, and a backup found
 // through it would be someone else's file. Absent is fine; backupFolder makes
-// them when a backup is first kept.
-func checkBackupParents(dir string) error {
-	for _, d := range []string{
-		filepath.Join(dir, chartStateDir),
-		filepath.Join(dir, chartStateDir, chartBackupSub),
-	} {
-		fi, err := os.Lstat(d)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil // nothing below an absent folder exists either
-		}
-		if err != nil {
-			return err
-		}
-		if !fi.IsDir() {
-			return fmt.Errorf("%s is not a folder", d)
-		}
+// it when a backup is first kept.
+func checkBackupFolder(dir string) (folder string, exists bool, err error) {
+	if !validFolderID(FolderID(dir)) {
+		return "", false, errNoFolderID
 	}
-	return nil
+	folder = BackupDir(dir)
+	exists, err = checkPrivateDir(dataHome(), backupParts(dir)...)
+	if err != nil || !exists {
+		return folder, false, err
+	}
+	return folder, true, nil
 }
 
-// backupFolder makes sure `<dir>/.sextile/backup` exists as a real folder, and
-// returns it. A link in either place is refused: it could point a client's
-// chart anywhere.
+// errNoFolderID is a charts folder whose path cannot be made absolute, so it
+// has no backup folder of its own.
+var errNoFolderID = errors.New("the charts folder's path cannot be resolved")
+
+// backupFolder makes sure dir's backup folder exists as a real, private
+// folder, and returns it. A link anywhere below the XDG data base is refused:
+// it could point a client's chart anywhere.
 func backupFolder(dir string) (string, error) {
-	state := filepath.Join(dir, chartStateDir)
-	folder := filepath.Join(state, chartBackupSub)
-	if err := os.MkdirAll(folder, 0o700); err != nil {
-		return "", err
+	if !validFolderID(FolderID(dir)) {
+		return "", errNoFolderID
 	}
-	for _, d := range []string{state, folder} {
-		fi, err := os.Lstat(d)
-		if err != nil {
-			return "", err
-		}
-		if !fi.IsDir() {
-			return "", fmt.Errorf("%s is not a folder", d)
-		}
-	}
-	return folder, nil
+	return privateDir(dataHome(), true, backupParts(dir)...)
 }
 
 // ReplaceChartWithBackup swaps tmp in as dir/file, keeping the first original
-// in dir/.sextile/backup/file.
+// in BackupDir(dir)/file.
 //
 // original is the content the retitle started from. If dir/file no longer
 // holds exactly those bytes, nothing happens and ErrChartChanged comes back.
@@ -194,17 +176,18 @@ func ReplaceChartWithBackup(dir, file, tmp string, original []byte) (backedUp bo
 		return false, fmt.Errorf("%w: %s", ErrChartChanged, filepath.Base(file))
 	}
 
-	if err := checkBackupParents(dir); err != nil {
+	backups, _, err := checkBackupFolder(dir)
+	if err != nil {
 		return false, fmt.Errorf("store: ReplaceChartWithBackup: cannot keep the original: %w", err)
 	}
-	bak := filepath.Join(dir, ChartBackupRel(file))
+	bak := filepath.Join(backups, filepath.Base(file))
 	// No `if x, err := …` here: the else branch below installs a deferred
 	// undo that must read the function's own err, and an if-scoped err would
 	// shadow it.
 	existing, statErr := os.Lstat(bak)
 	if statErr == nil {
 		if !existing.Mode().IsRegular() {
-			return false, fmt.Errorf("store: ReplaceChartWithBackup: %s is not a file, so it cannot hold the original", ChartBackupRel(file))
+			return false, fmt.Errorf("store: ReplaceChartWithBackup: %s is not a file, so it cannot hold the original", bak)
 		}
 	} else {
 		folder, ferr := backupFolder(dir)
@@ -233,12 +216,11 @@ func ReplaceChartWithBackup(dir, file, tmp string, original []byte) (backedUp bo
 		if werr == nil {
 			werr = os.Link(staged.Name(), bak)
 			if errors.Is(werr, os.ErrExist) {
-				werr = fmt.Errorf("%s appeared while the original was being kept", ChartBackupRel(file))
+				werr = fmt.Errorf("%s appeared while the original was being kept", bak)
 			}
 		}
 		os.Remove(staged.Name())
 		syncDir(folder)
-		syncDir(dir)
 		if werr != nil {
 			return false, fmt.Errorf("store: ReplaceChartWithBackup: cannot keep the original: %w", werr)
 		}

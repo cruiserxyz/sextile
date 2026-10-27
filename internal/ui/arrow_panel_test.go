@@ -146,7 +146,7 @@ func TestPanelBindingsAdvertiseTheArrows(t *testing.T) {
 	keys := defaultKeys()
 
 	help := helpListText(keys, defaultLeaderKey, defaultLeaderMap())
-	for _, want := range []string{"tab/→", "⇧tab/←"} {
+	for _, want := range []string{"tab/→", "⇧ tab/←"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("the help modal does not carry %q, so that key is undocumented", want)
 		}
@@ -160,7 +160,7 @@ func TestPanelBindingsAdvertiseTheArrows(t *testing.T) {
 	}
 	// The whole point of the footer entries: they must NOT spend the columns
 	// the frame does not have.
-	for _, unwanted := range []string{"tab/→", "⇧tab/←"} {
+	for _, unwanted := range []string{"tab/→", "⇧ tab/←"} {
 		if strings.Contains(bar, unwanted) {
 			t.Errorf("the footer carries %q; that is the wording that overflows 80 columns", unwanted)
 		}

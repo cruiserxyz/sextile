@@ -35,7 +35,7 @@ func overlay(bg, fg string, x, y int) string {
 		}
 		bgLine := bgLines[row]
 
-		left := ansi.Truncate(bgLine, x, "")
+		left := blankGlyphAtEnd(ansi.Truncate(bgLine, x, ""))
 		right := ansi.TruncateLeft(bgLine, x+fgWidth, "")
 
 		// Pad fg line out to fgWidth so short lines don't let bg bleed through.

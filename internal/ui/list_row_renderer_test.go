@@ -52,12 +52,12 @@ var listNonRowHelpers = map[string]bool{
 	"chartDropLines": true,
 	"fitDropLines":   true,
 	"bodyTagBar":     true,
+	// The aspect chooser's decision whether its rows keep the orb: a width
+	// measured over the registry, a number and never a line.
+	"aspectFullWidth": true,
 	// The dashed rule under a pinned block (the specification 6):
 	// built from a glyph and a width, never from a rendered row.
 	"listRule": true,
-	// The body popup's missing-file line (the specification
-	// C3): built from the probe's verdict text, never from a rendered row.
-	"bodyProbeNote": true,
 }
 
 // forbiddenRowCalls are the ways a line gets padded, truncated or restyled.

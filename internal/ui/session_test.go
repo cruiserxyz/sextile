@@ -40,11 +40,12 @@ func sessionSandbox(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("SEXTILE_CHARTS_DIR", filepath.Join(root, "charts"))
 	t.Setenv("SEXTILE_DEV_CHARTS_DIR", "")
 	t.Setenv("HOME", root)
-	return filepath.Join(root, "data", "sextile", "session")
+	return filepath.Join(root, "state", "sextile", "session")
 }
 
 func seedSession(t *testing.T, text string) string {
@@ -72,12 +73,35 @@ func snapshotChart() store.SessionChart {
 	return store.SessionChart{ID: "fixture-one", Name: "Constructed One", When: fixtureOneWhen, Place: fixtureOneP}
 }
 
-// withSession attaches a session that carries the snapshot and nothing else.
+// withSession attaches a session that carries the snapshot and nothing else,
+// saved in the charts folder this launch uses.
 func withSession(p ingest.StartupPerimeterReadMsg, s store.Session) ingest.StartupPerimeterReadMsg {
+	s.Folder = testFolderID
 	p.Session = s
 	p.HasSession = true
+	p.FolderID = testFolderID
 	return p
 }
+
+// here stamps s as saved in the charts folder this test launches in, as a
+// quit there would have.
+func here(s store.Session) store.Session {
+	s.Folder = store.FolderID(store.ChartsDir())
+	return s
+}
+
+// hereText is a seeded session file's text, stamped the same way: the folder
+// line goes straight after the version line.
+func hereText(text string) string {
+	line := "folder: " + store.FolderID(store.ChartsDir()) + "\n"
+	if i := strings.IndexByte(text, '\n'); i >= 0 && strings.HasPrefix(text, "version:") {
+		return text[:i+1] + line + text[i+1:]
+	}
+	return line + text
+}
+
+// testFolderID is the charts folder a hand-built perimeter read says it is in.
+var testFolderID = strings.Repeat("5e", 32)
 
 // startedModel drives a cold start to the point where the workspace exists:
 // the atlas index lands, then the perimeter read.
@@ -208,6 +232,7 @@ func assertQuits(t *testing.T, cmd tea.Cmd) {
 
 func assertSessionText(t *testing.T, want string) {
 	t.Helper()
+	want = hereText(want) // a quit records the folder it was saved in
 	got, err := os.ReadFile(store.SessionPath())
 	if err != nil {
 		t.Fatalf("read the session back: %v", err)
@@ -260,7 +285,7 @@ func TestQuitProceedsWhenSessionWriteFails(t *testing.T) {
 	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("XDG_DATA_HOME", blocker)
+	t.Setenv("XDG_STATE_HOME", blocker)
 	t.Setenv("HOME", root)
 
 	m := anchorFixture(t)
@@ -723,7 +748,7 @@ func TestSessionSurvivesAQuitAndARelaunch(t *testing.T) {
 func TestAYAMLEraSessionRestoresFromItsSnapshot(t *testing.T) {
 	sessionSandbox(t)
 	seedPreferences(t)
-	path := seedSession(t, `version: 1
+	path := seedSession(t, hereText(`version: 1
 chart:
   id: fixture-one
   kind: yaml
@@ -735,7 +760,7 @@ chart:
   lat: 12.34
   lon: 56.78
   tz: Etc/UTC
-`)
+`))
 	p := realPerimeter(t)
 	m := startedModel(t, p)
 	if got := anchoredSlot(t, m).Time; !got.Equal(fixtureOneWhen) {
@@ -761,5 +786,43 @@ chart:
 	}
 	if out := string(b); strings.Contains(out, "kind:") || strings.Contains(out, ".yaml\n") || !strings.Contains(out, "name: Constructed One") {
 		t.Errorf("the session written at quit:\n%s\nwant the snapshot kept and no locator", out)
+	}
+}
+
+// Restoring a session restores exactly the saved selection, now that opening a
+// chart selects nothing: anchoring the saved charts leaves everything unselected
+// and applySessionSelections sets only what the file marked.
+func TestRestoreSetsExactlyTheSavedSelection(t *testing.T) {
+	recA := store.SessionChart{ID: "a", Name: "A", Source: store.ChartSource{Kind: store.ChartKindFile, File: "a.as"}, When: fixtureOneWhen, Place: fixtureOneP}
+	recB := store.SessionChart{ID: "b", Name: "B", Source: store.ChartSource{Kind: store.ChartKindFile, File: "b.as"}, When: fixtureOneWhen, Place: fixtureOneP}
+	for _, tc := range []struct {
+		name           string
+		a, b, floating bool
+	}{
+		{"nothing selected", false, false, false},
+		{"second chart only", false, true, false},
+		{"first chart and floating", true, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := readyModelWithSlots(t, berlinP)
+			for _, rec := range []store.SessionChart{recA, recB} {
+				var ok bool
+				if m, ok = m.anchorFromSession(rec); !ok {
+					t.Fatal("anchorFromSession refused a usable chart")
+				}
+			}
+			if m.slots.SlotSelected(0) || m.slots.SlotSelected(1) || m.slots.SlotSelected(2) {
+				t.Fatal("precondition: anchoring from the session selected something")
+			}
+			m = m.applySessionSelections(ingest.StartupPerimeterReadMsg{HasSession: true, Session: store.Session{
+				Version: 2, FloatingSelected: tc.floating,
+				Slots: []store.SessionSlot{{Chart: recA, Usable: true, Selected: tc.a}, {Chart: recB, Usable: true, Selected: tc.b}},
+			}})
+			got := []bool{m.slots.SlotSelected(0), m.slots.SlotSelected(1), m.slots.SlotSelected(2)}
+			want := []bool{tc.a, tc.b, tc.floating}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("selected (a, b, floating) = %v, want %v", got, want)
+			}
+		})
 	}
 }

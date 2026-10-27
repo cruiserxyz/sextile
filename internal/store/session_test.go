@@ -24,7 +24,7 @@ import (
 func sessionSandbox(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", dir)
+	t.Setenv("XDG_STATE_HOME", dir)
 	t.Setenv("HOME", filepath.Join(dir, "home"))
 	return filepath.Join(dir, "sextile", "session")
 }
@@ -46,16 +46,56 @@ func fixtureChart() SessionChart {
 	}
 }
 
-// C3: the path is $XDG_DATA_HOME/sextile/session/session.yaml.
-func TestSessionPathUnderXDGDataHome(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", "/xdg")
-	if got, want := SessionPath(), "/xdg/sextile/session/session.yaml"; got != want {
+// The session and its lock are state, kept in $XDG_STATE_HOME/sextile/session
+// (fallback ~/.local/state/sextile/session) — never under XDG_DATA_HOME, where
+// 0.1.1's launcher pointed into the charts folder.
+func TestSessionDirIsXDGStateHome(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/data")
+	t.Setenv("XDG_STATE_HOME", "/xdg-state")
+	if got, want := SessionPath(), "/xdg-state/sextile/session/session.yaml"; got != want {
 		t.Errorf("SessionPath() = %q, want %q", got, want)
 	}
-	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "/home/u")
-	if got, want := SessionPath(), "/home/u/.local/share/sextile/session/session.yaml"; got != want {
-		t.Errorf("SessionPath() without XDG = %q, want %q", got, want)
+	if got, want := SessionDir(), "/home/u/.local/state/sextile/session"; got != want {
+		t.Errorf("SessionDir() without XDG_STATE_HOME = %q, want %q", got, want)
+	}
+}
+
+// A fresh session folder is private: 0700, whether the lock or the first save
+// makes it. One left 0755 by an earlier build is narrowed.
+func TestFreshSessionDirIsPrivate(t *testing.T) {
+	for _, maker := range []string{"lock", "save", "existing 0755"} {
+		t.Run(maker, func(t *testing.T) {
+			dir := sessionSandbox(t)
+			switch maker {
+			case "lock":
+				mustAcquire(t)
+			case "save":
+				if err := SaveSession(Session{Slots: oneSlot(fixtureChart(), false)}); err != nil {
+					t.Fatal(err)
+				}
+			case "existing 0755":
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				mustAcquire(t)
+			}
+			for _, d := range []string{dir, filepath.Dir(dir)} {
+				fi, err := os.Stat(d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if d == dir || maker != "existing 0755" {
+					if got := fi.Mode().Perm(); got != 0o700 {
+						t.Errorf("%s has mode %v, want 0700", d, got)
+					}
+				}
+			}
+		})
 	}
 }
 

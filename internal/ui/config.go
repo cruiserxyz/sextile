@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/cruiserxyz/sextile/internal/store"
+
 // ColorMode is the resolved colour policy for a run. The zero value
 // (ColorAuto) preserves the historical behaviour: colour follows Accessible,
 // so an accessible run is colourless and a normal run is coloured.
@@ -42,14 +44,30 @@ type Config struct {
 	InstanceLockUnsupported bool
 
 	// SecondWindow is true when another Sextile holds the instance lock. This
-	// window restores the session that window keeps and never writes it: not
-	// at quit, not for a house choice, not before a rename.
+	// window starts empty and never writes the general session: not at quit,
+	// not for a house choice, not before a rename. Once it saves or opens a
+	// named session it keeps that one (sessions_popup.go).
 	SecondWindow bool
 
 	// Launch is what the launcher says about how it started this copy: the
 	// value of SEXTILE_LAUNCH, `docker <image>` or `no-docker <describe>`.
 	// The Log's first line names it. Any other shape, and empty, says nothing.
 	Launch string
+
+	// Migration is the one Log line saying what the one-time copy of the
+	// charts folder's old state did (store.MigrationResult.Line); empty when
+	// there was nothing to copy.
+	Migration string
+
+	// NamedSession is the lock of the named session --session asked for, taken
+	// by main; this window runs that session from the start. NamedSessionName is
+	// its name. Nil runs the general session (or, in a second window, none).
+	NamedSession     *store.SessionLock
+	NamedSessionName string
+
+	// SessionNote is the one Log line saying why --session could not be
+	// honoured; empty when it was, or was not asked.
+	SessionNote string
 }
 
 // useColor reports whether explicit colours should be emitted for this render.

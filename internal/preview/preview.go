@@ -77,7 +77,7 @@ var pngSignature = []byte("\x89PNG\r\n\x1a\n")
 
 // ErrSessionEnded is returned by Show after Cleanup. Once Sextile has quit, a
 // late wheel publication must not bring the server or the client chart back.
-var ErrSessionEnded = errors.New("preview: the session has ended; no image is served")
+var ErrSessionEnded = errors.New("preview: the session has ended. No image is served")
 
 // ErrViewerClosed is returned by Show once the operator has closed the
 // terminal viewer and has not asked (RequestOpen) to open it again: there is nothing left
@@ -203,7 +203,7 @@ func selectedMode() (string, error) {
 	case modeXD, modeTerminalXD, modeHTTP, modeServe:
 		return mode, nil
 	default:
-		return "", fmt.Errorf("preview: %s=%q; want xdg, terminal-xdg, http, or serve", previewModeEnv, mode)
+		return "", fmt.Errorf("preview: %s=%q — want xdg, terminal-xdg, http, or serve", previewModeEnv, mode)
 	}
 }
 

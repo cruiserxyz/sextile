@@ -97,14 +97,11 @@ func noTempLeft(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.Name() == ".sextile" {
-			continue // the backup folder: its own entries are checked below
-		}
 		if strings.HasPrefix(e.Name(), ".") || strings.Contains(e.Name(), "sextile-tmp") {
 			t.Errorf("a temp file was left behind: %s", e.Name())
 		}
 	}
-	backups, err := os.ReadDir(filepath.Join(dir, store.ChartBackupFolderRel()))
+	backups, err := os.ReadDir(store.BackupDir(dir))
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
@@ -153,10 +150,10 @@ func TestRetitleChartFile(t *testing.T) {
 		if g, w := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")), fileBytes(t, want); g != w {
 			t.Errorf("the chart is not Astrolog's record byte for byte.\n got: %q\nwant: %q", g, w)
 		}
-		if g := fileBytes(t, filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); g != original {
+		if g := fileBytes(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); g != original {
 			t.Errorf("backup = %q, want the original", g)
 		}
-		if got.Name != "Constructed One" || got.Backup != store.ChartBackupRel("Equinox-2026-09.as") || got.ID != row.ID {
+		if got.Name != "Constructed One" || got.Backup != store.ChartBackupDisplay(dir, "Equinox-2026-09.as") || got.ID != row.ID {
 			t.Errorf("result = %+v", got)
 		}
 		noTempLeft(t, dir)
@@ -173,7 +170,7 @@ func TestRetitleChartFile(t *testing.T) {
 		if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 			t.Error("the chart changed after a failed write")
 		}
-		if _, err := os.Stat(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
 			t.Error("a failed write left a backup")
 		}
 		noTempLeft(t, dir)
@@ -192,7 +189,7 @@ func TestRetitleChartFile(t *testing.T) {
 		if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 			t.Error("the chart changed")
 		}
-		if _, err := os.Stat(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
 			t.Error("a backup was created")
 		}
 	})
@@ -224,7 +221,7 @@ func TestRetitleChartFile(t *testing.T) {
 		if got.Backup != "" {
 			t.Errorf("Backup = %q on the second write, want \"\" (the first is kept)", got.Backup)
 		}
-		if fileBytes(t, filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))) != original {
+		if fileBytes(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")) != original {
 			t.Error("the second retitle replaced the first backup")
 		}
 	})
@@ -257,13 +254,13 @@ func TestRetitleKeepsTheOriginalOfAFullFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("a full file was refused: %v", err)
 			}
-			if got.Backup == "" || fileBytes(t, filepath.Join(dir, got.Backup)) != original {
+			if got.Backup == "" || fileBytes(t, got.Backup) != original {
 				t.Errorf("the backup does not hold the original bytes (backup %q)", got.Backup)
 			}
 			if got.Name != "Constructed Full" || got.PlaceLabel != "Bremen, Germany" {
 				t.Errorf("read back %q / %q", got.Name, got.PlaceLabel)
 			}
-			sameMomentAndPlace(t, filepath.Join(dir, got.Backup), path)
+			sameMomentAndPlace(t, got.Backup, path)
 		})
 	}
 	t.Run("fixture", func(t *testing.T) {
@@ -276,10 +273,10 @@ func TestRetitleKeepsTheOriginalOfAFullFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FullMoon-2026-02.as was refused: %v", err)
 		}
-		if fileBytes(t, filepath.Join(dir, got.Backup)) != original {
+		if fileBytes(t, got.Backup) != original {
 			t.Error("the backup does not hold the original bytes")
 		}
-		sameMomentAndPlace(t, filepath.Join(dir, got.Backup), filepath.Join(dir, "FullMoon-2026-02.as"))
+		sameMomentAndPlace(t, got.Backup, filepath.Join(dir, "FullMoon-2026-02.as"))
 	})
 }
 
@@ -338,7 +335,7 @@ func TestRetitleRefusesABadReadBack(t *testing.T) {
 			if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 				t.Error("the original changed")
 			}
-			if _, err := os.Stat(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
 				t.Error("a refused write made a backup")
 			}
 			noTempLeft(t, dir)
@@ -375,7 +372,7 @@ func TestRetitleRefusesAChangedFile(t *testing.T) {
 		if fileBytes(t, path) != edited {
 			t.Error("the edited chart was rewritten")
 		}
-		if _, err := os.Stat(filepath.Join(filepath.Dir(path), store.ChartBackupRel(filepath.Base(path)))); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))); !os.IsNotExist(err) {
 			t.Error("a refused write made a backup")
 		}
 		if lib.Seen["Equinox-2026-09.as"] == "" {
@@ -399,7 +396,7 @@ func TestRetitleRefusesAChangedFile(t *testing.T) {
 	if fileBytes(t, path) != edited {
 		t.Error("the edit made meanwhile was overwritten")
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(path), store.ChartBackupRel(filepath.Base(path)))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))); !os.IsNotExist(err) {
 		t.Error("a refused write made a backup")
 	}
 	noTempLeft(t, dir)
@@ -421,7 +418,7 @@ func TestRetitleRefusesControlChars(t *testing.T) {
 		t.Error("the chart changed")
 	}
 	noTempLeft(t, dir)
-	if _, err := os.Stat(filepath.Join(dir, store.ChartBackupRel("Equinox-2026-09.as"))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
 		t.Error("a refused write made a backup")
 	}
 }
@@ -474,26 +471,32 @@ func stripSpawnPrefix(argv []string) ([]string, bool) {
 	return argv[len(want):], true
 }
 
-// A linked `.sextile` or `.sextile/backup` makes the retitle refuse, with the
-// chart untouched and the file the link leads to untouched.
+// A link on the way to the backup folder -- sextile/backup or the charts
+// folder's own backup folder under the XDG data base -- makes the retitle
+// refuse, with the chart untouched and the file the link leads to untouched.
 func TestRetitleRefusesALinkedBackupFolder(t *testing.T) {
-	for _, linked := range []string{".sextile", ".sextile/backup"} {
+	for _, linked := range []string{"backup", "folder"} {
 		t.Run(linked, func(t *testing.T) {
+			data := t.TempDir()
+			t.Setenv("XDG_DATA_HOME", data)
 			dir, row := untitledEquinox(t)
 			recordingAstrolog(t, "")
 			original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
 			outside := t.TempDir()
 			external := filepath.Join(outside, "Equinox-2026-09.as")
-			if linked == ".sextile" {
-				mustMkdirAll(t, filepath.Join(outside, "backup"))
-				external = filepath.Join(outside, "backup", "Equinox-2026-09.as")
+			link := store.BackupDir(dir)
+			if linked == "backup" {
+				mustMkdirAll(t, filepath.Join(data, "sextile"))
+				link = filepath.Join(data, "sextile", "backup")
+				mustMkdirAll(t, filepath.Join(outside, filepath.Base(store.BackupDir(dir))))
+				external = filepath.Join(outside, filepath.Base(store.BackupDir(dir)), "Equinox-2026-09.as")
 			} else {
-				mustMkdirAll(t, filepath.Join(dir, ".sextile"))
+				mustMkdirAll(t, filepath.Dir(link))
 			}
 			if err := os.WriteFile(external, []byte("somebody else's file\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Symlink(outside, filepath.Join(dir, linked)); err != nil {
+			if err := os.Symlink(outside, link); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany"); err == nil {

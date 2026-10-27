@@ -610,7 +610,9 @@ func TestTruncationIsMarked(t *testing.T) {
 			{"Open chart list row", func(t *testing.T) string {
 				m := designAt(t, mode.cfg, 80, 24)
 				charts := manyCharts(2)
-				charts[0].Name = long
+				// Longer than any box can be: the popup is as wide as its widest
+				// row, up to the terminal, so only a name beyond that is cut.
+				charts[0].Name = long + " " + long
 				m.picker = chartPickerState{loaded: true, prior: startupReady, charts: charts}
 				m.picker.refilter()
 				m.startup = startupChartOpen
@@ -639,7 +641,7 @@ func TestTruncationIsMarked(t *testing.T) {
 			// No popup title is long enough to be cut at a supported size, so
 			// the box is drawn with one; the frame is what reaches the screen.
 			{"Popup title", func(t *testing.T) string {
-				return renderModalBox(modalBox{Title: long + long}, mode.cfg, 80, 24, func(w, h int) string { return "" })
+				return renderModalBox(modalBox{Title: long + long, Fit: modalFit{Width: 1, Rows: 1}}, mode.cfg, 80, 24, func(w, h int) string { return "" })
 			}, "Constructed", ""},
 			// Bodies rows fit at every supported width; the panel body is
 			// drawn narrower than any of them to reach the cut.

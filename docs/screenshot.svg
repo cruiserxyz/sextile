@@ -289,7 +289,7 @@
 <text x="117.6" y="608.0" fill="#d0d0d0">-</text>
 <text x="134.4 151.2 159.6 176.4" y="608.0" fill="#d0d0d0">②in①</text>
 <path d="M529.2 603.0 L533.4 603.0 L533.4 612.0" fill="none" stroke-width="1.2" stroke="#585858"/>
-<line x1="184.8" y1="603.0" x2="529.2" y2="603.0" stroke-width="1.2" stroke="#585858"/>
+<line x1="193.2" y1="603.0" x2="529.2" y2="603.0" stroke-width="1.2" stroke="#585858"/>
 <path d="M546.0 603.0 L541.8 603.0 L541.8 612.0" fill="none" stroke-width="1.2" stroke="#585858"/>
 <line x1="546.0" y1="603.0" x2="554.4" y2="603.0" stroke-width="1.2" stroke="#585858"/>
 <text x="554.4 562.8 571.2" y="608.0" fill="#d0d0d0">Log</text>

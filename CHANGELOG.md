@@ -5,6 +5,51 @@ rest one outcome per bullet, then what still limits use and what an upgrade
 changes for you. Astrolog computes every astrological value Sextile shows.
 The format follows Keep a Changelog; versions are semantic, tagged vX.Y.Z.
 
+## [0.1.2] - 2026-10-27
+
+Your charts folder now holds only your charts. Sextile 0.1.1 kept the session,
+the preferences and the backups of retitled charts in a `.sextile` folder inside
+it, so syncing or sharing the folder shared them too. They now live in your home
+folder, under `~/.local/state`, `~/.config` and `~/.local/share` (`XDG_STATE_HOME`,
+`XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them), and `sextile doctor` names them.
+
+- Upgrading from 0.1.1 copies the session, preferences and backups out of
+  `<charts>/.sextile` the first time you start on that folder, only where nothing
+  is there yet, and the Log says what was copied. The old `.sextile` folder is
+  left as it was, for you to remove. With several charts folders, only the first
+  one you open brings its session along.
+- A session now opens only in the charts folder it was made in. Started on
+  another folder, Sextile opens with no charts and the Log says the saved session
+  belongs to another folder. A 0.1.1 session that names no folder is not restored.
+- Docker mounts the new folders beside the charts folder, creates the missing
+  ones private to you, and refuses to start when one is a symlink or a file. A
+  container you start by hand with only `-v ~/charts:/charts` mounts nothing
+  else, so its state stays in `.sextile` as before.
+- Sessions can be named: `,` `o` saves the open charts, selection and frames
+  under a name, opens, renames or moves to the trash the ones saved for this charts
+  folder, and `sextile -- --session NAME` starts in one. Sextile removes nothing. A named session runs in one window at a
+  time.
+- A second window now starts empty and keeps nothing until it opens or saves a
+  named session. In 0.1.1 it opened with the first window's charts. The first
+  window's session is left alone.
+- Opening a chart selects nothing. In 0.1.1 the first chart and the floating
+  chart came up selected. Now `Space` is the only way a chart becomes selected,
+  so comparison and body limits begin from what you chose.
+- A chart saved with `Ctrl+S` opens at once with the cursor on it.
+- `scripts/install` clones Sextile under `~/.local/share/sextile/app` and writes
+  a `sextile` command into `~/.local/bin`, so you start it with `sextile` from
+  anywhere. It stops before changing anything if a different file is already
+  that command, prints the line to add to your PATH when `~/.local/bin` is not on
+  it, edits no startup file, and warns instead of stopping when Docker is
+  missing. A clone an earlier install left in `~/sextile` is no longer used or
+  updated. The script says so and leaves it for you to remove.
+- On the first run the launcher proposes `~/.local/share/sextile/charts` as the
+  charts folder, then `Sextile` in your documents folder. It no longer offers
+  `~/.charts` or `~/Documents/charts`. A folder you already chose is remembered.
+- Popups are as large as their content and no larger, and wide symbols such as
+  ① and ● keep a space of their own colour, so they never run into the next
+  character in terminals that draw them wider.
+
 ## [0.1.1] - 2026-10-25
 
 A chart saved with `Ctrl+S` reopens under the city it was saved in. In 0.1.0 a

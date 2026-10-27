@@ -78,7 +78,7 @@ func readableSchema(path string) (int, error) {
 func checkSchema(v int) error {
 	switch {
 	case v > SchemaVersion:
-		return fmt.Errorf("written by a newer Sextile (generation %d; this build reads %d)", v, SchemaVersion)
+		return fmt.Errorf("written by a newer Sextile (generation %d, this build reads %d)", v, SchemaVersion)
 	case v < unversionedSchema:
 		return fmt.Errorf("unreadable generation %d", v)
 	default:

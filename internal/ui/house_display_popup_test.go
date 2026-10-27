@@ -334,9 +334,10 @@ func TestHouseDisplayPopup(t *testing.T) {
 		if !strings.Contains(joined, "----------------") {
 			t.Errorf("accessible popup has no ASCII divider:\n%s", joined)
 		}
-		uni := displayOpen(t, Config{Color: ColorNever}, 132, 40)
-		ujoined := strings.Join(popupBody(t, uni), "\n")
-		if !strings.Contains(ujoined, "(•) Angularity at a glance") || !strings.Contains(ujoined, "┄┄┄┄") {
+		forceColor(t)
+		uni := displayOpen(t, Config{Color: ColorAlways}, 132, 40)
+		ujoined := ansi.Strip(strings.Join(popupBody(t, uni), "\n"))
+		if !strings.Contains(ujoined, "(•) Angularity at a glance") || !strings.Contains(ujoined, "┈┈┈┈") {
 			t.Errorf("unicode popup lacks its mark or dotted line:\n%s", ujoined)
 		}
 	})
@@ -449,26 +450,30 @@ func TestHouseDisplayKeys(t *testing.T) {
 	})
 }
 
-// The popup is as tall as its fullest form needs and no taller, and it keeps
-// that height whichever form the cursor is on.
+// The popup is as tall as its fullest form needs, decided when it opens, and
+// keeps that size whichever form the cursor is on (operator, 2026-10-27: a
+// popup's size never changes while it is open). A form with less to say leaves
+// rows blank.
 func TestHouseDisplayPopupHeightIsFixed(t *testing.T) {
 	for _, size := range [][2]int{{132, 40}, {80, 24}} {
-		heights := map[int]bool{}
+		heights, widths := map[int]bool{}, map[int]bool{}
 		for i := range houseForms {
 			list := newRadioList(len(houseForms), 0)
 			list.cursor = i
 			frame := renderHouseDisplay(houseDisplayState{list: list}, Config{}, size[0], size[1])
-			heights[len(strings.Split(frame, "\n"))] = true
+			lines := strings.Split(frame, "\n")
+			heights[len(lines)], widths[ansi.StringWidth(lines[0])] = true, true
 		}
-		if len(heights) != 1 {
-			t.Errorf("%dx%d: the popup took %d different heights across the four forms: %v", size[0], size[1], len(heights), heights)
+		if len(heights) != 1 || len(widths) != 1 {
+			t.Errorf("%dx%d: the popup took %d heights and %d widths across the four forms: %v %v", size[0], size[1], len(heights), len(widths), heights, widths)
 		}
 	}
 	// At 132x40 nothing limits it but its content: the box is the content
 	// (four forms, dotted line, fullest description) plus its own chrome.
+	fit := houseDisplayFit(Config{})
 	list := newRadioList(len(houseForms), 0)
 	frame := renderHouseDisplay(houseDisplayState{list: list}, Config{}, 132, 40)
-	want := houseDisplayRows(60-2-4) + 1 + 2 + 1 // top edge, padding, bottom edge
+	want := fit.Rows + 1 + 2 + 1 // top edge, padding, bottom edge
 	if got := len(strings.Split(frame, "\n")); got != want {
 		t.Errorf("132x40: the popup is %d lines, want %d (its content and chrome)", got, want)
 	}

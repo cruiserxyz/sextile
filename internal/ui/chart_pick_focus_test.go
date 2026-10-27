@@ -73,17 +73,17 @@ func TestChartPickFocusesAnchoredSlot(t *testing.T) {
 			t.Errorf("Ctrl+S on the anchored slot wrote %v", afterSave.logPanelLines()[len(got.logPanelLines()):])
 		}
 
-		if !got.slots.SlotSelected(0) || !got.slots.SlotSelected(1) {
-			t.Fatal("precondition: a successful pick selects the anchored and floating slots")
+		if got.slots.SlotSelected(0) || got.slots.SlotSelected(1) {
+			t.Fatal("precondition: a successful pick selects nothing")
 		}
 		got.focused = PanelChart
 		updated, _ = got.Update(tea.KeyMsg{Type: tea.KeySpace})
 		afterSpace := updated.(Model)
-		if afterSpace.slots.SlotSelected(0) {
-			t.Error("Space did not toggle selection on the focused anchored slot")
+		if !afterSpace.slots.SlotSelected(0) {
+			t.Error("Space did not select the focused anchored slot")
 		}
-		if !afterSpace.slots.SlotSelected(1) {
-			t.Error("Space toggled the floating slot instead of leaving it selected")
+		if afterSpace.slots.SlotSelected(1) {
+			t.Error("Space selected the floating slot instead of the focused anchored slot")
 		}
 	})
 }

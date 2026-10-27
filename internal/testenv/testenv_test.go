@@ -74,3 +74,30 @@ func TestRunIsolatesTheChartLibraryOverrides(t *testing.T) {
 	}
 	_ = filepath.Join // keep the import honest if the assertions above change
 }
+
+// The launcher's contract variables steer which folder's backups and session a
+// run uses (SEXTILE_CHARTS_HOST_PATH, under SEXTILE_LAUNCH) and what path the
+// operator is shown (SEXTILE_BACKUP_HOST_PATH). A test run from inside a
+// launched shell must not inherit them, or a backup test would key on the
+// operator's real charts folder.
+func TestRunClearsTheLauncherContract(t *testing.T) {
+	for k, v := range map[string]string{
+		"SEXTILE_LAUNCH":           "docker sextile:0.1.2",
+		"SEXTILE_CHARTS_HOST_PATH": "/operator/real/client-charts",
+		"SEXTILE_BACKUP_HOST_PATH": "/operator/home/.local/share/sextile/backup",
+	} {
+		t.Setenv(k, v)
+	}
+	inside := map[string]string{}
+	Run(func() int {
+		for _, k := range []string{"SEXTILE_LAUNCH", "SEXTILE_CHARTS_HOST_PATH", "SEXTILE_BACKUP_HOST_PATH"} {
+			inside[k] = os.Getenv(k)
+		}
+		return 0
+	})
+	for k, v := range inside {
+		if v != "" {
+			t.Errorf("%s = %q inside the sandbox, want it cleared", k, v)
+		}
+	}
+}

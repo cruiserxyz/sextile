@@ -95,6 +95,11 @@ const (
 
 	// BindingHouseDisplay is `<leader> a`: the House display popup.
 	BindingHouseDisplay
+
+	// BindingSessions is `<leader> o`: the Sessions list. BindingSessionDelete
+	// is Ctrl+D there: move the highlighted session to the trash.
+	BindingSessions
+	BindingSessionDelete
 )
 
 // BindingNone is what matchBinding returns for a key no entry matches.
@@ -247,6 +252,15 @@ func (k keyMap) mainBindings() []BindingEntry {
 	}
 }
 
+// leaderOnlyBindings are actions the leader alone reaches whose last key is a
+// main-screen key: `<leader> o` opens the Sessions list, and bare o steps the
+// month. They claim no key of the main table -- the leader resolver dispatches
+// the sequence -- and the Keys popup's leader section reads their description
+// here.
+func (k keyMap) leaderOnlyBindings() []BindingEntry {
+	return []BindingEntry{{ID: BindingSessions, Binding: key.NewBinding(key.WithHelp("o", "Sessions")), BarKey: "o"}}
+}
+
 // detailsScrolls is where the page keys act: Details is on screen and its
 // active tab holds more than it can show.
 func (m Model) detailsScrolls() bool {
@@ -377,6 +391,8 @@ func (m Model) popupRows() int {
 		return len(m.atlas.matches)
 	case ownerOpenChart:
 		return len(m.picker.matches)
+	case ownerSessions:
+		return len(m.sessions.rows) + 1
 	case ownerBodies:
 		return len(m.bodyModal.matches)
 	case ownerAspects:
@@ -439,12 +455,32 @@ func openChartBindings() []BindingEntry {
 	}, pageEntries()...)
 }
 
+// sessionsBindings is the Sessions list's table: the chart list's moves. Enter
+// saves on the first row and opens a session on the others; Ctrl+R renames and
+// Ctrl+D trashes the highlighted session. Nothing in it types.
+func sessionsBindings() []BindingEntry {
+	return append([]BindingEntry{
+		listUp().shownWhen(Model.popupMoves), listDown(),
+		confirm("Save as").shownWhen(Model.sessionsOnSaveRow),
+		confirm("Open").shownWhen(Model.sessionsCanOpen),
+		{ID: BindingRename, Binding: key.NewBinding(key.WithKeys("ctrl+r")), Action: "Rename", BarKey: "⌃r", Bar: true, When: Model.sessionsOnFreeRow},
+		{ID: BindingSessionDelete, Binding: key.NewBinding(key.WithKeys("ctrl+d")), Action: "Delete", BarKey: "⌃d", Bar: true, When: Model.sessionsCanTrash},
+		closeOn("Close"),
+	}, pageEntries()...)
+}
+
+// sessionNameBindings is the Sessions name field's table: Enter saves (or
+// renames), Esc goes back to the list.
+func sessionNameBindings() []BindingEntry {
+	return []BindingEntry{confirm("Save").shownWhen(Model.sessionNameTyped), closeOn("Back")}
+}
+
 // chartTitleBindings is the Chart title popup's table. Esc goes back to the
 // chart list; Enter with an empty title opens the chart without one.
 func chartTitleBindings() []BindingEntry {
 	return []BindingEntry{
 		{ID: BindingNextField, Binding: key.NewBinding(key.WithKeys("tab")), Action: "Next field", BarKey: "tab", Bar: true},
-		{ID: BindingPrevField, Binding: key.NewBinding(key.WithKeys("shift+tab")), BarKey: "⇧tab"},
+		{ID: BindingPrevField, Binding: key.NewBinding(key.WithKeys("shift+tab")), BarKey: "⇧ tab"},
 		confirm("Save title"),
 		closeOn("Back"),
 	}
@@ -634,6 +670,8 @@ const (
 	ownerConsole
 	ownerDetails
 	ownerDisplay
+	ownerSessions
+	ownerSessionName
 )
 
 // currentOwner names whatever has the keyboard. The key dispatch and the key
@@ -655,6 +693,10 @@ func (m Model) currentOwner() owner {
 		return ownerZodiac
 	case startupDisplayOpen:
 		return ownerDisplay
+	case startupSessionsOpen:
+		return ownerSessions
+	case startupSessionNameOpen:
+		return ownerSessionName
 	case startupSaveOpen:
 		return ownerSaveChart
 	case startupTitleOpen:
@@ -695,6 +737,10 @@ func (m Model) ownerBindings(o owner) []BindingEntry {
 		return zodiacBindings()
 	case ownerDisplay:
 		return displayBindings()
+	case ownerSessions:
+		return sessionsBindings()
+	case ownerSessionName:
+		return sessionNameBindings()
 	case ownerHelp:
 		return helpBindings()
 	case ownerConsole:
@@ -765,7 +811,7 @@ func defaultKeys() keyMap {
 		),
 		PrevView: key.NewBinding(
 			key.WithKeys("shift+tab", "left"),
-			key.WithHelp("⇧tab/←", "Previous panel"),
+			key.WithHelp("⇧ tab/←", "Previous panel"),
 		),
 		// The ring digits. `0` is Details' digit: Details is not in the focus
 		// ring, so `0` cycles its tabs from anywhere instead of focusing it

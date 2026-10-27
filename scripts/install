@@ -1,16 +1,21 @@
 #!/bin/sh
-# scripts/install: put Sextile v0.1.1 in ~/sextile, then say how to start it.
-#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.1/scripts/install | sh
-# It checks that git and a running Docker exist, then clones the v0.1.1 tag
-# (depth 1) of github.com/cruiserxyz/sextile into $SEXTILE_DIR (default
-# ~/sextile). It never overwrites a folder, never uses sudo, never reads
-# its standard input and never starts Sextile; ./sextile does the rest.
+# scripts/install: put Sextile v0.1.2 under ~/.local/share/sextile/app, write
+# the sextile command into ~/.local/bin, then say how to start it.
+#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.2/scripts/install | sh
+# It checks that git exists, then clones the v0.1.2 tag (depth 1) of
+# github.com/cruiserxyz/sextile into $SEXTILE_DIR (default
+# ${XDG_DATA_HOME:-~/.local/share}/sextile/app) and writes a three-line
+# ~/.local/bin/sextile that runs the clone's launcher. Docker is not needed to
+# install, only to run; a missing Docker is a warning. It never overwrites a
+# folder or a command it did not write, never edits a shell startup file,
+# never uses sudo, never reads its standard input and never starts Sextile.
 
 set -eu
 
-TAG=v0.1.1
+TAG=v0.1.2
 REPO_URL=https://github.com/cruiserxyz/sextile.git
 GET_DOCKER=https://docs.docker.com/get-docker/
+MARKER='# Sextile command, written by its install script'
 
 # A refusal: the reason on stderr, nothing written, exit 2.
 die() {
@@ -22,6 +27,13 @@ die() {
 fail() {
   printf '%s\n' "$*" >&2
   exit 1
+}
+
+# docker_warn WHY: Docker is the usual way to run Sextile but not a reason to
+# refuse the install; --no-docker and doctor are the other ways in.
+docker_warn() {
+  printf '%s\n%s\n' "warning: $1" \
+    "The Docker route needs Docker (install it from $GET_DOCKER). sextile --no-docker needs go and astrolog, and sextile doctor says what is missing. Installing anyway." >&2
 }
 
 # quote PATH: PATH as one word a shell reads back unchanged.
@@ -43,26 +55,67 @@ quote() {
   printf "'%s'" "$out"
 }
 
+# is_our_clone DIR: DIR is a git clone of this repository.
+is_our_clone() {
+  origin=
+  if [ -e "$1/.git" ]; then
+    origin=$(git -C "$1" config --get remote.origin.url </dev/null 2>/dev/null) || origin=
+  fi
+  case $origin in
+    "$REPO_URL" | "${REPO_URL%.git}") return 0 ;;
+  esac
+  return 1
+}
+
 # The whole script is this one function, called on the last line, so a
 # download cut short can run nothing.
 main() {
-  [ $# -eq 0 ] || die "scripts/install takes no arguments; set SEXTILE_DIR to choose the folder."
+  [ $# -eq 0 ] || die "scripts/install takes no arguments. Set SEXTILE_DIR to choose the folder."
 
   # shellcheck disable=SC2217 # uname reads no stdin, but this script never lets a command read the piped installer
   system=$(uname -s </dev/null)
   case $system in
     Linux | Darwin) ;;
-    *) die "Docker is the install, on Linux or macOS, and on Windows from a WSL terminal; this system reports $system." ;;
+    *) die "Docker is the install, on Linux or macOS, and on Windows from a WSL terminal. This system reports $system." ;;
   esac
 
-  command -v git >/dev/null 2>&1 || die "git was not found on PATH; install git and run this again."
-  command -v docker >/dev/null 2>&1 || die "Docker was not found on PATH; install it from $GET_DOCKER and run this again."
-  docker info </dev/null >/dev/null 2>&1 || die "Docker is installed but its daemon did not answer (docker info failed); start Docker and run this again."
+  command -v git >/dev/null 2>&1 || die "git was not found on PATH. Install git and run this again."
+  case ${HOME:-} in
+    /*) ;;
+    *) die "HOME is not set to an absolute path. Set it, since the sextile command goes into \$HOME/.local/bin." ;;
+  esac
+
+  if ! command -v docker >/dev/null 2>&1; then
+    docker_warn "Docker was not found on PATH."
+  elif ! docker info </dev/null >/dev/null 2>&1; then
+    docker_warn "Docker is installed but its daemon did not answer (docker info failed)."
+  fi
 
   dir=${SEXTILE_DIR:-}
   if [ -z "$dir" ]; then
-    [ -n "${HOME:-}" ] || die "HOME is not set; set SEXTILE_DIR to the folder to install into."
-    dir=$HOME/sextile
+    case ${XDG_DATA_HOME:-} in
+      /*) data=$XDG_DATA_HOME ;;
+      *) data=$HOME/.local/share ;;
+    esac
+    dir=$data/sextile/app
+  else
+    case $dir in
+      /*) ;;
+      *) dir=$PWD/$dir ;;
+    esac
+  fi
+
+  # The command goes where a user's own commands go. One that this script did
+  # not write is never replaced, and that is settled before anything is made.
+  bindir=$HOME/.local/bin
+  wrapper=$bindir/sextile
+  if [ -e "$wrapper" ] || [ -L "$wrapper" ]; then
+    second=
+    if [ -f "$wrapper" ] && [ ! -L "$wrapper" ]; then
+      { IFS= read -r _ && IFS= read -r second; } <"$wrapper" || second=
+    fi
+    [ "$second" = "$MARKER" ] ||
+      die "$wrapper already exists and was not written by this script. It was left untouched and nothing was installed. Move it away and run this again."
   fi
 
   # git must never ask a question, and nothing it runs may read our stdin.
@@ -70,38 +123,69 @@ main() {
   export GIT_TERMINAL_PROMPT
 
   if [ -e "$dir" ]; then
-    origin=
-    if [ -e "$dir/.git" ]; then
-      origin=$(git -C "$dir" config --get remote.origin.url </dev/null 2>/dev/null) || origin=
-    fi
-    case $origin in
-      "$REPO_URL" | "${REPO_URL%.git}") ;;
-      *) die "$dir already exists and is not a clone of ${REPO_URL%.git}; it was left untouched. Set SEXTILE_DIR to another folder." ;;
-    esac
+    is_our_clone "$dir" ||
+      die "$dir already exists and is not a clone of ${REPO_URL%.git}. It was left untouched. Set SEXTILE_DIR to another folder."
     printf 'Updating the clone in %s to %s ...\n' "$dir" "$TAG"
     git -C "$dir" fetch --quiet origin "refs/tags/$TAG:refs/tags/$TAG" </dev/null ||
-      fail "git could not fetch $TAG into $dir; your files were not changed."
+      fail "git could not fetch $TAG into $dir. Your files were not changed."
     git -C "$dir" checkout --quiet --detach "refs/tags/$TAG" </dev/null ||
-      fail "git could not check out $TAG in $dir (local changes in the way?); nothing was deleted."
+      fail "git could not check out $TAG in $dir (local changes in the way?). Nothing was deleted."
   else
+    parent=${dir%/*}
+    [ -n "$parent" ] || parent=/
+    mkdir -p -- "$parent" </dev/null || fail "cannot create the folder $parent. Nothing was installed."
     printf 'Cloning Sextile %s into %s ...\n' "$TAG" "$dir"
     git -c advice.detachedHead=false clone --branch "$TAG" --depth 1 -- "$REPO_URL" "$dir" </dev/null ||
-      fail "git could not clone $REPO_URL at $TAG; nothing was installed."
+      fail "git could not clone $REPO_URL at $TAG. Nothing was installed."
   fi
 
   got=$(git -C "$dir" describe --tags --exact-match </dev/null 2>/dev/null) || got=
-  [ "$got" = "$TAG" ] || fail "$dir is not at $TAG after the clone (git describe says '$got'); do not use it."
+  [ "$got" = "$TAG" ] || fail "$dir is not at $TAG after the clone (git describe says '$got'). Do not use it."
 
-  if [ -n "${HOME:-}" ] && [ "$dir" = "$HOME/sextile" ]; then
+  # The command: written beside itself and moved into place, so a sextile that
+  # is running never reads half a file.
+  mkdir -p -- "$bindir" </dev/null || fail "cannot create the folder $bindir. The clone is in $dir but the sextile command was not written."
+  tmp=$bindir/.sextile.$$
+  # shellcheck disable=SC2217 # chmod and mv read no stdin, but this script never lets a command read the piped installer
+  {
+    printf '#!/bin/sh\n%s\nexec %s "$@"\n' "$MARKER" "$(quote "$dir/sextile")" >"$tmp" &&
+      chmod 755 "$tmp" </dev/null &&
+      mv -f -- "$tmp" "$wrapper" </dev/null
+  } || fail "cannot write $wrapper. The clone is in $dir but the sextile command was not written."
+
+  if [ "$dir" = "$HOME/.local/share/sextile/app" ]; then
     # shellcheck disable=SC2088 # a display string for the operator, never expanded
-    shown='~/sextile'
+    shown='~/.local/share/sextile/app'
   else
     shown=$(quote "$dir")
   fi
   printf '\nSextile %s is in %s.\n' "$TAG" "$shown"
-  printf 'To see whether this machine is ready, run ./sextile doctor in that folder.\n'
+  printf 'The command is ~/.local/bin/sextile.\n'
+
+  if [ -z "${SEXTILE_DIR:-}" ] && is_our_clone "$HOME/sextile"; then
+    printf 'Note: the older clone in ~/sextile is no longer used. It was left as it is, and you can remove it by hand.\n'
+  fi
+
+  case ":${PATH:-}:" in
+    *":$bindir:"* | *":$bindir/:"*) ;;
+    *)
+      # shellcheck disable=SC2088 # display strings for the operator, never expanded
+      case ${SHELL:-} in
+        */zsh) rc='~/.zshrc' ;;
+        */bash) rc='~/.bashrc' ;;
+        *) rc='~/.profile' ;;
+      esac
+      printf '\n~/.local/bin is not on your PATH yet. To add it, put this line in %s:\n' "$rc"
+      # shellcheck disable=SC2016 # the line is printed for the user to paste, $HOME unexpanded
+      printf '  export PATH="$HOME/.local/bin:$PATH"\n'
+      printf 'Then open a new terminal. ~/.local/bin/sextile works right now.\n\n'
+      ;;
+  esac
+
+  printf 'To see whether this machine is ready, run:\n'
+  printf 'sextile doctor\n'
   printf 'To start Sextile, run:\n'
-  printf 'cd %s && ./sextile\n' "$shown"
+  printf 'sextile\n'
 }
 
 main "$@"

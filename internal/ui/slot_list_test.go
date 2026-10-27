@@ -192,6 +192,7 @@ func TestPickOfAnOpenChartJumpsToIt(t *testing.T) {
 	t.Run("replaced: the same file now holding a different person is one row with the file's content", func(t *testing.T) {
 		m := listModel(t, 0, 0)
 		add(m, "first-person", "First", file("reused.as"), when)
+		m.slots.SetSlotSelected(0, true) // adding selects nothing: the operator selected this row
 		m.slots.ToggleBodySelection(0, aspect.Mars)
 		got := pickAt(m, store.NamedChart{ID: "second-person", Name: "Second", Place: fixtureOneP, Source: file("reused.as")}, when.Add(30*24*time.Hour))
 		slot := got.slots.All()[0]

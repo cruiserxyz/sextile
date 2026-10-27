@@ -140,64 +140,121 @@ type formView struct {
 	// is elided by design (save_modal.go destLine).
 	WrapInfo bool
 
-	// Refusal, when non-empty, is drawn after a blank line beneath Info. The
-	// form stays open with it; a refusal is the caller's next instruction to
-	// the operator, not a dialog of its own.
+	// Alt are the other blocks of text this popup shows in place of Info in
+	// another step (the title form's second step): the box is sized for the
+	// fullest of them and Info, once, so it does not change between steps.
+	Alt [][]string
+
+	// Refusal, when non-empty, is drawn in the box's message zone, which the
+	// form keeps from the moment it opens. The form stays open with it; a
+	// refusal is the caller's next instruction to the operator, not a dialog
+	// of its own, and it never makes the box bigger: one longer than its row
+	// wraps and takes rows from the foot of the info above it.
 	Refusal string
 }
 
-// renderForm draws f inside modalBox's chrome. The box's outer size depends
-// only on the terminal, the resting footer and the number of fields -- never on
-// values, placeholders, the refusal or which field is focused.
+// modalRefusalRoom is the cells the message zone has: a sentence of
+// the kind the forms say ("That name has no letters or digits to save under.")
+// fits, and the form is that wide from the moment it opens (chosen 2026-10-27).
+const modalRefusalRoom = modalProseWidth
+
+// renderForm draws f inside modalBox's chrome. The box is decided when the form
+// opens and holds for the whole opening (operator, 2026-10-27): as wide as its
+// widest line -- the fields (each asks for its label and modalFieldRoom cells to
+// type in), the info wrapped at modalProseWidth when the caller says to wrap it,
+// and the message zone -- and as tall as its info (the fullest block, if the
+// form has steps) and the zone, a blank row and the row where a refusal appears.
+// It does not change size with the values typed, the placeholders, which field is
+// focused or a refusal appearing.
+//
+// An info line that is NOT wrapped echoes what was typed (the save prompt's
+// file name): it is cut to the box and never sizes it, or the box would widen
+// with every letter.
 func renderForm(f form, v formView, cfg Config, termW, termH int) string {
-	inputs := make([]func(width int) string, len(f.fields))
+	inputs := make([]modalInput, len(f.fields))
 	for i := range f.fields {
 		fld, focused := f.fields[i], i == f.focus
-		inputs[i] = func(width int) string { return fieldLine(fld, focused, cfg, width) }
+		inputs[i] = modalInput{
+			Width:  ansi.StringWidth(fld.label) + modalFieldRoom + 1,
+			Render: func(width int) string { return fieldLine(fld, focused, cfg, width) },
+		}
 	}
-	return renderModalBox(modalBox{
-		Title:  v.Title,
-		Inputs: inputs,
-	}, cfg, termW, termH, func(width, height int) string {
-		lines := make([]string, 0, height)
-		for _, l := range v.Info {
-			if v.WrapInfo {
-				for _, w := range wrapAtSpace(l, width) {
-					lines = append(lines, cutRight(w, width, cfg))
-				}
+
+	// The lines are laid out before the box is, at a width that does not
+	// depend on it: the box takes its width from them.
+	wrapAt := min(modalProseWidth, modalContentCap(termW))
+	fit := modalFit{Width: modalRefusalRoom}
+	layout := func(info []string) []string {
+		var lines []string
+		for _, l := range info {
+			if !v.WrapInfo {
+				lines = append(lines, l)
 				continue
 			}
-			lines = append(lines, cutRight(l, width, cfg))
-		}
-		if v.Refusal != "" {
-			lines = append(lines, "")
-			for _, w := range wrapAtSpace(v.Refusal, width) {
-				lines = append(lines, cutRight(w, width, cfg))
+			for _, w := range wrapAtSpace(l, wrapAt) {
+				lines = append(lines, w)
+				fit.Width = max(fit.Width, ansi.StringWidth(w))
 			}
 		}
-		for len(lines) < height {
-			lines = append(lines, "")
+		return lines
+	}
+	lines := layout(v.Info)
+	fit.Rows = len(lines)
+	for _, alt := range v.Alt {
+		fit.Rows = max(fit.Rows, len(layout(alt)))
+	}
+
+	return renderModalBox(modalBox{
+		Title:   v.Title,
+		Inputs:  inputs,
+		Fit:     fit,
+		Zone:    true,
+		Message: v.Refusal,
+	}, cfg, termW, termH, func(width, height int) string {
+		out := make([]string, 0, height)
+		for _, l := range lines {
+			out = append(out, cutRight(l, width, cfg))
 		}
-		return strings.Join(lines[:height], "\n")
+		for len(out) < height {
+			out = append(out, "")
+		}
+		return strings.Join(out[:height], "\n")
 	})
 }
 
-// wrapAtSpace splits s into lines no wider than width, breaking at spaces.
-// A single word wider than width stays one line, for the caller to cut.
+// wrapAtSpace splits s into lines no wider than width, breaking at spaces. A
+// single word wider than width -- a backup folder's absolute path -- is broken
+// after its last slash that fits, or at the width when it has none, so the
+// whole path stays on screen instead of being cut.
 func wrapAtSpace(s string, width int) []string {
 	var out []string
-	for ansi.StringWidth(s) > width {
-		cut := -1
+	for width > 0 && ansi.StringWidth(s) > width {
+		cut, slash, hard := -1, -1, 0
 		for i, r := range s {
-			if r == ' ' && ansi.StringWidth(s[:i]) <= width {
+			if ansi.StringWidth(s[:i]) > width {
+				break
+			}
+			hard = i
+			if r == ' ' {
 				cut = i
 			}
+			if r == '/' && i > 0 && ansi.StringWidth(s[:i+1]) <= width {
+				slash = i + 1
+			}
 		}
-		if cut <= 0 {
-			break
+		switch {
+		case cut > 0:
+			out = append(out, s[:cut])
+			s = s[cut+1:]
+		case slash > 0:
+			out = append(out, s[:slash])
+			s = s[slash:]
+		case hard > 0:
+			out = append(out, s[:hard])
+			s = s[hard:]
+		default:
+			return append(out, s)
 		}
-		out = append(out, s[:cut])
-		s = s[cut+1:]
 	}
 	return append(out, s)
 }

@@ -99,7 +99,7 @@ func (m Model) applyHouseDisplay(c store.HouseDisplayConfig) Model {
 		return m
 	}
 	m.houseDisplay = houseAngularity
-	return m.logNote("preferences", "house_display %q ignored: expected %s; angularity stands", c.Value, houseFormWords())
+	return m.logNote("preferences", "house_display %q ignored: expected %s. Angularity stands", c.Value, houseFormWords())
 }
 
 // houseFormWords lists the words a preferences file may carry, for the Log note

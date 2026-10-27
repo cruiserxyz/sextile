@@ -40,13 +40,13 @@ func tempHolding(t *testing.T, dir, body string) string {
 
 // backupOf is where the backup of the chart at path is kept.
 func backupOf(path string) string {
-	return filepath.Join(filepath.Dir(path), ChartBackupRel(filepath.Base(path)))
+	return filepath.Join(BackupDir(filepath.Dir(path)), filepath.Base(path))
 }
 
 // backupFolderEntries are the names inside dir's backup folder.
 func backupFolderEntries(t *testing.T, dir string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(dir, ChartBackupFolderRel()))
+	entries, err := os.ReadDir(BackupDir(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func onlyEntries(t *testing.T, dir string, want ...string) {
 	}
 }
 
-// C3.9: the first original is kept as .sextile/backup/<file>, with an
+// C3.9: the first original is kept as BackupDir(<charts>)/<file>, with an
 // exclusive create at mode 0600, and a later write never replaces it. A short
 // write leaves no backup and the chart unchanged.
 func TestChartBackupKeepsTheFirst(t *testing.T) {
@@ -107,7 +107,7 @@ func TestChartBackupKeepsTheFirst(t *testing.T) {
 		if err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("backup mode = %v (%v), want 0600", fi.Mode().Perm(), err)
 		}
-		onlyEntries(t, dir, ".sextile", "Equinox-2026-09.as")
+		onlyEntries(t, dir, "Equinox-2026-09.as")
 		if got := backupFolderEntries(t, dir); strings.Join(got, ",") != "Equinox-2026-09.as" {
 			t.Errorf("the backup folder holds %q, want only Equinox-2026-09.as", got)
 		}
@@ -138,7 +138,7 @@ func TestChartBackupKeepsTheFirst(t *testing.T) {
 		t.Run("the backup is a "+kind, func(t *testing.T) {
 			dir := t.TempDir()
 			path := seedChart(t, dir, "Equinox-2026-09.as", retitleBefore)
-			if err := os.MkdirAll(filepath.Dir(backupOf(path)), 0o700); err != nil {
+			if _, err := backupFolder(dir); err != nil {
 				t.Fatal(err)
 			}
 			if kind == "directory" {
@@ -168,7 +168,7 @@ func TestChartBackupKeepsTheFirst(t *testing.T) {
 		tmp := tempHolding(t, dir, retitleFirst)
 		ReplaceChartWithBackup(dir, "Equinox-2026-09.as", tmp, []byte(retitleBefore))
 		os.Remove(tmp)
-		onlyEntries(t, dir, ".sextile", "Equinox-2026-09.as")
+		onlyEntries(t, dir, "Equinox-2026-09.as")
 		if got := backupFolderEntries(t, dir); len(got) != 0 {
 			t.Errorf("a short write left %q in the backup folder", got)
 		}
@@ -262,7 +262,7 @@ func TestChartReplaceChecksLateEdits(t *testing.T) {
 	// keeps the version it actually overwrites. (The temp is the caller's to
 	// remove, as lookup does on every path.)
 	os.Remove(tmp)
-	onlyEntries(t, dir, ".sextile", "Equinox-2026-09.as")
+	onlyEntries(t, dir, "Equinox-2026-09.as")
 	if got := backupFolderEntries(t, dir); len(got) != 0 {
 		t.Errorf("the refused attempt left %q in the backup folder", got)
 	}
@@ -302,16 +302,16 @@ func TestChartBackupState(t *testing.T) {
 	if held, err := ChartBackupState(dir, "Equinox-2026-09.as"); held || err != nil {
 		t.Errorf("absent: held %v, err %v", held, err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, ChartBackupFolderRel()), 0o700); err != nil {
+	if _, err := backupFolder(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ChartBackupRel("Equinox-2026-09.as")), []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(BackupDir(dir), "Equinox-2026-09.as"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if held, err := ChartBackupState(dir, "Equinox-2026-09.as"); !held || err != nil {
 		t.Errorf("a file: held %v, err %v", held, err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, ChartBackupRel("G.as")), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(BackupDir(dir), "G.as"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ChartBackupState(dir, "G.as"); err == nil {
@@ -322,42 +322,48 @@ func TestChartBackupState(t *testing.T) {
 	}
 }
 
-// A `.sextile` or `.sextile/backup` that is a link must never be trusted,
+// A folder on the way to the backup that is a link must never be trusted,
 // even when the link's target already holds a regular file under the chart's
 // name: the retitle refuses, and neither the chart nor the file the link
-// leads to changes.
+// leads to changes. Each level below the XDG data base is tried:
+// sextile, sextile/backup and sextile/backup/<FolderID>.
 func TestBackupParentLinksAreRefused(t *testing.T) {
-	for _, linked := range []string{"state", "backup"} {
+	for _, linked := range []string{"sextile", "backup", "folder"} {
 		t.Run(linked+" is a link", func(t *testing.T) {
+			data := t.TempDir()
+			t.Setenv("XDG_DATA_HOME", data)
 			dir := t.TempDir()
 			path := seedChart(t, dir, "Equinox-2026-09.as", retitleBefore)
 			outside := t.TempDir()
-			external := filepath.Join(outside, "Equinox-2026-09.as")
+			id := FolderID(dir)
+			// Below the link, the outside folder mirrors the layout, so the
+			// chart's name resolves to a real file through it.
+			var link, inside string
+			switch linked {
+			case "sextile":
+				link, inside = filepath.Join(data, "sextile"), filepath.Join(outside, "backup", id)
+			case "backup":
+				if err := os.Mkdir(filepath.Join(data, "sextile"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				link, inside = filepath.Join(data, "sextile", "backup"), filepath.Join(outside, id)
+			case "folder":
+				if err := os.MkdirAll(filepath.Join(data, "sextile", "backup"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				link, inside = filepath.Join(data, "sextile", "backup", id), outside
+			}
+			if err := os.MkdirAll(inside, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			external := filepath.Join(inside, "Equinox-2026-09.as")
 			if err := os.WriteFile(external, []byte("somebody else's file\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			switch linked {
-			case "state":
-				// <dir>/.sextile -> outside, which holds backup/Equinox-2026-09.as
-				if err := os.MkdirAll(filepath.Join(outside, "backup"), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				external = filepath.Join(outside, "backup", "Equinox-2026-09.as")
-				if err := os.WriteFile(external, []byte("somebody else's file\n"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(outside, filepath.Join(dir, ".sextile")); err != nil {
-					t.Fatal(err)
-				}
-			case "backup":
-				// <dir>/.sextile/backup -> outside, which holds Equinox-2026-09.as
-				if err := os.Mkdir(filepath.Join(dir, ".sextile"), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(outside, filepath.Join(dir, ".sextile", "backup")); err != nil {
-					t.Fatal(err)
-				}
+			if err := os.Symlink(outside, link); err != nil {
+				t.Fatal(err)
 			}
+			before := treeOf(t, outside)
 			tmp := tempHolding(t, dir, retitleFirst)
 			if _, err := ReplaceChartWithBackup(dir, "Equinox-2026-09.as", tmp, []byte(retitleBefore)); err == nil {
 				t.Fatal("a retitle went ahead through a linked backup folder")
@@ -365,12 +371,33 @@ func TestBackupParentLinksAreRefused(t *testing.T) {
 			if got := readString(t, path); got != retitleBefore {
 				t.Errorf("the chart changed: %q", got)
 			}
-			if got := readString(t, external); got != "somebody else's file\n" {
-				t.Errorf("the file the link leads to changed: %q", got)
+			if got := treeOf(t, outside); got != before {
+				t.Errorf("the folder the link leads to changed:\nbefore %s\nafter  %s", before, got)
 			}
 			if _, err := ChartBackupState(dir, "Equinox-2026-09.as"); err == nil {
 				t.Error("ChartBackupState trusted a backup found through a link")
 			}
 		})
 	}
+}
+
+// treeOf lists every path under root with its mode and content, so a test can
+// see that nothing under it was created, changed or removed.
+func treeOf(t *testing.T, root string) string {
+	t.Helper()
+	var b strings.Builder
+	filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		b.WriteString(rel + " " + fi.Mode().String())
+		if fi.Mode().IsRegular() {
+			c, _ := os.ReadFile(p)
+			b.WriteString(" " + string(c))
+		}
+		b.WriteString("; ")
+		return nil
+	})
+	return b.String()
 }

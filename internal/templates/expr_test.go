@@ -501,9 +501,9 @@ func expressionOutputIsNeutral(t *testing.T) {
 func TestHostileTemplatesNeverPanic(t *testing.T) {
 	deep := func(n int) string { return strings.Repeat("(", n) + `elongation.lon` + strings.Repeat(")", n) }
 	hostile := map[string]struct{ src, want string }{
-		"70000 bytes":       {"{" + strings.Repeat("a", 70000) + "}", "the most is 10000"},
-		"70000 line":        {strings.Repeat(" ", 70000) + "{" + strings.Repeat("a", 70000) + "}", "the most is 10000"},
-		"10001 bytes":       {"{" + strings.Repeat("a", 10001) + "}", "the most is 10000"},
+		"70000 bytes":       {"{" + strings.Repeat("a", 70000) + "}", "The most is 10000"},
+		"70000 line":        {strings.Repeat(" ", 70000) + "{" + strings.Repeat("a", 70000) + "}", "The most is 10000"},
+		"10001 bytes":       {"{" + strings.Repeat("a", 10001) + "}", "The most is 10000"},
 		"33 deep":           {"{" + deep(33) + "}", "32"},
 		"33 not":            {"{" + strings.Repeat("!", 33) + `has(elongation.lon) ? term("east") : term("west")}`, "32"},
 		"33 else chain":     {"{" + strings.Repeat(`has(elongation.lon) ? term("east") : `, 33) + `term("west")}`, "32"},
@@ -520,7 +520,7 @@ func TestHostileTemplatesNeverPanic(t *testing.T) {
 		"body":              {`{venus}`, "body name"},
 		"arithmetic":        {`{elongation.lon + elongation.lon.abs}`, "arithmetic operator"},
 		"rule call":         {`{rule("solar.beams")}`, "rule(...) is not a helper"},
-		"many operators":    {"{" + strings.Repeat("&& || ! ", 2000) + "}", "the most is 10000"},
+		"many operators":    {"{" + strings.Repeat("&& || ! ", 2000) + "}", "The most is 10000"},
 		"nul and non-utf8":  {"{\x00\xff\xfe}", "is not allowed in a slot"},
 		"quotes everywhere": {`{"""""""}`, "string literal"},
 	}

@@ -188,7 +188,7 @@ func TestWheelClosedFrames(t *testing.T) {
 	t.Run("colour is the error red, the words are plain", func(t *testing.T) {
 		m := wheelNoticeModel(t, Config{Color: ColorAlways}, 132, 40, true)
 		s := parseDesignScreen(m.View())
-		text := "Wheel closed; Ctrl+X opens it again"
+		text := "Wheel closed. Ctrl+X opens it again"
 		y := rowWith(s, m.geometry()[PanelLog], text)
 		if y < 0 {
 			t.Fatal("the closing line is not on screen")

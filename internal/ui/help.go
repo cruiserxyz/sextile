@@ -24,8 +24,9 @@ type helpLine struct {
 }
 
 // helpZodiacNote is what the Keys popup says about the ayanamsas the finder
-// offers (the specification C9). It closes the list, and each line is short enough for the narrowest popup (56
-// cells of text at 80 columns): it is never clipped and never needs a scroll.
+// offers (the specification C9). It closes the list, and each line is short enough for any popup at 80 columns
+// (the Help box is as wide as its widest line, this note's, 54 cells): it is
+// never clipped.
 var helpZodiacNote = []string{
 	"Zodiac: Astrolog's ayanamsas are fixed offsets from",
 	"Fagan-Bradley. Each chart is precessed to its own",
@@ -197,12 +198,28 @@ func renderHelpModal(lines []helpLine, cfg Config, st helpState, termW, termH in
 	return renderModalBox(modalBox{
 		Title:   popupTitleKeys,
 		NoInput: true,
+		Fit:     helpFit(lines, cfg),
 		Scroll: func(height int) (viewport, int) {
 			return viewport{Total: len(lines), Visible: height, Offset: window(height)}, 0
 		},
 	}, cfg, termW, termH, func(width, height int) string {
 		return listBlock(helpListRows(lines, window(height), cfg, width, height), width, height)
 	})
+}
+
+// helpFit is the Help list's size: its widest line, binding or note, and every
+// line it has (it scrolls when the terminal gives fewer rows).
+func helpFit(lines []helpLine, cfg Config) modalFit {
+	fit := modalFit{Rows: len(lines)}
+	for _, l := range lines {
+		if l.binding {
+			fit.Width = max(fit.Width, listRowWidth(listRowSpec{Left: l.text}, cfg))
+			continue
+		}
+		fit.Width = max(fit.Width, ansi.StringWidth(l.text))
+	}
+	fit.Width = max(fit.Width, 1)
+	return fit
 }
 
 // helpListRows draws the window of the help list: binding lines through the
@@ -224,7 +241,7 @@ func helpListRows(lines []helpLine, offset int, cfg Config, width, height int) [
 // bindingDesc is the help description registered for an action, so the leader
 // section and the flat list can never describe the same binding differently.
 func bindingDesc(keys keyMap, id BindingID) string {
-	for _, e := range keys.mainBindings() {
+	for _, e := range append(keys.mainBindings(), keys.leaderOnlyBindings()...) {
 		if e.ID == id {
 			return e.Binding.Help().Desc
 		}

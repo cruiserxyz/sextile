@@ -18,28 +18,112 @@ import (
 const (
 	preferencesFile = "preferences.yaml"
 	sessionDirName  = "session"
+	sessionsDirName = "sessions"
 )
 
 // PreferencesPath returns the user-editable preferences file path.
 // XDG-standard: $XDG_CONFIG_HOME/sextile/preferences.yaml
 // Fallback:     $HOME/.config/sextile/preferences.yaml
 func PreferencesPath() string {
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		base = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	return filepath.Join(base, "sextile", preferencesFile)
+	return filepath.Join(configHome(), "sextile", preferencesFile)
 }
 
-// SessionDir returns the directory for machine-managed session state.
-// XDG-standard: $XDG_DATA_HOME/sextile/session/
-// Fallback:     $HOME/.local/share/sextile/session/
+// SessionDir returns the directory for machine-managed session state and the
+// instance lock. It is state, not data: one session shared by every charts
+// folder, kept out of all of them.
+// XDG-standard: $XDG_STATE_HOME/sextile/session/
+// Fallback:     $HOME/.local/state/sextile/session/
 func SessionDir() string {
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		base = filepath.Join(os.Getenv("HOME"), ".local", "share")
+	return filepath.Join(stateHome(), "sextile", sessionDirName)
+}
+
+// stateHome is the XDG state base: $XDG_STATE_HOME, else $HOME/.local/state.
+func stateHome() string {
+	if base := os.Getenv("XDG_STATE_HOME"); base != "" {
+		return base
 	}
-	return filepath.Join(base, "sextile", sessionDirName)
+	return filepath.Join(os.Getenv("HOME"), ".local", "state")
+}
+
+// dataHome is the XDG data base: $XDG_DATA_HOME, else $HOME/.local/share.
+func dataHome() string {
+	if base := os.Getenv("XDG_DATA_HOME"); base != "" {
+		return base
+	}
+	return filepath.Join(os.Getenv("HOME"), ".local", "share")
+}
+
+// configHome is the XDG config base: $XDG_CONFIG_HOME, else $HOME/.config.
+func configHome() string {
+	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
+		return base
+	}
+	return filepath.Join(os.Getenv("HOME"), ".config")
+}
+
+// legacySessionPath is where a hand-run Sextile before 0.1.2 kept its session:
+// $XDG_DATA_HOME/sextile/session/session.yaml. MigrateLegacyState copies it.
+func legacySessionPath() string {
+	return filepath.Join(dataHome(), "sextile", sessionDirName, sessionFile)
+}
+
+// SessionsDir is the folder that holds the named sessions:
+// $XDG_DATA_HOME/sextile/sessions (fallback $HOME/.local/share/sextile/sessions).
+// They are the operator's own saved work, so they are data, not state.
+func SessionsDir() string {
+	return filepath.Join(dataHome(), "sextile", sessionsDirName)
+}
+
+// sessionsHostPath is the host side of SessionsDir, passed by the launcher as
+// SEXTILE_SESSIONS_HOST_PATH. It is only shown, never written to.
+func sessionsHostPath(chartsDir string) (string, bool) {
+	if _, ok := chartsHostPath(chartsDir); !ok {
+		return "", false
+	}
+	return launcherHostPath(chartsDir, "SEXTILE_SESSIONS_HOST_PATH")
+}
+
+// BackupBase is the folder that holds every charts folder's backups:
+// $XDG_DATA_HOME/sextile/backup (fallback $HOME/.local/share/sextile/backup).
+func BackupBase() string {
+	return filepath.Join(dataHome(), "sextile", chartBackupSub)
+}
+
+// dockerChartsDir is where the launcher mounts the charts folder in Docker.
+const dockerChartsDir = "/charts"
+
+// launcherHostPath returns the value of name when, and only when, this copy
+// runs in the launcher's Docker container: SEXTILE_LAUNCH starts with
+// "docker ", the charts folder is exactly /charts, the mount the launcher
+// makes, and the process is inside a container (inContainer), so a native run
+// handed --charts-dir /charts and a hand-set launch value cannot qualify. Then, and only then, the app cannot see the host path itself. Any
+// other launch -- native, hand-run, or a hand-set SEXTILE_LAUNCH on another
+// folder -- ignores the variable and uses the folder's own physical path, so a
+// forged value cannot make one folder pass for another.
+func launcherHostPath(chartsDir, name string) (string, bool) {
+	if !strings.HasPrefix(os.Getenv("SEXTILE_LAUNCH"), "docker ") || filepath.Clean(chartsDir) != dockerChartsDir || !inContainer() {
+		return "", false
+	}
+	v := os.Getenv(name)
+	if v == "" || !filepath.IsAbs(v) {
+		return "", false
+	}
+	return filepath.Clean(v), true
+}
+
+// chartsHostPath is the launcher's `pwd -P` of the charts folder on the host,
+// passed as SEXTILE_CHARTS_HOST_PATH (inside Docker the folder is /charts).
+func chartsHostPath(chartsDir string) (string, bool) {
+	return launcherHostPath(chartsDir, "SEXTILE_CHARTS_HOST_PATH")
+}
+
+// backupHostPath is the host side of BackupBase, passed by the launcher as
+// SEXTILE_BACKUP_HOST_PATH. It is only shown, never written to.
+func backupHostPath(chartsDir string) (string, bool) {
+	if _, ok := chartsHostPath(chartsDir); !ok {
+		return "", false
+	}
+	return launcherHostPath(chartsDir, "SEXTILE_BACKUP_HOST_PATH")
 }
 
 // Location reads the persisted PlaceInfo from preferences.yaml. Returns
@@ -303,7 +387,7 @@ func writePreferencesChecked(path string, merge func(existing string) (string, e
 			return nil
 		}
 	}
-	return fmt.Errorf("store: write: %s kept changing while it was being written; nothing was replaced", path)
+	return fmt.Errorf("store: write: %s kept changing while it was being written. Nothing was replaced", path)
 }
 
 // writePreferencesOnce is one read-merge-replace. changed reports that the file

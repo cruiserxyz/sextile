@@ -9,7 +9,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/location"
@@ -469,8 +468,11 @@ func (b *bodyModalState) toggleGroup(g int) {
 }
 
 // bodyListHeight is the rows the list gets: the box's list area minus the tag
-// bar and the pinned group block with its rule. Navigation needs the same number
-// drawing does, or the cursor lands outside the window that was painted.
+// bar and the pinned group block with its rule (the message zone is on top of
+// what the terminal gives the content, modalBox.Zone). Navigation
+// needs the same number drawing does, or the cursor lands outside the window
+// that was painted. A long note takes more rows while it shows; the drawn window
+// then keeps the cursor on screen by itself (windowAt).
 func bodyListHeight(termH int) int {
 	h := modalListHeight(termH) - tagBarRows - bodyPinnedRows()
 	if h < 1 {
@@ -480,46 +482,65 @@ func bodyListHeight(termH int) int {
 }
 
 // renderBodyModal draws the selector: a flat filtered list with the tag bar
-// pinned beneath it.
+// pinned beneath it, and the message zone below, where the probe's note about a
+// body Astrolog cannot draw appears.
 func renderBodyModal(state bodyModalState, cfg Config, termW, termH int) string {
 	pos := listPosition{Cursor: state.cursor, Total: state.totalRows()}
-	// The probe's status line sits directly below the pinned bar, and takes a
-	// list row only while the cursor is on a body that cannot be drawn. The
-	// window is laid out for the height that remains, so the cursor row and
-	// the bar are never the rows that give way (N5).
-	status, hasStatus := bodyProbeStatus(state)
-	// The note is given a row only if a list row is left beside it: at 80x24
-	// the group block, its rule and the bar leave the list one row, and the
-	// cursor row outranks the note (the specification 7).
-	statusRows := func(height int) int {
-		if hasStatus && height-tagBarRows-bodyPinnedRows() >= 2 {
-			return 1
-		}
-		return 0
-	}
+	status, _ := bodyProbeStatus(state)
 	return renderModalBox(modalBox{
 		Title:    popupTitleBodies,
+		Fit:      bodyFit(state, cfg),
 		Position: &pos,
 		Scroll: func(height int) (viewport, int) {
 			// The tag bar below is pinned and is not part of the track.
-			h := height - tagBarRows - statusRows(height) - bodyPinnedRows()
+			h := height - tagBarRows - bodyPinnedRows()
 			_, offset := state.windowAt(state.cursor-groupRows(), h)
 			return viewport{Total: len(state.matches), Visible: h, Offset: offset}, bodyPinnedRows()
 		},
 		FilterText: state.filterText,
 		Prompt:     "Search bodies: ",
+		Zone:       true,
+		Message:    status,
+		KeepRows:   bodyPinnedRows() + tagBarRows + 1,
 	}, cfg, termW, termH, func(width, height int) string {
-		extra := statusRows(height)
 		below := []string{listNote(bodyTagBar(state, width, cfg), width, cfg)}
-		if extra > 0 {
-			below = append(below, bodyProbeNote(status, width, cfg))
-		}
 		return renderPinnedBody(pinnedBody{
 			Above: append(bodyGroupRows(state, cfg, width), listRule(cfg, width)),
-			Rows:  bodyListRows(state, cfg, width, height-tagBarRows-extra-bodyPinnedRows()),
+			Rows:  bodyListRows(state, cfg, width, height-tagBarRows-bodyPinnedRows()),
 			Below: below,
 		}, width, height)
 	})
+}
+
+// bodyTagNamesRoom is how many cells the tag bar keeps for the chosen names
+// after its legend, so the bar shows a few of them and then the cut mark. The
+// names are a reminder, not the list, and the box is not widened for all of
+// them. Held whether or not any is ticked, so the box does not change width
+// as the first one is.
+const bodyTagNamesRoom = 12
+
+// bodyFit is the selector's size, decided when it opens for everything it could
+// show: wide enough for the legend of the tag bar, the group rows and the widest
+// body of the registry, and for a sentence in the message zone (the probe's
+// answer arrives after the popup is open, and the cursor moves); as tall as the
+// group block, its rule, every body and the tag bar. The zone's rows are the
+// box's (modalBox.Zone). The tag bar's chosen names take the width there is and
+// are cut to it.
+func bodyFit(state bodyModalState, cfg Config) modalFit {
+	fit := modalFit{Width: 1, Rows: bodyPinnedRows() + max(len(state.registry), 1) + tagBarRows}
+	for i := range recipe.ObjectGroups {
+		fit.Width = max(fit.Width, listRowWidth(bodyGroupRow(state, i, false), cfg))
+	}
+	for _, o := range state.registry {
+		fit.Width = max(fit.Width, listRowWidth(bodyRow(state, o, false), cfg))
+	}
+	// The count is as wide as it can get, so the box does not change width as
+	// bodies are ticked.
+	fit.Width = max(fit.Width, ansi.StringWidth(bodyTagLegend(state, cfg, len(state.registry)))+1+bodyTagNamesRoom)
+	// The line for the note about a body Astrolog cannot draw is as wide as a
+	// sentence: which body, and which files it is missing.
+	fit.Width = max(fit.Width, modalProseWidth)
+	return fit
 }
 
 // bodyListRows renders the filtered list.
@@ -555,31 +576,25 @@ const (
 // count of members the filter leaves visible, in the aspect families' form.
 func bodyGroupRows(state bodyModalState, cfg Config, width int) []string {
 	rows := make([]string, 0, groupRows())
-	for i, g := range recipe.ObjectGroups {
-		mark := groupMarkNone
-		switch state.groupState(i) {
-		case familyAll:
-			mark = groupMarkAll
-		case familyPartial:
-			mark = groupMarkSome
-		}
-		rows = append(rows, listRow(listRowSpec{
-			Left:   fmt.Sprintf("[%s] %-15s (%d)", mark, g.Name, len(state.groupMembers(i))),
-			Cursor: state.cursor == i,
-		}, cfg, width))
+	for i := range recipe.ObjectGroups {
+		rows = append(rows, listRow(bodyGroupRow(state, i, state.cursor == i), cfg, width))
 	}
 	return rows
 }
 
-// bodyProbeNote draws the missing-file line: not a pickable row, so it styles
-// its own text, in the key bar's error colour when colours are on so it
-// catches the eye (operator, 2026-10-11: "a reddish color").
-func bodyProbeNote(status string, width int, cfg Config) string {
-	line := listNote(status, width, cfg)
-	if cfg.useColor() {
-		line = lipgloss.NewStyle().Foreground(errorColour).Render(line)
+// bodyGroupRow is one group of the pinned block.
+func bodyGroupRow(state bodyModalState, i int, cursor bool) listRowSpec {
+	mark := groupMarkNone
+	switch state.groupState(i) {
+	case familyAll:
+		mark = groupMarkAll
+	case familyPartial:
+		mark = groupMarkSome
 	}
-	return line
+	return listRowSpec{
+		Left:   fmt.Sprintf("[%s ] %-15s (%d)", mark, recipe.ObjectGroups[i].Name, len(state.groupMembers(i))),
+		Cursor: cursor,
+	}
 }
 
 // bodyProbeStatus is the line under the Enabled bar while the cursor is on a
@@ -589,11 +604,16 @@ func bodyProbeStatus(state bodyModalState) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	e, marked := state.undrawable(cur.Number)
+	return bodyProbeStatusFor(state, cur)
+}
+
+// bodyProbeStatusFor is that line for one body.
+func bodyProbeStatusFor(state bodyModalState, o aspect.RegistryObject) (string, bool) {
+	e, marked := state.undrawable(o.Number)
 	if !marked {
 		return "", false
 	}
-	return fmt.Sprintf("%s can't be drawn: no ephemeris file %s", cur.Name, strings.Join(e.files, ", ")), true
+	return fmt.Sprintf("%s can't be drawn: no ephemeris file %s", o.Name, strings.Join(e.files, ", ")), true
 }
 
 // bodyRow is one object: tick box and the object's full name, on the left, with
@@ -641,17 +661,23 @@ func bodyTagBar(state bodyModalState, width int, cfg Config) string {
 			names = append(names, o.Name)
 		}
 	}
-	dot := "·"
-	if cfg.useASCII() {
-		dot = "-"
-	}
-	legend := fmt.Sprintf("%d of %d selected %s %s all %s some %s none",
-		len(names), len(state.registry), dot, groupMarkAll, groupMarkSome, groupMarkNone)
+	legend := bodyTagLegend(state, cfg, len(names))
 	room := width - ansi.StringWidth(legend) - 1
 	if len(names) == 0 || room <= ansi.StringWidth(cutMark(cfg)) {
 		return cutRight(legend, width, cfg)
 	}
 	return legend + " " + cutRight(strings.Join(names, " "), room, cfg)
+}
+
+// bodyTagLegend is the tag bar's fixed part: the count of ticked bodies and
+// what the group marks mean.
+func bodyTagLegend(state bodyModalState, cfg Config, n int) string {
+	dot := "·"
+	if cfg.useASCII() {
+		dot = "-"
+	}
+	return fmt.Sprintf("%d of %d selected %s %s all %s some %s none",
+		n, len(state.registry), dot, groupMarkAll, groupMarkSome, groupMarkNone)
 }
 
 // updateBodyModalKey handles one keystroke. The caller in model.go has already
@@ -699,22 +725,11 @@ func updateBodyModalKey(state bodyModalState, msg tea.KeyMsg, listHeight int) (b
 	return state, bodyModalOutcome{}
 }
 
-// pageBodies applies a paging key by the one rule. The probe's status line takes
-// a list row only while the cursor is on a body that cannot be drawn, so the
-// number of rows a page can rely on is one short whenever there is room for the
-// note (the smallest count the render shows). The stored window is then held
-// where the render draws it for the cursor's new row, with or without the note.
+// pageBodies applies a paging key by the one rule, then holds the stored
+// window where the render draws it for the cursor's new row.
 func (b *bodyModalState) pageBodies(op pageOp, listHeight int) {
-	smallest := listHeight
-	if listHeight >= 2 {
-		smallest--
-	}
-	b.pageBelow(groupRows(), op, smallest)
-	h := listHeight
-	if _, has := bodyProbeStatus(*b); has && listHeight >= 2 {
-		h--
-	}
-	_, b.offset = b.windowAt(b.cursor-groupRows(), h)
+	b.pageBelow(groupRows(), op, listHeight)
+	_, b.offset = b.windowAt(b.cursor-groupRows(), listHeight)
 }
 
 // bodyModalOutcome is what one keystroke decided. Both Confirmed and Cancelled

@@ -174,7 +174,7 @@ func ParseAspectRegistry(out string) ([]aspect.RegistryAspect, error) {
 		}
 	}
 	if headings > 1 {
-		return nil, fmt.Errorf("astrolog: -HA: %q appears %d times; a renamed field has forged the section heading", unrestrictedHeading, headings)
+		return nil, fmt.Errorf("astrolog: -HA: %q appears %d times. A renamed field has forged the section heading", unrestrictedHeading, headings)
 	}
 
 	var reg []aspect.RegistryAspect
@@ -196,7 +196,7 @@ func ParseAspectRegistry(out string) ([]aspect.RegistryAspect, error) {
 		// fabricated angle and orb, which silently regroups the aspect (C5)
 		// and misreports whether it can be selected (C14). Refusing is C10.
 		if len(cands) > 1 {
-			return nil, fmt.Errorf("astrolog: -HA: row %q can be read %d ways; its name, abbreviation or glyph contains something shaped like its own angle and orb", strings.TrimSpace(line), len(cands))
+			return nil, fmt.Errorf("astrolog: -HA: row %q can be read %d ways. Its name, abbreviation or glyph contains something shaped like its own angle and orb", strings.TrimSpace(line), len(cands))
 		}
 		c := cands[0]
 		idxField := rowHead.FindStringSubmatch(line)[1]
@@ -223,7 +223,7 @@ func ParseAspectRegistry(out string) ([]aspect.RegistryAspect, error) {
 		// Contiguity subsumes the two checks that used to be here: an index
 		// below 1 and an index seen twice are both non-successors.
 		if idx != len(reg)+1 {
-			return nil, fmt.Errorf("astrolog: -HA: row %d arrived where %d was expected; this registry is numbered contiguously from 1, so that line is not one the producer emitted here", idx, len(reg)+1)
+			return nil, fmt.Errorf("astrolog: -HA: row %d arrived where %d was expected. This registry is numbered contiguously from 1, so that line is not one the producer emitted here", idx, len(reg)+1)
 		}
 		reg = append(reg, aspect.RegistryAspect{
 			Index:  idx,

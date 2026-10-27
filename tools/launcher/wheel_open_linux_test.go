@@ -270,7 +270,7 @@ func TestLauncherSaysWhereTheWheelIs(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("exit %d:\n%s", code, out)
 		}
-		want := "Wheel: " + url + "; your browser opens on the first Ctrl+X"
+		want := "Wheel: " + url + ". Your browser opens on the first Ctrl+X"
 		i, j := strings.Index(out, want), strings.Index(out, "starting Sextile")
 		if i < 0 || j < 0 || i < j {
 			t.Fatalf("want %q after the start line:\n%s", want, out)
@@ -281,7 +281,7 @@ func TestLauncherSaysWhereTheWheelIs(t *testing.T) {
 		r := newRig(t)
 		s := r.startPTY(allTTY, "--charts-dir", r.mkdir("c"), "--port", port)
 		out, _ := s.finish()
-		if !strings.Contains(out, "Wheel: "+url+"; open it yourself after the first Ctrl+X") || strings.Contains(out, "your browser opens") {
+		if !strings.Contains(out, "Wheel: "+url+". Open it yourself after the first Ctrl+X") || strings.Contains(out, "your browser opens") {
 			t.Fatalf("with no opener the line must not promise one:\n%s", out)
 		}
 	})
@@ -291,7 +291,7 @@ func TestLauncherSaysWhereTheWheelIs(t *testing.T) {
 		installOpener(t, r, "xdg-open")
 		s := r.startPTY(allTTY, "--charts-dir", r.mkdir("c"), "--port", port, "--no-open")
 		out, _ := s.finish()
-		if !strings.Contains(out, "Wheel: "+url+"; open it yourself after the first Ctrl+X") || strings.Contains(out, "your browser opens") {
+		if !strings.Contains(out, "Wheel: "+url+". Open it yourself after the first Ctrl+X") || strings.Contains(out, "your browser opens") {
 			t.Fatalf("with --no-open the line must not promise the browser:\n%s", out)
 		}
 	})
@@ -300,12 +300,12 @@ func TestLauncherSaysWhereTheWheelIs(t *testing.T) {
 		r := newRig(t)
 		installOpener(t, r, "wslview")
 		res := r.run("doctor", "--charts-dir", r.mkdir("c"), "--port", port)
-		if !strings.Contains(res.stdout, "wheel: "+url+"; your browser opens on the first Ctrl+X") {
+		if !strings.Contains(res.stdout, "wheel: "+url+". Your browser opens on the first Ctrl+X") {
 			t.Fatalf("doctor does not say where the wheel will be:\n%s", res.stdout)
 		}
 		r = newRig(t)
 		res = r.run("doctor", "--charts-dir", r.mkdir("c"), "--port", port)
-		if !strings.Contains(res.stdout, "wheel: "+url+";") || !strings.Contains(res.stdout, "no wslview or xdg-open") {
+		if !strings.Contains(res.stdout, "wheel: "+url+".") || !strings.Contains(res.stdout, "No wslview or xdg-open") {
 			t.Fatalf("doctor with no opener:\n%s", res.stdout)
 		}
 		r.mustExit2(r.run("doctor", "--no-open"))

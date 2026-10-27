@@ -1487,10 +1487,18 @@ func TestRunArgv(t *testing.T) {
 			"run", "--rm", "--pull", "never", "-i",
 			"--user", uid + ":" + gid,
 			"--mount", "type=bind,source=" + charts + ",target=/charts",
+			"--mount", "type=bind,source=" + r.defaultState() + ",target=/state/sextile",
+			"--mount", "type=bind,source=" + r.defaultConfig() + ",target=/config/sextile",
+			"--mount", "type=bind,source=" + r.defaultBackup() + ",target=/data/sextile/backup",
+			"--mount", "type=bind,source=" + r.defaultSessions() + ",target=/data/sextile/sessions",
 			"--tmpfs", "/tmp",
 			"-p", "127.0.0.1:" + p + ":" + p,
 			"-e", "SEXTILE_PREVIEW_ADDR=0.0.0.0:" + p,
 			"-e", "SEXTILE_LAUNCH=docker localhost/sextile:v0.1.0-rc.1",
+			"-e", "XDG_STATE_HOME=/state", "-e", "XDG_CONFIG_HOME=/config", "-e", "XDG_DATA_HOME=/data",
+			"-e", "SEXTILE_CHARTS_HOST_PATH=" + charts,
+			"-e", "SEXTILE_BACKUP_HOST_PATH=" + r.defaultBackup(),
+			"-e", "SEXTILE_SESSIONS_HOST_PATH=" + r.defaultSessions(),
 			"-e", "TZ=Europe/Amsterdam",
 			"-e", "TERM", "-e", "COLORTERM", "-e", "NO_COLOR", "-e", "SEXTILE_COLOR",
 			"localhost/sextile:v0.1.0-rc.1", "--accessible",
@@ -1508,10 +1516,18 @@ func TestRunArgv(t *testing.T) {
 			"run", "--rm", "--pull", "never", "-i",
 			"--user", uid + ":" + gid,
 			"--mount", "type=bind,source=" + charts + ",target=/charts",
+			"--mount", "type=bind,source=" + r.defaultState() + ",target=/state/sextile",
+			"--mount", "type=bind,source=" + r.defaultConfig() + ",target=/config/sextile",
+			"--mount", "type=bind,source=" + r.defaultBackup() + ",target=/data/sextile/backup",
+			"--mount", "type=bind,source=" + r.defaultSessions() + ",target=/data/sextile/sessions",
 			"--tmpfs", "/tmp",
 			"-p", "127.0.0.1:5307:5307",
 			"-e", "SEXTILE_PREVIEW_ADDR=0.0.0.0:5307",
 			"-e", "SEXTILE_LAUNCH=docker localhost/sextile:v0.1.0-rc.1",
+			"-e", "XDG_STATE_HOME=/state", "-e", "XDG_CONFIG_HOME=/config", "-e", "XDG_DATA_HOME=/data",
+			"-e", "SEXTILE_CHARTS_HOST_PATH=" + charts,
+			"-e", "SEXTILE_BACKUP_HOST_PATH=" + r.defaultBackup(),
+			"-e", "SEXTILE_SESSIONS_HOST_PATH=" + r.defaultSessions(),
 			"localhost/sextile:v0.1.0-rc.1",
 		}
 		if got := r.find("run"); fmt.Sprintf("%q", got) != fmt.Sprintf("%q", want) {
@@ -1536,6 +1552,258 @@ func TestRunArgv(t *testing.T) {
 			t.Fatalf("%q", run)
 		}
 	})
+}
+
+// defaultState, defaultConfig and defaultBackup are the host folders the
+// launcher mounts when the person sets no XDG variable of their own: the rig's
+// HOME and XDG_CONFIG_HOME.
+func (r *rig) defaultState() string  { return filepath.Join(r.home, ".local", "state", "sextile") }
+func (r *rig) defaultConfig() string { return filepath.Join(r.xdg, "sextile") }
+func (r *rig) defaultBackup() string {
+	return filepath.Join(r.home, ".local", "share", "sextile", "backup")
+}
+func (r *rig) defaultSessions() string {
+	return filepath.Join(r.home, ".local", "share", "sextile", "sessions")
+}
+
+// mounts returns every --mount value of a run call, in order.
+func mounts(call []string) []string {
+	var out []string
+	for i, a := range call {
+		if a == "--mount" && i+1 < len(call) {
+			out = append(out, call[i+1])
+		}
+	}
+	return out
+}
+
+// envs returns every -e value of a run call, in order.
+func envs(call []string) []string {
+	var out []string
+	for i, a := range call {
+		if a == "-e" && i+1 < len(call) {
+			out = append(out, call[i+1])
+		}
+	}
+	return out
+}
+
+// The charts folder holds charts only: the session, the preferences and the
+// backups live in the person's XDG state, config and data folders, mounted
+// beside it. The app's own clone ($XDG_DATA_HOME/sextile/app) is never mounted.
+func TestDockerMountsStateConfigBackup(t *testing.T) {
+	t.Run("the default places", func(t *testing.T) {
+		r := newRig(t)
+		charts := r.mkdir("charts")
+		app := mustMkdir(t, filepath.Join(r.home, ".local", "share", "sextile", "app"))
+		r.mustSucceed(r.run("--charts-dir", charts))
+		run := r.find("run")
+		wantMounts := []string{
+			"type=bind,source=" + charts + ",target=/charts",
+			"type=bind,source=" + r.defaultState() + ",target=/state/sextile",
+			"type=bind,source=" + r.defaultConfig() + ",target=/config/sextile",
+			"type=bind,source=" + r.defaultBackup() + ",target=/data/sextile/backup",
+			"type=bind,source=" + r.defaultSessions() + ",target=/data/sextile/sessions",
+		}
+		if got := mounts(run); fmt.Sprintf("%q", got) != fmt.Sprintf("%q", wantMounts) {
+			t.Fatalf("mounts:\n got %q\nwant %q", got, wantMounts)
+		}
+		wantEnvs := []string{
+			"SEXTILE_PREVIEW_ADDR=0.0.0.0:5307",
+			"SEXTILE_LAUNCH=docker localhost/sextile:v0.1.0-rc.1",
+			"XDG_STATE_HOME=/state", "XDG_CONFIG_HOME=/config", "XDG_DATA_HOME=/data",
+			"SEXTILE_CHARTS_HOST_PATH=" + charts,
+			"SEXTILE_BACKUP_HOST_PATH=" + r.defaultBackup(),
+			"SEXTILE_SESSIONS_HOST_PATH=" + r.defaultSessions(),
+		}
+		if got := envs(run); fmt.Sprintf("%q", got) != fmt.Sprintf("%q", wantEnvs) {
+			t.Fatalf("env:\n got %q\nwant %q", got, wantEnvs)
+		}
+		for _, m := range mounts(run) {
+			if strings.Contains(m, app) || strings.Contains(m, "source="+filepath.Dir(app)+",") {
+				t.Fatalf("the app clone must not be mounted: %q", m)
+			}
+		}
+	})
+
+	t.Run("the person's absolute XDG folders", func(t *testing.T) {
+		r := newRig(t)
+		charts := r.mkdir("charts")
+		st, cf, da := r.mkdir("my/state"), r.mkdir("my/config"), r.mkdir("my/data")
+		r.setenv("XDG_STATE_HOME", st)
+		r.setenv("XDG_CONFIG_HOME", cf)
+		r.setenv("XDG_DATA_HOME", da)
+		r.mustSucceed(r.run("--charts-dir", charts))
+		run := r.find("run")
+		wantMounts := []string{
+			"type=bind,source=" + charts + ",target=/charts",
+			"type=bind,source=" + st + "/sextile,target=/state/sextile",
+			"type=bind,source=" + cf + "/sextile,target=/config/sextile",
+			"type=bind,source=" + da + "/sextile/backup,target=/data/sextile/backup",
+			"type=bind,source=" + da + "/sextile/sessions,target=/data/sextile/sessions",
+		}
+		if got := mounts(run); fmt.Sprintf("%q", got) != fmt.Sprintf("%q", wantMounts) {
+			t.Fatalf("mounts:\n got %q\nwant %q", got, wantMounts)
+		}
+		if indexOf(run, "SEXTILE_BACKUP_HOST_PATH="+da+"/sextile/backup") < 0 {
+			t.Fatalf("the display path is the host backup folder: %q", envs(run))
+		}
+	})
+
+	t.Run("a relative XDG folder is ignored", func(t *testing.T) {
+		r := newRig(t)
+		r.setenv("XDG_STATE_HOME", "rel/state")
+		r.setenv("XDG_DATA_HOME", "rel/data")
+		r.mustSucceed(r.run("--charts-dir", r.mkdir("charts")))
+		got := mounts(r.find("run"))
+		if len(got) != 5 || !strings.Contains(got[1], "source="+r.defaultState()+",") || !strings.Contains(got[3], "source="+r.defaultBackup()+",") || !strings.Contains(got[4], "source="+r.defaultSessions()+",") {
+			t.Fatalf("a relative value falls back to the default: %q", got)
+		}
+	})
+}
+
+// The named sessions live in the person's XDG data folder's sextile/sessions,
+// mounted at /data/sextile/sessions: made 0700 when absent, refused when it is
+// a symlink or a file, and named to the app by its host path for the Log.
+func TestDockerMountsSessions(t *testing.T) {
+	r := newRig(t)
+	r.mustSucceed(r.run("--charts-dir", r.mkdir("charts")))
+	run := r.find("run")
+	if indexOf(mounts(run), "type=bind,source="+r.defaultSessions()+",target=/data/sextile/sessions") < 0 {
+		t.Fatalf("no sessions mount: %q", mounts(run))
+	}
+	if indexOf(envs(run), "SEXTILE_SESSIONS_HOST_PATH="+r.defaultSessions()) < 0 {
+		t.Fatalf("the app is not told the host sessions folder: %q", envs(run))
+	}
+	if info, err := os.Stat(r.defaultSessions()); err != nil || info.Mode().Perm() != 0o700 {
+		t.Errorf("the sessions folder must be made 0700: %v %v", info, err)
+	}
+	for _, kind := range []string{"symlink", "file"} {
+		t.Run(kind, func(t *testing.T) {
+			r := newRig(t)
+			charts := r.mkdir("charts")
+			elsewhere := r.mkdir("elsewhere")
+			p := r.defaultSessions()
+			mustMkdir(t, filepath.Dir(p))
+			if kind == "symlink" {
+				if err := os.Symlink(elsewhere, p); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				mustWrite(t, p, "x", 0o600)
+			}
+			res := r.run("--charts-dir", charts)
+			if res.code == 0 || !strings.Contains(res.stderr, p) {
+				t.Fatalf("a %s at %s must be refused, naming it; exit %d:\n%s", kind, p, res.code, res.stderr)
+			}
+			if n := r.count("run") + r.count("build"); n != 0 {
+				t.Fatalf("nothing may run after a refusal: %q", r.verbs())
+			}
+			if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+				t.Fatalf("nothing may be created through the link: %v", entries)
+			}
+		})
+	}
+}
+
+// A hand-written `docker run -v ~/charts:/charts` (docs/REFERENCE.md, "By
+// hand") mounts only the charts folder, so the image's own defaults must keep
+// the session, preferences and data inside it; the launcher overrides all
+// three with -e and mounts its own folders.
+func TestDockerfileKeepsHandRunStateInTheChartsFolder(t *testing.T) {
+	env := repoFile(t, "Dockerfile")
+	for _, want := range []string{
+		"XDG_STATE_HOME=/charts/.sextile/state",
+		"XDG_DATA_HOME=/charts/.sextile/data",
+		"XDG_CONFIG_HOME=/charts/.sextile/config",
+		"SEXTILE_ATLAS_PATH=/usr/local/share/astrolog/atlas.as",
+	} {
+		if !strings.Contains(env, want) {
+			t.Errorf("the Dockerfile's ENV lacks %s", want)
+		}
+	}
+}
+
+// A state, config or data folder that is a symlink (or not a folder) is
+// refused before anything runs: the launcher will not mount through it.
+func TestDockerRefusesASymlinkedStateFolder(t *testing.T) {
+	cases := []struct {
+		name string
+		path func(r *rig) string // what is replaced by a symlink or a file
+	}{
+		{"state", func(r *rig) string { return r.defaultState() }},
+		{"config", func(r *rig) string { return r.defaultConfig() }},
+		{"backup", func(r *rig) string { return r.defaultBackup() }},
+		{"the data folder's sextile parent", func(r *rig) string { return filepath.Dir(r.defaultBackup()) }},
+	}
+	for _, c := range cases {
+		for _, kind := range []string{"symlink", "file"} {
+			t.Run(c.name+" "+kind, func(t *testing.T) {
+				r := newRig(t)
+				charts := r.mkdir("charts")
+				elsewhere := r.mkdir("elsewhere")
+				p := c.path(r)
+				mustMkdir(t, filepath.Dir(p))
+				if kind == "symlink" {
+					if err := os.Symlink(elsewhere, p); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					mustWrite(t, p, "x", 0o600)
+				}
+				res := r.run("--charts-dir", charts)
+				if res.code == 0 {
+					t.Fatalf("a %s at %s must be refused; stderr: %s", kind, p, res.stderr)
+				}
+				if !strings.Contains(res.stderr, p) {
+					t.Fatalf("the message must name %s:\n%s", p, res.stderr)
+				}
+				if n := r.count("run") + r.count("build"); n != 0 {
+					t.Fatalf("nothing may run after a refusal: %q", r.verbs())
+				}
+				if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+					t.Fatalf("nothing may be created through the link: %v", entries)
+				}
+			})
+		}
+	}
+}
+
+// The folders the launcher makes for the app are private: the session, the
+// preferences and the backups hold client data.
+func TestDockerCreatesStateFoldersPrivate(t *testing.T) {
+	r := newRig(t)
+	r.mustSucceed(r.run("--charts-dir", r.mkdir("charts")))
+	for _, d := range []string{
+		r.defaultState(), filepath.Join(r.home, ".local", "state"),
+		filepath.Join(r.home, ".local", "share", "sextile"), r.defaultBackup(),
+	} {
+		info, err := os.Stat(d)
+		if err != nil {
+			t.Fatalf("%s was not made: %v", d, err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Errorf("%s is %v, want 0700", d, info.Mode().Perm())
+		}
+	}
+	// The config folder exists in the rig (it holds nothing yet): it is made
+	// private too when missing.
+	r2 := newRig(t)
+	r2.setenv("XDG_CONFIG_HOME", filepath.Join(r2.root, "newcfg"))
+	r2.mustSucceed(r2.run("--charts-dir", r2.mkdir("charts")))
+	if info, err := os.Stat(filepath.Join(r2.root, "newcfg", "sextile")); err != nil || info.Mode().Perm() != 0o700 {
+		t.Errorf("the config folder must be made 0700: %v %v", info, err)
+	}
+	// A folder that exists keeps the mode its owner gave it.
+	r3 := newRig(t)
+	mustMkdir(t, r3.defaultState())
+	if err := os.Chmod(r3.defaultState(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	r3.mustSucceed(r3.run("--charts-dir", r3.mkdir("charts")))
+	if info, _ := os.Stat(r3.defaultState()); info.Mode().Perm() != 0o750 {
+		t.Errorf("an existing folder is left as it is, got %v", info.Mode().Perm())
+	}
 }
 
 func TestExitStatusIsDockers(t *testing.T) {
@@ -1574,7 +1842,7 @@ func TestPortBusy(t *testing.T) {
 	p := busyPort(t)
 	res := r.run("--charts-dir", r.mkdir("c"), "--port", strconv.Itoa(p))
 	r.mustExit2(res)
-	want := fmt.Sprintf("port %d is in use; run ./sextile --port %d\n", p, p+1)
+	want := fmt.Sprintf("port %d is in use. Run sextile --port %d\n", p, p+1)
 	if res.stderr != want {
 		t.Fatalf("got %q want %q", res.stderr, want)
 	}
@@ -1611,10 +1879,10 @@ func TestDefaultPortBusyPicksTheNext(t *testing.T) {
 	res := r.run("--charts-dir", r.mkdir("c"))
 	r.mustSucceed(res)
 	var p int
-	if _, err := fmt.Sscanf(res.stderr, "port 5307 is in use; this window uses port %d\n", &p); err != nil {
+	if _, err := fmt.Sscanf(res.stderr, "port 5307 is in use. This window uses port %d\n", &p); err != nil {
 		t.Fatalf("stderr = %q, want one line naming the port this window uses", res.stderr)
 	}
-	if want := fmt.Sprintf("port 5307 is in use; this window uses port %d\n", p); res.stderr != want || p <= 5307 || p > 5407 {
+	if want := fmt.Sprintf("port 5307 is in use. This window uses port %d\n", p); res.stderr != want || p <= 5307 || p > 5407 {
 		t.Fatalf("stderr = %q, want exactly %q with a port above 5307", res.stderr, want)
 	}
 	run := r.find("run")
@@ -1627,7 +1895,7 @@ func TestDefaultPortBusyPicksTheNext(t *testing.T) {
 	r2 := newRig(t)
 	res = r2.run("--charts-dir", r2.mkdir("c"), "--port", "5307")
 	r2.mustExit2(res)
-	if res.stderr != "port 5307 is in use; run ./sextile --port 5308\n" {
+	if res.stderr != "port 5307 is in use. Run sextile --port 5308\n" {
 		t.Fatalf("explicit busy --port: stderr = %q", res.stderr)
 	}
 	r2.noBuildOrRun()
@@ -1773,7 +2041,7 @@ func TestChartsDirInsideCloneRefused(t *testing.T) {
 		dir := inside(r)[name]
 		res := r.run("--charts-dir", dir)
 		r.mustExit2(res)
-		contains(t, res.stderr, dir+verbatim+r.clone+"); keep client charts outside it")
+		contains(t, res.stderr, dir+verbatim+r.clone+"). Keep client charts outside it")
 		r.noBuildOrRun()
 	}
 
@@ -1783,7 +2051,7 @@ func TestChartsDirInsideCloneRefused(t *testing.T) {
 	r.writeConf("charts-dir=" + sub + "\n")
 	res := r.run()
 	r.mustExit2(res)
-	contains(t, res.stderr, sub+verbatim+r.clone+"); keep client charts outside it")
+	contains(t, res.stderr, sub+verbatim+r.clone+"). Keep client charts outside it")
 	r.noBuildOrRun()
 
 	// Outside the clone still works.
@@ -1791,11 +2059,46 @@ func TestChartsDirInsideCloneRefused(t *testing.T) {
 	r2.mustSucceed(r2.run("--charts-dir", r2.mkdir("outside")))
 }
 
+// A user may link the launcher by hand into a folder on PATH; the clone it
+// serves is where the file is, not where the link is. The clone is found
+// through chains of links, absolute and relative.
+func TestLauncherFindsItsCloneThroughSymlinks(t *testing.T) {
+	r := newRig(t)
+	sub := mustMkdir(t, filepath.Join(r.clone, "charts"))
+	bin := mustMkdir(t, filepath.Join(r.root, "linkbin"))
+	hop := mustMkdir(t, filepath.Join(r.root, "hops"))
+	// bin/sextile -> ../hops/second (relative) -> <clone>/sextile (absolute)
+	if err := os.Symlink(r.script(), filepath.Join(hop, "second")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "hops", "second"), filepath.Join(bin, "sextile")); err != nil {
+		t.Fatal(err)
+	}
+	// bin/near -> sextile, a link to a link in the same folder
+	if err := os.Symlink("sextile", filepath.Join(bin, "near")); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"sextile", "near"} {
+		cmd := exec.Command(filepath.Join(bin, name), "--charts-dir", sub)
+		cmd.Dir = r.work
+		cmd.Env = r.environ()
+		out, err := cmd.CombinedOutput()
+		if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 {
+			t.Fatalf("%s: %v, want exit 2\n%s", name, err, out)
+		}
+		contains(t, string(out), sub+" is inside the Sextile checkout ("+r.clone+"). Keep client charts outside it")
+	}
+	r.noBuildOrRun()
+}
+
 func TestChartsDirNotRemembered(t *testing.T) {
 	r := newRig(t)
 	r.mustSucceed(r.run("--charts-dir", r.mkdir("c")))
-	if _, err := os.Stat(filepath.Join(r.xdg, "sextile")); err == nil {
-		t.Fatal("a --charts-dir run must not create the config")
+	// The config FOLDER is the app's preferences folder now and is made for the
+	// Docker run; what a --charts-dir run must not make is the launcher's file,
+	// or anything inside the folder.
+	if entries, _ := os.ReadDir(filepath.Join(r.xdg, "sextile")); len(entries) != 0 {
+		t.Fatalf("a --charts-dir run must not create the config: %v", entries)
 	}
 	r.writeConf("charts-dir=" + r.mkdir("kept") + "\n")
 	before, _ := os.ReadFile(r.confPath())
@@ -1991,7 +2294,7 @@ func TestDoctorArgs(t *testing.T) {
 
 // ------------------------------------------------------------- C22 to C22c
 
-var doctorNames = []string{"docker", "daemon", "endpoint", "image", "port", "wheel", "time zone", "charts folder", "config", "other images"}
+var doctorNames = []string{"docker", "daemon", "endpoint", "image", "port", "wheel", "time zone", "charts folder", "config", "state", "other images"}
 
 var doctorNativeNames = []string{"go", "astrolog", "astrolog files"}
 
@@ -2018,8 +2321,8 @@ func TestDoctorLines(t *testing.T) {
 				t.Fatalf("%s: line %d should be the %q check: %q", engine, i+1, n, lines[i])
 			}
 		}
-		if !strings.Contains(lines[9], "2 other") {
-			t.Fatalf("two images besides this checkout's: %q", lines[9])
+		if !strings.Contains(lines[len(doctorNames)-1], "2 other") {
+			t.Fatalf("two images besides this checkout's: %q", lines[len(doctorNames)-1])
 		}
 		if !strings.Contains(lines[3], "localhost/sextile:v0.1.0-rc.1") {
 			t.Fatalf("the image line names this checkout's image: %q", lines[3])
@@ -2028,6 +2331,46 @@ func TestDoctorLines(t *testing.T) {
 		if podman != (engine == "Podman Engine") || (podman && !strings.HasPrefix(lines[1], "note")) {
 			t.Fatalf("%s: the Podman note belongs on the daemon line, as a note: %q", engine, lines[1])
 		}
+	}
+}
+
+// doctor says where the session, the preferences and the backups are kept, and
+// refuses a symlinked folder there, without creating anything.
+func TestDoctorReportsStateFolders(t *testing.T) {
+	r := newRig(t)
+	r.writeConf("charts-dir=" + r.mkdir("kept") + "\n")
+	before := snapshot(t, r.home)
+	res := r.run("doctor", "--port", strconv.Itoa(freePort(t)))
+	r.mustSucceed(res)
+	var row string
+	for _, l := range strings.Split(res.stdout, "\n") {
+		if strings.HasPrefix(l, "ok    state: ") {
+			row = l
+		}
+	}
+	for _, want := range []string{
+		"session in ~/.local/state/sextile",
+		"preferences in " + r.defaultConfig(),
+		"backups in ~/.local/share/sextile/backup",
+		"named sessions in ~/.local/share/sextile/sessions",
+	} {
+		if !strings.Contains(row, want) {
+			t.Errorf("the state row lacks %q: %q", want, row)
+		}
+	}
+	if d := diffSnapshots(before, snapshot(t, r.home)); len(d) != 0 {
+		t.Errorf("doctor created %v", d)
+	}
+
+	r2 := newRig(t)
+	r2.writeConf("charts-dir=" + r2.mkdir("kept") + "\n")
+	mustMkdir(t, filepath.Dir(r2.defaultState()))
+	if err := os.Symlink(r2.mkdir("elsewhere"), r2.defaultState()); err != nil {
+		t.Fatal(err)
+	}
+	res = r2.run("doctor", "--port", strconv.Itoa(freePort(t)))
+	if res.code != 1 || !strings.Contains(res.stdout, "FAIL  state: "+r2.defaultState()+" is a symlink") {
+		t.Fatalf("a symlinked state folder is a FAIL, exit 1; got exit %d\n%s", res.code, res.stdout)
 	}
 }
 
@@ -2092,23 +2435,46 @@ func unexpectedWrites(before, after map[string]string, allowed func(entry, path 
 	return bad
 }
 
+// stateFolderMade allows, for unexpectedWrites, exactly the folders a Docker
+// run makes for the app's state: the XDG state, config and data folders'
+// sextile/, the backup folder and the sessions folder, with their missing
+// parents under HOME. Only
+// folders, only added: a file written there is still unexpected.
+func (r *rig) stateFolderMade(entry, path string) bool {
+	if !strings.HasPrefix(entry, "added") {
+		return false
+	}
+	for _, d := range []string{
+		filepath.Join(r.home, ".local"),
+		filepath.Join(r.home, ".local", "state"), r.defaultState(),
+		filepath.Join(r.home, ".local", "share"), filepath.Dir(r.defaultBackup()), r.defaultBackup(),
+		r.defaultSessions(), r.defaultConfig(),
+	} {
+		if path == d {
+			return true
+		}
+	}
+	return false
+}
+
 func TestWritesOnlyConfig(t *testing.T) {
-	// A plain launch with a flag writes nothing at all, anywhere under the root.
+	// A plain launch with a flag writes nothing but the empty state folders the
+	// app is given, anywhere under the root.
 	r := newRig(t)
 	r.setenv("FAKE_DOCKER_IMAGE", "absent")
 	charts := r.mkdir("c")
 	before := snapshot(t, r.root)
 	r.mustSucceed(r.run("--charts-dir", charts, "--rebuild"))
-	if d := unexpectedWrites(before, snapshot(t, r.root), nil); len(d) != 0 {
+	if d := unexpectedWrites(before, snapshot(t, r.root), r.stateFolderMade); len(d) != 0 {
 		t.Fatalf("a launch wrote: %v", d)
 	}
 
-	// With a remembered folder, still nothing; also for a local build.
+	// With a remembered folder, still nothing more; also for a local build.
 	r2 := newRig(t, plainClone())
 	r2.writeConf("charts-dir=" + r2.mkdir("kept") + "\n")
 	before = snapshot(t, r2.root)
 	r2.mustSucceed(r2.run())
-	if d := unexpectedWrites(before, snapshot(t, r2.root), nil); len(d) != 0 {
+	if d := unexpectedWrites(before, snapshot(t, r2.root), r2.stateFolderMade); len(d) != 0 {
 		t.Fatalf("a launch from the config wrote: %v", d)
 	}
 
@@ -2228,7 +2594,7 @@ func codeBlocks(lines []string) [][]string {
 }
 
 // The README's Install and run leads with the one-line installer, at the tag
-// scripts/install clones, then the launcher it ends at, doctor first.
+// scripts/install clones, then the command it writes, doctor first.
 func TestReadmeLeadsWithLauncher(t *testing.T) {
 	m := regexp.MustCompile(`(?m)^TAG=(v[0-9.]+)$`).FindStringSubmatch(repoFile(t, "scripts/install"))
 	if m == nil {
@@ -2238,7 +2604,7 @@ func TestReadmeLeadsWithLauncher(t *testing.T) {
 	got := codeBlocks(section(t, repoFile(t, "README.md"), "Install and run"))
 	want := [][]string{
 		{"curl -fsSL " + url + " | sh"},
-		{"cd ~/sextile", "./sextile doctor", "./sextile"},
+		{"sextile doctor", "sextile"},
 	}
 	if len(got) < len(want) || fmt.Sprintf("%q", got[:len(want)]) != fmt.Sprintf("%q", want) {
 		t.Fatalf("Install's first code blocks:\n got %q\nwant %q", got, want)
@@ -2478,9 +2844,9 @@ func TestDoctorCountsWhatPruningRemoves(t *testing.T) {
 		extra []string
 		want  string
 	}{
-		{"one", nil, "note  other images: 1 other images; removed at the next launch"},
-		{"two", []string{"img ffff00000006 1 localhost/sextile:v0.0.5"}, "note  other images: 2 other images; removed at the next launch"},
-		{"multi-tag", []string{"img ffff00000006 1 localhost/sextile:v0.0.5 localhost/sextile:v0.0.5-rc"}, "note  other images: 3 other images; removed at the next launch"},
+		{"one", nil, "note  other images: 1 other images. Removed at the next launch"},
+		{"two", []string{"img ffff00000006 1 localhost/sextile:v0.0.5"}, "note  other images: 2 other images. Removed at the next launch"},
+		{"multi-tag", []string{"img ffff00000006 1 localhost/sextile:v0.0.5 localhost/sextile:v0.0.5-rc"}, "note  other images: 3 other images. Removed at the next launch"},
 	}
 	for _, c := range cases {
 		r := newRig(t)
@@ -2552,7 +2918,7 @@ func TestDoctorSaysWhenItCouldNotCheck(t *testing.T) {
 	r = newRig(t)
 	preparePrune(r)
 	r.setenv("FAKE_DOCKER_PS_FAIL_ID", "bbbb00000002")
-	want = "note  other images: 1 other images; removed at the next launch; 1 could not be checked (docker ps failed)"
+	want = "note  other images: 1 other images. Removed at the next launch — 1 could not be checked (docker ps failed)"
 	if got := doctorLine(r); got != want {
 		t.Fatalf("ps failing for one image:\n got %q\nwant %q", got, want)
 	}

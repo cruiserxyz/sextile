@@ -18,7 +18,8 @@ import (
 // Sextile authors no byte of a chart file. Astrolog writes the record whole
 // into a temp file store created; this file reads that record back through
 // Astrolog and checks it says what it should; only then does store swap it in,
-// keeping the first original under .sextile/backup. Every failure leaves the library as it
+// keeping the first original in its backup folder (store.BackupDir), outside
+// the charts folder. Every failure leaves the library as it
 // was.
 
 // Retitled is what one successful retitle produced.
@@ -27,7 +28,7 @@ type Retitled struct {
 	Name       string // the title Astrolog recorded, read back from the file
 	PlaceLabel string // the place label Astrolog recorded
 	File       string // the chart's file name after the write
-	Backup     string // where the original was kept (relative to the charts folder), or "" if one already existed
+	Backup     string // where the original was kept (absolute; the host's path in Docker), or "" if one already existed
 
 	// Row is the chart as the library now lists it, read back after the
 	// write: what a caller anchors, so the anchor and the session carry what
@@ -140,7 +141,7 @@ func retitleChartFile(ctx context.Context, dir string, c store.NamedChart, title
 	keep = true // renamed into place; there is no temp file left to remove
 	r := Retitled{ID: c.ID, Name: after.Name, PlaceLabel: after.PlaceLabel, File: file}
 	if backedUp {
-		r.Backup = store.ChartBackupRel(file)
+		r.Backup = store.ChartBackupDisplay(dir, file)
 	}
 	return r, nil
 }
@@ -164,7 +165,7 @@ func sameRecord(got astrolog.ChartFile, momentOK bool, lon, lat float64, title, 
 		bad = append(bad, "place")
 	}
 	if len(bad) > 0 {
-		return fmt.Errorf("%w (%s); nothing was written", ErrBadReadBack, strings.Join(bad, ", "))
+		return fmt.Errorf("%w (%s). Nothing was written", ErrBadReadBack, strings.Join(bad, ", "))
 	}
 	return nil
 }

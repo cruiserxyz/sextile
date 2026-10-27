@@ -195,7 +195,7 @@ func mergeFrame(existing, houses, zodiac string) (string, error) {
 		return existing + "frame:\n  houses: " + houses + "\n  zodiac: " + zodiac + "\n", nil
 	}
 	if fb.scalar {
-		return "", fmt.Errorf("store: preferences.yaml has '%s', not a block; the frame was not saved",
+		return "", fmt.Errorf("store: preferences.yaml has '%s', not a block. The frame was not saved",
 			strings.TrimSpace(lines[fb.start]))
 	}
 	var inserted []string

@@ -285,9 +285,6 @@ func pageOwners() []pageOwner {
 		read: func(m Model) (int, int, int, int) {
 			b := m.bodyModal
 			visible := bodyListHeight(m.height)
-			if visible >= 2 {
-				visible-- // room for the probe's status row
-			}
 			return b.cursor - groupRows(), b.offset, len(b.matches), visible
 		},
 		put: func(m Model, c, o int) Model {
@@ -296,9 +293,6 @@ func pageOwners() []pageOwner {
 		},
 		drawn: func(m Model) int {
 			h := bodyListHeight(m.height)
-			if _, has := bodyProbeStatus(m.bodyModal); has && h >= 2 {
-				h--
-			}
 			_, off := m.bodyModal.windowAt(m.bodyModal.cursor-groupRows(), h)
 			return off
 		},

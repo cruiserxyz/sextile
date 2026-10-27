@@ -400,7 +400,7 @@ func parseLine(text string, ctx *loadCtx) (line, error) {
 		label = set.Terms[set.Rules[l.parts[0].rule].Verdict].Display
 	}
 	if n := utf8.RuneCountInString(label); n > LabelWidth {
-		return l, fmt.Errorf("label %q is %d characters; the label column holds %d", label, n, LabelWidth)
+		return l, fmt.Errorf("label %q is %d characters. The label column holds %d", label, n, LabelWidth)
 	}
 	return l, nil
 }

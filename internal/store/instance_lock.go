@@ -17,7 +17,8 @@ import (
 //
 // The lock file is written by exactly one function, AcquireInstanceLock, and
 // only ever holds the holder's process id. It is not a chart file and never
-// touches the chart folder, even when XDG_DATA_HOME sits under it.
+// touches the chart folder. Its folder is private (0700), and a link anywhere
+// below the XDG state base refuses the launch rather than being followed.
 
 const (
 	instanceLockFile = "sextile.lock"
@@ -100,18 +101,73 @@ var heldLock *InstanceLock
 // to be a regular file with one name (a hard link to a chart file would
 // otherwise be written), and only then is the lock taken and the pid written.
 func AcquireInstanceLock() (*InstanceLock, error) {
-	dir := SessionDir()
-	path := filepath.Join(dir, instanceLockFile)
-	if err := mkdirAllSynced(dir, 0o755); err != nil {
-		return nil, &LockError{Kind: LockOpen, Path: path, Err: err}
+	path := filepath.Join(SessionDir(), instanceLockFile)
+	if _, err := ensureSessionDir(); err != nil {
+		kind := LockOpen
+		if errors.Is(err, errLinkedFolder) {
+			kind = LockUnsafe
+		}
+		return nil, &LockError{Kind: kind, Path: path, Err: err}
 	}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
+	f, unsupported, err := takeLock(path)
+	if err != nil {
+		return nil, err
+	}
+	if unsupported {
+		return &InstanceLock{Unsupported: true}, nil
+	}
+	l := &InstanceLock{file: f}
+	heldLock = l
+	return l, nil
+}
+
+// ReleaseInstanceLock drops the instance lock this process holds, if any. A
+// window that goes on to run a named session holds that session's lock
+// instead: a window holds exactly one.
+func ReleaseInstanceLock() {
+	if heldLock != nil && heldLock.file != nil {
+		heldLock.file.Close()
+		heldLock.file = nil
+	}
+	heldLock = nil
+}
+
+// takeLock opens path as a lock file and takes an exclusive flock on it, or
+// says why not: *LockHeldError when another holder has it, *LockError for
+// every other reason. unsupported is true, with no file and no error, when the
+// filesystem cannot lock at all. On success the file holds this process's pid
+// and must stay open for as long as the lock is held.
+func takeLock(path string) (*os.File, bool, error) {
+	f, unsupported, _, err := takeLockCreated(path)
+	return f, unsupported, err
+}
+
+// openLockFile opens path as takeLock does and reports whether this call
+// created it: an exclusive create first, and only when the name exists an open
+// of what is there, still never through a link.
+func openLockFile(path string) (*os.File, bool, error) {
+	const flags = os.O_RDWR | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	f, err := os.OpenFile(path, flags|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		return f, true, nil
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return nil, false, err
+	}
+	f, err = os.OpenFile(path, flags, 0o600)
+	return f, false, err
+}
+
+// takeLockCreated is takeLock, also reporting whether this call created the
+// lock file, so a caller that cannot use it may take it away again.
+func takeLockCreated(path string) (*os.File, bool, bool, error) {
+	f, created, err := openLockFile(path)
 	if err != nil {
 		kind := LockOpen
 		if errors.Is(err, syscall.ELOOP) || errors.Is(err, syscall.EISDIR) || errors.Is(err, syscall.ENXIO) {
 			kind = LockUnsafe
 		}
-		return nil, &LockError{Kind: kind, Path: path, Err: unwrapPathError(err)}
+		return nil, false, false, &LockError{Kind: kind, Path: path, Err: unwrapPathError(err)}
 	}
 	taken := false
 	defer func() {
@@ -122,31 +178,29 @@ func AcquireInstanceLock() (*InstanceLock, error) {
 
 	st, err := f.Stat()
 	if err != nil {
-		return nil, &LockError{Kind: LockOpen, Path: path, Err: unwrapPathError(err)}
+		return nil, false, created, &LockError{Kind: LockOpen, Path: path, Err: unwrapPathError(err)}
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); !ok || !st.Mode().IsRegular() || sys.Nlink != 1 {
-		return nil, &LockError{Kind: LockUnsafe, Path: path}
+		return nil, false, created, &LockError{Kind: LockUnsafe, Path: path}
 	}
 
 	switch err := lockFile(f); {
 	case err == nil:
 	case errors.Is(err, syscall.EWOULDBLOCK): // EAGAIN: another process holds it
-		return nil, &LockHeldError{PID: readHolderPID(f)}
+		return nil, false, created, &LockHeldError{PID: readHolderPID(f)}
 	case errors.Is(err, syscall.ENOTSUP), errors.Is(err, syscall.ENOLCK), errors.Is(err, syscall.EINVAL):
 		// The filesystem cannot lock (some network and container mounts). Refusing
 		// would make Sextile unusable there; run, and say so.
-		return &InstanceLock{Unsupported: true}, nil
+		return nil, true, created, nil
 	default:
-		return nil, &LockError{Kind: LockFlock, Path: path, Err: err}
+		return nil, false, created, &LockError{Kind: LockFlock, Path: path, Err: err}
 	}
 
 	if err := writeHolderPID(f); err != nil {
-		return nil, &LockError{Kind: LockRecord, Path: path, Err: err}
+		return nil, false, created, &LockError{Kind: LockRecord, Path: path, Err: err}
 	}
 	taken = true
-	l := &InstanceLock{file: f}
-	heldLock = l
-	return l, nil
+	return f, false, created, nil
 }
 
 func lockFile(f *os.File) error {

@@ -265,11 +265,11 @@ func TestZeroOrbAspectsAreDistinguished(t *testing.T) {
 		t.Error("a zero-orb aspect was seeded as selected; it cannot produce a row")
 	}
 	for _, width := range []int{54, 60} {
-		row := listRow(aspectRow(st, reg[4], false, width), Config{}, width)
+		row := listRow(aspectRow(st, Config{}, reg[4], false, width), Config{}, width)
 		if !strings.Contains(row, "[-]") {
 			t.Errorf("width %d: zero-orb row = %q, want the unavailable marker", width, row)
 		}
-		live := listRow(aspectRow(st, reg[3], false, width), Config{}, width)
+		live := listRow(aspectRow(st, Config{}, reg[3], false, width), Config{}, width)
 		if strings.Contains(live, "[-]") {
 			t.Errorf("width %d: a counting aspect was marked unavailable: %q", width, live)
 		}
@@ -391,7 +391,7 @@ func TestFilteredFamilyRowAgreesWithItsGlyph(t *testing.T) {
 		t.Errorf("Ptolemaic = %v with its one visible member selected, want all", got)
 	}
 	rows := aspectFamilyRows(st, Config{}, 60)
-	if !strings.Contains(rows[0], "[●]") || !strings.Contains(rows[0], "(1)") {
+	if !strings.Contains(rows[0], "[● ]") || !strings.Contains(rows[0], "(1)") {
 		t.Errorf("Ptolemaic row = %q, want a full glyph and a count of 1 — both over the same set", rows[0])
 	}
 

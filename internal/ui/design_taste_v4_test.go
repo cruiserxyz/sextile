@@ -58,6 +58,7 @@ func designDemoModel(t *testing.T, cfg Config, w, h int) Model {
 		LocationCandidate: location.Candidate{Source: "stored-location", Place: raw},
 		Session:           v1(&store.SessionChart{ID: "constructed-demo", Name: "Constructed Demo", When: demoBirth, Place: demoPlace}, true, true, nil, nil),
 		HasSession:        true,
+		FolderID:          testFolderID,
 	})
 	frame := now.overlayFrame()
 	m := tm.(Model)

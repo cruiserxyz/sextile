@@ -173,7 +173,7 @@ func TestRefusedSessionDirectoryIsLeftAlone(t *testing.T) {
 func TestPartlyRefusedSessionStillRestoresValidCharts(t *testing.T) {
 	sessionSandbox(t)
 	seedPreferences(t)
-	if err := store.SaveSession(store.Session{Slots: []store.SessionSlot{listEntry(1, true), listEntry(2, false)}}); err != nil {
+	if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{listEntry(1, true), listEntry(2, false)}})); err != nil {
 		t.Fatal(err)
 	}
 	text, err := os.ReadFile(store.SessionPath())

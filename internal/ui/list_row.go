@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/store"
@@ -148,6 +147,44 @@ func layoutListRow(left, tail string, right []string, pinned bool, room int, cfg
 	}
 }
 
+// listRowWidth is the cells a row needs to be drawn whole: the cursor column
+// colours off draw, the left cell and its tail, and the right block with the
+// gaps. A box fitted to its widest row's listRowWidth cuts nothing and leaves
+// the widest row's gap at listRowGap, no wider.
+func listRowWidth(r listRowSpec, cfg Config) int {
+	w := ansi.StringWidth(r.Left) + ansi.StringWidth(r.LeftTail)
+	if !cfg.useColor() {
+		w += ansi.StringWidth(cursorColumn(false, cfg))
+	}
+	var right []string
+	for _, c := range r.Right {
+		if c != "" {
+			right = append(right, c)
+		}
+	}
+	return w + rightBlockWidth(right)
+}
+
+// widestRow is the widest of several rows, as the box must hold them.
+func widestRow(cfg Config, rows ...listRowSpec) int {
+	w := 0
+	for _, r := range rows {
+		w = max(w, listRowWidth(r, cfg))
+	}
+	return w
+}
+
+// fitMessage is the width and the rows of a message the list shows in place of
+// its rows -- a hint, a load error. It is measured wrapped at modalProseWidth;
+// floor is the width the box has anyway (the search line's), and the message
+// wraps at that, as listMessage wraps it at the width the box ends up with.
+func fitMessage(s string, floor int) (width, rows int) {
+	for _, l := range strings.Split(ansi.Wrap(s, modalProseWidth, ""), "\n") {
+		width = max(width, ansi.StringWidth(l))
+	}
+	return width, len(strings.Split(ansi.Wrap(s, max(width, floor), ""), "\n"))
+}
+
 // rightBlockWidth is the right cells, their gaps, and the gap before them.
 func rightBlockWidth(cells []string) int {
 	if len(cells) == 0 {
@@ -194,7 +231,11 @@ func listBlock(lines []string, width, height int) string {
 // line, a hint — wrapped to the width rather than cut, because a message the
 // operator cannot finish reading is a message they did not get.
 func listMessage(s string, width, height int) string {
-	return lipgloss.NewStyle().Width(width).Height(height).Render(s)
+	lines := strings.Split(ansi.Wrap(s, width, ""), "\n")
+	for i := range lines {
+		lines[i] = listNote(lines[i], width, Config{})
+	}
+	return listBlock(lines, width, height)
 }
 
 // applyDisplayConfig takes the display: block into the active configuration.
@@ -218,7 +259,7 @@ func (m Model) applyDisplayConfig(d store.DisplayConfig) Model {
 			continue
 		}
 		if !validDisplayColour(c.val) {
-			m = m.logNote("preferences", "%s %q ignored: expected a 256-colour number (0-255) or #rrggbb; the default stands", c.key, c.val)
+			m = m.logNote("preferences", "%s %q ignored: expected a 256-colour number (0-255) or #rrggbb. The default stands", c.key, c.val)
 			continue
 		}
 		*c.into = c.val

@@ -31,7 +31,7 @@ func parseYAML(src string) (*node, error) {
 	var lines []srcLine
 	for i, raw := range strings.Split(src, "\n") {
 		if strings.ContainsRune(raw, '\t') {
-			return nil, fmt.Errorf("line %d: a tab; indent with spaces", i+1)
+			return nil, fmt.Errorf("line %d: a tab. Indent with spaces", i+1)
 		}
 		trimmed := strings.TrimLeft(raw, " ")
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {

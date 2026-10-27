@@ -30,55 +30,90 @@ func main() {
 		os.Exit(runVersion(os.Stdout))
 	}
 
-	// The lock's holder owns the session (the specification): the lock is
-	// taken before the chart folder, the preferences or the session are read,
-	// and after the environment is loaded, because a dev .env can set
-	// XDG_DATA_HOME and the lock file lives in SessionDir(): a lock taken
-	// first would sit in a different folder from the session every later read
-	// uses, and two windows would each hold "the" lock on the same session. A
-	// copy that finds it held by another window runs as a second window, which
-	// never writes the session; any other failure refuses having touched
-	// nothing but the environment (a dev build may have read, or reported, its
-	// .env first).
-	lock, lockErr := acquireLockAfterEnv()
-	lockCfg, refused := lockOutcome(lock, lockErr)
+	cfg, lock, refused, err := prepareLaunch(opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sextile: invalid --charts-dir %q: %v\n", opts.chartsDir, err)
+		os.Exit(2)
+	}
 	if refused != nil {
 		os.Exit(runProgram(ui.NewLockRefusedModel(ui.Config{
 			Accessible: opts.accessible,
 			Color:      resolveColorMode(opts.color),
 		}, refused)))
 	}
+	status := runProgram(ui.NewModel(cfg))
+	runtime.KeepAlive(lock) // the descriptor holding the lock lives as long as the program
+	os.Exit(status)
+}
 
+// prepareLaunch is the launch's order, and the order is the safety:
+//
+//  1. the environment (a dev .env can set the XDG bases);
+//  2. the charts folder, so --charts-dir takes precedence before anything
+//     reads it;
+//  3. the instance lock, before the preferences or the session are read: the
+//     lock lives in SessionDir(), so it must resolve from the same environment
+//     every later read uses. A copy that finds it held runs as a second
+//     window, which never writes the session; any other failure refuses
+//     (refused), having touched nothing but the lock's folder;
+//  4. only then, and only for the window that holds the lock (or runs where
+//     locking is unsupported), the one-time copy of the charts folder's old
+//     state, from the folder the flag chose.
+//
+// err is an unusable --charts-dir.
+func prepareLaunch(opts *options) (cfg ui.Config, lock *store.InstanceLock, refused error, err error) {
+	loadEnv()
 	if opts.chartsDir != "" {
 		if err := setChartsDir(opts.chartsDir); err != nil {
-			fmt.Fprintf(os.Stderr, "sextile: invalid --charts-dir %q: %v\n", opts.chartsDir, err)
-			os.Exit(2)
+			return ui.Config{}, nil, nil, err
 		}
 	}
-	cfg := ui.Config{
+	lock, lockErr := store.AcquireInstanceLock()
+	lockCfg, refused := lockOutcome(lock, lockErr)
+	if refused != nil {
+		return ui.Config{}, nil, refused, nil
+	}
+	cfg = ui.Config{
 		Accessible:              opts.accessible,
 		Color:                   resolveColorMode(opts.color),
 		InstanceLockUnsupported: lockCfg.InstanceLockUnsupported,
 		SecondWindow:            lockCfg.SecondWindow,
 		Launch:                  os.Getenv("SEXTILE_LAUNCH"),
 	}
-	status := runProgram(ui.NewModel(cfg))
-	runtime.KeepAlive(lock) // the descriptor holding the lock lives as long as the program
-	os.Exit(status)
+	if !cfg.SecondWindow {
+		cfg.Migration = store.MigrateLegacyState(store.ChartsDir()).Line()
+	}
+	if opts.session != "" {
+		cfg = openSessionFlag(cfg, opts.session)
+	}
+	return cfg, lock, nil, nil
+}
+
+// openSessionFlag is --session NAME: the launch runs that named session from
+// the start, holding its lock and letting go of the general one -- a window
+// holds exactly one. A session that is missing, open in another window, or
+// saved in another charts folder is not opened: the launch goes on as usual
+// and one Log line says why.
+func openSessionFlag(cfg ui.Config, name string) ui.Config {
+	_, display, lock, err := store.OpenNamedSessionByName(name, store.FolderID(store.ChartsDir()))
+	if err != nil {
+		why := err.Error()
+		if errors.Is(err, store.ErrSessionNotFound) {
+			why = "there is no saved session of that name in " + store.SessionsDir()
+		}
+		cfg.SessionNote = fmt.Sprintf("--session %q not opened: %s. Started as usual", name, why)
+		return cfg
+	}
+	if !cfg.SecondWindow {
+		store.ReleaseInstanceLock()
+	}
+	cfg.NamedSession, cfg.NamedSessionName = lock, display
+	return cfg
 }
 
 // loadEnv is env.Load; a test swaps it to stand in for a .env, which an
 // untagged build never reads.
 var loadEnv = env.Load
-
-// acquireLockAfterEnv seeds the process environment from the repo-root .env
-// (a no-op in a release build) and then takes the instance lock, so the lock
-// and every later SessionDir() read resolve XDG_DATA_HOME from the same
-// environment.
-func acquireLockAfterEnv() (*store.InstanceLock, error) {
-	loadEnv()
-	return store.AcquireInstanceLock()
-}
 
 // lockOutcome is what the launch does with AcquireInstanceLock's answer: the
 // lock fields of the Config for a window that runs, or the error that refuses
@@ -137,6 +172,7 @@ type options struct {
 	accessible bool
 	color      string
 	version    bool
+	session    string
 }
 
 // readBuildInfo is the toolchain's build record; a test swaps it.
@@ -207,9 +243,10 @@ func runVersion(w io.Writer) int {
 func registerFlags(fs *flag.FlagSet) *options {
 	opts := &options{}
 	fs.StringVar(&opts.chartsDir, "charts-dir", "", "directory containing the chart library (Astrolog chart files)")
-	fs.BoolVar(&opts.accessible, "accessible", false, "use ASCII box-drawing glyphs; choose color independently with --color")
+	fs.BoolVar(&opts.accessible, "accessible", false, "use ASCII box-drawing glyphs, and choose color independently with --color")
 	fs.StringVar(&opts.color, "color", "auto", "color policy: auto, always, or never")
-	fs.BoolVar(&opts.version, "version", false, "print Sextile's version and the Astrolog it finds, then exit; checks only Astrolog's version answer (no ephemeris or atlas check)")
+	fs.StringVar(&opts.session, "session", "", "start running the named session NAME (saved with , o in this charts folder)")
+	fs.BoolVar(&opts.version, "version", false, "print Sextile's version and the Astrolog it finds, then exit — checks only Astrolog's version answer (no ephemeris or atlas check)")
 	fs.Usage = func() { printUsage(fs) }
 	return opts
 }

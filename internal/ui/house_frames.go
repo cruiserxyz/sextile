@@ -514,9 +514,12 @@ func (m Model) chooseFrame(slotIdx int, c frameChoice) (Model, tea.Cmd) {
 		// A launch whose refused session file could not be kept writes nothing
 		// (the specification C4): the launch already said so. Nor does a
 		// second window, which said so at start.
-		if !m.sessionKept && m.ownsSession() {
+		if (m.named.running() || !m.sessionKept) && m.ownsSession() {
 			if err := m.writeSessionNow(); err != nil {
-				m = m.logError("Couldn't save the %s choice. It will be tried again at quit.", c.noun)
+				var outside bool
+				if m, outside = m.sessionChangedOutside(err); !outside {
+					m = m.logError("Couldn't save the %s choice. It will be tried again at quit.", c.noun)
+				}
 			}
 		}
 	}
@@ -626,13 +629,16 @@ func (m Model) writeSessionNow() error {
 	if m.slots == nil || m.cantStart.locked() {
 		return errors.New("no workspace to save")
 	}
-	if m.cfg.SecondWindow {
+	if !m.ownsSession() {
 		return errSecondWindow
 	}
-	if m.sessionKept {
+	if m.named.pending {
+		return errors.New("a session is being opened")
+	}
+	if m.sessionKept && !m.named.running() {
 		return errors.New("the refused session file was left in place")
 	}
-	return store.SaveSession(m.sessionSnapshot())
+	return m.saveRunningSession()
 }
 
 // frameRecordsToSave is the session's `frames:` as the next write makes it:
@@ -765,11 +771,25 @@ func castsOf(key chartKey, lens lookup.Lens, r lookup.Result, err error) []castF
 //
 // A second window reads the session without moving a refused file aside: the
 // file is the other window's.
+// perimeterCmd is this launch's perimeter read: the named session --session
+// opened, else the general session -- or, for a second window, none.
+func (m Model) perimeterCmd() tea.Cmd {
+	if m.named.running() {
+		return readPerimeterWith(ingest.ReadStartupPerimeterNamed(m.named.file))
+	}
+	return readPerimeterCmd(m.cfg.SecondWindow)
+}
+
 func readPerimeterCmd(secondWindow bool) tea.Cmd {
 	read := ingest.ReadStartupPerimeter()
 	if secondWindow {
 		read = ingest.ReadStartupPerimeterReadOnly()
 	}
+	return readPerimeterWith(read)
+}
+
+// readPerimeterWith is read plus the chart files the session it read names.
+func readPerimeterWith(read tea.Cmd) tea.Cmd {
 	return func() tea.Msg {
 		p, ok := read().(ingest.StartupPerimeterReadMsg)
 		if !ok {
@@ -784,7 +804,7 @@ func readPerimeterCmd(secondWindow bool) tea.Cmd {
 // that cannot be read is left out: its chart then falls to the next rule of C1
 // and the re-check that follows the first frame says what it found.
 func readSessionFiles(p ingest.StartupPerimeterReadMsg) (map[string]ingest.ChartFileRead, map[string]string) {
-	if !p.HasSession || p.SessionErr != nil {
+	if !p.HasSession || p.SessionErr != nil || !sessionBelongsHere(p) {
 		return nil, nil
 	}
 	var files []string
@@ -894,7 +914,7 @@ var readChartFileIn = lookup.ReadChartFileIn
 func (m Model) renameCmd(gen int, dir string, c store.NamedChart, seen, title, place string) tea.Cmd {
 	file := filepath.Base(c.Source.File)
 	rec, haveRec := m.frames.find(file, false)
-	haveRec = haveRec && !m.cfg.SecondWindow
+	haveRec = haveRec && m.ownsSession()
 	// The read is always fresh: nothing cached about the file is trusted, since
 	// it may have been replaced since it was last read.
 	return func() tea.Msg {
