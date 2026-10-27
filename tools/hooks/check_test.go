@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -250,6 +251,41 @@ func TestPlainCheckFailsWhenItCannotTellTheRange(t *testing.T) {
 	out, code = c.run()
 	if code != 0 || !strings.Contains(out, "check: MESSAGES ok") {
 		t.Fatalf("the range starts at origin/main, so the older bad commit is outside it: %d\n%s", code, out)
+	}
+}
+
+// TestReleaseTrapRemovesOnlyInTheCheckItself: ./check --release removes its
+// extracted tree on EXIT, and every child bash forks with that trap still
+// installed until it resets it. probe kills its watchdog subshell the moment
+// a fast probe returns; a SIGTERM that lands before the child's reset runs the
+// trap there, and the tree vanished under the rows still running in it (a
+// release check failing on getcwd after ASTROLOG, about one run in fifteen
+// with the stub toolchain). This runs the trap ./check installs the way such
+// a child runs it, in a subshell, then in the check's own shell.
+func TestReleaseTrapRemovesOnlyInTheCheckItself(t *testing.T) {
+	wd, _ := os.Getwd()
+	b, err := os.ReadFile(filepath.Join(wd, "..", "..", "check"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	traps := regexp.MustCompile(`(?m)^\s*trap '([^']*(?:'\\''[^']*)*)' EXIT$`).FindAllStringSubmatch(string(b), -1)
+	if len(traps) != 1 || !strings.Contains(traps[0][1], `"$WORK"`) {
+		t.Fatalf("want exactly one EXIT trap in ./check, the one that removes WORK; found %q", traps)
+	}
+	work := filepath.Join(t.TempDir(), "sextile-release.test")
+	if err := os.Mkdir(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := `set -Eeuo pipefail
+WORK=$1
+( eval "$CHECK_TRAP" ) || true
+[ -d "$WORK" ] || { echo "a child running the trap removed WORK"; exit 3; }
+eval "$CHECK_TRAP"
+[ ! -e "$WORK" ] || { echo "the check's own shell kept WORK"; exit 4; }
+`
+	out, code := sh(t, wd, []string{"CHECK_TRAP=" + traps[0][1]}, "", "bash", "-c", script, "trapprobe", work)
+	if code != 0 {
+		t.Fatalf("EXIT trap %q: exit %d\n%s", traps[0][1], code, out)
 	}
 }
 

@@ -267,7 +267,12 @@ else
   FULL=$(git rev-parse --verify --quiet "$REV^{commit}") || refuse "$REV is not a commit here"
   REPO=$(pwd -P)
   WORK=$(mktemp -d "${TMPDIR:-/tmp}/sextile-release.XXXXXX") || refuse 'cannot make the temp directory'
-  trap 'rm -rf -- "$WORK"' EXIT
+  # Only this shell removes WORK. A child killed between its fork and its own
+  # trap reset (probe's watchdog, killed the moment a fast probe returns)
+  # still holds this trap and runs it on SIGTERM; unguarded, it deleted the
+  # tree under the rows still running in it. $$ stays this shell's pid in a
+  # subshell, BASHPID does not.
+  trap '[ "$BASHPID" != "$$" ] || rm -rf -- "$WORK"' EXIT
   git archive --format=tar "$FULL" | tar -x -C "$WORK"
   printf 'check: release %s: tree extracted to %s\n' "$REV" "$WORK"
   # The rows run inside REV's own tree, with REV's own tools.
