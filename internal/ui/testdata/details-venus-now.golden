@@ -1,6 +1,6 @@
 == 2026-10-14 12:00 UT, color 80x24: no Details panel in this layout ==
 == 2026-10-14 12:00 UT, color 156x40: Details 80x33 ==
-[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mBodies[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m─────────────────────────────────────────────────────────╮[0m
+[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mVenus[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m──────────────────────────────────────────────────────────╮[0m
 [38;5;240m│[0melongation         14°52′ east                                    [38;5;244mby longitude[0m[38;5;240m│[0m
 [38;5;240m│[0mphase              evening star · occidental                                  [38;5;240m│[0m
 [38;5;240m│[0m                   approaching the Sun                                        [38;5;240m│[0m
@@ -35,7 +35,7 @@
 [38;5;240m╰──────────────────────────────────────────────────────────────────────────────╯[0m
 == 2026-10-14 12:00 UT, never 80x24: no Details panel in this layout ==
 == 2026-10-14 12:00 UT, never 156x40: Details 80x33 ==
-╭─[0] Bodies - [Details]───────────────────────────────────────────────────────╮
+╭─[0] Venus - [Details]────────────────────────────────────────────────────────╮
 │elongation         14°52′ east                                    by longitude│
 │phase              evening star · occidental                                  │
 │                   approaching the Sun                                        │
@@ -70,7 +70,7 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 == 2026-10-24 05:44 Berlin, color 80x24: no Details panel in this layout ==
 == 2026-10-24 05:44 Berlin, color 156x40: Details 80x33 ==
-[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mBodies[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m─────────────────────────────────────────────────────────╮[0m
+[38;5;240m╭─[0m[38;5;252m[0] [0m[38;5;252mVenus[0m[38;5;252m - [0m[92mDetails[0m[38;5;240m──────────────────────────────────────────────────────────╮[0m
 [38;5;240m│[0melongation         0°00′ at conjunction                           [38;5;244mby longitude[0m[38;5;240m│[0m
 [38;5;240m│[0mphase              at conjunction · at conjunction                            [38;5;240m│[0m
 [38;5;240m│[0munder the beams    yes                                              [38;5;244mwithin 17°[0m[38;5;240m│[0m
@@ -105,7 +105,7 @@
 [38;5;240m╰──────────────────────────────────────────────────────────────────────────────╯[0m
 == 2026-10-24 05:44 Berlin, never 80x24: no Details panel in this layout ==
 == 2026-10-24 05:44 Berlin, never 156x40: Details 80x33 ==
-╭─[0] Bodies - [Details]───────────────────────────────────────────────────────╮
+╭─[0] Venus - [Details]────────────────────────────────────────────────────────╮
 │elongation         0°00′ at conjunction                           by longitude│
 │phase              at conjunction · at conjunction                            │
 │under the beams    yes                                              within 17°│

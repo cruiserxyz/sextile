@@ -2,7 +2,7 @@
 # sextile: build (once) and run Sextile in Docker, or with --no-docker
 # build this checkout with the host's go and run it.
 #
-#   sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [-- APP ARGS...]
+#   sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons] [-- APP ARGS...]
 #   sextile doctor [--charts-dir DIR] [--port N]
 #
 # Docker, local daemon only; --no-docker never runs a docker command, and
@@ -16,6 +16,7 @@ unset CDPATH
 IMAGE_REPO=localhost/sextile
 LABEL=io.github.cruiserxyz.sextile.launcher
 COMMIT_LABEL=io.github.cruiserxyz.sextile.commit
+MOONS_LABEL=io.github.cruiserxyz.sextile.moons
 MIN_DOCKER=28
 DEFAULT_PORT=5307
 GET_DOCKER=https://docs.docker.com/get-docker/
@@ -58,7 +59,7 @@ ROOT=$(cd -- "$here_dir" >/dev/null 2>&1 && pwd -P) || die "cannot find the fold
 usage() {
   local l
   while IFS= read -r l; do printf '%s\n' "$l"; done <<'EOF'
-usage: sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [-- APP-ARGS...]
+usage: sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons] [-- APP-ARGS...]
        sextile doctor [--charts-dir DIR] [--port N]
 
 Builds the Docker image for this checkout when it is missing, then runs Sextile
@@ -71,8 +72,12 @@ in it with your charts folder mounted.
   --no-open         do not open the wheel in your browser on the first Ctrl+X
   --no-docker       build and run this checkout with the host's go and astrolog
                     instead of Docker
+  --moons           put the planetary moons' files, about 240 MB, in the image from now on
+  --no-moons        leave them out from now on
   doctor            say what is wrong, without changing anything
   --                everything after it goes to Sextile unchanged
+
+  SEXTILE_MOONS=1   (environment) for one run, the same as --moons. It is not remembered
 EOF
 }
 
@@ -86,6 +91,7 @@ CHARTS_SET=
 REBUILD=
 NO_OPEN=
 NATIVE=
+MOONS_FLAG=
 SEP=
 FWD=()
 
@@ -129,6 +135,11 @@ while [ $# -gt 0 ]; do
       [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--no-docker')"
       [ -n "$NATIVE" ] && die "--no-docker was given twice"
       NATIVE=1 ;;
+    --moons | --no-moons)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '$arg')"
+      [ "$MOONS_FLAG" = "$arg" ] && die "$arg was given twice"
+      [ -n "$MOONS_FLAG" ] && die "--moons and --no-moons cannot be given together"
+      MOONS_FLAG=$arg ;;
     --charts-dir | --charts-dir=*)
       [ -n "$CHARTS_SET" ] && die "--charts-dir was given twice"
       if [ "$arg" = --charts-dir ]; then
@@ -236,6 +247,103 @@ check_endpoint() {
       ST=FAIL
       MSG="only a local Docker is supported (this endpoint is $ENDPOINT): Sextile mounts a folder of this machine, which a remote Docker cannot see" ;;
   esac
+}
+
+# moons_words: "with" for 1, "without" for 0 (the planetary moons' files).
+moons_words() {
+  if [ "$1" = 1 ]; then printf with; else printf without; fi
+}
+
+# moons_switch: "on" for 1, "off" for 0.
+moons_switch() {
+  if [ "$1" = 1 ]; then printf on; else printf off; fi
+}
+
+# read_moons_file: the remembered choice, in launcher-moons.conf beside
+# launcher.conf (never inside it: an older launcher refuses a second line
+# there). MF_ST is absent, valid or invalid; valid sets MF_VAL (1 or 0).
+MOONS_CONF=
+MF_ST=absent
+MF_VAL=
+read_moons_file() {
+  local line n=0 val=
+  MF_ST=absent
+  MF_VAL=
+  [ -e "$MOONS_CONF" ] || [ -L "$MOONS_CONF" ] || return 0
+  MF_ST=invalid
+  if [ -L "$MOONS_CONF" ] || [ ! -f "$MOONS_CONF" ] || [ ! -r "$MOONS_CONF" ]; then
+    return 0
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+      '' | '#'*) continue ;;
+    esac
+    [ -n "${line//[[:space:]]/}" ] || continue
+    n=$((n + 1))
+    val=$line
+  done <"$MOONS_CONF"
+  [ "$n" -eq 1 ] || return 0
+  case $val in
+    moons=1) MF_VAL=1 ;;
+    moons=0) MF_VAL=0 ;;
+    *) return 0 ;;
+  esac
+  MF_ST=valid
+}
+
+# check_moons: decides whether the image carries the planetary moons' files
+# (about 240 MB). First that applies: the flag, SEXTILE_MOONS (1 or 0; empty
+# counts as not set), the remembered choice, then off. Sets WANT_MOONS (1 or
+# 0) and MOONS_SRC (flag, env, file or default), or returns 1 with MOONS_ERR
+# and MOONS_ERR_KIND (env or file). Only the Docker route uses the result:
+# --no-docker uses the files in the host's Astrolog folder.
+WANT_MOONS=0
+MOONS_SRC=default
+MOONS_ERR=
+MOONS_ERR_KIND=
+check_moons() {
+  local env_val=
+  MOONS_ERR=
+  MOONS_ERR_KIND=
+  MOONS_SRC=default
+  WANT_MOONS=0
+  case ${SEXTILE_MOONS-} in
+    '') ;;
+    0 | 1) env_val=$SEXTILE_MOONS ;;
+    *)
+      MOONS_ERR="SEXTILE_MOONS=$SEXTILE_MOONS is not accepted. Use SEXTILE_MOONS=1 for the planetary moons' files in the image, or 0 or leave it unset for none"
+      MOONS_ERR_KIND=env
+      return 1 ;;
+  esac
+  MF_ST=absent
+  MF_VAL=
+  if config_location; then
+    MOONS_CONF=$CONF_DIR/launcher-moons.conf
+    read_moons_file
+    if [ "$MF_ST" = invalid ]; then
+      MOONS_ERR="the file $MOONS_CONF is not valid: its line must be moons=1 or moons=0. Fix it or delete it"
+      MOONS_ERR_KIND=file
+      return 1
+    fi
+  elif [ -n "$MOONS_FLAG" ]; then
+    MOONS_ERR=$CONF_ERR
+    MOONS_ERR_KIND=file
+    return 1
+  fi
+  if [ "$MOONS_FLAG" = --moons ]; then
+    WANT_MOONS=1
+    MOONS_SRC=flag
+  elif [ "$MOONS_FLAG" = --no-moons ]; then
+    WANT_MOONS=0
+    MOONS_SRC=flag
+  elif [ -n "$env_val" ]; then
+    WANT_MOONS=$env_val
+    MOONS_SRC=env
+  elif [ "$MF_ST" = valid ]; then
+    WANT_MOONS=$MF_VAL
+    MOONS_SRC=file
+  fi
+  return 0
 }
 
 DESCRIBE=
@@ -778,25 +886,54 @@ describe_folder() {
   fi
 }
 
-write_config() {
-  local tmp
+# write_private TARGET TEMPLATE LABEL FORMAT ARG: write printf FORMAT with ARG to
+# the file TARGET in $CONF_DIR, the folder made private, through a temporary file of the same
+# folder (mode 600) moved into place. LABEL names the file in a refusal.
+write_private() {
+  local target=$1 template=$2 label=$3 tmp
   make_dir "$CONF_DIR" || die "cannot create the config folder $CONF_DIR"
   [ -L "$CONF_DIR" ] && die "the config folder $CONF_DIR is a symlink. The launcher will not write through it"
   chmod 700 "$CONF_DIR" || die "cannot make the config folder $CONF_DIR private (chmod 700 failed)"
-  [ -L "$CONF" ] && die "the config file $CONF is a symlink. The launcher will not write through it"
-  tmp=$(mktemp "$CONF_DIR/.launcher.conf.XXXXXX") || die "cannot write in the config folder $CONF_DIR"
+  [ -L "$target" ] && die "the $label $target is a symlink. The launcher will not write through it"
+  tmp=$(mktemp "$CONF_DIR/$template") || die "cannot write in the config folder $CONF_DIR"
   # The temporary file is the launcher's own; every failure path removes it.
-  if ! printf '# written by sextile. Delete this file to be asked again\ncharts-dir=%s\n' "$1" >"$tmp"; then
+  if ! printf "$4" "$5" >"$tmp"; then
     rm -f -- "$tmp"
-    die "cannot write the config file $CONF"
+    die "cannot write the $label $target"
   fi
   if ! chmod 600 "$tmp"; then
     rm -f -- "$tmp"
-    die "cannot make the config file $CONF private (chmod 600 failed)"
+    die "cannot make the $label $target private (chmod 600 failed)"
   fi
-  if ! mv -f -- "$tmp" "$CONF"; then
+  if ! mv -f -- "$tmp" "$target"; then
     rm -f -- "$tmp"
-    die "cannot write the config file $CONF"
+    die "cannot write the $label $target"
+  fi
+}
+
+write_config() {
+  write_private "$CONF" .launcher.conf.XXXXXX "config file" '# written by sextile. Delete this file to be asked again\ncharts-dir=%s\n' "$1"
+}
+
+# remember_moons: with --moons or --no-moons, write the choice to
+# launcher-moons.conf and say so. Called once every refusal of the launch is
+# behind it and before any build.
+remember_moons() {
+  local value=0 where
+  [ -n "$MOONS_FLAG" ] || return 0
+  config_location || die "$CONF_ERR"
+  MOONS_CONF=$CONF_DIR/launcher-moons.conf
+  [ "$MOONS_FLAG" = --moons ] && value=1
+  write_private "$MOONS_CONF" .launcher-moons.conf.XXXXXX "moons file" \
+    '# written by sextile --moons or --no-moons. Delete this file for the default (no planetary moons)\nmoons=%s\n' "$value"
+  where=$(tilde "$MOONS_CONF")
+  if [ "$value" = 1 ]; then
+    printf 'planetary moons: on from now on (remembered in %s). sextile --no-moons turns them off\n' "$where" >&2
+  else
+    printf 'planetary moons: off from now on (remembered in %s)\n' "$where" >&2
+  fi
+  if [ -n "$NATIVE" ]; then
+    printf '%s\n' "--no-docker reads the files in your Astrolog folder. scripts/build-astrolog --moons installs them there" >&2
   fi
 }
 
@@ -1183,6 +1320,28 @@ native_run() {
 
 # ------------------------------------------------------------------- doctor
 
+# report_moons: doctor's moons line, after the image line.
+report_moons() {
+  local here
+  [ "$MOONS_ERR_KIND" = env ] && return 0
+  if [ -n "$MOONS_ERR" ]; then
+    ST=FAIL
+    MSG=$MOONS_ERR
+    report moons
+    return 0
+  fi
+  ST=ok
+  here=$(tilde "$MOONS_CONF")
+  case $MOONS_SRC:$WANT_MOONS in
+    file:1) MSG="on, remembered in $here. sextile --no-moons turns them off" ;;
+    file:0) MSG="off, remembered in $here" ;;
+    env:1) MSG="on, from SEXTILE_MOONS=1 in the environment (this run only)" ;;
+    env:0) MSG="off, from SEXTILE_MOONS=0 in the environment (this run only)" ;;
+    *) MSG="off. sextile --moons puts the planetary moons' files (about 240 MB) in the image and remembers it" ;;
+  esac
+  report moons
+}
+
 ISSUES=0
 report() { # report NAME: print the current ST/MSG as one doctor line
   printf '%-5s %s: %s\n' "$ST" "$1" "${DMSG:-$MSG}"
@@ -1190,19 +1349,29 @@ report() { # report NAME: print the current ST/MSG as one doctor line
   [ "$ST" = FAIL ] && ISSUES=$((ISSUES + 1))
 }
 
-image_state() { # sets IMG_STATE: absent, unlabelled, stale or labelled
-  local out lab com
+image_state() { # sets IMG_STATE: absent, unlabelled, stale or labelled; IMG_WHY (commit or moons) when stale
+  local out lab com mo rest
   IMG_STATE=absent
-  out=$(docker image inspect --format "{{index .Config.Labels \"$LABEL\"}} {{index .Config.Labels \"$COMMIT_LABEL\"}}" "$IMAGE" 2>/dev/null) || return 0
-  lab=${out%% *}
-  com=
-  case $out in
-    *' '*) com=${out#* } ;;
-  esac
+  IMG_WHY=
+  IMG_MOONS=0
+  # Separated by |, not a space: a missing label is an empty field and must not
+  # shift the others.
+  out=$(docker image inspect --format "{{index .Config.Labels \"$LABEL\"}}|{{index .Config.Labels \"$COMMIT_LABEL\"}}|{{index .Config.Labels \"$MOONS_LABEL\"}}" "$IMAGE" 2>/dev/null) || return 0
+  lab=${out%%|*}
+  rest=${out#*|}
+  com=${rest%%|*}
+  mo=${rest#*|}
+  # An image built before the moons switch existed has no moons label: it
+  # counts as 0, so nobody who never set the variable rebuilds at an upgrade.
+  [ "$mo" = 1 ] && IMG_MOONS=1
   if [ "$lab" != 1 ]; then
     IMG_STATE=unlabelled
   elif [ -n "$COMMIT" ] && [ "$com" != "$COMMIT" ]; then
     IMG_STATE=stale
+    IMG_WHY=commit
+  elif [ "$IMG_MOONS" != "$WANT_MOONS" ]; then
+    IMG_STATE=stale
+    IMG_WHY=moons
   else
     IMG_STATE=labelled
   fi
@@ -1376,7 +1545,16 @@ run_doctor() {
   fi
 
   check_tag
+  check_moons || :
   if [ "$ST" = FAIL ]; then
+    report image
+  elif [ "$MOONS_ERR_KIND" = env ]; then
+    ST=FAIL
+    MSG=$MOONS_ERR
+    report image
+  elif [ -n "$MOONS_ERR" ]; then
+    ST=note
+    MSG="$IMAGE not checked (the moons setting is not valid, see moons)"
     report image
   elif [ -n "$daemon_ok" ]; then
     image_state
@@ -1394,7 +1572,11 @@ run_doctor() {
         MSG="$IMAGE exists without the launcher's label — sextile builds a new one over that name" ;;
       stale)
         ST=note
-        MSG="$IMAGE was built from another commit — sextile builds a new one over that name" ;;
+        if [ "$IMG_WHY" = moons ]; then
+          MSG="$IMAGE was built $(moons_words "$IMG_MOONS") the planetary moons' files and they are switched $(moons_switch "$WANT_MOONS") — sextile builds a new one over that name"
+        else
+          MSG="$IMAGE was built from another commit — sextile builds a new one over that name"
+        fi ;;
       *)
         ST=note
         MSG="$IMAGE not built yet — sextile builds it" ;;
@@ -1405,6 +1587,7 @@ run_doctor() {
     MSG="$IMAGE not checked (no working docker)"
     report image
   fi
+  report_moons
 
   check_port
   report port
@@ -1477,6 +1660,8 @@ if [ -n "$NATIVE" ]; then
     die "--no-docker did not find $missing. It needs go (Go 1.25 or newer) on PATH, and astrolog on PATH or in ~/.local/bin (scripts/build-astrolog installs Astrolog, about two minutes)"
   fi
 else
+  # A refusal before any docker command, let alone a build.
+  check_moons || die "$MOONS_ERR"
   step "checking Docker (a Docker Desktop that is still starting can take a minute)..."
   check_docker
   [ "$ST" = FAIL ] && die "$MSG"
@@ -1505,12 +1690,14 @@ if [ "$CHARTS_SRC" = none ]; then
 fi
 
 if [ -n "$NATIVE" ]; then
+  remember_moons
   native_build
   native_run
 fi
 
 # Before anything is built or run: a refusal here leaves the machine as it was.
 state_folders || die "$STATE_ERR"
+remember_moons
 
 image_state
 need=
@@ -1521,8 +1708,17 @@ need=
 if [ -z "$need" ]; then
   step "image $IMAGE is ready"
 fi
+if [ "$IMG_WHY" = moons ]; then
+  if [ "$WANT_MOONS" = 1 ]; then
+    printf 'planetary moons switched on: rebuilding %s with their files (about 240 MB to download the first time)\n' "$IMAGE" >&2
+  else
+    printf 'planetary moons switched off: rebuilding %s without their files\n' "$IMAGE" >&2
+  fi
+fi
 if [ -n "$need" ]; then
-  build=(build --build-arg "SEXTILE_VERSION=$DESCRIBE" --label "$LABEL=1")
+  moons_arg=false
+  [ "$WANT_MOONS" = 1 ] && moons_arg=true
+  build=(build --build-arg "SEXTILE_VERSION=$DESCRIBE" --build-arg "SEXTILE_MOONS=$moons_arg" --label "$LABEL=1" --label "$MOONS_LABEL=$WANT_MOONS")
   [ -n "$COMMIT" ] && build+=(--label "$COMMIT_LABEL=$COMMIT")
   build+=(-t "$IMAGE" "$ROOT")
   if [ -n "$ALWAYS" ]; then
@@ -1558,7 +1754,11 @@ find_zone
 
 args=(run --rm --pull never -i)
 if [ -t 0 ] && [ -t 1 ]; then
-  args+=(-t)
+  # Docker's detach sequence defaults to Ctrl+P, Ctrl+Q, and its client holds a
+  # lone Ctrl+P back until the next key: Sextile's Actions key (Ctrl+P) then
+  # arrived only with the key after it. Ctrl+^ twice detaches instead, a key
+  # Sextile does not use (operator, 2026-11-07).
+  args+=(-t --detach-keys=ctrl-^,ctrl-^)
 fi
 args+=(
   --user "$(id -u):$(id -g)"

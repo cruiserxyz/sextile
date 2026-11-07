@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -13,7 +14,7 @@ import (
 
 // framePrefix is a house frame without its trailing padding.
 func framePrefix(h int) string {
-	return strings.TrimRight(houseQuadrant(aspect.House(h)), " ")
+	return strings.TrimRight(panel.HouseQuadrant(aspect.House(h)), " ")
 }
 
 // Acceptance 1 and 4: `<n> <ordinal>`, the position, then the frame with n in
@@ -113,9 +114,9 @@ func TestCuspRowInComparingColumns(t *testing.T) {
 		other[i] = float64(int(other[i]+97) % 360)
 	}
 	state := chartViewState{positions: withTicked(fullChartPositions(), cusps, 2), cusps: cusps}
-	cols := []bodyColumn{
-		{positions: state.positions, cusps: cusps},
-		{positions: state.positions, cusps: other},
+	cols := []panel.BodyColumn{
+		{Positions: state.positions, Cusps: cusps},
+		{Positions: state.positions, Cusps: other},
 	}
 	view := bodiesView{shown: 2, comparing: true, ok: true, cols: cols, focus: 0}
 	body, rule, _ := renderBodiesFor(view, state, nil, 0, 0, 100, 40, false, Config{Color: ColorNever})

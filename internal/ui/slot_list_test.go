@@ -84,16 +84,16 @@ func selections(m Model) []bool {
 }
 
 func barKeys(m Model) string {
-	return lastRow(renderKeyBar(200, m.keyBarEntries(), Config{Accessible: true}, ""))
+	return lastRow(m.barText(m.currentOwner(), m.ownerBindings(m.currentOwner()), 200, Config{Accessible: true}, ""))
 }
 
 // C3: a picked chart that is not in the list becomes a new slot directly above
 // the floating slot, takes the cursor, and disturbs nothing.
 func TestPickAddsASlotAboveFloating(t *testing.T) {
 	m := listModel(t, 2, 0)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objMars)
 	before := []store.Slot{*m.slots.All()[0], *m.slots.All()[1]}
-	marks := [][]aspect.Body{m.slots.SelectedBodies(0), m.slots.SelectedBodies(1)}
+	marks := [][]aspect.Object{markedObjects(m.slots, 0), markedObjects(m.slots, 1)}
 
 	third := store.NamedChart{ID: "synthetic-third", Name: "Synthetic Third", Place: fixtureOneP,
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "synthetic-third.as"}}
@@ -117,8 +117,8 @@ func TestPickAddsASlotAboveFloating(t *testing.T) {
 		if !reflect.DeepEqual(*got.slots.All()[i], before[i]) {
 			t.Errorf("slot %d changed:\n  before %+v\n  after  %+v", i, before[i], *got.slots.All()[i])
 		}
-		if !reflect.DeepEqual(got.slots.SelectedBodies(i), marks[i]) {
-			t.Errorf("slot %d marks changed: %v -> %v", i, marks[i], got.slots.SelectedBodies(i))
+		if !reflect.DeepEqual(markedObjects(got.slots, i), marks[i]) {
+			t.Errorf("slot %d marks changed: %v -> %v", i, marks[i], markedObjects(got.slots, i))
 		}
 	}
 }
@@ -175,7 +175,7 @@ func TestPickOfAnOpenChartJumpsToIt(t *testing.T) {
 	t.Run("legacy: the id changed AND the minute was corrected is still one row, updated in place", func(t *testing.T) {
 		m := listModel(t, 0, 0)
 		add(m, "old-id", "Legacy", file("legacy.as"), when)
-		m.slots.ToggleBodySelection(0, aspect.Mars)
+		m.slots.ToggleObjectSelection(0, objMars)
 		got := pickAt(m, store.NamedChart{ID: "legacy", Name: "Legacy", Place: fixtureOneP, Source: file("legacy.as")}, when.Add(time.Minute))
 		slot := got.slots.All()[0]
 		if got.slots.AnchoredCount() != 1 || got.cursorIdx != 0 {
@@ -184,7 +184,7 @@ func TestPickOfAnOpenChartJumpsToIt(t *testing.T) {
 		if slot.Chart.ID != "legacy" || !slot.Time.Equal(when.Add(time.Minute)) {
 			t.Errorf("the row holds id %q at %v, want the file's current id and corrected minute", slot.Chart.ID, slot.Time)
 		}
-		if !reflect.DeepEqual(got.slots.SelectedBodies(0), []aspect.Body{aspect.Mars}) {
+		if !reflect.DeepEqual(markedObjects(got.slots, 0), []aspect.Object{objMars}) {
 			t.Error("the row's marks were not kept")
 		}
 	})
@@ -193,13 +193,13 @@ func TestPickOfAnOpenChartJumpsToIt(t *testing.T) {
 		m := listModel(t, 0, 0)
 		add(m, "first-person", "First", file("reused.as"), when)
 		m.slots.SetSlotSelected(0, true) // adding selects nothing: the operator selected this row
-		m.slots.ToggleBodySelection(0, aspect.Mars)
+		m.slots.ToggleObjectSelection(0, objMars)
 		got := pickAt(m, store.NamedChart{ID: "second-person", Name: "Second", Place: fixtureOneP, Source: file("reused.as")}, when.Add(30*24*time.Hour))
 		slot := got.slots.All()[0]
 		if got.slots.AnchoredCount() != 1 || slot.Chart.Name != "Second" || slot.Chart.ID != "second-person" || !slot.Time.Equal(when.Add(30*24*time.Hour)) {
 			t.Errorf("%d rows; the row holds %q (%s) at %v, want one row with the file's content", got.slots.AnchoredCount(), slot.Chart.Name, slot.Chart.ID, slot.Time)
 		}
-		if !reflect.DeepEqual(got.slots.SelectedBodies(0), []aspect.Body{aspect.Mars}) || !got.slots.SlotSelected(0) {
+		if !reflect.DeepEqual(markedObjects(got.slots, 0), []aspect.Object{objMars}) || !got.slots.SlotSelected(0) {
 			t.Error("the row's selection and marks were not kept")
 		}
 	})
@@ -267,7 +267,7 @@ func TestDelRemovesTheFocusedSlot(t *testing.T) {
 	before := fingerprint()
 
 	m := listModel(t, 3, 1)
-	m.slots.ToggleBodySelection(0, aspect.Sun)
+	m.slots.ToggleObjectSelection(0, objSun)
 
 	// The middle chart goes; the cursor lands on the slot that took its index.
 	m = send(t, m, keyDelete)
@@ -277,8 +277,8 @@ func TestDelRemovesTheFocusedSlot(t *testing.T) {
 	if m.cursorIdx != 1 || m.slots.All()[m.cursorIdx].Chart.Name != "Synthetic 3" {
 		t.Errorf("cursor = %d, want it on the former third chart (1)", m.cursorIdx)
 	}
-	if !reflect.DeepEqual(m.slots.SelectedBodies(0), []aspect.Body{aspect.Sun}) {
-		t.Errorf("the first chart's marks changed: %v", m.slots.SelectedBodies(0))
+	if !reflect.DeepEqual(markedObjects(m.slots, 0), []aspect.Object{objSun}) {
+		t.Errorf("the first chart's marks changed: %v", markedObjects(m.slots, 0))
 	}
 
 	// The last anchored chart goes; the cursor lands on the floating slot.
@@ -394,8 +394,8 @@ func TestFloatingSlotRefusesListKeys(t *testing.T) {
 // follows; at the ends they do nothing and are not on the bar.
 func TestCtrlJKReorderAnchoredSlots(t *testing.T) {
 	m := listModel(t, 3, 2)
-	m.slots.ToggleSlotSelection(2)              // select the 3rd
-	m.slots.ToggleBodySelection(2, aspect.Moon) // and mark it
+	m.slots.ToggleSlotSelection(2)            // select the 3rd
+	m.slots.ToggleObjectSelection(2, objMoon) // and mark it
 	m = send(t, m, keyCtrlK)
 	if want := []string{"Synthetic 1", "Synthetic 3", "Synthetic 2", "now"}; !reflect.DeepEqual(order(m), want) {
 		t.Fatalf("⌃k on the third: %v, want %v", order(m), want)
@@ -403,8 +403,8 @@ func TestCtrlJKReorderAnchoredSlots(t *testing.T) {
 	if m.cursorIdx != 1 {
 		t.Errorf("cursor = %d, want it following the moved chart (1)", m.cursorIdx)
 	}
-	if !m.slots.SlotSelected(1) || m.slots.SlotSelected(2) || !reflect.DeepEqual(m.slots.SelectedBodies(1), []aspect.Body{aspect.Moon}) {
-		t.Errorf("selection or marks did not travel with the chart: selected %v, marks %v", selections(m), m.slots.SelectedBodies(1))
+	if !m.slots.SlotSelected(1) || m.slots.SlotSelected(2) || !reflect.DeepEqual(markedObjects(m.slots, 1), []aspect.Object{objMoon}) {
+		t.Errorf("selection or marks did not travel with the chart: selected %v, marks %v", selections(m), markedObjects(m.slots, 1))
 	}
 
 	m = listModel(t, 3, 0)
@@ -626,20 +626,20 @@ func TestBodiesRowsFollowTheirSlotsThroughDelAndMove(t *testing.T) {
 func TestLocationRebuildPreservesTheList(t *testing.T) {
 	m := listModel(t, 3, 1)
 	m.slots.ToggleSlotSelection(2) // the 1st (default) and the 3rd selected
-	m.slots.ToggleBodySelection(1, aspect.Venus)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objVenus)
+	m.slots.ToggleObjectSelection(1, objMars)
 	before := m.slots
 	type snap struct {
 		name     string
 		when     time.Time
 		place    location.PlaceInfo
 		selected bool
-		marks    []aspect.Body
+		marks    []aspect.Object
 	}
 	take := func(s *store.Slots) []snap {
 		var out []snap
 		for i, slot := range s.All()[:s.AnchoredCount()] {
-			out = append(out, snap{slot.Chart.Name, slot.Time, slot.Location, s.SlotSelected(i), s.SelectedBodies(i)})
+			out = append(out, snap{slot.Chart.Name, slot.Time, slot.Location, s.SlotSelected(i), markedObjects(s, i)})
 		}
 		return out
 	}
@@ -661,7 +661,7 @@ func TestLocationRebuildPreservesTheList(t *testing.T) {
 	}
 }
 
-func listEntry(n int, selected bool, bodies ...aspect.Body) store.SessionSlot {
+func listEntry(n int, selected bool, bodies ...string) store.SessionSlot {
 	return store.SessionSlot{
 		Chart: store.SessionChart{
 			ID: fmt.Sprintf("synthetic-%d", n), Name: fmt.Sprintf("Synthetic %d", n),
@@ -683,10 +683,10 @@ func TestRestoreDropsUnresolvableSlots(t *testing.T) {
 	sessionSandbox(t)
 	notUsable := listEntry(2, true)
 	notUsable.Usable = false
-	noZone := listEntry(4, false, aspect.Venus)
+	noZone := listEntry(4, false, "Venus")
 	noZone.Chart.Place.TZ = "" // usable by the store's say-so, refused by the workspace
 	sess := v2([]store.SessionSlot{
-		listEntry(1, true, aspect.Sun), notUsable, listEntry(3, false, aspect.Moon), noZone, listEntry(5, true),
+		listEntry(1, true, "Sun"), notUsable, listEntry(3, false, "Moon"), noZone, listEntry(5, true),
 	}, true)
 
 	m := startedModel(t, withSession(perimeter(), sess))
@@ -697,8 +697,8 @@ func TestRestoreDropsUnresolvableSlots(t *testing.T) {
 	if want := []bool{true, false, true, true}; !reflect.DeepEqual(selections(m), want) {
 		t.Errorf("selections = %v, want %v (each entry's own flag)", selections(m), want)
 	}
-	if !reflect.DeepEqual(m.slots.SelectedBodies(0), []aspect.Body{aspect.Sun}) || !reflect.DeepEqual(m.slots.SelectedBodies(1), []aspect.Body{aspect.Moon}) || len(m.slots.SelectedBodies(2)) != 0 {
-		t.Errorf("marks followed the wrong entries: %v / %v / %v", m.slots.SelectedBodies(0), m.slots.SelectedBodies(1), m.slots.SelectedBodies(2))
+	if !reflect.DeepEqual(markedObjects(m.slots, 0), []aspect.Object{objSun}) || !reflect.DeepEqual(markedObjects(m.slots, 1), []aspect.Object{objMoon}) || len(markedObjects(m.slots, 2)) != 0 {
+		t.Errorf("marks followed the wrong entries: %v / %v / %v", markedObjects(m.slots, 0), markedObjects(m.slots, 1), markedObjects(m.slots, 2))
 	}
 	if want := []string{"Couldn't restore 2 of the open charts."}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
@@ -709,7 +709,7 @@ func TestRestoreDropsUnresolvableSlots(t *testing.T) {
 // chart: it comes back from its snapshot, and restore says nothing.
 func TestRestoreFromSnapshotWhenFileIsGone(t *testing.T) {
 	sessionSandbox(t) // an empty charts directory: no library file exists
-	entry := listEntry(1, true, aspect.Mars)
+	entry := listEntry(1, true, "Mars")
 	p := withSession(perimeter(), v2([]store.SessionSlot{entry}, false))
 	m := startedModel(t, p)
 
@@ -720,8 +720,8 @@ func TestRestoreFromSnapshotWhenFileIsGone(t *testing.T) {
 	if slot.Chart.Name != "Synthetic 1" || !slot.Time.Equal(entry.Chart.When) || slot.Location != entry.Chart.Place {
 		t.Errorf("restored %q at %v in %+v, want the snapshot", slot.Chart.Name, slot.Time, slot.Location)
 	}
-	if !m.slots.SlotSelected(0) || !reflect.DeepEqual(m.slots.SelectedBodies(0), []aspect.Body{aspect.Mars}) {
-		t.Errorf("selection %v / marks %v, want selected and [mars]", selections(m), m.slots.SelectedBodies(0))
+	if !m.slots.SlotSelected(0) || !reflect.DeepEqual(markedObjects(m.slots, 0), []aspect.Object{objMars}) {
+		t.Errorf("selection %v / marks %v, want selected and [mars]", selections(m), markedObjects(m.slots, 0))
 	}
 	for _, l := range m.logLines {
 		if strings.HasPrefix(l.text, "session:") || l.lane == laneError {
@@ -756,7 +756,7 @@ func TestRestoreFromSnapshotWhenFileIsGone(t *testing.T) {
 	}
 	slot = firstAnchor(m.slots)
 	if slot == nil || slot.Chart.Name != "Synthetic 1" || !slot.Time.Equal(entry.Chart.When) || slot.Location != entry.Chart.Place ||
-		!m.slots.SlotSelected(0) || !reflect.DeepEqual(m.slots.SelectedBodies(0), []aspect.Body{aspect.Mars}) {
+		!m.slots.SlotSelected(0) || !reflect.DeepEqual(markedObjects(m.slots, 0), []aspect.Object{objMars}) {
 		t.Errorf("the re-check disturbed the snapshot: %+v", slot)
 	}
 }
@@ -787,7 +787,7 @@ func TestAListSurvivesAQuitAndARelaunch(t *testing.T) {
 	seedPreferences(t)
 	m := withFrame(listModel(t, 3, 1))
 	m.slots.ToggleSlotSelection(2)
-	m.slots.ToggleBodySelection(1, aspect.Saturn)
+	m.slots.ToggleObjectSelection(1, objSaturn)
 	wantOrder, wantSel := order(m), selections(m)
 
 	if _, cmd := press(t, m, "q"); cmd == nil {
@@ -797,8 +797,8 @@ func TestAListSurvivesAQuitAndARelaunch(t *testing.T) {
 	if !reflect.DeepEqual(order(got), wantOrder) || !reflect.DeepEqual(selections(got), wantSel) {
 		t.Errorf("relaunched %v %v, want %v %v", order(got), selections(got), wantOrder, wantSel)
 	}
-	if !reflect.DeepEqual(got.slots.SelectedBodies(1), []aspect.Body{aspect.Saturn}) {
-		t.Errorf("the second chart's marks = %v, want [saturn]", got.slots.SelectedBodies(1))
+	if !reflect.DeepEqual(markedObjects(got.slots, 1), []aspect.Object{objSaturn}) {
+		t.Errorf("the second chart's marks = %v, want [saturn]", markedObjects(got.slots, 1))
 	}
 	if lines := sessionLines(got); len(lines) != 0 {
 		t.Errorf("a clean relaunch said %v", lines)
@@ -883,25 +883,23 @@ func TestFocusedAnchoredSlotComputesItsOwnChart(t *testing.T) {
 	var natal []store.AnchorChart
 	var crossed []store.AnchorChart // the transit cross's natal side
 	var synastry [][2]store.AnchorChart
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			natal = append(natal, c)
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: float64(c.When.Year() % 360)}}}, nil
+		}
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 1}}}, nil
+		}
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			crossed = append(crossed, c)
+			return lookup.OverlayAspects{}, nil
+		}
+		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			synastry = append(synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
+			return lookup.OverlayAspects{}, nil
+		}
 	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		natal = append(natal, c)
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: float64(c.When.Year() % 360)}}}, nil
-	}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 1}}}, nil
-	}
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		crossed = append(crossed, c)
-		return lookup.OverlayAspects{}, nil
-	}
-	synastryCrossAspects = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		synastry = append(synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
-		return lookup.OverlayAspects{}, nil
-	}
 	run := func(m Model) FirstFrameReadyMsg {
 		t.Helper()
 		natal, crossed, synastry = nil, nil, nil
@@ -1029,7 +1027,7 @@ func TestHelpListsListKeys(t *testing.T) {
 	// The Keys popup shows the new spellings, and the bar the new actions.
 	var listing []string
 	for _, l := range m.helpLines() {
-		listing = append(listing, l.text)
+		listing = append(listing, l.Text)
 	}
 	text := strings.Join(listing, "\n")
 	for _, want := range []string{"Move chart up  ^t", "Move chart down  ^g", "Remove chart  ^y"} {
@@ -1047,7 +1045,7 @@ func TestHelpListsListKeys(t *testing.T) {
 		var out []string
 		for _, l := range m.helpLines() {
 			for _, w := range []string{"Remove chart", "Move chart up", "Move chart down"} {
-				if strings.Contains(l.text, w) {
+				if strings.Contains(l.Text, w) {
 					out = append(out, w)
 				}
 			}
@@ -1068,7 +1066,7 @@ func TestHelpListsListKeys(t *testing.T) {
 func TestBarOffersListKeysWhereTheyAct(t *testing.T) {
 	has := func(m Model) (del, up, down bool) {
 		bar := barKeys(m)
-		return strings.Contains(bar, "Remove: del"), strings.Contains(bar, "Chart up: ⌃k"), strings.Contains(bar, "Chart down: ⌃j")
+		return strings.Contains(bar, "Remove: del"), strings.Contains(bar, "Move up: ⌃k"), strings.Contains(bar, "Move down: ⌃j")
 	}
 	check := func(name string, m Model, wantDel, wantUp, wantDown bool) {
 		t.Helper()
@@ -1100,12 +1098,12 @@ func TestPickRefreshesAnOpenWheel(t *testing.T) {
 		place string
 	}
 	var calls []call
-	prev := renderWheelImage
-	renderWheelImage = func(_ context.Context, when time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		calls = append(calls, call{when, place.Name})
-		return []byte("BM-wheel"), nil
-	}
-	t.Cleanup(func() { renderWheelImage = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, when time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			calls = append(calls, call{when, place.Name})
+			return []byte("BM-wheel"), nil
+		}
+	})
 
 	open := func() Model {
 		m := listModel(t, 2, 0) // A focused
@@ -1164,18 +1162,18 @@ func TestPickOfAnEditedOpenChartTakesTheFile(t *testing.T) {
 	stubTextCompute(t)
 	stubShowWheel(t)
 	var renders []string
-	prev := renderWheelImage
-	renderWheelImage = func(_ context.Context, _ time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		renders = append(renders, place.Name)
-		return []byte("BM-wheel"), nil
-	}
-	t.Cleanup(func() { renderWheelImage = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, _ time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			renders = append(renders, place.Name)
+			return []byte("BM-wheel"), nil
+		}
+	})
 
 	setup := func() Model {
 		m := withFrame(listModel(t, 3, 2))
 		m.slots.SetComparisonSelected(false)
 		m.slots.ToggleSlotSelection(1)
-		m.slots.ToggleBodySelection(1, aspect.Mars)
+		m.slots.ToggleObjectSelection(1, objMars)
 		m = m.focusSlot(1)
 		m.bodyCursorIdx = 5
 		m = m.focusSlot(2)
@@ -1211,8 +1209,8 @@ func TestPickOfAnEditedOpenChartTakesTheFile(t *testing.T) {
 		if !slot.Time.Equal(newWhen) || !slot.Chart.When.Equal(newWhen) || slot.Chart.Name != "Synthetic 2 (corrected)" {
 			t.Errorf("the slot holds %v / %+v, want the file's moment and snapshot", slot.Time, slot.Chart)
 		}
-		if !m.slots.SlotSelected(1) || !reflect.DeepEqual(m.slots.SelectedBodies(1), []aspect.Body{aspect.Mars}) || m.bodyCursorIdx != 5 {
-			t.Errorf("selection %v marks %v row %d: the slot's own state must stay", m.slots.SlotSelected(1), m.slots.SelectedBodies(1), m.bodyCursorIdx)
+		if !m.slots.SlotSelected(1) || !reflect.DeepEqual(markedObjects(m.slots, 1), []aspect.Object{objMars}) || m.bodyCursorIdx != 5 {
+			t.Errorf("selection %v marks %v row %d: the slot's own state must stay", m.slots.SlotSelected(1), markedObjects(m.slots, 1), m.bodyCursorIdx)
 		}
 		if m.refresh[surfaceText].wantID == wantID {
 			t.Error("the corrected chart was not recomputed")
@@ -1425,7 +1423,7 @@ func frameModel(t *testing.T, cfg Config, w, h, anchored, cursor int) Model {
 		m.slots.ToggleSlotSelection(2) // the 1st (the add default) and the 3rd
 	}
 	m.width, m.height = w, h
-	return m
+	return m.restampFrame() // the taste is the list, not the view rule: Bodies keeps the frame it had
 }
 
 func TestSlotListFrames(t *testing.T) {
@@ -1492,10 +1490,10 @@ func TestCityChangeKeepsAPendingRecheck(t *testing.T) {
 
 // C16: a session file of an unknown version restores nothing and says so once,
 // on the error lane.
-func TestRestoreRefusesVersionFourWithOneErrorLine(t *testing.T) {
+func TestRestoreRefusesALaterVersionWithOneErrorLine(t *testing.T) {
 	sessionSandbox(t)
 	seedPreferences(t)
-	seedSession(t, "version: 4\ncharts:\n  - id: x\n    name: X\n    when: \"2001-02-03T04:05:00Z\"\n    place: P\n    lat: 1\n    lon: 2\n    tz: UTC\n")
+	seedSession(t, "version: 5\ncharts:\n  - id: x\n    name: X\n    when: \"2001-02-03T04:05:00Z\"\n    place: P\n    lat: 1\n    lon: 2\n    tz: UTC\n")
 	m := startedModel(t, realPerimeter(t))
 	if m.slots.AnchoredCount() != 0 {
 		t.Errorf("%d slots restored from a version-4 file", m.slots.AnchoredCount())
@@ -1578,7 +1576,7 @@ func TestCityChangesKeepTheRecheckMapBounded(t *testing.T) {
 // already has for an entry that cannot stand.
 func TestSessionKindFile(t *testing.T) {
 	sessionSandbox(t)
-	entry := listEntry(1, true, aspect.Sun)
+	entry := listEntry(1, true, "Sun")
 	if err := store.SaveSession(v2([]store.SessionSlot{entry}, false)); err != nil {
 		t.Fatal(err)
 	}

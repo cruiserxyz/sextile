@@ -1,6 +1,6 @@
 +-[1] Chart----------------------------------------------------++-[1m>Log[0m-------------------------------------------------------------------------+
-|1        Fri Jun 15, 1990 16:30 CEST Amsterdam, NL        WhTr||  astrolog -qj 2461156.000000 -zl 13:25E 52:31N -c 14 -Yn -R 11 -R 17 -R 18...|
-|[1m2 ~ Now  Sat Apr 25, 2026 14:00 CEST Berlin, DE           WhTr[0m||  ! Couldn't cast the chart. Press ,l for what Astrolog ran.                  |
+|1        Fri Jun 15, 1990 16:30 CEST Amsterdam, NL        WhTr||  ! astrolog -qj 2461156.000000 -zl 13:25E 52:31N -c 14 -Yn -R 11 -R 17 -R ...|
+|[1m2 ~ Now  Sat Apr 25, 2026 14:00 CEST Berlin, DE           WhTr[0m||  ! Couldn't cast the chart. Press ,l l for what Astrolog ran.                |
 +-------------------------------------------------------2 of 2-+|[1m[7m> astrolog -qj 2461157.000000 -zl 13:25E 52:31N -c 14 -Yn -R 11 -R 17 -R 18...[0m|
 +-[2] Bodies---------------------------------------------------+|                                                                              |
 |☉ Sun       Tau 16°43' [Gem 24°13' ]█▉      |   |  8|         ||                                                                              |

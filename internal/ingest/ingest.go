@@ -67,6 +67,10 @@ type StartupPerimeterReadMsg struct {
 	// house system a chart falls back to (the specification C1).
 	Frame store.FrameConfig
 
+	// Experimental is the experimental: block exactly as the store read it. The
+	// UI keeps the ids its own table lists and ignores the rest.
+	Experimental store.ExperimentalConfig
+
 	// Clock is the clock: block as the store resolved it (hours and date
 	// order, defaults applied, refused entries listed). It is read once, here,
 	// and held for the session (the specification C12).
@@ -131,7 +135,7 @@ func ReadStartupPerimeterNamed(file string) tea.Cmd {
 func readStartupPerimeter(loadSession func() (store.Session, bool, store.SessionKeep, error)) tea.Cmd {
 	return func() tea.Msg {
 		preseed := location.PreseedFromIANA(location.HostIANA())
-		msg := StartupPerimeterReadMsg{IANAPreseed: preseed, Keys: store.Keys(), Display: store.Display(), WheelFormat: store.WheelFormat(), HouseDisplay: store.HouseDisplay(), Frame: store.Frame(), Clock: store.Clock()}
+		msg := StartupPerimeterReadMsg{IANAPreseed: preseed, Keys: store.Keys(), Display: store.Display(), WheelFormat: store.WheelFormat(), HouseDisplay: store.HouseDisplay(), Frame: store.Frame(), Clock: store.Clock(), Experimental: store.Experimental()}
 		if cand, ok := store.LocationCandidate(); ok {
 			msg.LocationCandidate = cand
 		}

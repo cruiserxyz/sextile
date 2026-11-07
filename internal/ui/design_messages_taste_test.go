@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ func TestDesignMessagesV1(t *testing.T) {
 	}{{"color", Config{Color: ColorAlways}}, {"plain", Config{Accessible: true, Color: ColorNever}}} {
 		m := messagesModel(t, mode.cfg)
 		frames := map[string]string{"log": m.View()}
-		opened, _ := press(t, m, ",", "l")
+		opened, _ := press(t, m, ",", "l", "l")
 		frames["console"] = opened.View()
 		for _, view := range []string{"log", "console"} {
 			frame := frames[view]
@@ -33,7 +34,7 @@ func TestDesignMessagesV1(t *testing.T) {
 				continue
 			}
 			writeDesignFrame(t, "messages-"+view+"-red1", frame)
-			writeDesignFrame(t, "messages-"+view+"-red9", swapForeground(t, frame, errorColour, lipgloss.Color("9")))
+			writeDesignFrame(t, "messages-"+view+"-red9", swapForeground(t, frame, term.ErrorColour, lipgloss.Color("9")))
 		}
 	}
 }
@@ -64,6 +65,7 @@ func TestDesignMessagesV2(t *testing.T) {
 	own, _ = applyTextCommit(own, FirstFrameReadyMsg{Positions: fullChartPositions()})
 	own = withSceneColumns(own)
 	own, _ = press(t, own, "3")
+	own = own.restampFrame() // the empty states are the sheet; the key press's recompute is not run
 
 	cross := tabsPairModel(t, cfg)
 	cross.width, cross.height = 80, 24
@@ -71,11 +73,12 @@ func TestDesignMessagesV2(t *testing.T) {
 	cross, _ = applyTextCommit(cross, FirstFrameReadyMsg{Positions: fullChartPositions(), Aspects: tasteOwnAspects(), Overlay: true})
 	cross = withSceneColumns(cross)
 	cross, _ = press(t, cross, "3")
+	cross = cross.restampFrame()
 
 	console := tabsPairModel(t, cfg)
 	console.width, console.height = 80, 24
 	console.logLines = nil
-	console, _ = press(t, console, ",", "l")
+	console, _ = press(t, console, ",", "l", "l")
 
 	for name, m := range map[string]Model{"aspects": own, "cross": cross, "console": console} {
 		writeDesignFrame(t, "design-empty-"+name+"-80x24-color", m.View())

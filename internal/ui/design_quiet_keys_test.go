@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"reflect"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func mainQuietStates(t *testing.T) []quietState {
 	t.Helper()
 	cfg := Config{Accessible: true, Color: ColorNever}
 
-	preLocation := NewModelWithClock(cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
+	preLocation := newTestModel(t, cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
 	preLocation.width, preLocation.height = 144, 40
 
 	noAnchor := readyModelWithSlots(t, berlinP)
@@ -77,6 +78,7 @@ func mainQuietStates(t *testing.T) []quietState {
 // ownerQuietStates are every owner's states from § Key states.
 func ownerQuietStates(t *testing.T) []quietState {
 	t.Helper()
+	freshModels(t)
 	press := func(m Model, k string) Model { m, _ = escSend(t, m, keyMsgFor(t, k)); return m }
 	states := mainQuietStates(t)
 	for _, c := range keyOwnerCases() {
@@ -102,19 +104,19 @@ func ownerQuietStates(t *testing.T) []quietState {
 // returns no command and changes nothing but the Log must not change the Log.
 func TestQuietKeys(t *testing.T) {
 	old := yankLine
-	yankLine = func(string) error { return nil }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(string) error { return nil }
 	stubTextCompute(t)
 	stubRawReports(t)
 
 	t.Run("removed notes", quietKeysRemovedNotes)
 	for _, s := range ownerQuietStates(t) {
 		t.Run(s.name, func(t *testing.T) {
-			keys := []string{"z", "f9"}
+			kmap := []string{"z", "f9"}
 			for _, e := range s.m.ownerBindings(s.m.currentOwner()) {
-				keys = append(keys, e.Binding.Keys()...)
+				kmap = append(kmap, e.Binding.Keys()...)
 			}
-			for _, k := range keys {
+			for _, k := range kmap {
 				msg, ok := quietKeyMsg(t, k)
 				if !ok {
 					continue
@@ -173,12 +175,12 @@ func quietKeysRemovedNotes(t *testing.T) {
 
 // partnersOf are the entries that share a bar pair with id: the bar names
 // ↑↓ or 1/2/3 as one entry, so the pair acts if any of them does.
-var partnersOf = map[BindingID][]BindingID{
-	BindingSlotCycleUp: {BindingSlotCycleDown},
-	BindingListUp:      {BindingListDown},
-	BindingScrollUp:    {BindingScrollDown},
-	BindingTabNext:     {BindingTabPrev},
-	BindingFocusChart:  {BindingFocusBodies, BindingFocusAspects},
+var partnersOf = map[keys.BindingID][]keys.BindingID{
+	keys.BindingSlotCycleUp: {keys.BindingSlotCycleDown},
+	keys.BindingListUp:      {keys.BindingListDown},
+	keys.BindingScrollUp:    {keys.BindingScrollDown},
+	keys.BindingTabNext:     {keys.BindingTabPrev},
+	keys.BindingFocusChart:  {keys.BindingFocusBodies, keys.BindingFocusAspects},
 }
 
 // B2, B3: every entry the bar shows acts where it is shown. Acting is a
@@ -186,15 +188,15 @@ var partnersOf = map[BindingID][]BindingID{
 // and ↓ at its last are piece 4's C12, so a pair acts if either half does.
 func TestKeyBarShowsWhatWorks(t *testing.T) {
 	old := yankLine
-	yankLine = func(string) error { return nil }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(string) error { return nil }
 	stubTextCompute(t)
 	stubRawReports(t)
 
 	for _, s := range ownerQuietStates(t) {
 		t.Run(s.name, func(t *testing.T) {
 			all := s.m.ownerBindings(s.m.currentOwner())
-			keysOf := func(id BindingID) []string {
+			keysOf := func(id keys.BindingID) []string {
 				for _, e := range all {
 					if e.ID == id {
 						return e.Binding.Keys()
@@ -206,19 +208,19 @@ func TestKeyBarShowsWhatWorks(t *testing.T) {
 				if !e.Bar {
 					continue
 				}
-				keys := append([]string(nil), e.Binding.Keys()...)
+				kmap := append([]string(nil), e.Binding.Keys()...)
 				for _, p := range partnersOf[e.ID] {
-					keys = append(keys, keysOf(p)...)
+					kmap = append(kmap, keysOf(p)...)
 				}
 				// A keyless entry is a leader sequence (Details' `,y`).
 				start := s.m
-				if len(keys) == 0 && e.ID == BindingCopy {
-					keys = []string{"y"}
+				if len(kmap) == 0 && e.ID == keys.BindingCopy {
+					kmap = []string{"y"}
 					tl, _ := start.Update(keyMsgFor(t, ","))
 					start = tl.(Model)
 				}
 				acted := false
-				for _, k := range keys {
+				for _, k := range kmap {
 					start.slots = cloneSlots(t, s.m.slots) // a list key changes the list
 					start = withSceneColumns(start)        // columns name slots by identity
 					before := withoutLog(start)
@@ -231,7 +233,7 @@ func TestKeyBarShowsWhatWorks(t *testing.T) {
 					}
 				}
 				if !acted {
-					t.Errorf("the bar shows %q (%s), and it does nothing here", e.Action, e.BarKey)
+					t.Errorf("the bar shows %q (%s), and it does nothing here", e.Title, e.BarKey)
 				}
 			}
 		})
@@ -261,10 +263,10 @@ func TestRoutineWorkIsQuiet(t *testing.T) {
 	})
 	t.Run("a body comes back", func(t *testing.T) {
 		m := escBase(t)
-		m = m.reportUnavailable([]string{"Eris"})
-		after := m.reportUnavailable(nil)
+		m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
+		after := m.reportUnavailable(nil, tUnavailable)
 		quiet(t, "a body becoming available again", m, after)
-		if got := m.logPanelLines(); len(got) == 0 || !strings.Contains(got[len(got)-1], "no ephemeris for Eris") {
+		if got := m.logPanelLines(); len(got) == 0 || !strings.Contains(got[len(got)-1], "Eris can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) {
 			t.Errorf("a body with no ephemeris is no longer reported: %q", got)
 		}
 	})
@@ -304,25 +306,28 @@ func launchLog(t *testing.T) []string {
 	return startedModel(t, withSession(perimeter(), v1(&snap, true, false, nil, nil))).logPanelLines()
 }
 
-// U3 4: with a notice showing, the last row holds the notice (cut from the
-// right if it must be) and still holds Help and Quit.
+// U3 4, amended 2026-11-07 (operator: a footer message "needs to either
+// overlay or modify the footer content so it has enough space"): with a
+// notice showing, the last row holds the WHOLE notice; the bar yields, and
+// keeps Help and Quit where they still fit (80x24), cut from the right where
+// they do not (66x15).
 func TestNoticeKeepsHelpAndQuit(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {66, 15}} {
 		m := consoleModel(t, 0)
 		m.width, m.height = size[0], size[1]
 		m, _ = m.showNotice(noticeOnlyNow)
 		row := strings.TrimRight(ansi.Strip(lastRow(m.View())), " ")
-		if !strings.Contains(row, "Help: ?") || !strings.Contains(row, "Quit: q") {
-			t.Errorf("%dx%d: last row %q lost Help or Quit", size[0], size[1], row)
+		if !strings.Contains(row, noticeOnlyNow) {
+			t.Errorf("%dx%d: last row %q lacks the whole notice", size[0], size[1], row)
 		}
-		if !strings.Contains(row, "Only Now") {
-			t.Errorf("%dx%d: last row %q lacks the notice", size[0], size[1], row)
+		if size[0] == 80 && (!strings.Contains(row, "Help: ?") || !strings.Contains(row, "Quit: q")) {
+			t.Errorf("80x24: last row %q lost Help or Quit", row)
 		}
 		if w := ansi.StringWidth(row); w > size[0] {
 			t.Errorf("%dx%d: last row is %d wide", size[0], size[1], w)
 		}
 		if size[0] == 66 && !strings.Contains(row, "…") && !strings.Contains(row, "...") {
-			t.Errorf("66x15: notice %q was not cut", row)
+			t.Errorf("66x15: the bar %q was not cut", row)
 		}
 	}
 }

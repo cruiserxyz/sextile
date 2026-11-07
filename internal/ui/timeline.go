@@ -3,27 +3,27 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // The Details timeline tab (the specification): every dated
-// event Astrolog's -t, -dm and -tr searches emit for the floating slot's
+// event Astrolog's -t, -d and -tr searches emit for the floating slot's
 // month, in the floating slot's clock, one row per event and each row
 // Astrolog's own line. Enter on a row moves the floating slot to that instant
 // through the ordinary time-step path, and the list stays where it was.
-
-// computeTimeline is the timeline's one spawn seam, a package variable so a
-// test can count and script the searches without starting Astrolog.
-var computeTimeline = lookup.Timeline
 
 // timelineKey is every search input (C10): the floating slot's month and
 // year in its own zone, that zone, and the anchored charts the selected set
@@ -46,6 +46,10 @@ type timelineKey struct {
 	// stays comparable: a policy holds maps and slices.
 	objects, aspects string
 	trueNode         bool
+	// skyMarks is the floating slot's sorted marks, which narrow the sky
+	// search; each natal's own are in natals. A mark change re-asks, a tick-only
+	// change is objects (F14).
+	skyMarks string
 	// houses is the system the comparing searches cast the natals in: ①'s own,
 	// whatever the cursor or the frame. Zero (and unused) while single, where
 	// the sky alone is searched and no chart is cast (the specification C4).
@@ -53,29 +57,42 @@ type timelineKey struct {
 	// zodiac is the zodiac every search is cast in: ①'s while comparing (the
 	// zodiac stays the first chart's, S4b B2/B3), the cursor chart's otherwise.
 	// Unlike the houses it matters to the sky alone as well, since the
-	// ingresses and aspects of -dm read the zodiac they are searched in (the
+	// ingresses and aspects of -d read the zodiac they are searched in (the
 	// specification C10).
 	zodiac recipe.Zodiac
 }
 
 // chooserKey is a lens's search-relevant part in comparable form. Order-free
-// inputs (a BodySet, the order ticks were collected in) are normalised, so the
+// inputs (an ObjectSet, the order ticks were collected in) are normalised, so the
 // same policy always has the same key. It does not resolve a delta policy and
 // an explicit one to a common set (that needs Astrolog's defaults), so a modal
 // that re-confirms the same visible bodies as an explicit selection re-runs the
 // searches once.
 func chooserKey(l lookup.Lens) (objects, aspects string, trueNode bool) {
 	o := l.Objects
-	var add, remove []string
-	for _, b := range o.Add.Members() {
-		add = append(add, b.String())
-	}
-	for _, b := range o.Remove.Members() {
-		remove = append(remove, b.String())
-	}
-	objects = fmt.Sprintf("%d|%s|%s|%v", int(o.Baseline), strings.Join(add, ","), strings.Join(remove, ","), o.Selected())
+	objects = fmt.Sprintf("%d|%v|%v|%v", int(o.Baseline), o.Add.Members(), o.Remove.Members(), o.Selected())
 	aspects = fmt.Sprintf("%t|%v", l.Aspects.Explicit, l.Aspects.Selected())
 	return objects, aspects, o.TrueNodeMode
+}
+
+// timelineObjects is the object policy of one slot's searches: the committed
+// lens's objects with the slot's own marks as Only, the same narrowing
+// showLens gives the Aspects list (read from the committed lens, never from a
+// chooser preview). A slot with no marks carries no Only.
+func (m Model) timelineObjects(lens lookup.Lens, s *store.Slot) recipe.ObjectPolicy {
+	o := lens.Objects
+	o.Only = nil
+	if m.slots == nil || s == nil {
+		return o
+	}
+	if sel := m.slots.SelectedObjects(m.slotIndexOf(s)); len(sel) > 0 {
+		nums := make([]int, len(sel))
+		for i, ob := range sel {
+			nums[i] = ob.Number
+		}
+		o.Only = recipe.NewObjectSet(nums...)
+	}
+	return o
 }
 
 // committedLens is the lens the timeline follows: the one the operator last
@@ -107,6 +124,12 @@ type timelineState struct {
 	kept []lookup.TimelineRow
 	// failed says this key's search ended in failure, so nothing is awaited.
 	failed bool
+	// content is the key of the list the tab can draw: rows once complete,
+	// kept before. hasContent says there is one. The view rule reads it
+	// (timelinePaneState): the list is drawn bright for its own key, faint for
+	// another version of the same subject, and not at all for another subject.
+	content    timelineKey
+	hasContent bool
 	// marks are the rows Space marked for `,y`. They belong to this key's
 	// list, so a new month's load (a fresh timelineState) clears them, and
 	// they are keyed by row identity, never by index.
@@ -247,7 +270,7 @@ func (m Model) timelineDisplayRows() []lookup.TimelineRow {
 }
 
 // timelineShown is the rows as the panel SHOWS them and every action reads
-// them: the list, cut to the rows the listFilter strategy accepts for the `/` query
+// them: the list, cut to the rows the menu.Filter strategy accepts for the `/` query
 // against the row as displayed, still in time order (the specification
 // rules 2 and 6). With no query it is the list itself.
 func (m Model) timelineShown() []lookup.TimelineRow {
@@ -257,9 +280,9 @@ func (m Model) timelineShown() []lookup.TimelineRow {
 	}
 	lines := make([]string, len(rows))
 	for i, r := range rows {
-		lines[i] = displayTimelineRow(r, m.cfg)
+		lines[i] = panel.DisplayRow(r, m.cfg)
 	}
-	kept, _, _ := listFilter{query: m.timeline.query}.apply(lines, 0)
+	kept, _, _ := menu.Filter{Query: m.timeline.query}.Apply(lines, 0)
 	out := make([]lookup.TimelineRow, 0, len(kept))
 	for _, i := range kept {
 		out = append(out, rows[i])
@@ -304,24 +327,49 @@ func (m Model) cancelTimelineSearch() Model {
 	return m.restoreTimelineCursor().clampTimelineCursor()
 }
 
+// timelineSearchBindings is the bar while the search line is open: the line
+// types, the arrows move, Enter applies and Esc goes back.
+func timelineSearchBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true},
+		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down")), BarKey: "↓"},
+		{ID: keys.BindingConfirm, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Jump", BarKey: "enter", Bar: true},
+		{ID: keys.BindingClose, Binding: key.NewBinding(key.WithKeys("esc")), Title: "Back", BarKey: "esc", Bar: true},
+		// ⇞ ⇟ page the cursor, as the arrows move it; Home, End, g and G are text
+		// or nothing in the line. Ctrl+⇞ ⇟ pass through to the Details scroll.
+		{ID: keys.BindingPageUp, Title: "Page list", HelpKey: "⇞/⇟", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "⇞"},
+		{ID: keys.BindingPageDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
+		{ID: keys.BindingScrollUp, Binding: key.NewBinding(key.WithKeys("ctrl+pgup")), BarKey: "⌃⇞"},
+		{ID: keys.BindingScrollDown, Binding: key.NewBinding(key.WithKeys("ctrl+pgdown")), BarKey: "⌃⇟"},
+	})
+}
+
 // updateTimelineSearchKey is the line's own key state: letters, Space and
 // Backspace edit the query (the fuzzy popups' typing helper), the arrows move
-// the cursor, Enter applies and Esc goes back. Nothing else is read, so j, k,
-// y, d and the comma are text here.
+// the cursor, Enter jumps to the row under it and Esc goes back. Nothing else
+// is read, so j, k, y, d and the comma are text here.
 func (m Model) updateTimelineSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch matchBinding(msg, timelineSearchBindings()) {
-	case BindingScrollUp:
+	switch keys.MatchBinding(msg, timelineSearchBindings()) {
+	case keys.BindingScrollUp:
 		return m.scrollDetailsTab(-detailsScrollStep), nil
-	case BindingScrollDown:
+	case keys.BindingScrollDown:
 		return m.scrollDetailsTab(detailsScrollStep), nil
-	case BindingPageUp:
-		return m.pageTimeline(pageUp), nil
-	case BindingPageDown:
-		return m.pageTimeline(pageDown), nil
+	case keys.BindingPageUp:
+		return m.pageTimeline(menu.PageUp), nil
+	case keys.BindingPageDown:
+		return m.pageTimeline(menu.PageDown), nil
 	}
 	switch msg.Type {
 	case tea.KeyEnter:
-		return m.closeTimelineSearch(), nil
+		// The arrows move the row cursor in the open line, so Enter is the
+		// row's Enter too: the line closes with its query and the row under
+		// the cursor is jumped to, as with the line closed (operator,
+		// 2026-11-06: the first Enter only closed the line, the second jumped).
+		m = m.closeTimelineSearch()
+		if m.detailsRowKeysBlocked() {
+			return m, nil
+		}
+		return m.jumpToTimelineRow()
 	case tea.KeyEsc:
 		return m.cancelTimelineSearch(), nil
 	case tea.KeyUp:
@@ -329,9 +377,9 @@ func (m Model) updateTimelineSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyDown:
 		return m.moveTimelineCursor(+1), nil
 	}
-	l := fuzzyList[struct{}]{filterText: m.timeline.query}
-	if l.typeKey(msg) {
-		m.timeline.query = l.filterText
+	l := menu.FuzzyList[struct{}]{FilterText: m.timeline.query}
+	if l.TypeKey(msg) {
+		m.timeline.query = l.FilterText
 		m = m.placeTimelineCursor().clampTimelineCursor()
 	}
 	return m, nil
@@ -362,18 +410,24 @@ func (m Model) timelineInputs() (lookup.TimelineRequest, timelineKey, bool) {
 	}
 	view := m.viewLens()
 	lens.Houses, lens.Zodiac = view.Houses, view.Zodiac
+	// The sky search takes the floating slot's marks, each natal its own
+	// (F14): the committed lens's objects with the slot's selected objects as
+	// Only, the way showLens narrows the Aspects list.
+	all := m.slots.All()
+	lens.Objects = m.timelineObjects(lens, all[len(all)-1])
 	req := lookup.TimelineRequest{When: floating.Time, Place: floating.Location, Lens: lens}
 	// The month is Astrolog's, in its own calendar: a Julian 29 February 1500
 	// is February whatever Go's calendar calls the day (the specification N8).
 	year, month := lookup.TimelineMonth(floating.Time, loc)
 	key := timelineKey{year: year, month: month, zone: floating.Location.TZ}
 	key.objects, key.aspects, key.trueNode = chooserKey(lens)
+	key.skyMarks = fmt.Sprint(lens.Objects.Only.Members())
 	key.zodiac = lens.Zodiac
 	// Transit and return rows (-t, -tr) are about the selected charts: they
 	// appear only while comparing, one pair of searches per selected anchored
 	// slot, each row tagged with its slot's numeral. With the cursor on an
 	// unselected chart, or fewer than two slots selected, the timeline is the
-	// sky alone (-dm). Operator hot-fix 2026-09-30, then P4 / C10 / C13 of
+	// sky alone (-d). Operator hot-fix 2026-09-30, then P4 / C10 / C13 of
 	// the specification.
 	if sc.mode == sceneComparing {
 		var key0 strings.Builder
@@ -383,8 +437,9 @@ func (m Model) timelineInputs() (lookup.TimelineRequest, timelineKey, bool) {
 			}
 			n := sc.numeral(slot)
 			chart := anchorOf(slot)
-			req.Natals = append(req.Natals, lookup.TimelineNatal{Numeral: n, Chart: chart})
-			fmt.Fprintf(&key0, "%d|%d|%v|%v|%s|%s\x00%s;", n, chart.When.UnixNano(), chart.Place.Lon, chart.Place.Lat, chart.Place.TZ, slot.Chart.ID, slot.Chart.Name)
+			objects := m.timelineObjects(lens, slot)
+			req.Natals = append(req.Natals, lookup.TimelineNatal{Numeral: n, Chart: chart, Objects: objects})
+			fmt.Fprintf(&key0, "%d|%d|%v|%v|%s|%s\x00%s|%v\x1e", n, chart.When.UnixNano(), chart.Place.Lon, chart.Place.Lat, chart.Place.TZ, slot.Chart.ID, slot.Chart.Name, objects.Only.Members())
 		}
 		key.natals = key0.String()
 		key.houses = lens.Houses
@@ -409,18 +464,66 @@ func (m Model) syncTimeline() (Model, tea.Cmd) {
 	if !ok || (m.timeline.keyed && m.timeline.key == key) {
 		return m, nil
 	}
+	prev := m.timeline
 	m.timeline = timelineState{key: key, keyed: true, kept: m.timelineStaleFor(key)}
+	if m.timeline.kept != nil {
+		m.timeline.content, m.timeline.hasContent = prev.content, prev.hasContent
+	}
 	m.details.cursor, m.details.rowOffset = 0, 0
+	// A list already searched for these inputs is drawn now, from memory.
+	if nm, ok := m.adoptTimelineFromMemory(key); ok {
+		return nm, nil
+	}
 	return m.bumpIdentity(surfaceTimeline)
 }
 
-// suspendTimeline cancels an in-flight search when Details leaves the
-// layout. A list that never completed forgets its key, so the searches run
-// again when Details returns; a complete one stays, for the same inputs.
-func (m Model) suspendTimeline() Model {
+// timelineKeyFor is the key of the search the Model would ask for now; ok is
+// false when there is no request. The same key syncTimeline and
+// buildTimelineCmd compare, so the row's inputs and the commit gate cannot
+// disagree.
+func (m Model) timelineKeyFor() (timelineKey, bool) {
+	_, key, ok := m.timelineInputs()
+	return key, ok
+}
+
+// newTimelineRow is the Timeline surface's refresh policy (specs/
+// refresh-descriptor-timeline.md): the coordinator asks it through Model.rowFor.
+// Its spawn is the one search seam: a test counts and scripts the searches on
+// its own Model without starting Astrolog.
+// It has no rest timer: bumpIdentity starts the run at once and arms one
+// defensive retry tick of textDebounce. The key is not in accept:
+// commitTimeline logs the argv lines first and then drops a result for a
+// left key, so such a search still writes its argv line.
+func newTimelineRow() surfaceRow {
+	return surfaceRow{
+		inputs: func(m Model) (refreshKey, bool) {
+			k, ok := m.timelineKeyFor()
+			return k, ok
+		},
+		trigger:   triggerIdentity,
+		supersede: supersedeHard,
+		debounce:  textDebounce,
+		build:     buildTimelineCmd,
+		accept:    acceptExactWant,
+		commit:    (Model).commitTimeline,
+		suspend:   forgetIncompleteTimeline,
+		spawn:     rowSpawns{timeline: lookup.Timeline},
+	}
+}
+
+// forgetIncompleteTimeline is the row's suspend: a list that never completed
+// forgets its key, so the searches run again when Details returns; a complete
+// one stays, for the same inputs.
+func forgetIncompleteTimeline(m Model) Model {
 	if !m.timeline.complete {
 		m.timeline = timelineState{}
 	}
+	return m
+}
+
+// suspendTimeline cancels an in-flight search when Details leaves the
+// layout; suspendSurface fences the surface and asks the row to forget.
+func (m Model) suspendTimeline() Model {
 	return m.suspendSurface(surfaceTimeline)
 }
 
@@ -429,6 +532,7 @@ func buildTimelineCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cm
 	if !ok || !m.timeline.keyed || key != m.timeline.key {
 		return nil
 	}
+	compute := m.rows[surfaceTimeline].spawn.timeline
 	labels := map[int]string{}
 	sc := m.deriveScene()
 	for i, slot := range sc.set {
@@ -436,7 +540,7 @@ func buildTimelineCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cm
 		labels[n] = slotLabel(n, slot, m.cfg)
 	}
 	return func() tea.Msg {
-		res, err := computeTimeline(ctx, req)
+		res, err := compute(ctx, req)
 		return refreshResultMsg{
 			surface: surfaceTimeline,
 			runID:   runID,
@@ -451,7 +555,7 @@ func buildTimelineCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cm
 // here, at the commit gate, on success and failure alike.
 func (m Model) commitTimeline(msg refreshResultMsg) (Model, tea.Cmd) {
 	p, _ := msg.payload.(timelinePayload)
-	m = m.logCommandsFor(surfaceTimeline, msg.wantID, p.commands)
+	m = m.logCommandsFor(surfaceTimeline, msg.wantID, p.commands, failedLast(msg.err, p.commands)...)
 	// A result for inputs the operator has left paints nothing — a late
 	// search for the previous client must never replace the current list.
 	if p.key != m.timeline.key {
@@ -465,6 +569,9 @@ func (m Model) commitTimeline(msg refreshResultMsg) (Model, tea.Cmd) {
 		// The dimmed list was for other inputs: it goes, and nothing is
 		// awaited any more (the specification rule 8).
 		m.timeline.kept, m.timeline.failed = nil, true
+		if !m.timeline.complete {
+			m.timeline.hasContent = false // the dimmed list goes; a complete list for these inputs stays
+		}
 		if len(p.failures) > 0 {
 			// Every search of a comparing timeline failed: each is named (C17).
 			return m.logTimelineFailures(p), nil
@@ -475,8 +582,15 @@ func (m Model) commitTimeline(msg refreshResultMsg) (Model, tea.Cmd) {
 	// Searches that failed beside others that did not: the rows of the others
 	// are shown, and each failure is one Log line naming its search (C17, C17a).
 	m = m.logTimelineFailures(p)
+	return m.landTimeline(p).rememberTimeline(p), nil
+}
+
+// landTimeline puts a searched list on screen under its key. A fresh result and
+// one adopted from memory land by it alike.
+func (m Model) landTimeline(p timelinePayload) Model {
 	m.timeline.rows, m.timeline.complete, m.timeline.kept = p.rows, true, nil
-	return m.placeTimelineCursor().clampTimelineCursor(), nil
+	m.timeline.content, m.timeline.hasContent = p.key, true
+	return m.placeTimelineCursor().clampTimelineCursor()
 }
 
 // timelineReason is why a search failed, in the Log's words: the refusal's own
@@ -519,45 +633,11 @@ func (m Model) logTimelineFailures(p timelinePayload) Model {
 		}
 		label := p.labels[f.Numeral]
 		if label == "" {
-			label = numeralForColour(f.Numeral, m.cfg)
+			label = panel.NumeralForColour(f.Numeral, m.cfg)
 		}
 		m = m.logTimelineError(fmt.Sprintf("The %s search for %s failed. %s", f.Search, label, reason)).logWarnings(f.Err)
 	}
 	return m
-}
-
-// displayTimelineRow is a row as the panel shows it, copies it and filters it:
-// alignTimelineRow's layout, with a comparing transit or return row's numeral
-// standing in its empty weekday column, where a weekday's second letter would
-// sit (` ① ` against `Sat`), so every row keeps its width and the columns of
-// numbered and sky rows line up by construction (C11, P4; operator,
-// 2026-10-04). A transit row never carries a weekday (astrolog.TimelineRow);
-// were one ever to, the numeral goes in front rather than be lost.
-func displayTimelineRow(r lookup.TimelineRow, cfg Config) string {
-	return displayTimelineRowPad(r, cfg, false)
-}
-
-// displayTimelineRowPad is displayTimelineRow with the Julian mark's four cells
-// reserved on a row that has none, so a list holding both keeps its columns.
-func displayTimelineRowPad(r lookup.TimelineRow, cfg Config, pad bool) string {
-	if r.Numeral > 0 {
-		glyph := numeralForColour(r.Numeral, cfg)
-		if r.Weekday != "" {
-			return glyph + " " + alignTimelineRowPad(r, pad)
-		}
-		r.Weekday = " " + glyph
-	}
-	return alignTimelineRowPad(r, pad)
-}
-
-// anyJulian says whether any of the rows is dated on the Julian branch.
-func anyJulian(rows []lookup.TimelineRow) bool {
-	for _, r := range rows {
-		if r.Julian {
-			return true
-		}
-	}
-	return false
 }
 
 // clampTimelineCursor keeps the row cursor on a row and inside the rendered
@@ -587,7 +667,7 @@ func (m Model) clampTimelineCursor() Model {
 	if visible <= 0 {
 		return m
 	}
-	m.details.rowOffset = scrollToShow(m.details.rowOffset, m.details.cursor, total, visible)
+	m.details.rowOffset = menu.ScrollToShow(m.details.rowOffset, m.details.cursor, total, visible)
 	return m
 }
 
@@ -607,15 +687,15 @@ func (m Model) recordTimelineCursor() Model {
 }
 
 // pageTimeline applies a paging key to the attached timeline's cursor: the
-// shared rule (pageCursor) over the rows shown and the rows the panel can show
+// shared rule (menu.PageCursor) over the rows shown and the rows the panel can show
 // (the search line takes one when it is there). The offset it returns is the
 // one stored, exactly.
-func (m Model) pageTimeline(op pageOp) Model {
+func (m Model) pageTimeline(op menu.PageOp) Model {
 	total, visible := len(m.timelineShown()), m.timelineHeight()
 	if total == 0 || visible <= 0 {
 		return m
 	}
-	m.details.cursor, m.details.rowOffset = pageCursor(m.details.cursor, m.details.rowOffset, total, visible, op)
+	m.details.cursor, m.details.rowOffset = menu.PageCursor(m.details.cursor, m.details.rowOffset, total, visible, op)
 	return m.recordTimelineCursor()
 }
 
@@ -669,7 +749,7 @@ func nearestTimelineRow(rows []lookup.TimelineRow, t time.Time) int {
 // centreOffset is the window offset that puts line in the middle row, as far
 // as the list allows.
 func centreOffset(line, total, visible int) int {
-	return clampOffset(line-visible/2, total, visible)
+	return pane.ClampOffset(line-visible/2, total, visible)
 }
 
 // placeTimelineCursor puts the cursor where a freshly loaded list wants it
@@ -688,7 +768,7 @@ func (m Model) placeTimelineCursor() Model {
 			if markOf(r) == m.details.cursorAt {
 				m.details.cursor = i
 				if visible > 0 {
-					m.details.rowOffset = scrollToShow(m.details.rowOffset, i, len(rows), visible)
+					m.details.rowOffset = menu.ScrollToShow(m.details.rowOffset, i, len(rows), visible)
 				}
 				return m
 			}
@@ -710,6 +790,28 @@ func (m Model) moveTimelineCursor(step int) Model {
 	return m.clampTimelineCursor()
 }
 
+// leadBodiesTo puts the Bodies cursor on the body row leads to (lookup.LeadObject:
+// the moving object, the transiting object, the faster object of a sky aspect). A
+// row that is not resolved, or a body Bodies does not list, moves nothing. A led
+// row outside the window it was in lands in the middle of the panel, not at its
+// edge (operator, 2026-11-06); a row in sight leaves the window where it is.
+func (m Model) leadBodiesTo(row lookup.TimelineRow) Model {
+	if m.slots == nil {
+		return m
+	}
+	o, ok := lookup.LeadObject(row)
+	if !ok {
+		return m
+	}
+	planets, under, height := m.bodiesRows()
+	first, last := panel.BodyDrawnRows(planets, under, height, m.bodyTop)
+	m = m.walkBodyCursorTo(o)
+	if r := m.bodyCursorIdx; r < first || r > last {
+		m.bodyTop = panel.BodyWindowStart(planets, under, r, panel.BodyDisplayRow(planets, under, height, r)-height/2, height)
+	}
+	return m
+}
+
 // scrollTimeline moves the timeline window by delta rows and pulls the
 // cursor into it, so the row Enter would act on is always a row the
 // operator can see (C29).
@@ -718,7 +820,7 @@ func (m Model) scrollTimeline(delta int) Model {
 	if total == 0 || visible <= 0 {
 		return m
 	}
-	m.details.rowOffset = clampOffset(m.details.rowOffset+delta, total, visible)
+	m.details.rowOffset = pane.ClampOffset(m.details.rowOffset+delta, total, visible)
 	last := min(m.details.rowOffset+visible, total) - 1
 	m.details.cursor = min(max(m.details.cursor, m.details.rowOffset), last)
 	return m
@@ -747,8 +849,8 @@ func (m Model) attachTab() TabID {
 	return active
 }
 
-// attachLabel is the key bar's word for Enter: the tab attachDetails shows.
-func (m Model) attachLabel() string {
+// attachTitle is Enter's title: the tab attachDetails shows.
+func (m Model) attachTitle() string {
 	if m.attachTab() == TabDetailsTimeline {
 		return "Timeline"
 	}
@@ -763,7 +865,7 @@ func (m Model) canAttachDetails() bool {
 // attachDetails is Enter from a ring panel (C15): Details takes row
 // navigation, focus does not move, and nothing computes.
 func (m Model) attachDetails() (Model, tea.Cmd) {
-	if !isFocusable(m.focused) || !m.detailsVisible() {
+	if m.blocked(keys.BindingAttach) != "" {
 		return m, nil
 	}
 	m.details.attached = true
@@ -832,55 +934,55 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.details.searching && m.detailsReportSearchLine() {
 		return m.updateDetailsReportSearchKey(msg)
 	}
-	id := matchBinding(msg, m.available(m.keys.detailsBindings()))
+	id := keys.MatchBinding(msg, m.available(ownerDetails, detailsBindings(m.keys)))
 	// A waiting tab with a row cursor ignores its row keys
 	// (the specification rule 7); everything else acts.
 	if m.detailsRowKeysBlocked() {
 		switch id {
-		case BindingToggle, BindingSearch, BindingListUp, BindingListDown, BindingConfirm, BindingScrollDown, BindingScrollUp, BindingPageDown, BindingPageUp, BindingPageHome, BindingPageEnd:
+		case keys.BindingToggle, keys.BindingSearch, keys.BindingListUp, keys.BindingListDown, keys.BindingConfirm, keys.BindingScrollDown, keys.BindingScrollUp, keys.BindingPageDown, keys.BindingPageUp, keys.BindingPageHome, keys.BindingPageEnd:
 			return m, nil
 		}
 	}
 	// `/` on a waiting report does nothing (the specification 8).
-	if id == BindingSearch && m.detailsReportFilterBlocked() {
+	if id == keys.BindingSearch && m.detailsReportFilterBlocked() {
 		return m, nil
 	}
 	switch id {
-	case BindingToggle:
+	case keys.BindingToggle:
 		return m.toggleTimelineMark(), nil
-	case BindingSearch:
+	case keys.BindingSearch:
 		if !m.detailsOnTimeline() {
 			return m.openDetailsReportSearch(), nil
 		}
 		return m.openTimelineSearch(), nil
-	case BindingClose:
+	case keys.BindingClose:
 		return m.detachDetails()
-	case BindingListUp:
+	case keys.BindingListUp:
 		return m.stepDetailsRow(-1), nil
-	case BindingListDown:
+	case keys.BindingListDown:
 		return m.stepDetailsRow(+1), nil
-	case BindingConfirm:
+	case keys.BindingConfirm:
 		return m.jumpToTimelineRow()
-	case BindingScrollDown:
+	case keys.BindingScrollDown:
 		return m.scrollDetailsTab(detailsScrollStep), nil
-	case BindingScrollUp:
+	case keys.BindingScrollUp:
 		return m.scrollDetailsTab(-detailsScrollStep), nil
 	// ⇞ ⇟ Home End move the timeline's row cursor by the one paging rule; a tab
 	// with no row cursor (the report) scrolls two lines on ⇞ ⇟ as it always did.
-	case BindingPageDown:
+	case keys.BindingPageDown:
 		if m.detailsOnTimeline() {
-			return m.pageTimeline(pageDown), nil
+			return m.pageTimeline(menu.PageDown), nil
 		}
 		return m.scrollDetailsTab(detailsScrollStep), nil
-	case BindingPageUp:
+	case keys.BindingPageUp:
 		if m.detailsOnTimeline() {
-			return m.pageTimeline(pageUp), nil
+			return m.pageTimeline(menu.PageUp), nil
 		}
 		return m.scrollDetailsTab(-detailsScrollStep), nil
-	case BindingPageHome:
-		return m.pageTimeline(pageHome), nil
-	case BindingPageEnd:
-		return m.pageTimeline(pageEnd), nil
+	case keys.BindingPageHome:
+		return m.pageTimeline(menu.PageHome), nil
+	case keys.BindingPageEnd:
+		return m.pageTimeline(menu.PageEnd), nil
 	// The timeline's own navigation: the list is cut to the floating slot's
 	// month, and these are the keys that move it. `o`/`O` step the month
 	// (C57, operator 2026-09-30, reversing pass-7 P2); `n` jumps to now and
@@ -888,27 +990,27 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// path, so the commit that re-keys the searches (C10, C25) is untouched.
 	// The table offers them on both tabs and from any cursor position (D37,
 	// operator 2026-10-13, reversing C59 and the floating-only rule).
-	case BindingTimeStepYear:
+	case keys.BindingTimeStepYear:
 		return m.advanceTime(unitYear, stepDirectionFromRune(msg))
-	case BindingTimeStepMonth:
+	case keys.BindingTimeStepMonth:
 		return m.advanceTime(unitMonth, stepDirectionFromRune(msg))
-	case BindingTimeStepWeek:
+	case keys.BindingTimeStepWeek:
 		return m.advanceTime(unitWeek, stepDirectionFromRune(msg))
-	case BindingTimeStepDay:
+	case keys.BindingTimeStepDay:
 		return m.advanceTime(unitDay, stepDirectionFromRune(msg))
-	case BindingTimeStepHour:
+	case keys.BindingTimeStepHour:
 		return m.advanceTime(unitHour, stepDirectionFromRune(msg))
-	case BindingTimeStepMinute:
+	case keys.BindingTimeStepMinute:
 		return m.advanceTime(unitMinute, stepDirectionFromRune(msg))
-	case BindingJumpNow:
+	case keys.BindingJumpNow:
 		return m.jumpFloatingToNow()
-	case BindingToggleBack:
+	case keys.BindingToggleBack:
 		return m.toggleFloatingBack()
-	case BindingFocusChart, BindingFocusBodies, BindingFocusAspects:
+	case keys.BindingFocusChart, keys.BindingFocusBodies, keys.BindingFocusAspects:
 		return m.detachAndFocus(panelDigits[id])
-	case BindingTabNext, BindingDetailsTab:
+	case keys.BindingTabNext, keys.BindingDetailsTab:
 		return m.cycleTab(PanelDetails, +1)
-	case BindingTabPrev:
+	case keys.BindingTabPrev:
 		return m.cycleTab(PanelDetails, -1)
 	}
 	return m.passDetailsKeyToMain(msg)
@@ -918,18 +1020,19 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // focus: each would move, select, reorder or remove something in a main panel
 // underneath it (operator, 2026-10-24). Every other main key works from Details
 // exactly as on the main screen.
-var detailsRefused = map[BindingID]string{
-	BindingNextView:      "moves the focus to another main panel",
-	BindingPrevView:      "moves the focus to another main panel",
-	BindingSelect:        "selects a chart or a body in the focused panel",
-	BindingSlotCycleUp:   "moves the Chart or Bodies cursor",
-	BindingSlotCycleDown: "moves the Chart or Bodies cursor",
-	BindingPageHome:      "moves the Chart or Bodies cursor",
-	BindingPageEnd:       "moves the Chart or Bodies cursor",
-	BindingSlotMoveUp:    "reorders the charts",
-	BindingSlotMoveDown:  "reorders the charts",
-	BindingSlotDelete:    "removes a chart",
-	BindingAttach:        "Details is already attached. Attaching again resets what leaving restores",
+var detailsRefused = map[keys.BindingID]string{
+	keys.BindingNextView:      "moves the focus to another main panel",
+	keys.BindingPrevView:      "moves the focus to another main panel",
+	keys.BindingSelect:        "selects a chart or a body in the focused panel",
+	keys.BindingSlotCycleUp:   "moves the Chart or Bodies cursor",
+	keys.BindingSlotCycleDown: "moves the Chart or Bodies cursor",
+	keys.BindingPageHome:      "moves the Chart or Bodies cursor",
+	keys.BindingPageEnd:       "moves the Chart or Bodies cursor",
+	keys.BindingSlotMoveUp:    "reorders the charts",
+	keys.BindingSlotMoveDown:  "reorders the charts",
+	keys.BindingSlotDelete:    "removes a chart",
+	keys.BindingAttach:        "Details is already attached. Attaching again resets what leaving restores",
+	keys.BindingActions:       "opens the Actions list, whose commands act on the main screen underneath Details",
 }
 
 // passDetailsKeyToMain is a key Details does not answer itself: the main
@@ -937,8 +1040,13 @@ var detailsRefused = map[BindingID]string{
 // opened from here owns the keys ahead of attached Details (currentOwner), and
 // Details stays attached underneath, so closing it lands back here.
 func (m Model) passDetailsKeyToMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	id := matchBinding(msg, m.available(m.keys.mainBindings()))
+	id := keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys)))
 	if _, refused := detailsRefused[id]; refused {
+		if id == keys.BindingActions {
+			// The one refusal that says so (operator, 2026-11-07): the others stay
+			// silent as the 2026-10-24 list has them.
+			return m.showNotice(noticeActionsInDetails)
+		}
 		return m, nil
 	}
 	return m.dispatchMainBinding(id, msg)
@@ -1034,11 +1142,10 @@ func (m Model) jumpToTimelineRow() (Model, tea.Cmd) {
 	m = m.withTabMemoryOf(pressed)
 	m = m.noteArrival()
 	moved := m.cursorIdx != origin
-	// An ingress or a station moves now's Bodies cursor to the moving body by
-	// Bodies' own Up/Down action, so `2` lands on it (the specification).
-	if (row.Kind == lookup.TimelineKindIngress || row.Kind == lookup.TimelineKindStation) && row.Resolved {
-		m = m.walkBodyCursorTo(row.BodyID)
-	}
+	// Every row that names a body moves now's Bodies cursor to it by Bodies'
+	// own Up/Down action, so `2` lands on it (the specification and
+	// specs/timeline-row-body.md).
+	m = m.leadBodiesTo(row)
 	// Each press clamps the row cursor against the list its transient state
 	// shows (a cursor on the unselected floating slot lists the sky rows
 	// alone); the row is Enter's own and stays where it was.
@@ -1070,10 +1177,10 @@ func (m Model) jumpToTimelineRow() (Model, tea.Cmd) {
 func (m Model) copiedRows() []string {
 	var out []string
 	shown := m.timelineShown()
-	pad := anyJulian(shown)
+	pad := panel.AnyJulian(shown)
 	for _, r := range shown {
 		if len(m.timeline.marks) == 0 || m.timeline.marks[markOf(r)] {
-			out = append(out, displayTimelineRowPad(r, m.cfg, pad))
+			out = append(out, panel.DisplayRowPad(r, m.cfg, pad))
 		}
 	}
 	return out
@@ -1092,7 +1199,7 @@ func (m Model) yankDetails() (Model, tea.Cmd) {
 		}
 		text, scope, what = strings.Join(rows, "\n"), "timeline", fmt.Sprintf("copied %d %s", len(rows), noun)
 	} else {
-		text, scope, what = m.details.body, "details", "copied the report"
+		text, scope, what = m.detailsBodyShown(), "details", "copied the report"
 	}
 	if text == "" {
 		return m.showNotice(noticeNothingCopy)
@@ -1106,92 +1213,4 @@ func (m Model) yankDetails() (Model, tea.Cmd) {
 	m.yank.notice = ""
 	m.yank.chars = utf8.RuneCountInString(text)
 	return m, armYankFlash(m.yank.gen)
-}
-
-// alignTimelineRow lays one row out in columns: weekday (4), date (10, right),
-// time (7, right), "trans" (5), first body (7, right, never cut), then the
-// rest exactly as Astrolog wrote it. Only the spaces between Astrolog's words
-// are Sextile's (D9). The columns come from the parser; Line is not re-read.
-func alignTimelineRow(r lookup.TimelineRow) string { return alignTimelineRowPad(r, false) }
-
-// alignTimelineRowPad is alignTimelineRow with the Julian mark: ` Jul` after the
-// date of a row Astrolog's reader took on the Julian branch (the specification
-// C7), or four spaces in its place when pad says another row of the list has it.
-func alignTimelineRowPad(r lookup.TimelineRow, pad bool) string {
-	trans := "     "
-	if r.Transit {
-		trans = "trans"
-	}
-	mark := ""
-	if r.Julian {
-		mark = " Jul"
-	} else if pad {
-		mark = "    "
-	}
-	return fmt.Sprintf("%-3s %10s%s %7s %s %7s%s", r.Weekday, r.Date, mark, r.Time, trans, r.Body, r.Rest)
-}
-
-// timelineSearchView is what the panel's last row needs: the query, whether
-// the line is open, and how many rows the list holds before the filter.
-type timelineSearchView struct {
-	show  bool
-	open  bool
-	query string
-	total int
-}
-
-// searchLine draws the last row: `/<query>█` with `N of M` right-aligned while
-// open, `/<query>  N of M` once closed. The slashes are the mode's: `/` exact,
-// `//` fuzzy, `///` exact respecting case.
-func (v timelineSearchView) searchLine(shown, innerW int) string {
-	count := fmt.Sprintf("%d of %d", shown, v.total)
-	if !v.open {
-		return listFilter{query: v.query}.shown() + "  " + count
-	}
-	left := listFilter{query: v.query}.shown() + "█"
-	gap := innerW - lipgloss.Width(left) - lipgloss.Width(count)
-	if gap < 1 {
-		return left
-	}
-	return left + strings.Repeat(" ", gap) + count
-}
-
-// renderTimelineBody draws the window of timeline rows. A row is Astrolog's
-// line, clipped at the panel edge — truncated, never wrapped, because one
-// row is one event and Enter and the cursor both depend on that (V2) — and
-// the cursor row carries the shared active-row treatment only while Details
-// is attached, the way a ring panel's cursor shows only while it is focused.
-func renderTimelineBody(rows []lookup.TimelineRow, marks map[timelineMark]bool, nearest int, st detailsViewState, search timelineSearchView, innerW, innerH int, cfg Config) (string, viewport) {
-	if innerW <= 0 || innerH <= 0 {
-		return "", viewport{}
-	}
-	listH := innerH
-	if search.show {
-		listH = innerH - 1
-	}
-	scroll := viewport{Total: len(rows), Visible: listH, Offset: clampOffset(st.rowOffset, len(rows), listH)}
-	end := min(scroll.Offset+listH, len(rows))
-	pad := anyJulian(rows)
-	out := make([]string, 0, innerH)
-	for i := scroll.Offset; i < end; i++ {
-		cursorRow := st.attached && i == st.cursor
-		text := rowPrefix(st.attached, cursorRow, marks[markOf(rows[i])], len(marks) > 0, cfg) + displayTimelineRowPad(rows[i], cfg, pad)
-		// The cursor row is bold with the band while Details has the keyboard;
-		// the nearest event is bold, and nothing more, always (rule 2).
-		state := cursorRowState(st.attached, cursorRow)
-		if state == rowPlain && i == nearest {
-			state = rowCursorBlurred
-		}
-		out = append(out, renderRow(cutRight(text, innerW, cfg), innerW, state, cfg))
-	}
-	if search.show {
-		if len(rows) == 0 && search.query != "" && listH > 0 {
-			out = append(out, cutRight(fmt.Sprintf("No rows match %q.", search.query), innerW, cfg))
-		}
-		for len(out) < listH {
-			out = append(out, "")
-		}
-		out = append(out, cutRight(search.searchLine(len(rows), innerW), innerW, cfg))
-	}
-	return strings.Join(out, "\n"), scroll
 }

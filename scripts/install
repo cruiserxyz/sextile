@@ -1,8 +1,8 @@
 #!/bin/sh
-# scripts/install: put Sextile v0.1.2 under ~/.local/share/sextile/app, write
+# scripts/install: put Sextile v0.1.3 under ~/.local/share/sextile/app, write
 # the sextile command into ~/.local/bin, then say how to start it.
-#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.2/scripts/install | sh
-# It checks that git exists, then clones the v0.1.2 tag (depth 1) of
+#   curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.3/scripts/install | sh
+# It checks that git exists, then clones the v0.1.3 tag (depth 1) of
 # github.com/cruiserxyz/sextile into $SEXTILE_DIR (default
 # ${XDG_DATA_HOME:-~/.local/share}/sextile/app) and writes a three-line
 # ~/.local/bin/sextile that runs the clone's launcher. Docker is not needed to
@@ -12,7 +12,7 @@
 
 set -eu
 
-TAG=v0.1.2
+TAG=v0.1.3
 REPO_URL=https://github.com/cruiserxyz/sextile.git
 GET_DOCKER=https://docs.docker.com/get-docker/
 MARKER='# Sextile command, written by its install script'

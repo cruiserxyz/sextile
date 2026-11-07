@@ -89,22 +89,22 @@ func TestFixtureChartsAreEvents(t *testing.T) {
 func TestFixtureEventsMatchAstrolog(t *testing.T) {
 	needAstrolog(t)
 	// 0 at the new moon, 180 at the full moon.
-	elongation := func(p map[aspect.Body]float64) float64 {
-		return math.Mod(p[aspect.Moon]-p[aspect.Sun]+360, 360)
+	elongation := func(p map[aspect.Object]float64) float64 {
+		return math.Mod(p[objMoon]-p[objSun]+360, 360)
 	}
 	apart := func(d, target float64) float64 { return math.Abs(math.Remainder(d-target, 360)) }
 	tcs := []struct {
 		file string
 		fact string
-		off  func(p map[aspect.Body]float64) float64 // degrees away from the event
+		off  func(p map[aspect.Object]float64) float64 // degrees away from the event
 		tol  float64
 	}{
-		{"Equinox-2026-03.as", "Sun at 0 Aries", func(p map[aspect.Body]float64) float64 { return apart(p[aspect.Sun], 0) }, 0.02},
-		{"Equinox-2026-09.as", "Sun at 0 Libra", func(p map[aspect.Body]float64) float64 { return apart(p[aspect.Sun], 180) }, 0.02},
-		{"Solstice-2025-12.as", "Sun at 0 Capricorn", func(p map[aspect.Body]float64) float64 { return apart(p[aspect.Sun], 270) }, 0.02},
-		{"FullMoon-2026-02.as", "Moon opposite the Sun", func(p map[aspect.Body]float64) float64 { return apart(elongation(p), 180) }, 0.25},
-		{"Eclipse-2026-08-12.as", "Moon at the Sun", func(p map[aspect.Body]float64) float64 { return apart(elongation(p), 0) }, 0.25},
-		{"GreatConjunction-2020-12-21.as", "Jupiter at Saturn", func(p map[aspect.Body]float64) float64 { return apart(p[aspect.Jupiter], p[aspect.Saturn]) }, 0.15},
+		{"Equinox-2026-03.as", "Sun at 0 Aries", func(p map[aspect.Object]float64) float64 { return apart(p[objSun], 0) }, 0.02},
+		{"Equinox-2026-09.as", "Sun at 0 Libra", func(p map[aspect.Object]float64) float64 { return apart(p[objSun], 180) }, 0.02},
+		{"Solstice-2025-12.as", "Sun at 0 Capricorn", func(p map[aspect.Object]float64) float64 { return apart(p[objSun], 270) }, 0.02},
+		{"FullMoon-2026-02.as", "Moon opposite the Sun", func(p map[aspect.Object]float64) float64 { return apart(elongation(p), 180) }, 0.25},
+		{"Eclipse-2026-08-12.as", "Moon at the Sun", func(p map[aspect.Object]float64) float64 { return apart(elongation(p), 0) }, 0.25},
+		{"GreatConjunction-2020-12-21.as", "Jupiter at Saturn", func(p map[aspect.Object]float64) float64 { return apart(p[objJupiter], p[objSaturn]) }, 0.15},
 	}
 	if len(tcs) != len(fixtureEvents) {
 		t.Fatalf("%d events checked, %d on the allowlist", len(tcs), len(fixtureEvents))
@@ -117,9 +117,9 @@ func TestFixtureEventsMatchAstrolog(t *testing.T) {
 			if err != nil {
 				t.Fatalf("astrolog -i %s: %v", path, err)
 			}
-			p := map[aspect.Body]float64{}
-			for _, pos := range parsePositions(string(out)) {
-				p[pos.Body] = pos.Longitude
+			p := map[aspect.Object]float64{}
+			for _, pos := range mustPositions(t, string(out), defaultSet...) {
+				p[pos.Object] = pos.Longitude
 			}
 			if off := tc.off(p); off > tc.tol {
 				t.Errorf("%s: %s is %.3f degrees off, want within %.2f", tc.file, tc.fact, off, tc.tol)

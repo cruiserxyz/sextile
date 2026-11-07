@@ -2,10 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -25,7 +29,7 @@ type pageOwner struct {
 	// put places the cursor and window, in the same frame.
 	put func(m Model, cursor, offset int) Model
 	// drawn is the offset the owner's render draws from for its stored state: what
-	// its draw-time correction (windowAt, chartWindow, bodyWindowStart) settles on.
+	// its draw-time correction (WindowAt, chartWindow, bodyWindowStart) settles on.
 	drawn func(m Model) int
 	// popup says the owner is one of the six filtered popups.
 	popup bool
@@ -64,7 +68,7 @@ func syntheticAspects(n int) []aspect.RegistryAspect {
 func syntheticObjects(n int) []aspect.RegistryObject {
 	out := make([]aspect.RegistryObject, n)
 	for i := range out {
-		out[i] = aspect.RegistryObject{Number: i, Name: fmt.Sprintf("Object %02d", i)}
+		out[i] = aspect.RegistryObject{Object: aspect.Object{Number: i, Name: fmt.Sprintf("Object %02d", i)}}
 	}
 	return out
 }
@@ -98,7 +102,7 @@ func pageOwners() []pageOwner {
 
 	bodiesVisible := func(m Model) int {
 		p, u, h := m.bodiesRows()
-		if bodyRuled(p, u, h) {
+		if panel.BodyRuled(p, u, h) {
 			return h - 1
 		}
 		return h
@@ -117,7 +121,7 @@ func pageOwners() []pageOwner {
 		},
 		drawn: func(m Model) int {
 			p, u, h := m.bodiesRows()
-			return bodyPageOffset(p, u, h, bodyWindowStart(p, u, m.bodyCursorIdx, m.bodyTop, h))
+			return bodyPageOffset(p, u, h, panel.BodyWindowStart(p, u, m.bodyCursorIdx, m.bodyTop, h))
 		},
 	})
 
@@ -129,7 +133,7 @@ func pageOwners() []pageOwner {
 		return m.recordTimelineCursor()
 	}
 	drawnTimeline := func(m Model) int {
-		return clampOffset(m.details.rowOffset, len(m.timelineShown()), m.timelineHeight())
+		return pane.ClampOffset(m.details.rowOffset, len(m.timelineShown()), m.timelineHeight())
 	}
 	owners = append(owners, pageOwner{
 		name:  "Timeline, attached",
@@ -173,26 +177,26 @@ func pageOwners() []pageOwner {
 	}
 	owners = append(owners, pageOwner{
 		name:   "City popup",
-		filter: func(m Model) string { return m.atlas.filterText },
+		filter: func(m Model) string { return m.atlas.FilterText },
 		popup:  true,
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 30)
 			m.startup = startupAtlasOpen
-			m.atlas.filterText = "t"
-			m.atlas.setMatches(syntheticPlaces(60), false)
+			m.atlas.FilterText = "t"
+			m.atlas.SetMatches(syntheticPlaces(60), false)
 			return m
 		},
 		read: func(m Model) (int, int, int, int) {
-			return m.atlas.cursor, m.atlas.offset, len(m.atlas.matches), modalListHeight(m.height)
+			return m.atlas.Cursor, m.atlas.Offset, len(m.atlas.Matches), dialog.ListHeight(m.height)
 		},
-		put: func(m Model, c, o int) Model { m.atlas.cursor, m.atlas.offset = c, o; return m },
+		put: func(m Model, c, o int) Model { m.atlas.Cursor, m.atlas.Offset = c, o; return m },
 		drawn: func(m Model) int {
-			_, off := m.atlas.windowAt(m.atlas.cursor, modalListHeight(m.height))
+			_, off := m.atlas.WindowAt(m.atlas.Cursor, dialog.ListHeight(m.height))
 			return off
 		},
 	}, pageOwner{
 		name:   "Open chart popup",
-		filter: func(m Model) string { return m.picker.filterText },
+		filter: func(m Model) string { return m.picker.FilterText },
 		popup:  true,
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 30)
@@ -203,18 +207,18 @@ func pageOwners() []pageOwner {
 			return m
 		},
 		read: func(m Model) (int, int, int, int) {
-			return m.picker.cursor, m.picker.offset, len(m.picker.matches), chartBlockHeight(m.picker, modalListHeight(m.height))
+			return m.picker.Cursor, m.picker.Offset, len(m.picker.Matches), chartBlockHeight(m.picker, dialog.ListHeight(m.height))
 		},
-		put: func(m Model, c, o int) Model { m.picker.cursor, m.picker.offset = c, o; return m },
+		put: func(m Model, c, o int) Model { m.picker.Cursor, m.picker.Offset = c, o; return m },
 		drawn: func(m Model) int {
-			_, off := m.picker.windowAt(m.picker.cursor, chartBlockHeight(m.picker, modalListHeight(m.height)))
+			_, off := m.picker.WindowAt(m.picker.Cursor, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 			return off
 		},
 	}, pageOwner{
 		name:    "Houses popup",
-		filter:  func(m Model) string { return m.houseFinder.filterText },
+		filter:  func(m Model) string { return m.houseFinder.FilterText },
 		popup:   true,
-		endRows: func(m Model) int { return modalListHeight(m.height) },
+		endRows: func(m Model) int { return dialog.ListHeight(m.height) },
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 24)
 			next, _ := openHouseFinder(m)
@@ -222,16 +226,16 @@ func pageOwners() []pageOwner {
 		},
 		read: func(m Model) (int, int, int, int) {
 			f := m.houseFinder
-			return f.cursor, f.offset, len(f.matches), f.housePageRows(modalListHeight(m.height))
+			return f.Cursor, f.Offset, len(f.Matches), f.PageRows(dialog.ListHeight(m.height))
 		},
-		put: func(m Model, c, o int) Model { m.houseFinder.cursor, m.houseFinder.offset = c, o; return m },
+		put: func(m Model, c, o int) Model { m.houseFinder.Cursor, m.houseFinder.Offset = c, o; return m },
 		drawn: func(m Model) int {
-			_, off, _ := m.houseFinder.houseWindow(modalListHeight(m.height))
+			_, off, _ := m.houseFinder.Window(dialog.ListHeight(m.height))
 			return off
 		},
 	}, pageOwner{
 		name:   "Zodiac popup",
-		filter: func(m Model) string { return m.zodiacFinder.filterText },
+		filter: func(m Model) string { return m.zodiacFinder.FilterText },
 		popup:  true,
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 24)
@@ -240,18 +244,18 @@ func pageOwners() []pageOwner {
 		},
 		read: func(m Model) (int, int, int, int) {
 			f := m.zodiacFinder
-			return f.cursor, f.offset, len(f.matches), modalListHeight(m.height)
+			return f.Cursor, f.Offset, len(f.Matches), dialog.ListHeight(m.height)
 		},
-		put: func(m Model, c, o int) Model { m.zodiacFinder.cursor, m.zodiacFinder.offset = c, o; return m },
+		put: func(m Model, c, o int) Model { m.zodiacFinder.Cursor, m.zodiacFinder.Offset = c, o; return m },
 		drawn: func(m Model) int {
-			_, off := m.zodiacFinder.windowAt(m.zodiacFinder.cursor, modalListHeight(m.height))
+			_, off := m.zodiacFinder.WindowAt(m.zodiacFinder.Cursor, dialog.ListHeight(m.height))
 			return off
 		},
 	}, pageOwner{
 		name:   "Aspects popup",
-		filter: func(m Model) string { return m.aspectModal.filterText },
+		filter: func(m Model) string { return m.aspectModal.FilterText },
 		popup:  true,
-		pinned: familyRows(),
+		pinned: popup.FamilyRows(),
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 30)
 			m.aspectRegistry = syntheticAspects(60)
@@ -260,22 +264,22 @@ func pageOwners() []pageOwner {
 		},
 		read: func(m Model) (int, int, int, int) {
 			a := m.aspectModal
-			return a.cursor - familyRows(), a.offset, len(a.matches), aspectListHeight(m.height)
+			return a.Cursor - popup.FamilyRows(), a.Offset, len(a.Matches), popup.AspectListHeight(m.height)
 		},
 		put: func(m Model, c, o int) Model {
-			m.aspectModal.cursor, m.aspectModal.offset = familyRows()+c, o
+			m.aspectModal.Cursor, m.aspectModal.Offset = popup.FamilyRows()+c, o
 			return m
 		},
 		drawn: func(m Model) int {
-			_, off := m.aspectModal.windowAt(m.aspectModal.cursor-familyRows(), aspectListHeight(m.height))
+			_, off := m.aspectModal.WindowAt(m.aspectModal.Cursor-popup.FamilyRows(), popup.AspectListHeight(m.height))
 			return off
 		},
 	}, pageOwner{
 		name:    "Bodies popup",
-		filter:  func(m Model) string { return m.bodyModal.filterText },
+		filter:  func(m Model) string { return m.bodyModal.FilterText },
 		popup:   true,
-		pinned:  groupRows(),
-		endRows: func(m Model) int { return bodyListHeight(m.height) },
+		pinned:  popup.GroupRows(),
+		endRows: func(m Model) int { return popup.ListHeight(m.height) },
 		open: func(t *testing.T) Model {
 			m := popupBase(t, 30)
 			m.objectRegistry = syntheticObjects(80)
@@ -284,16 +288,16 @@ func pageOwners() []pageOwner {
 		},
 		read: func(m Model) (int, int, int, int) {
 			b := m.bodyModal
-			visible := bodyListHeight(m.height)
-			return b.cursor - groupRows(), b.offset, len(b.matches), visible
+			visible := popup.ListHeight(m.height)
+			return b.Cursor - popup.GroupRows(), b.Offset, len(b.Matches), visible
 		},
 		put: func(m Model, c, o int) Model {
-			m.bodyModal.cursor, m.bodyModal.offset = groupRows()+c, o
+			m.bodyModal.Cursor, m.bodyModal.Offset = popup.GroupRows()+c, o
 			return m
 		},
 		drawn: func(m Model) int {
-			h := bodyListHeight(m.height)
-			_, off := m.bodyModal.windowAt(m.bodyModal.cursor-groupRows(), h)
+			h := popup.ListHeight(m.height)
+			_, off := m.bodyModal.WindowAt(m.bodyModal.Cursor-popup.GroupRows(), h)
 			return off
 		},
 	})
@@ -304,7 +308,7 @@ func pageOwners() []pageOwner {
 // window, PgDn moves the cursor to the window's last row and leaves the window; a
 // second PgDn moves the window by a page less a row, the cursor to its new last
 // row; PgUp mirrors it. The expected numbers are written out here from the
-// rule, not read from pageCursor, so an owner that pages by hand (or by a page,
+// rule, not read from menu.PageCursor, so an owner that pages by hand (or by a page,
 // or with its own margin) fails by its name; and after every press the owner's
 // draw-time correction finds nothing to correct.
 func TestEveryCursorOwnerPagesCursorFirst(t *testing.T) {
@@ -361,14 +365,14 @@ func TestEveryCursorOwnerPagesCursorFirst(t *testing.T) {
 // bodyPageOffset and bodyPageTop translate the stored window between display
 // rows (the rule counts as one) and the cursor-row index the owner table works in.
 func bodyPageOffset(planets, under, height, top int) int {
-	if bodyRuled(planets, under, height) && top > planets {
+	if panel.BodyRuled(planets, under, height) && top > planets {
 		return top - 1
 	}
 	return top
 }
 
 func bodyPageTop(planets, under, height, offset int) int {
-	if bodyRuled(planets, under, height) && offset >= planets {
+	if panel.BodyRuled(planets, under, height) && offset >= planets {
 		return offset + 1
 	}
 	return offset

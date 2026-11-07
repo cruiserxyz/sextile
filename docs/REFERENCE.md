@@ -1,7 +1,7 @@
 # Sextile reference
 
 The [README](../README.md) gets you to a first session. This page holds the rest: what each panel shows, every
-key, the install routes and their options, where Sextile keeps what, and its limits. It describes Sextile 0.1.2.
+key, the install routes and their options, where Sextile keeps what, and its limits. It describes Sextile 0.1.3.
 
 - [The screen](#the-screen)
 - [Keys](#keys)
@@ -33,7 +33,7 @@ interpretation of its own.
 - **Follows the clock.** The floating chart starts on the current minute and follows the clock. Its row reads
   `~ Now`. A step key, `N` or Enter on a timeline row stops it where it is (the row reads `~`) — `n` returns to now
   and follows again, `N` goes back to where you were.
-- **Answers "what does Astrolog say?"** Details follows the cursor with Astrolog's report for the body under it.
+- **Answers "what does Astrolog say?"** Details follows the cursor with Astrolog's report for the body under it. Details (every tab), Bodies and Aspects draw a result only under the name it was computed for. While the result for another chart or body is on its way, Details stays empty, and after a second its bottom edge reads `loading` with moving dots and no row count. Bodies and Aspects keep their rows until the new ones replace them. When only the moment or a setting changed, the previous result stays, faint, with `…` after the caption. A report Astrolog cannot give reads `Couldn't read <name>'s report.` in the panel, and the Log has the reason.
   On a chart it opens on Astrolog's influence chart, a table of each body's positional and aspect strength. A
   timeline tab lists the events of the floating moment's calendar month. The Timeline tab exists for the floating
   chart and for a selected group that contains it: alone, the floating month's sky. In a group, the sky plus each
@@ -45,18 +45,21 @@ interpretation of its own.
   (see [The wheel](#the-wheel)).
 - **Picks up where you left off.** Quit and reopen: your charts, your selection and your house and zodiac choices
   come back. The floating chart is freshly now.
-- **Shows its working.** The log console (`,` then `l`) lists the Astrolog commands behind the screen, and you can
-  copy one out. Each line leaves out the opening every call shares and starts at the switches that name the chart.
-  One too wide for the console ends in `…`. Enter copies the whole command. While the chart follows the clock its
-  minute updates write nothing to the Log except one `now:` line, always the console's last, which updates with the
-  latest command each minute while the console is open, and `,` `l` opens on it. So the console holds the command
-  behind the current screen and every step you took, not a line for every minute.
+- **Shows its working.** The Log panel (`,` then `l`) takes the keyboard: move over its lines, `Enter` copies the
+  highlighted one and `,` `y` copies them all. A second `l` there opens the log console, which lists the Astrolog
+  commands behind the screen, and you can copy one out. Each line leaves out the opening every call shares and starts
+  at the switches that name the chart. One too wide for the console ends in `…`. Enter copies the whole command.
+  A command Astrolog failed on (it exited with an error, crashed, warned, or printed what Sextile could not read) is drawn behind a red `!` (a plain `! ` with colours off), and Enter still copies the command alone.
+  While the chart follows the clock its minute updates write nothing to the Log except one `now:` line, always the
+  console's last, which updates with the latest command each minute while the console is open, and the console opens
+  on it. So the console holds the command behind the current screen and every step you took, not a line for every
+  minute. Where the terminal is too narrow for the Log panel, `,` `l` opens the console at once.
 
 ### Comparison
 
 Opening a chart selects nothing. `Space` selects the slot under the cursor. Two selected charts engage comparison.
 
-Comparison reads `X in Y`: the chart under the cursor (X) is the one you read, and the Aspects tab, with `[` and `]`, picks the chart it is read against (Y), whose houses and zodiac frame the comparison — now is never Y. Bodies keeps listing X under the title `X in Y`, each body's house in Y's houses bold beside Y's own house for that body faint.
+Comparison reads `X in Y`: the chart under the cursor (X) is the one you read, and the Aspects tab, with `[` and `]`, picks the chart it is read against (Y), whose houses and zodiac frame the comparison — now is never Y. Each aspect on that tab names X's body first, then Y's. Bodies keeps listing X under the title `X in Y`, each body's house in Y's houses bold beside Y's own house for that body faint.
 
 The tab is labelled with the charts' numbers, like `② in ①` (`2 in 1` without colour). With the cursor on an opened
 chart and only the floating chart beside it, there is no other chart to read it against, so its own tab shows.
@@ -126,23 +129,25 @@ Press `?` inside Sextile for the full list.
 | `n` / `N` | Now (the floating chart follows the clock until you move it) / back to the previous time |
 | `Ctrl+O` / `Ctrl+S` | Open a chart from the library / save the floating chart (focus it first) |
 | `Ctrl+L` | Choose the city |
+| `Ctrl+P` | Actions (from the main screen, not from inside Details): every command with its key, searchable. Type to narrow the list (the commands you ran last lead it), `Enter` runs the one under the cursor, `Esc` closes. A greyed row says why it cannot run right now, and `Enter` on it shows the reason |
 | `Ctrl+H` / `Ctrl+Z` | Choose the house system / the zodiac of the focused chart. Every other chart keeps its own, and a comparison is read in the houses and zodiac of the chart the Aspects tab reads it against. The popup's title names the focused chart |
-| `Ctrl+A` / `Ctrl+B` | Choose which aspects / which bodies are shown — `Space` ticks at once and the screen updates live, `Esc` or `Enter` closes keeping what is ticked |
+| `Ctrl+A` / `Ctrl+B` | Choose which aspects / which bodies are shown — `Space` ticks at once and the screen updates live, `Esc` or `Enter` closes keeping what is ticked. In the bodies chooser `Ctrl+D` ticks the default bodies again, and seven group rows (Planets, Angles, Points, House cusps, Asteroids, Uranians, Other) tick their bodies together and count how many are ticked. A body Astrolog cannot draw is marked `!`, listed after all the others, and shows Astrolog's own message on the last line while the cursor is on it |
 | `Space` | Select the focused chart or body. Two selected charts engage comparison. Selected bodies show only themselves on the chart's wheel, aspects and report (nothing selected shows all) |
 | `Tab` `1` `2` `3` | Move between the Chart, Bodies and Aspects panels |
-| `Enter` `[` `]` `0` | Into Details, and between its tabs. From the Chart or Aspects panel `[` `]` pick the chart the cursor's chart is read against |
+| `Enter` `[` `]` `0` | Into Details, and between its tabs. From the Chart, Bodies or Aspects panel `[` `]` pick the chart the cursor's chart is read against |
 | `Enter` `/` | In Details: on a timeline row, move the floating chart to that moment without selecting it (`n` follows the clock again). Filter the rows |
 | `Ctrl+X` | Render the wheel. With Docker, again closes it |
-| `,` `l` | The log console (from the main screen): the Astrolog commands — `Enter` copies the highlighted line |
+| `,` `l` | The Log takes the keyboard (from the main screen): `↑` `↓` move over its lines, `Enter` copies the highlighted line, `,` `y` copies them all, `l` opens the log console (the Astrolog commands — `Enter` copies the highlighted one), `Esc` or `q` goes back. Any other key goes back and then does what it does on the screen. Without room for the Log panel, `,` `l` opens the log console |
 | `,` `a` | How the Bodies house column is drawn ([House display](#house-display)): angularity at a glance (the default), true quadrants, plain number, or number + angularity — `,` `c` `d` keeps it with the city, along with the floating chart's house system and zodiac |
+| `,` `n` | A new, unnamed session: every chart closes, nothing is selected, the floating chart stays, and houses, zodiac and body choice go back to the saved defaults. With charts open, a second press confirms. A named session is left as last saved |
 | `,` `o` | The Sessions list ([Sessions](#sessions)): save the open charts under a name, or open, rename (`Ctrl+R`) or move to the trash (`Ctrl+D`) a saved session of this charts folder |
-| `,` `y` | In Details: copy the timeline rows (marked, else all) or the whole report |
+| `,` `y` | Copy the whole content of whatever has the keyboard, one row to a line: the Chart, Bodies or Aspects panel (every row, as shown, without colour), the Log or the log console (every line), and in Details the timeline rows (marked, else all) or the whole report |
 | `,` `h` / `,` `z` / `,` `s` | The same as `Ctrl+H` / `Ctrl+Z` / `Ctrl+S`, for a terminal that keeps those keys for itself |
 | `q` | Quit from the main screen. Closes Help, the log console, Details and the house display popup. Inside a search or title field it is a letter. `Ctrl+C` quits from anywhere |
 
 ⇞ ⇟ Home End (and g G outside a filter) move the cursor of the focused list: first to the edge of its window, then by a page of the window minus one row. This holds in the Chart and Bodies panels, the timeline, the Log console and every chooser. ⌃⇞ ⌃⇟ scroll the Details report from anywhere, two lines a press. If your leader key is g, the leader wins — Home and End always work.
 
-In Details, `/` filters the timeline rows or the report: type to match anywhere in a row, ignoring case. Start with a second `/` for a loose match (the letters in order), or a third for an exact match that respects case.
+In Details, `/` filters the timeline rows or the report: type to match anywhere in a row, ignoring case. While the line is open the arrows move the timeline's row cursor and `Enter` jumps to that row, closing the line and keeping the filter. Start with a second `/` for a loose match (the letters in order), or a third for an exact match that respects case.
 
 Options: `--charts-dir DIR` (the chart library, also `SEXTILE_CHARTS_DIR`), `--accessible` (ASCII borders and markers),
 `--color auto|always|never` (also `SEXTILE_COLOR` and `NO_COLOR`), `--session NAME` (start in that named session,
@@ -211,6 +216,8 @@ first). Each session's file name is made from its name the way a chart's is. To 
 with `--session NAME` (`sextile -- --session NAME`). A session that is missing, open elsewhere or from another
 charts folder is not opened, and the Log says why.
 
+`,` `n` starts a new, unnamed session: it closes every chart, selects nothing and keeps the floating chart. Houses, zodiac and body choice go back to the saved defaults. With charts open, a second press confirms. A named session is left as last saved.
+
 ## The example chart
 
 [`examples/Demo-Hamburg-2026-10-24.as`](../examples/Demo-Hamburg-2026-10-24.as) is the moment every example here
@@ -262,20 +269,22 @@ go test ./internal/ui -run '^TestReadmeScreenshotScene$' -demo
 
 ## Getting a result out
 
-- **Text.** In Details, `,` then `y` copies to the clipboard: on the Timeline tab the marked rows (all rows if none are
-  marked. Mark with `Space`), on the report tab the whole report. In the log console, `Enter` copies a command,
-  whole, however short its line is shown.
+- **Text.** `,` then `y` copies to the clipboard the whole content of whatever has the keyboard: the Chart, Bodies or
+  Aspects panel (every row, one to a line, as shown but without colour and not cut to the panel), the Log or the log
+  console (every line). In Details it copies on the Timeline tab the marked rows (all rows if none are marked. Mark
+  with `Space`), on the report tab the whole report. With the Log focused (`,` `l`) or in the log console, `Enter`
+  copies one line, whole, however short its line is shown.
 - **Wheel.** `Ctrl+X`, as described under [The wheel](#the-wheel).
-- **Clipboard.** Copying sends the terminal's clipboard escape sequence (OSC 52). Sextile shows `Copied` once it has sent the text and cannot tell whether your terminal accepted it. If nothing pastes, read the command in the log console (`,` `l`).
+- **Clipboard.** Copying sends the terminal's clipboard escape sequence (OSC 52). Sextile shows `Copied` once it has sent the text and cannot tell whether your terminal accepted it. If nothing pastes, read the command in the log console (`,` `l` `l`).
 
 ## Install options
 
-The README's [Install and run](../README.md#install-and-run) fetches Sextile with `scripts/install`. It clones into `~/.local/share/sextile/app` (`$XDG_DATA_HOME/sextile/app` when you set `XDG_DATA_HOME`, set `SEXTILE_DIR` to choose another folder). An existing Sextile clone there is moved to the release tag, so files committed after it leave the working tree and stay in its history, and uncommitted changes stop the checkout. Any other existing folder is refused. It then writes a `sextile` command into `~/.local/bin` that runs the clone's launcher: three lines, the second of which marks it as the script's own, so a file already there that the script did not write is never replaced and the install stops before it changes anything. When `~/.local/bin` is not on your PATH (the default on macOS) it prints the line to add to `~/.zshrc`, `~/.bashrc` or `~/.profile`, whichever fits your shell, and says that `~/.local/bin/sextile` works right away. It edits no startup file. A clone that an earlier install left in `~/sextile` is no longer used. The script says so and leaves it as it is, for you to remove by hand. Docker is needed to run Sextile, not to install it: without a running Docker the script warns and goes on. The details:
+The README's [Install and run](../README.md#install-and-run) fetches Sextile with `scripts/install`. It clones into `~/.local/share/sextile/app` (`$XDG_DATA_HOME/sextile/app` when you set `XDG_DATA_HOME`, set `SEXTILE_DIR` to choose another folder). An existing Sextile clone there is moved to the release tag, so files committed after it leave the working tree and stay in its history, and uncommitted changes stop the checkout. Any other existing folder is refused. It then writes a `sextile` command into `~/.local/bin` that runs the clone's launcher: three lines, the second of which marks it as the script's own, so a file already there that the script did not write is never replaced and the install stops before it changes anything. When `~/.local/bin` is not on your PATH (the default on macOS) it prints the line to add to `~/.zshrc`, `~/.bashrc` or `~/.profile`, whichever fits your shell, and says that `~/.local/bin/sextile` works right away. It edits no startup file. To update, run the install line of a newer release: the script moves the clone to that release's tag, and the next start builds that release's image. A clone that an earlier install left in `~/sextile` is no longer used. The script says so and leaves it as it is, for you to remove by hand. Docker is needed to run Sextile, not to install it: without a running Docker the script warns and goes on. The details:
 
 - You need Docker 28 or newer, running on this machine.
 - The first run asks which folder holds your charts (Astrolog chart files), suggesting `~/.local/share/sextile/charts` first and `~/Documents/Sextile` second, remembers the answer in `~/.config/sextile/`, builds the image, and starts Sextile. The first build downloads and compiles Astrolog 8.00 from its checksum-pinned source archive, which carries the Swiss Ephemeris files for 1800–2400 and the files for Hygiea and seven dwarf planets (Eris, Haumea, Makemake, Gonggong, Quaoar, Sedna, Orcus), which cover about 1500 to 2100, and adds the three 1200–1800 files from the aloistr/swisseph GitHub mirror at a pinned commit, every file checked by checksum. It takes a few minutes, and later starts skip it.
 - To bring existing Astrolog chart files, copy them into your charts folder, then press Ctrl+O.
-- `sextile --charts-dir DIR` uses another charts folder for one run, `sextile --port 5308` another port, `sextile --no-open` leaves the browser closed, and `sextile --rebuild` builds the image again. Anything after `--` goes to Sextile itself. (Run the launcher from a clone you made by hand as `./sextile`.)
+- `sextile --charts-dir DIR` uses another charts folder for one run, `sextile --port 5308` another port, `sextile --no-open` leaves the browser closed, and `sextile --rebuild` builds the image again. `sextile --moons` puts the planetary moons' files (about 240 MB) in the image and remembers it in `launcher-moons.conf` beside the launcher's config file, `sextile --no-moons` leaves them out from then on, and `SEXTILE_MOONS=1` or `0` does the same for one run without remembering it (the flag wins, then the variable, then the file). Anything after `--` goes to Sextile itself. (Run the launcher from a clone you made by hand as `./sextile`.)
 - After a launch, `sextile` removes older `localhost/sextile` images that it built itself and that no container uses. Other images are never touched.
 - `sextile doctor` says what is wrong (Docker, the port, the charts folder, and for `sextile --no-docker` go and astrolog) without changing anything.
 - Your time zone is passed in so the first run can propose your city. A proposed city is named in the Log. Choose another with Ctrl+L or keep it as your default with `, c d`, which keeps your house display (`, a`) with it, and the floating chart's house system and zodiac as the frame a chart that names none opens in (charts already open keep the frame they show, and a second window refuses `, c d`). A city chosen with Ctrl+L lasts for the session only. Chart times always use each chart's own place.
@@ -315,6 +324,9 @@ bin/sextile --charts-dir ~/.charts
 
 Or let the launcher do it: `./sextile --no-docker` (go and astrolog on the host, it builds into `~/.cache/sextile/native/`, removing the older builds there after a new one, and keeps session, preferences and backups in the same XDG folders as Docker, outside the charts folder).
 
+`scripts/build-astrolog --moons` also puts the planetary moons' files (about 240 MB) in Astrolog's own folder. The
+script keeps an `astrolog.as` you changed and puts Astrolog's own beside it as `astrolog.as.stock`.
+
 Requires Go 1.25 or newer and a C compiler for Astrolog. `scripts/build-astrolog` expects a Linux system (GNU `sed`, `sha256sum`, `nproc`). On macOS, use Docker. Put `~/.local/bin` on your PATH so Sextile finds the Astrolog that `scripts/build-astrolog` installed there. `bin/sextile --version` prints both versions and where it found Astrolog. The wheel behaves as described under [The wheel](#the-wheel).
 
 ## What Sextile keeps on disk
@@ -326,8 +338,9 @@ backup folders are private to you (`0700`):
   holds the last-opened charts (titles, dates, times and places) so the session can be restored, and the lock that
   makes a second window a second window. There is one session for all your charts folders, and it records which
   charts folder it was saved in: started on another folder, Sextile opens with no charts and says on the Log that the
-  saved session belongs to another charts folder and was not opened, so a chart in one folder is never mistaken for a
-  same-named chart in another. Quitting there then keeps that folder's session instead.
+  saved session is another folder's and was not opened, so a chart in one folder is never mistaken for a same-named
+  chart in another. That folder's session then stays exactly as it was: this run is saved only if you save it under a
+  name (`,o`).
 - **Named sessions.** `~/.local/share/sextile/sessions/` (`$XDG_DATA_HOME/sextile/sessions/`), one `<name>.yaml`
   per saved session (mode 0600, the folder 0700): the same content as the session, plus its name and the charts
   folder it belongs to, and a `<name>.lock` while a window runs it. `Ctrl+D` moves a session to
@@ -362,6 +375,7 @@ backup folders are private to you (`0700`):
   or opened from there, its session is kept like any other. A named session runs in one window at a time. Two
   windows cannot save a chart under the same name: the second is told the name is taken. With `sextile` and no `--port`, a later window
   takes the next free port and prints which. A `--port` that is taken is refused.
+- `,` `y` on the log console copies every open chart's birth moment and coordinates (the Astrolog command lines) to the clipboard. A clipboard manager with history keeps them.
 - The terminal must be at least 66 columns by 15 rows with one chart, one more row for each further chart. Below
   that Sextile shows "Terminal too small" and the size it needs. Resize and it carries on.
 - Details and the Log sit beside the charts when the terminal is at least 132 columns wide plus 12 per extra chart.
@@ -369,8 +383,14 @@ backup folders are private to you (`0700`):
   Bodies columns do not all fit, the focused chart's column stays whole and `‹N` / `N›` count the columns hidden
   to each side.
 - It is a terminal application: no mouse, no windows, no phone.
+- In the Docker launch, `Ctrl+^` pressed twice detaches the terminal from a running Sextile. That is Docker's
+  own detach key, moved off `Ctrl+P` so the Actions list opens at once. `docker attach` brings the screen back.
+- The Chart report is Astrolog's influence chart, and Astrolog 8.00 miscounts fixed stars in it (some builds end
+  the run, others put power in the wrong sign). That one report leaves fixed stars out, and the large log (`,l l`)
+  notes it beside the command. The Bodies table, the aspects, the wheel and the Timeline keep them. An Astrolog
+  that dies on a call shows `Astrolog crashed.` in the Log, and the command is in the console.
 - It needs Astrolog 8.00. The Docker image builds it for you. Otherwise you install it.
 - There are no prebuilt binaries: Docker is the install, on Linux or macOS, and on Windows from a WSL terminal. Linux and Windows through WSL are tested — macOS is expected to work but untested.
-- It draws no planetary moons or planets' centres of body (their ephemeris files are not included), and none of the asteroid bodies outside the dates their files cover. The Log names a body it leaves out.
+- It draws the planetary moons and planets' centres of body when their ephemeris files are in Astrolog's folder, and no Astrolog distribution ships them: the Docker image carries them once you have run `sextile --moons` (about 240 MB more, remembered for later starts), and `scripts/build-astrolog --moons` installs them for a native Astrolog. Without the files they are marked in the chooser and never drawn. With them ticked and the sky as the transiting side, a Timeline month takes about ten seconds: they meet their planet and each other several times a day, more events than Astrolog 8.00's month search lists, so Sextile asks for the sky one day at a time. It draws none of the asteroid bodies outside the dates their files cover. The Log names the bodies it leaves out in one line, or counts them when there are many.
 - Names and places longer than 54 bytes are cut, ending in `…`. Accented letters count as two. A chart file
   written elsewhere with a longer place may fail to open.

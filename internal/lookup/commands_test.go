@@ -28,7 +28,7 @@ func commandsTestPlace() location.PlaceInfo {
 func commandsStub(commands []string, err error) *Probers {
 	stub := ChartComputer(func(context.Context, recipe.ChartSpec) (payload.RawOutput, error) {
 		return payload.RawOutput{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 35.5}},
+			Positions: []aspect.Position{{Object: objSun, Longitude: 35.5}},
 			Commands:  commands,
 		}, err
 	})
@@ -88,7 +88,7 @@ func TestRawReportReturnsCommand(t *testing.T) {
 	}
 
 	natal := store.AnchorChart{When: time.Date(1990, 5, 15, 12, 0, 0, 0, time.UTC), Place: place}
-	_, crossCommand, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, when, place, aspect.Moon)
+	_, crossCommand, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, when, place, objMoon)
 	if err != nil {
 		t.Fatalf("CrossBodyRawReport: %v", err)
 	}

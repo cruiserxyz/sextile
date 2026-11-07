@@ -84,7 +84,7 @@ func TestMultiWheelRefusesEveryTextProjection(t *testing.T) {
 	spec := multiWheelSpec(t, 3)
 	for _, p := range []recipe.Projection{
 		recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(),
-		recipe.AspectsRawReport(), recipe.BodyRawReport(0),
+		recipe.AspectsRawReport(), recipe.BodyRawReport(objSun),
 	} {
 		if _, err := Compile(spec, p); err == nil {
 			t.Errorf("Compile accepted %s over a MultiWheel", p.Label())
@@ -243,7 +243,7 @@ func recordStagedWrites(t *testing.T) *[]string {
 // TestTimelineSourceSwitch: a failed search is reported under Astrolog's own
 // switch.
 func TestTimelineSourceSwitch(t *testing.T) {
-	for src, want := range map[TimelineSource]string{TimelineTransit: "-t", TimelineSky: "-dm", TimelineReturn: "-tr"} {
+	for src, want := range map[TimelineSource]string{TimelineTransit: "-t", TimelineSky: "-d", TimelineReturn: "-tr"} {
 		if got := src.Switch(); got != want {
 			t.Errorf("%v.Switch() = %q, want %q", src, got, want)
 		}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,7 +26,7 @@ func (m Model) untilNextMinute() time.Duration {
 }
 
 // minuteTimer starts the timer that ends at a minute boundary. It is one
-// package-level variable, like yankLine and showWheel, so the test binary can
+// package-level variable, like yankLine, so the test binary can
 // put a timer in its place that does not sleep: a test that runs every command
 // a flow returns (runAll) would otherwise wait out a wall-clock minute, and
 // no test needs to. Production always runs longTimer.
@@ -108,11 +109,11 @@ func (m Model) hush(before [numSurfaces]uint64) Model {
 
 // logCommandsFor is logCommands for the result of a run on surface s that was
 // started for wantID: a quiet want records nothing.
-func (m Model) logCommandsFor(s surface, wantID uint64, commands []string) Model {
+func (m Model) logCommandsFor(s surface, wantID uint64, commands []string, failed ...int) Model {
 	if m.isQuiet(s, wantID) {
 		return m
 	}
-	return m.logCommands(commands)
+	return m.logCommands(commands, failed...)
 }
 
 // isQuiet reports whether a result for wantID on surface s answers work the
@@ -130,9 +131,13 @@ const nowLinePrefix = "now: "
 // added by the first tick and moved to the bottom by every later one (appendLog),
 // so the buffer holds the same number of lines however many ticks have run. A
 // frame that ran no command leaves it as it was.
-func (m Model) setNowLine(commands []string) Model {
+//
+// failed is the frame's failed list: the line is marked when the last command
+// is among them.
+func (m Model) setNowLine(commands []string, failed ...int) Model {
 	if len(commands) == 0 {
 		return m
 	}
-	return m.appendLog(laneNow, commands[len(commands)-1])
+	last := len(commands) - 1
+	return m.appendLogLine(logLine{lane: laneNow, text: commands[last], failed: slices.Contains(failed, last)})
 }

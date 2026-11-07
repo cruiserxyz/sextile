@@ -28,13 +28,14 @@ func hellenisticSpecAt(t *testing.T, jd, lon, lat float64) recipe.ChartSpec {
 		recipe.Tropical,
 		recipe.ObjectPolicy{
 			Baseline:     recipe.AstrologDefault,
-			Add:          recipe.NewBodySet(aspect.Chiron, aspect.SouthNode, aspect.Lilith, aspect.ImumCoeli, aspect.Descendant),
+			Add:          recipe.NewObjectSet(11, 17, 18, 25, 28), // Chiron, South Node, Lilith, Nadir, Descendant
 			TrueNodeMode: true,
 		},
 	)
 	if err != nil {
 		t.Fatalf("build hellenistic spec: %v", err)
 	}
+	spec.Registry = testRegistry(t)
 	return spec
 }
 
@@ -117,7 +118,7 @@ func TestCompile_RawReportArgv(t *testing.T) {
 		// influenceChartMode. A bare toggle here would make the report depend
 		// on the host's astrolog.as.
 		{"chart", recipe.ChartRawReport(), []string{"=j0"}},
-		{"body", recipe.BodyRawReport(aspect.Moon), []string{"-aa", "-RO", "2"}},
+		{"body", recipe.BodyRawReport(objMoon), []string{"-aa", "-RO", "2"}},
 		{"aspects", recipe.AspectsRawReport(), []string{"-aa"}},
 	}
 	for _, tc := range cases {
@@ -155,7 +156,7 @@ func TestCompile_RawReportComparisonCompatibility(t *testing.T) {
 	// a BODY raw report is well defined over a comparison — `-RO <n>`
 	// restricts the relationship list to the rows where that object is one of
 	// the two ends.
-	body := mustCompile(t, spec, recipe.BodyRawReport(aspect.Moon)).Invocations[0]
+	body := mustCompile(t, spec, recipe.BodyRawReport(objMoon)).Invocations[0]
 	wantTail := []string{"-aa", "-RO", "2"}
 	if body.Argv[0] != "-r0" || len(body.TempInputs) != 2 || !reflect.DeepEqual(body.Argv[len(body.Argv)-3:], wantTail) {
 		t.Errorf("comparison raw body did not compile to staged -r0 ... -aa -RO 2: argv=%v temps=%d", body.Argv, len(body.TempInputs))
@@ -174,7 +175,7 @@ func TestCompile_RawReportComparisonCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transit comparison spec: %v", err)
 	}
-	if got := mustCompile(t, transitSpec, recipe.BodyRawReport(aspect.Moon)).Invocations[0].Argv; got[0] != "-rt" {
+	if got := mustCompile(t, transitSpec, recipe.BodyRawReport(objMoon)).Invocations[0].Argv; got[0] != "-rt" {
 		t.Errorf("transit comparison raw body source = %q, want -rt: %v", got[0], got)
 	}
 	// The chart report stays undefined over a pair: which chart's influences?
@@ -242,8 +243,8 @@ func TestObjectPolicy_RestrictionAlgebra(t *testing.T) {
 		recipe.WholeSign, recipe.Tropical,
 		recipe.ObjectPolicy{
 			Baseline: recipe.AstrologDefault,
-			Add:      recipe.NewBodySet(aspect.Chiron), // astrolog 11 (restricted by default)
-			Remove:   recipe.NewBodySet(aspect.Pluto),  // astrolog 10 (default-visible)
+			Add:      recipe.NewObjectSet(11), // Chiron, astrolog 11 (restricted by default)
+			Remove:   recipe.NewObjectSet(10), // Pluto, astrolog 10 (default-visible)
 		},
 	)
 	if err != nil {
@@ -322,23 +323,6 @@ func TestCompileBundle_PrefixSharing(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("bundle missing plan for %s", p.Label())
-		}
-	}
-}
-
-// TestBodyObjectNum_CoversAllKnownBodies guards the contract that a
-// recipe-validated ObjectPolicy can always be compiled: every body recipe
-// treats as real (non-"unknown" String) must have an astrolog object number
-// here. If recipe accepts a body the compiler can't lower, the two have
-// drifted.
-func TestBodyObjectNum_CoversAllKnownBodies(t *testing.T) {
-	for i := 1; i <= 255; i++ {
-		b := aspect.Body(i)
-		if b.String() == "unknown" {
-			continue
-		}
-		if _, ok := bodyObjectNum[b]; !ok {
-			t.Errorf("bodyObjectNum missing known body %s (%d) — recipe would accept it but the compiler can't lower it", b, i)
 		}
 	}
 }
@@ -481,6 +465,26 @@ func TestPositionsPinsTheRatioAndStationColumn(t *testing.T) {
 			if a == "-v0" {
 				t.Errorf("%s: positions argv still carries the toggle -v0: %v", name, got)
 			}
+		}
+	}
+}
+
+// TestBodyReportArgvCarriesTheNumber: the body report asks Astrolog for the
+// object's own number, whatever Sextile has a glyph for: Fortune is -RO 19.
+func TestBodyReportArgvCarriesTheNumber(t *testing.T) {
+	spec := hellenisticSpec(t)
+	for _, c := range []struct {
+		o    aspect.Object
+		want string
+	}{
+		{aspect.Object{Number: 19, Name: "Fortune"}, "19"},
+		{aspect.Object{Number: 32, Name: "11th Cusp"}, "32"},
+		{objMoon, "2"},
+	} {
+		argv := mustCompile(t, spec, recipe.BodyRawReport(c.o)).Invocations[0].Argv
+		tail := argv[len(argv)-2:]
+		if tail[0] != "-RO" || tail[1] != c.want {
+			t.Errorf("%s: argv tail = %v, want -RO %s", c.o.Name, tail, c.want)
 		}
 	}
 }

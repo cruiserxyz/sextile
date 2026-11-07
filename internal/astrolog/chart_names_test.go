@@ -97,7 +97,7 @@ func TestReportCallsCarryChartNames(t *testing.T) {
 			{namedMoment(name, place), recipe.Aspects{}},
 			{namedMoment(name, place), recipe.ChartRawReport()},
 			{namedLocal(nameJD, name, place), recipe.ChartRawReport()},
-			{namedLocal(nameJD, name, place), recipe.BodyRawReport(aspect.Sun)},
+			{namedLocal(nameJD, name, place), recipe.BodyRawReport(objSun)},
 			{namedLocal(nameJD, name, place), recipe.AspectsRawReport()},
 		} {
 			label := fmt.Sprintf("%T/%s", tc.src, tc.proj.Label())
@@ -118,7 +118,7 @@ func TestReportCallsCarryChartNames(t *testing.T) {
 					a, b = namedLocal(nameJD, "Aster", "Amsterdam, NL"), namedLocal(nameJD+30, "Birch", "Tromso, NO")
 				}
 				spec := castSpec(t, recipe.Comparison{Primary: a, Secondary: b, Relation: rel})
-				for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.AspectsRawReport(), recipe.BodyRawReport(aspect.Sun)} {
+				for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.AspectsRawReport(), recipe.BodyRawReport(objSun)} {
 					inv := compileOne(t, spec, p)
 					files := stagedContents(inv)
 					if len(files) != 2 {
@@ -436,7 +436,7 @@ func TestLongLabelsNeverCrashAstrolog(t *testing.T) {
 			place1, name2, place2 := other(i, n, 1), other(i, n, 2), other(i, n, 4)
 			spec := castSpec(t, namedLocal(nameJD, label, place1))
 			// The raw reports Details shows (-v, -aa, -aa -RO).
-			for _, p := range []recipe.RawReport{recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(aspect.Sun)} {
+			for _, p := range []recipe.RawReport{recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(objSun)} {
 				report, _, err := ComputeRawReport(ctx, spec, p)
 				if err != nil {
 					t.Fatalf("%s %d %s: %v%s", kind, n, p.Label(), err, crashed(err))
@@ -506,12 +506,13 @@ func crashed(err error) string {
 func TestNamesChangeNoParsedValue(t *testing.T) {
 	needAstrolog(t)
 	ctx := context.Background()
-	objects := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Add: recipe.NewBodySet(aspect.Chiron)}
+	objects := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Add: recipe.NewObjectSet(11)}
 	spec := func(src recipe.Source, houses recipe.HouseSystem) recipe.ChartSpec {
 		s, err := recipe.NewChartSpec(src, houses, recipe.Tropical, objects)
 		if err != nil {
 			t.Fatal(err)
 		}
+		s.Registry = testRegistry(t)
 		return s
 	}
 	t.Run("a single chart", func(t *testing.T) {
@@ -553,6 +554,7 @@ func TestNamesChangeNoParsedValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			s.Registry = testRegistry(t)
 			return s
 		}
 		bare, err := ComputeChart(ctx, mk(""))
@@ -609,7 +611,7 @@ func TestNamedHeaderParses(t *testing.T) {
 		if len(bare.Positions) == 0 || len(bare.Aspects) == 0 {
 			t.Fatal("the one-line control parsed nothing")
 		}
-		if !reflect.DeepEqual(parsePositions(named.Raw), parsePositions(bare.Raw)) || !reflect.DeepEqual(parseAspects(named.Raw), parseAspects(bare.Raw)) {
+		if !reflect.DeepEqual(named.Positions, bare.Positions) || !reflect.DeepEqual(parseAspects(named.Raw, testRegistry(t)), parseAspects(bare.Raw, testRegistry(t))) {
 			t.Error("named rows differ from the one-line form's")
 		}
 		if first, _ := reportHeader(t, named.AspectsReport); !strings.HasSuffix(first, "Synthetic Aster") {

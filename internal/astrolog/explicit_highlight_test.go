@@ -41,7 +41,7 @@ func explicitHighlightSpec(t *testing.T) recipe.ChartSpec {
 func TestExplicitComposesWithHighlight(t *testing.T) {
 	spec := explicitHighlightSpec(t)
 	render := recipe.DefaultWheelRender()
-	render.Highlight = recipe.NewHighlight([]aspect.Body{aspect.Moon, aspect.Venus}, aspect.BodyUnknown)
+	render.Highlight = recipe.NewHighlight(objectNums(objMoon, objVenus), aspect.Object{})
 
 	plan, err := Compile(spec, recipe.WheelImage{Render: render})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestExplicitComposesWithHighlight(t *testing.T) {
 func TestExplicitHighlightMembersAreDrawnOnly(t *testing.T) {
 	spec := explicitHighlightSpec(t)
 	render := recipe.DefaultWheelRender()
-	render.Highlight = recipe.NewHighlight([]aspect.Body{aspect.Moon, aspect.Mercury}, aspect.BodyUnknown)
+	render.Highlight = recipe.NewHighlight(objectNums(objMoon, objMercury), aspect.Object{})
 
 	plan, err := Compile(spec, recipe.WheelImage{Render: render})
 	if err != nil {
@@ -103,7 +103,7 @@ func TestExplicitHighlightMembersAreDrawnOnly(t *testing.T) {
 func TestExplicitHighlightOfNothingDrawnIsPlain(t *testing.T) {
 	spec := explicitHighlightSpec(t)
 	render := recipe.DefaultWheelRender()
-	render.Highlight = recipe.NewHighlight([]aspect.Body{aspect.Mercury}, aspect.BodyUnknown)
+	render.Highlight = recipe.NewHighlight(objectNums(objMercury), aspect.Object{})
 
 	plan, err := Compile(spec, recipe.WheelImage{Render: render})
 	if err != nil {

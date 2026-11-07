@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/ingest"
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -107,10 +110,54 @@ var testFolderID = strings.Repeat("5e", 32)
 // the atlas index lands, then the perimeter read.
 func startedModel(t *testing.T, p ingest.StartupPerimeterReadMsg) Model {
 	t.Helper()
-	var m tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var m tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
+	// A saved drawn set keeps waiting for the list, as the tests of that wait
+	// need; every other start has it in.
+	if p.HasSession && p.Session.Drawn != nil {
+		m = withoutObjectList(m.(Model))
+	}
 	m, _ = m.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	m, _ = m.Update(p)
 	return m.(Model)
+}
+
+// withoutObjectList is a Model whose start has not heard of the object list
+// yet: the tests of the wait for it build their Model so.
+func withoutObjectList(m Model) Model {
+	m.objectRegistry = nil
+	m.lens.Registry = nil
+	return m
+}
+
+// withObjectList is a Model that has Astrolog's object list in before its
+// start, as a normal start has it (objects slice 0b: no chart is cast before
+// it). A test that hand-builds a start and does not mean to test the wait
+// takes it from here.
+func withObjectList(m Model) Model {
+	reg := startObjectList()
+	m.objectRegistry = reg
+	m.lens.Registry = reg
+	return m
+}
+
+var (
+	startListOnce sync.Once
+	startList     []aspect.RegistryObject
+)
+
+// startObjectList is the binary's own object list, read once for the test
+// binary; the six-object list the drawn-set tests use stands in when there is
+// no Astrolog to ask. Calls name their rows through it, so a list that lacked
+// Mercury would show Mercury as a plain registry name.
+func startObjectList() []aspect.RegistryObject {
+	startListOnce.Do(func() {
+		if reg, err := lookup.ObjectRegistry(context.Background()); err == nil {
+			startList = reg
+			return
+		}
+		startList = drawnRegistry()
+	})
+	return startList
 }
 
 // sessionLines is every Log line the restore wrote, in order. Startup writes
@@ -177,8 +224,8 @@ func TestQuitWritesSession(t *testing.T) {
 		if !m.slots.SetComparisonSelected(false) {
 			t.Fatal("the pair could not be deselected")
 		}
-		for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-			if _, ok := m.slots.ToggleBodySelection(0, b); !ok {
+		for _, b := range []aspect.Object{objSun, objMoon} {
+			if _, ok := m.slots.ToggleObjectSelection(0, b); !ok {
 				t.Fatalf("could not mark %v on the anchored slot", b)
 			}
 		}
@@ -186,7 +233,7 @@ func TestQuitWritesSession(t *testing.T) {
 		_, cmd := press(t, m, "q")
 		assertQuits(t, cmd)
 
-		want := `version: 3
+		want := `version: 4
 charts:
   - id: fixture-one
     kind: file
@@ -199,7 +246,7 @@ charts:
     lon: 56.78
     tz: Etc/UTC
     selected: false
-    bodies: sun,moon
+    bodies: Sun,Moon
 floating:
   selected: false
 `
@@ -209,14 +256,14 @@ floating:
 	t.Run("unanchored", func(t *testing.T) {
 		sessionSandbox(t)
 		m := readyModelWithSlots(t, berlinP)
-		if _, ok := m.slots.ToggleBodySelection(0, aspect.Mars); !ok {
+		if _, ok := m.slots.ToggleObjectSelection(0, objMars); !ok {
 			t.Fatal("could not mark mars on the floating slot")
 		}
 
 		_, cmd := press(t, m, "q")
 		assertQuits(t, cmd)
 
-		assertSessionText(t, "version: 3\nfloating:\n  selected: false\n  bodies: mars\n")
+		assertSessionText(t, "version: 4\nfloating:\n  selected: false\n  bodies: Mars\n")
 	})
 }
 
@@ -247,7 +294,7 @@ func assertSessionText(t *testing.T, want string) {
 func TestQuitBeforeWorkspaceLeavesSessionUntouched(t *testing.T) {
 	t.Run("no session file is created", func(t *testing.T) {
 		sessionSandbox(t)
-		m := NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+		m := newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 		if m.startup != startupBootstrapping {
 			t.Fatalf("startup = %q, want %q", m.startup, startupBootstrapping)
 		}
@@ -263,7 +310,7 @@ func TestQuitBeforeWorkspaceLeavesSessionUntouched(t *testing.T) {
 		const previous = "version: 1\nselection:\n  floating_bodies: pluto\n"
 		path := seedSession(t, previous)
 
-		m := NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+		m := newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 		_, cmd := press(t, m, "q")
 		assertQuits(t, cmd)
 
@@ -406,7 +453,7 @@ func TestRestoreMalformedSessionIgnored(t *testing.T) {
 		{"unreadable", ""}, // mode 000, seeded below
 		{"not parseable", "not: yaml: at all\n\t- [ unterminated\n"},
 		{"no version", "chart:\n  name: Constructed One\n  tz: Europe/Berlin\n"},
-		{"a later generation", "version: 4\nselection:\n  floating_bodies: mars\n"},
+		{"a later generation", "version: 5\nselection:\n  floating_bodies: mars\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -537,18 +584,18 @@ func TestRestoreFloatingIsNow(t *testing.T) {
 // still means selected.
 func TestRestoreSelections(t *testing.T) {
 	snap := snapshotChart()
-	m := startedModel(t, withSession(perimeter(), v1(&snap, true, false, []aspect.Body{aspect.Sun, aspect.Sun, aspect.Moon}, []aspect.Body{aspect.Mars})))
+	m := startedModel(t, withSession(perimeter(), v1(&snap, true, false, []string{"Sun", "Sun", "Moon"}, []string{"Mars"})))
 
 	if m.slots.ComparisonSelected() {
 		t.Error("the pair came back selected; the session said it was not")
 	}
-	if got, want := m.slots.SelectedBodies(0), []aspect.Body{aspect.Sun, aspect.Moon}; !reflect.DeepEqual(got, want) {
+	if got, want := markedObjects(m.slots, 0), []aspect.Object{objSun, objMoon}; !reflect.DeepEqual(got, want) {
 		t.Errorf("anchored selection = %v, want %v", got, want)
 	}
-	if !m.slots.BodySelected(0, aspect.Sun) {
+	if !m.slots.ObjectSelected(0, objSun.Number) {
 		t.Error("a name repeated in the file toggled its own selection back off")
 	}
-	if got, want := m.slots.SelectedBodies(1), []aspect.Body{aspect.Mars}; !reflect.DeepEqual(got, want) {
+	if got, want := markedObjects(m.slots, 1), []aspect.Object{objMars}; !reflect.DeepEqual(got, want) {
 		t.Errorf("floating selection = %v, want %v", got, want)
 	}
 }
@@ -564,19 +611,19 @@ func TestNamelessAnchorWritesSelectionsOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.slots.SetComparisonSelected(false)
-	m.slots.ToggleBodySelection(0, aspect.Saturn)
+	m.slots.ToggleObjectSelection(0, objSaturn)
 	if anchorRecord(m).Name != "" {
 		t.Fatal("this fixture must stand in for an anchor with no record")
 	}
 
 	_, cmd := press(t, m, "q")
 	assertQuits(t, cmd)
-	assertSessionText(t, "version: 3\nfloating:\n  selected: false\n")
+	assertSessionText(t, "version: 4\nfloating:\n  selected: false\n")
 }
 
 // C12: with nothing anchored the anchored slot's state has nowhere to go.
 func TestRestoreFloatingSelectionsWithoutAnchor(t *testing.T) {
-	m := startedModel(t, withSession(perimeter(), v1(nil, false, true, []aspect.Body{aspect.Sun}, []aspect.Body{aspect.Mars, aspect.Mars})))
+	m := startedModel(t, withSession(perimeter(), v1(nil, false, true, []string{"Sun"}, []string{"Mars", "Mars"})))
 
 	if firstAnchor(m.slots) != nil {
 		t.Fatal("an unanchored session anchored something")
@@ -584,7 +631,7 @@ func TestRestoreFloatingSelectionsWithoutAnchor(t *testing.T) {
 	if m.slots.ComparisonSelected() {
 		t.Error("a comparison was selected with nothing to compare")
 	}
-	if got, want := m.slots.SelectedBodies(0), []aspect.Body{aspect.Mars}; !reflect.DeepEqual(got, want) {
+	if got, want := markedObjects(m.slots, 0), []aspect.Object{objMars}; !reflect.DeepEqual(got, want) {
 		t.Errorf("floating selection = %v, want %v", got, want)
 	}
 	if got := sessionLines(m); len(got) != 0 {
@@ -598,9 +645,9 @@ func TestRestoreThroughAtlasPick(t *testing.T) {
 	snap := snapshotChart()
 	// No location candidate and no preseed: the resolver fails and the modal
 	// opens with the perimeter stashed.
-	p := withSession(ingest.StartupPerimeterReadMsg{}, v1(&snap, true, false, []aspect.Body{aspect.Moon}, []aspect.Body{aspect.Mars}))
+	p := withSession(ingest.StartupPerimeterReadMsg{}, v1(&snap, true, false, []string{"Moon"}, []string{"Mars"}))
 
-	var m tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var m tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	m, _ = m.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	m, _ = m.Update(p)
 	if got := m.(Model).startup; got != startupAtlasOpen {
@@ -623,10 +670,10 @@ func TestRestoreThroughAtlasPick(t *testing.T) {
 	if got.slots.ComparisonSelected() {
 		t.Error("the pair came back selected; the session said it was not")
 	}
-	if sel := got.slots.SelectedBodies(0); !reflect.DeepEqual(sel, []aspect.Body{aspect.Moon}) {
+	if sel := markedObjects(got.slots, 0); !reflect.DeepEqual(sel, []aspect.Object{objMoon}) {
 		t.Errorf("anchored selection = %v, want [moon]", sel)
 	}
-	if sel := got.slots.SelectedBodies(1); !reflect.DeepEqual(sel, []aspect.Body{aspect.Mars}) {
+	if sel := markedObjects(got.slots, 1); !reflect.DeepEqual(sel, []aspect.Object{objMars}) {
 		t.Errorf("floating selection = %v, want [mars]", sel)
 	}
 	if want := []string(nil); !reflect.DeepEqual(sessionLines(got), want) {
@@ -634,23 +681,41 @@ func TestRestoreThroughAtlasPick(t *testing.T) {
 	}
 }
 
-// C23: a body name this build does not know is skipped, the rest are applied,
-// and the skip is named.
-func TestRestoreSkipsUnknownBodies(t *testing.T) {
+// C23 (rewritten, objects slice 1): a name this Astrolog does not list is no
+// longer skipped. It is kept on its slot verbatim, said once with the drawn
+// set's line, and the names that do resolve are applied.
+func TestRestoreKeepsUnknownBodies(t *testing.T) {
 	snap := snapshotChart()
-	m := startedModel(t, withSession(perimeter(), v1(&snap, true, true, []aspect.Body{aspect.Sun}, []aspect.Body{aspect.Mars}, "sedna", "eris")))
+	m := startedModel(t, withSession(perimeter(), v1(&snap, true, true, []string{"sedna", "Sun", "eris"}, []string{"Mars", "eris"})))
 
-	if sel := m.slots.SelectedBodies(0); !reflect.DeepEqual(sel, []aspect.Body{aspect.Sun}) {
+	if sel := markedObjects(m.slots, 0); !reflect.DeepEqual(sel, []aspect.Object{objSun}) {
 		t.Errorf("anchored selection = %v, want [sun]", sel)
 	}
-	if sel := m.slots.SelectedBodies(1); !reflect.DeepEqual(sel, []aspect.Body{aspect.Mars}) {
+	if sel := markedObjects(m.slots, 1); !reflect.DeepEqual(sel, []aspect.Object{objMars}) {
 		t.Errorf("floating selection = %v, want [mars]", sel)
 	}
-	want := []string{
-		"session: skipped unknown bodies: sedna, eris",
+	if got := m.slots.KeptMarks(0); !reflect.DeepEqual(got, []string{"sedna", "eris"}) {
+		t.Errorf("anchored kept names = %v, want [sedna eris]", got)
 	}
-	if got := sessionLines(m); !reflect.DeepEqual(got, want) {
-		t.Errorf("log = %v, want %v", got, want)
+	if got := m.slots.KeptMarks(1); !reflect.DeepEqual(got, []string{"eris"}) {
+		t.Errorf("floating kept names = %v, want [eris]", got)
+	}
+	for _, name := range []string{"sedna", "eris"} {
+		line := name + " is not an object of this Astrolog, kept in the session"
+		if n := countLines(m, line); n != 1 {
+			t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
+		}
+	}
+	if got := sessionLines(m); len(got) != 0 {
+		t.Errorf("session lines = %v, want none (the skipped-bodies line is gone)", got)
+	}
+	// The next quit writes them back: the resolved names, then the kept ones.
+	snapshot := m.sessionSnapshot()
+	if got := snapshot.Slots[0].Bodies; !reflect.DeepEqual(got, []string{"Sun", "sedna", "eris"}) {
+		t.Errorf("the anchored line would be %v, want [Sun sedna eris]", got)
+	}
+	if got := snapshot.FloatingBodies; !reflect.DeepEqual(got, []string{"Mars", "eris"}) {
+		t.Errorf("the floating line would be %v, want [Mars eris]", got)
 	}
 }
 
@@ -686,15 +751,15 @@ func TestRestoreHintLines(t *testing.T) {
 			want: []string{"session: natal not restored"},
 		},
 		{
+			// The name is kept and said with the drawn set's line, which is no
+			// session: line (TestRestoreKeepsUnknownBodies).
 			name: "unknown names beside a restore",
-			p:    withSession(perimeter(), v1(&usable, true, false, nil, nil, "sedna")),
-			want: []string{
-				"session: skipped unknown bodies: sedna",
-			},
+			p:    withSession(perimeter(), v1(&usable, true, false, []string{"sedna"}, nil)),
+			want: []string(nil),
 		},
 		{
 			name: "an ordinary unanchored quit",
-			p:    withSession(perimeter(), v1(nil, false, false, nil, []aspect.Body{aspect.Mars})),
+			p:    withSession(perimeter(), v1(nil, false, false, nil, []string{"Mars"})),
 			want: nil,
 		},
 	}
@@ -716,8 +781,8 @@ func TestSessionSurvivesAQuitAndARelaunch(t *testing.T) {
 	seedPreferences(t)
 	m := anchorFixture(t)
 	m.slots.SetComparisonSelected(false)
-	m.slots.ToggleBodySelection(0, aspect.Saturn)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(0, objSaturn)
+	m.slots.ToggleObjectSelection(1, objMars)
 	if _, cmd := press(t, m, "q"); cmd == nil {
 		t.Fatal("q did not quit")
 	}
@@ -730,10 +795,10 @@ func TestSessionSurvivesAQuitAndARelaunch(t *testing.T) {
 	if relaunched.slots.ComparisonSelected() {
 		t.Error("the pair came back selected")
 	}
-	if sel := relaunched.slots.SelectedBodies(0); !reflect.DeepEqual(sel, []aspect.Body{aspect.Saturn}) {
+	if sel := markedObjects(relaunched.slots, 0); !reflect.DeepEqual(sel, []aspect.Object{objSaturn}) {
 		t.Errorf("anchored selection = %v, want [saturn]", sel)
 	}
-	if sel := relaunched.slots.SelectedBodies(1); !reflect.DeepEqual(sel, []aspect.Body{aspect.Mars}) {
+	if sel := markedObjects(relaunched.slots, 1); !reflect.DeepEqual(sel, []aspect.Object{objMars}) {
 		t.Errorf("floating selection = %v, want [mars]", sel)
 	}
 	if want := []string(nil); !reflect.DeepEqual(sessionLines(relaunched), want) {

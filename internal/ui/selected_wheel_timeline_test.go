@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"math"
 	"reflect"
 	"slices"
@@ -58,34 +59,32 @@ func stubWheels(t *testing.T) (*wheelCalls, *[][]byte) {
 	t.Helper()
 	calls := &wheelCalls{}
 	published := &[][]byte{}
-	oldS, oldO, oldM, oldShow := renderWheelImage, renderOverlayWheelImage, renderMultiWheelImage, showWheel
-	t.Cleanup(func() {
-		renderWheelImage, renderOverlayWheelImage, renderMultiWheelImage, showWheel = oldS, oldO, oldM, oldShow
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			calls.mu.Lock()
+			calls.single = append(calls.single, when)
+			calls.mu.Unlock()
+			return []byte("single"), nil
+		}
+		s.wheel.renderOverlay = func(_ context.Context, chart store.AnchorChart, when time.Time, place location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
+			calls.mu.Lock()
+			calls.overlay = append(calls.overlay, overlayCall{chart, when, place})
+			calls.mu.Unlock()
+			return []byte("overlay"), nil
+		}
+		s.wheel.renderRings = func(_ context.Context, rings []lookup.WheelRing, _ lookup.Lens) ([]byte, []string, error) {
+			calls.mu.Lock()
+			calls.rings = append(calls.rings, append([]lookup.WheelRing(nil), rings...))
+			calls.mu.Unlock()
+			return []byte("rings"), []string{"astrolog rings"}, nil
+		}
+		s.wheel.show = func(img []byte) (string, error) {
+			calls.mu.Lock()
+			*published = append(*published, img)
+			calls.mu.Unlock()
+			return "/tmp/stub.png", nil
+		}
 	})
-	renderWheelImage = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		calls.mu.Lock()
-		calls.single = append(calls.single, when)
-		calls.mu.Unlock()
-		return []byte("single"), nil
-	}
-	renderOverlayWheelImage = func(_ context.Context, chart store.AnchorChart, when time.Time, place location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
-		calls.mu.Lock()
-		calls.overlay = append(calls.overlay, overlayCall{chart, when, place})
-		calls.mu.Unlock()
-		return []byte("overlay"), nil
-	}
-	renderMultiWheelImage = func(_ context.Context, rings []lookup.WheelRing, _ lookup.Lens) ([]byte, []string, error) {
-		calls.mu.Lock()
-		calls.rings = append(calls.rings, append([]lookup.WheelRing(nil), rings...))
-		calls.mu.Unlock()
-		return []byte("rings"), []string{"astrolog rings"}, nil
-	}
-	showWheel = func(img []byte) (string, error) {
-		calls.mu.Lock()
-		*published = append(*published, img)
-		calls.mu.Unlock()
-		return "/tmp/stub.png", nil
-	}
 	return calls, published
 }
 
@@ -213,9 +212,9 @@ func TestWheelDrawsTheTab(t *testing.T) {
 
 	// The single wheel keeps the cursor chart's highlight on its own tab.
 	m := selectedSet(t, 2, true, 1)
-	m.slots.ToggleBodySelection(1, aspect.Venus)
+	m.slots.ToggleObjectSelection(1, objVenus)
 	plan, ok := m.wheelPlan()
-	if !ok || plan.mode != wheelSingle || !slices.Contains(plan.highlight.Selected, aspect.Venus) {
+	if !ok || plan.mode != wheelSingle || !slices.Contains(plan.highlight.Selected, objVenus.Number) {
 		t.Errorf("own tab plan %+v, want the cursor's chart alone with Venus highlighted", plan)
 	}
 }
@@ -223,14 +222,14 @@ func TestWheelDrawsTheTab(t *testing.T) {
 // C8: with the cursor on a chart outside the selected set, or with fewer than
 // two slots selected, the wheel shows the cursor's chart alone.
 func TestWheelAloneWhenSingle(t *testing.T) {
-	for name, build := range map[string]func() Model{
-		"cursor on an unselected chart": func() Model {
+	for name, build := range map[string]func(t *testing.T) Model{
+		"cursor on an unselected chart": func(t *testing.T) Model {
 			m := selectedSet(t, 2, true, 0)
 			m.slots.SetSlotSelected(1, false)
 			m.cursorIdx = 1
 			return m
 		},
-		"one slot selected": func() Model {
+		"one slot selected": func(t *testing.T) Model {
 			m := selectedSet(t, 2, false, 0)
 			m.slots.SetSlotSelected(1, false)
 			return m
@@ -238,7 +237,7 @@ func TestWheelAloneWhenSingle(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			calls, _ := stubWheels(t)
-			m := build()
+			m := build(t)
 			if m.comparing() {
 				t.Fatal("fixture: the model compares")
 			}
@@ -288,7 +287,7 @@ func TestReorderWithinTheSetRenumbersTheTimeline(t *testing.T) {
 		t.Fatalf("%d timeline searches in all, want exactly one new one", len(*timeline))
 	}
 	got := (*timeline)[1].req.Natals
-	if len(got) != 3 || got[0] != oldNatals[0] ||
+	if len(got) != 3 || got[0].Numeral != oldNatals[0].Numeral || got[0].Chart != oldNatals[0].Chart ||
 		got[1].Numeral != 2 || got[1].Chart != oldNatals[2].Chart ||
 		got[2].Numeral != 3 || got[2].Chart != oldNatals[1].Chart {
 		t.Errorf("natals after the reorder = %+v, want ② and ③ swapped from %+v", got, oldNatals)
@@ -316,9 +315,11 @@ func TestBiWheelStagingFailureKeepsThePreviousImage(t *testing.T) {
 		t.Fatalf("fixture: published %q, want the first bi-wheel picture", *published)
 	}
 
-	renderOverlayWheelImage = func(context.Context, store.AnchorChart, time.Time, location.PlaceInfo, lookup.Lens) ([]byte, error) {
-		return nil, fmt.Errorf("astrolog: RenderImage: %w", stagedFailure{ring: 2})
-	}
+	m = withSpawns(m, func(s *rowSpawns) {
+		s.wheel.renderOverlay = func(context.Context, store.AnchorChart, time.Time, location.PlaceInfo, lookup.Lens) ([]byte, error) {
+			return nil, fmt.Errorf("astrolog: RenderImage: %w", stagedFailure{ring: 2})
+		}
+	})
 	m, cmd := m.setFloatingTarget(m.targetFloatingTime.Add(24 * time.Hour))
 	m = pump(t, m, cmd)
 
@@ -413,12 +414,12 @@ func (s *mergeSearcher) search(_ context.Context, call lookup.BodyCall) (string,
 func stubTimelineSearch(t *testing.T, s *mergeSearcher) {
 	defaultClock(t)
 	t.Helper()
-	old := computeTimeline
-	computeTimeline = func(ctx context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		return lookup.TimelineWith(ctx, req, s.search, stubDefaults)
-	}
-	timelineStubbed = true
-	t.Cleanup(func() { computeTimeline, timelineStubbed = old, false })
+	stubSpawns(t, func(sp *rowSpawns) {
+		sp.timeline = func(ctx context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			return lookup.TimelineWith(ctx, req, s.search, stubDefaults)
+		}
+	})
+	markStubbed(t, "timeline")
 }
 
 // octoberSet is a ready ① ② ③ set (two anchored charts and now), the floating
@@ -514,7 +515,7 @@ func TestTimelineRowsCarryTheirNumeral(t *testing.T) {
 	}
 	// Today's rendered text of each fixture row, frozen byte for byte from the
 	// numeral-less layout on trunk: an independent reference, so a spacing
-	// change in alignTimelineRow cannot move the expectation with it.
+	// change in panel.AlignRow cannot move the expectation with it.
 	frozen := []string{
 		"Wed 10/14/2026    2:59          Moon (Sco) --> Sagittarius",
 		"    10/14/2026   23:26 trans     Sun (Lib) Opp natal (Ari) Midheaven",
@@ -537,14 +538,14 @@ func TestTimelineRowsCarryTheirNumeral(t *testing.T) {
 		}
 		numbered, sky := 0, 0
 		for i, r := range rows {
-			shown := displayTimelineRow(r, cfg)
+			shown := panel.DisplayRow(r, cfg)
 			if r.Numeral == 0 {
 				if shown != frozen[i] {
 					t.Errorf("sky row %d shown as %q, frozen today's text %q", i, shown, frozen[i])
 				}
 				sky++
-				if shown != alignTimelineRow(r) {
-					t.Errorf("sky row shown as %q, want today's %q", shown, alignTimelineRow(r))
+				if shown != panel.AlignRow(r) {
+					t.Errorf("sky row shown as %q, want today's %q", shown, panel.AlignRow(r))
 				}
 				continue
 			}
@@ -614,7 +615,7 @@ func TestMarkingOneOfTwoIdenticalRowsMarksOnlyIt(t *testing.T) {
 	copied := captureYank(t)
 	m, _ = tpress(t, m, runes(","))
 	m, _ = tpress(t, m, runes("y"))
-	if want := displayTimelineRow(rows[first], m.cfg); len(*copied) != 1 || (*copied)[0] != want {
+	if want := panel.DisplayRow(rows[first], m.cfg); len(*copied) != 1 || (*copied)[0] != want {
 		t.Errorf(",y copied %q, want only ①'s row %q", *copied, want)
 	}
 	marked := 0
@@ -634,21 +635,21 @@ func TestMarkingOneOfTwoIdenticalRowsMarksOnlyIt(t *testing.T) {
 // anchored chart, or a group without the floating slot, has no tab), so the
 // cursor is on the floating slot in each.
 func TestTimelineSkyOnlyWhenSingle(t *testing.T) {
-	for name, build := range map[string]func() Model{
-		"cursor on the unselected floating slot": func() Model {
+	for name, build := range map[string]func(t *testing.T) Model{
+		"cursor on the unselected floating slot": func(t *testing.T) Model {
 			m := octoberSet(t, 0)
 			m.slots.SetSlotSelected(2, false)
 			m.cursorIdx = 2
 			return m
 		},
-		"only the floating slot selected": func() Model {
+		"only the floating slot selected": func(t *testing.T) Model {
 			m := octoberSet(t, 0)
 			m.slots.SetSlotSelected(0, false)
 			m.slots.SetSlotSelected(1, false)
 			m.cursorIdx = 2
 			return m
 		},
-		"nothing selected": func() Model {
+		"nothing selected": func(t *testing.T) Model {
 			m := octoberSet(t, 0)
 			for i := range 3 {
 				m.slots.SetSlotSelected(i, false)
@@ -660,7 +661,7 @@ func TestTimelineSkyOnlyWhenSingle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &mergeSearcher{}
 			stubTimelineSearch(t, s)
-			m := build()
+			m := build(t)
 			if m.comparing() {
 				t.Fatal("fixture: the model compares")
 			}
@@ -677,8 +678,8 @@ func TestTimelineSkyOnlyWhenSingle(t *testing.T) {
 				if r.Numeral != 0 || r.Transit {
 					t.Errorf("row %+v is not a sky row", r)
 				}
-				if displayTimelineRow(r, m.cfg) != alignTimelineRow(r) {
-					t.Errorf("a sky row gained something: %q", displayTimelineRow(r, m.cfg))
+				if panel.DisplayRow(r, m.cfg) != panel.AlignRow(r) {
+					t.Errorf("a sky row gained something: %q", panel.DisplayRow(r, m.cfg))
 				}
 			}
 		})
@@ -701,8 +702,8 @@ func TestFailedSkySearchKeepsTheTransits(t *testing.T) {
 		}
 	}
 	lines := errorLines(m)
-	if len(lines) != 1 || !strings.Contains(lines[0], "sky") || !strings.Contains(lines[0], "-dm") {
-		t.Errorf("error lane = %q, want one line naming the sky search (-dm)", lines)
+	if len(lines) != 1 || !strings.Contains(lines[0], "sky") || !strings.Contains(lines[0], "(-d)") {
+		t.Errorf("error lane = %q, want one line naming the sky search (-d)", lines)
 	}
 	if got := argvLines(m); !slices.Equal(got, s.cmds) {
 		t.Errorf("argv lane = %d lines, want the %d spawned commands", len(got), len(s.cmds))
@@ -809,7 +810,7 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	m, cmd = m.afterComparisonChange()
 	m = pumpPatient(t, m, cmd)
 	m.focused = PanelBodies
-	m.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+	m.chart.positions = []aspect.Position{{Object: objMoon}}
 	m, cmd = m.startDetailsNow()
 	m = pumpPatient(t, m, cmd)
 	m = loadTimeline(t, m)
@@ -838,7 +839,7 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 		}
 	}
 	// The N-natal searches carry the choosers too: the aspect band and the node
-	// mode are written once for every search, and the object band is hide-only.
+	// mode are written once for every search, and the object band is the chooser's.
 	s.mu.Lock()
 	cmds := slices.Clone(s.cmds)
 	s.mu.Unlock()
@@ -862,8 +863,9 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	// pair runs once (-r0 and its raw report), the text frame's chart computes are five -qj (② frames and is the cursor, so
 	// its positions and aspects are cast once, ① is listed, `1 in 2`, so its are
 	// cast for Bodies, and the Details report of the Bodies row asks once), and the timeline is the -t and -tr searches of
-	// three natals and the sky's -dm, over the two offset segments of an October
-	// with a clock change.
+	// three natals and the sky's void-mark -dm and its -d for each day, over the
+	// two offset segments of an October with a clock change (25 days and 7, the
+	// 25th in both).
 	kindOf := func(line string) string {
 		line += " "
 		switch {
@@ -877,6 +879,8 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 			return "timeline -t"
 		case strings.Contains(line, " -dm "):
 			return "timeline -dm"
+		case strings.Contains(line, " -d "):
+			return "timeline -d"
 		case strings.Contains(line, " -qj "):
 			return "chart compute"
 		}
@@ -895,7 +899,7 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	}
 	wantKinds := map[string]int{
 		"synastry raw report": 1, "synastry cross": 1,
-		"timeline -t": 6, "timeline -tr": 6, "timeline -dm": 2, "chart compute": 5,
+		"timeline -t": 6, "timeline -tr": 6, "timeline -dm": 2, "timeline -d": 32, "chart compute": 5,
 	}
 	if !reflect.DeepEqual(logged, wantKinds) {
 		t.Errorf("the Log's command list holds %v, want exactly %v:\n%s", logged, wantKinds, strings.Join(argvLines(m), "\n"))

@@ -3,6 +3,8 @@ package recipe
 import (
 	"fmt"
 	"math"
+
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // ChartSpec is the shared semantic base of a computation: who/when/where, the
@@ -23,6 +25,11 @@ type ChartSpec struct {
 	// Aspects mirrors Objects for the aspect set. Its zero value means "no
 	// override", so every caller predating it keeps compiling identically.
 	Aspects AspectPolicy
+
+	// Registry is the binary's object list, carried so the parsers can give
+	// every row Astrolog's own identity. It changes no argv and no result's
+	// shape; the compiler hands it to the call it issues.
+	Registry aspect.Registry
 }
 
 // Source is the chart-entry root: the single way a chart's time and place are

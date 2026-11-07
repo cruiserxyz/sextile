@@ -15,7 +15,7 @@ import (
 // textModel returns a ready single-slot workspace for text-surface tests.
 func textModel(t *testing.T) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -71,7 +71,7 @@ func TestTextTick_StaleTimerIgnored(t *testing.T) {
 // follow-up. Cancellation is expected coordination noise, not a failure.
 func TestTextResult_CanceledDroppedSilently(t *testing.T) {
 	m := textModel(t)
-	m.chart.positions = []aspect.Position{{Body: aspect.Sun, Longitude: 100}}
+	m.chart.positions = []aspect.Position{{Object: objSun, Longitude: 100}}
 	m, _ = m.advanceTime(unitDay, +1)
 	st := m.refresh[surfaceText]
 
@@ -89,7 +89,7 @@ func TestTextResult_CanceledDroppedSilently(t *testing.T) {
 	}
 	for _, line := range m.logLines {
 		if strings.Contains(line.text, "chart compute error") {
-			t.Errorf("a canceled result must not be logged as a failure: %q", line)
+			t.Errorf("a canceled result must not be logged as a failure: %+v", line)
 		}
 	}
 	if m.refresh[surfaceText].cancel != nil {
@@ -126,7 +126,7 @@ func TestTextResult_ErrorPolicy(t *testing.T) {
 
 	// Stale-want error against a POPULATED chart: visible state unchanged.
 	m2 := textModel(t)
-	good := []aspect.Position{{Body: aspect.Sun, Longitude: 123}}
+	good := []aspect.Position{{Object: objSun, Longitude: 123}}
 	m2.chart.positions = good
 	committedTime := m2.slots.Floating().Time
 	m2, _ = m2.advanceTime(unitDay, +1) // run 1, want 1
@@ -145,7 +145,7 @@ func TestTextResult_ErrorPolicy(t *testing.T) {
 	}
 	for _, line := range m2.logLines {
 		if strings.Contains(line.text, "mid-burst boom") {
-			t.Errorf("a stale-want error must not be logged: %q", line)
+			t.Errorf("a stale-want error must not be logged: %+v", line)
 		}
 	}
 	// Recovery: the pending tick (timer 2) fires → trailing run 2 starts.

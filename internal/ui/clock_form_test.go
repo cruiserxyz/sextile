@@ -6,6 +6,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -158,7 +159,7 @@ func TestPickerDateKeepsTheFilesCivilDate(t *testing.T) {
 		holdForm(t, clockCase{"24", "month-first"})
 		c := mk(2026, 10, 5)
 		c.Place.Name, c.Place.Country = "Llanfairpwllgwyngyllgogerychwyrndrobwll", "GB"
-		got := listRow(chartRow(c, false, time.Time{}), plainCfg, 54)
+		got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 54)
 		if !strings.HasSuffix(got, "Oct  5, 2026") {
 			t.Errorf("the date was cut before the place: %q", got)
 		}

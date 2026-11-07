@@ -86,28 +86,26 @@ func (k AspectKind) String() string {
 	}
 }
 
-// Aspect pairs two bodies under a named angular relationship, with the
+// Aspect pairs two objects under a named angular relationship, with the
 // observed orb (angular deviation from the exact angle).
 //
-// Ordering invariant: A <= B in Body enum order. NewAspect enforces this so
-// (Venus, Mars) and (Mars, Venus) collapse to a single canonical pair and
-// consumers can dedupe without a normalisation step. Applying/separating is a
-// property of the pair (the orb closing or opening), so it does not depend on
-// A/B order — it is Astrolog's own verdict, read from the -aa list.
+// Ordering invariant: AObject.Number <= BObject.Number, Astrolog's own object
+// numbers. NewObjectAspect enforces this so (Venus, Mars) and (Mars, Venus)
+// collapse to a single canonical pair and consumers can dedupe without a
+// normalisation step; a side the registry could not resolve (the zero Object)
+// has no number, so a pair with one keeps the order it was printed in.
+// Applying/separating is a property of the pair (the orb closing or opening),
+// so it does not depend on side order — it is Astrolog's own verdict, read from
+// the -aa list.
 type Aspect struct {
-	A    Body
-	B    Body
 	Kind AspectKind
 	Orb  Orb
 
-	// ALabel and BLabel are the names Astrolog printed for a side this enum
-	// cannot name, and are empty for every body it can. The enum stays
-	// authoritative: nothing reads a label when its Body is set. They are what
-	// let an aspect to Ceres or Vertex be kept instead of dropped; such a side
-	// is BodyUnknown, renders, and is not addressable as a typed body. Labels
-	// travel with their body through NewLabelledAspect's A<=B reorder.
-	ALabel string
-	BLabel string
+	// AObject and BObject are Astrolog's objects for the two sides, resolved
+	// through the registry; the zero Object for a side the registry could not
+	// resolve.
+	AObject Object
+	BObject Object
 
 	// Power is astrolog's aspect strength (the `-a` "power:" column), used to
 	// rank the aspect waterfall. Zero when unknown (e.g. cross-aspects computed
@@ -122,26 +120,15 @@ type Aspect struct {
 	Applying bool
 }
 
-// NewAspect returns an Aspect with A and B reordered so A <= B in Body enum
-// order. The only constructor in this package that enforces an invariant
-// downstream code relies on.
-func NewAspect(a, b Body, kind AspectKind, orb Orb) Aspect {
-	if b < a {
+// NewObjectAspect returns an Aspect for two sides given as Astrolog objects,
+// ordered by object number: the lower number is the first side. Two resolved
+// sides with the same number, and any pair with a zero (unresolved) side, keep
+// the order given:
+// the zero Object's number 0 is Earth's, so it says nothing about which side
+// comes first, and the printed order is the one thing known.
+func NewObjectAspect(a, b Object, kind AspectKind, orb Orb) Aspect {
+	if a != (Object{}) && b != (Object{}) && b.Number < a.Number {
 		a, b = b, a
 	}
-	return Aspect{A: a, B: b, Kind: kind, Orb: orb}
-}
-
-// NewLabelledAspect is NewAspect for sides that may be untyped: each body comes
-// with its label (empty for a typed body), and the A<=B reorder swaps the
-// labels with the bodies so a label never lands on the wrong side. Two untyped
-// sides (both BodyUnknown) keep their printed order.
-func NewLabelledAspect(a Body, aLabel string, b Body, bLabel string, kind AspectKind, orb Orb) Aspect {
-	if b < a {
-		a, b = b, a
-		aLabel, bLabel = bLabel, aLabel
-	}
-	out := Aspect{A: a, B: b, Kind: kind, Orb: orb}
-	out.ALabel, out.BLabel = aLabel, bLabel
-	return out
+	return Aspect{AObject: a, BObject: b, Kind: kind, Orb: orb}
 }

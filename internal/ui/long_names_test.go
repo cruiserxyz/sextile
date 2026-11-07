@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +52,7 @@ func TestSaveRefusesALongName(t *testing.T) {
 				if cmd != nil {
 					t.Fatal("a refused name still dispatched a command")
 				}
-				if m.startup != startupSaveOpen || m.save.typedName() != c.typed || m.save.saving {
+				if m.startup != startupSaveOpen || m.save.typedName() != c.typed || m.save.Saving {
 					t.Errorf("the prompt did not stay open with the typed name (startup %v, name %q)", m.startup, m.save.typedName())
 				}
 				if got := dirEntries(t, chartsDirOf(t)); len(got) != 0 {
@@ -60,7 +61,7 @@ func TestSaveRefusesALongName(t *testing.T) {
 				return
 			}
 			if cmd == nil {
-				t.Fatalf("a 54-byte name was refused: %q", m.save.refusal)
+				t.Fatalf("a 54-byte name was refused: %q", m.save.Refusal)
 			}
 			done := cmd().(SaveChartDoneMsg)
 			if done.Err != nil {
@@ -78,8 +79,8 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 	typed := strings.Repeat("é", 28)
 	m, _ = submitSave(t, m, typed)
 	want := "Name too long: 56 of 54 bytes (é counts 2)"
-	if m.save.refusal != want {
-		t.Fatalf("refusal = %q, want %q", m.save.refusal, want)
+	if m.save.Refusal != want {
+		t.Fatalf("refusal = %q, want %q", m.save.Refusal, want)
 	}
 	// The prompt's own words, with the box's edges taken off each line: a
 	// sentence wrapped inside the box still reads as one.
@@ -94,7 +95,7 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 		}
 	}
 	// It is one row of the message zone, and the box does not grow for it.
-	rested := renderSaveModal(saveModalState{form: m.save.form, dest: m.save.dest}, m.cfg, 80, 24)
+	rested := renderSaveModal(saveModalState{Form: popup.Form{Fields: m.save.Fields}, dest: m.save.dest}, m.cfg, 80, 24)
 	if a, b := strings.Count(rested, "\n"), strings.Count(renderSaveModal(m.save, m.cfg, 80, 24), "\n"); a != b {
 		t.Errorf("the refusal changed the prompt's height: %d lines, then %d", a+1, b+1)
 	}
@@ -103,16 +104,16 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 	tm := openedPicker(t)
 	tm, _ = pickRow(t, tm, "NoPlace.as")
 	tm = typeText(t, tm, "Fine")
-	tm.title.form.focus = titlePlaceField
+	tm.title.Fields.Focus = titlePlaceField
 	tm = typeText(t, tm, strings.Repeat("p", 70))
 	tm, cmd := sendKey(t, tm, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
 		t.Fatal("a 70-byte place dispatched a write")
 	}
-	if !strings.HasPrefix(tm.title.refusal, "Place too long: 70 of 54 bytes") {
-		t.Errorf("title refusal = %q", tm.title.refusal)
+	if !strings.HasPrefix(tm.title.Refusal, "Place too long: 70 of 54 bytes") {
+		t.Errorf("title refusal = %q", tm.title.Refusal)
 	}
-	if tm.title.form.focus != titlePlaceField || !strings.Contains(titleFrame(tm), strings.Repeat("p", 20)) {
+	if tm.title.Fields.Focus != titlePlaceField || !strings.Contains(titleFrame(tm), strings.Repeat("p", 20)) {
 		t.Error("the typed place is not still in its field")
 	}
 }
@@ -125,7 +126,7 @@ func TestSaveCutsALongSlotPlace(t *testing.T) {
 	m.slots.All()[1].Location.Name = strings.Repeat("P", 30) + `"` + strings.Repeat("Q", 50)
 	m = runSave(t, m, "Cut Place")
 	if m.startup == startupSaveOpen {
-		t.Fatalf("the save did not complete: %q", m.save.refusal)
+		t.Fatalf("the save did not complete: %q", m.save.Refusal)
 	}
 	var cutLine string
 	for _, l := range m.logLines {
@@ -167,14 +168,14 @@ func TestRenameRefusesALongName(t *testing.T) {
 			m := openedPicker(t)
 			m, _ = pickRow(t, m, "NoPlace.as")
 			m = typeText(t, m, c.title)
-			m.title.form.focus = titlePlaceField
+			m.title.Fields.Focus = titlePlaceField
 			m = typeText(t, m, c.place)
 			m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-			if cmd != nil || m.title.saving || m.startup != startupTitleOpen {
+			if cmd != nil || m.title.Saving || m.startup != startupTitleOpen {
 				t.Fatalf("the over-long %s was submitted (startup %v)", c.name, m.startup)
 			}
-			if !strings.HasPrefix(m.title.refusal, c.want) {
-				t.Errorf("refusal = %q, want prefix %q", m.title.refusal, c.want)
+			if !strings.HasPrefix(m.title.Refusal, c.want) {
+				t.Errorf("refusal = %q, want prefix %q", m.title.Refusal, c.want)
 			}
 			if fileText(t, path) != before {
 				t.Error("the file changed")

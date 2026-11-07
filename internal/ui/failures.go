@@ -55,6 +55,11 @@ func (m Model) failureReason(err error, fallback string) string {
 		// A chart call Astrolog warned on is refused, not shown. The reason is
 		// Astrolog's own first line; the rest is in the console (logWarnings).
 		return "Astrolog warned: " + warningTexts(err)[0]
+	case errors.Is(err, lookup.ErrAstrologCrashed):
+		// A named cause, so it carries no console pointer (the pointer is the
+		// fallback for a failure that cannot be named, where the command is the
+		// reason). The command is in the console all the same.
+		return "Astrolog crashed."
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		// The refresh coordinator drops superseded runs before they reach a
 		// log line, so arriving here means a cancellation nobody expected.
@@ -83,7 +88,7 @@ func (m Model) consolePointer(recorded bool) string {
 	if m.leaderKey == "" {
 		return "Astrolog returned nothing usable."
 	}
-	return "Press " + m.leaderKey + "l for what Astrolog ran."
+	return "Press " + m.leaderKey + "l l for what Astrolog ran."
 }
 
 // The per-site fallbacks for the surfaces that record no command. Each says

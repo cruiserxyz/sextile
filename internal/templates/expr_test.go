@@ -58,7 +58,7 @@ func TestOldSlotsAreUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, items)}, set(t))
 	if err != nil {
 		t.Fatal(err)

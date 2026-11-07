@@ -13,26 +13,22 @@ import (
 )
 
 // OverlayAspect is a transit→natal cross-aspect ready for display. Unlike
-// aspect.Aspect it preserves ROLES — Transit is the moving chart's body, Natal
-// the fixed chart's — because aspect.NewAspect canonicalizes A<=B and would
-// collapse the pair. Power is astrolog's real -r0 strength; Applying is
+// aspect.Aspect it preserves ROLES — TransitObject is the moving chart's
+// object, NatalObject the fixed chart's — because aspect.NewObjectAspect
+// orders a pair by object number and would collapse the roles. Power is astrolog's real -r0 strength; Applying is
 // Astrolog's own -rt -aa verdict: the natal chart's velocities are
 // zeroed, so the phase follows the transiting body's motion against the
 // fixed natal position. Nothing is derived in Sextile.
 type OverlayAspect struct {
-	Transit  aspect.Body
-	Natal    aspect.Body
 	Kind     aspect.AspectKind
 	Orb      aspect.Orb
 	Power    float64
 	Applying bool
 
-	// TransitLabel and NatalLabel are the names Astrolog printed for a side the
-	// Body enum cannot name, and are empty for every body it can. Nothing reads
-	// a label when its Body is set; a labelled side is BodyUnknown, renders as a
-	// placeholder, and is not addressable as a typed body.
-	TransitLabel string
-	NatalLabel   string
+	// TransitObject and NatalObject are Astrolog's objects for the two sides.
+	// The zero Object is a side the registry could not resolve.
+	TransitObject aspect.Object
+	NatalObject   aspect.Object
 }
 
 // OverlayAspects keeps Astrolog's role-preserving style map beside the display
@@ -124,22 +120,20 @@ func SynastryCrossAspects(
 	}, nil
 }
 
-// overlayAspectsFromCross maps astrolog's generic []CrossAspect (Primary=chart1=
-// natal, Secondary=chart2=transit) to display []OverlayAspect with the roles
+// overlayAspectsFromCross maps astrolog's generic []CrossAspect (PrimaryObject=chart1=
+// natal, SecondaryObject=chart2=transit) to display []OverlayAspect with the roles
 // laid out and Astrolog's phase verdict carried through unchanged. Pure.
 func overlayAspectsFromCross(cross []aspect.CrossAspect) []OverlayAspect {
 	out := make([]OverlayAspect, 0, len(cross))
 	for _, c := range cross {
 		out = append(out, OverlayAspect{
-			Transit:  c.Secondary,
-			Natal:    c.Primary,
 			Kind:     c.Kind,
 			Orb:      c.Orb,
 			Power:    c.Power,
 			Applying: c.Applying,
 
-			TransitLabel: c.SecondaryLabel,
-			NatalLabel:   c.PrimaryLabel,
+			TransitObject: c.SecondaryObject,
+			NatalObject:   c.PrimaryObject,
 		})
 	}
 	return out

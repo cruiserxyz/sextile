@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func TestHouseDisplayDocs(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"All four fill the same " + strconv.Itoa(houseColumnWidth) + " cells",
+		"All four fill the same " + strconv.Itoa(panel.HouseColumnWidth) + " cells",
 		"the chart's own house faint, the house in the compared chart bold",
 		"`house_display:`",
 		"`12 1 2 | 3 4 5 | 6 7 8 | 9 10 11`",

@@ -3,6 +3,7 @@ package ui
 // the specification. Chart values are constructed synthetic test inputs.
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"regexp"
 	"strings"
@@ -25,6 +26,7 @@ var (
 // list index cursor, in colours-off ASCII so the cursor row shows as "> ".
 func finderModel(t *testing.T, n, cursor int) Model {
 	t.Helper()
+	freshModels(t)
 	sessionSandbox(t)
 	stubHouseLookups(t)
 	m := listModel(t, n, cursor)
@@ -51,7 +53,7 @@ func typeInFinder(t *testing.T, m Model, s string) Model {
 
 func finderNames(m Model) []string {
 	var out []string
-	for _, h := range m.houseFinder.matches {
+	for _, h := range m.houseFinder.Matches {
 		out = append(out, lookup.HouseName(h))
 	}
 	return out
@@ -116,16 +118,16 @@ func TestHouseFinderKeys(t *testing.T) {
 		m := finderModel(t, 2, 0)
 		var key, seq bool
 		for _, l := range m.helpLines() {
-			if strings.Contains(l.text, "Choose houses") {
-				key = key || strings.Contains(l.text, "⌃h")
-				seq = seq || strings.Contains(l.text, ",h")
+			if strings.Contains(l.Text, "Choose houses") {
+				key = key || strings.Contains(l.Text, "⌃h")
+				seq = seq || strings.Contains(l.Text, ",h")
 			}
 		}
 		if !key || !seq {
 			t.Errorf("Help lists ctrl+h = %v and the leader sequence = %v", key, seq)
 		}
 		for _, e := range m.keyBarEntries() {
-			if e.Bar && (e.ID == BindingHouses || e.Binding.Help().Desc == "Choose houses") {
+			if e.Bar && (e.ID == keys.BindingHouses || e.Binding.Help().Desc == "Choose houses") {
 				t.Errorf("the key bar lists the finder: %+v", e)
 			}
 		}
@@ -156,10 +158,10 @@ func TestLeaderHOpensFinderWithoutSteppingTime(t *testing.T) {
 // C14.
 func TestHouseFinderAppliesOnlyOnEnter(t *testing.T) {
 	setup := func(t *testing.T) Model {
-		m := selectedSet(t, 2, false, 1)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubHouseLookups(t)
+		m := selectedSet(t, 2, false, 1)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m.frames = m.frames.with(chosen(m, 0, recipe.Placidus))
 		m.frames = m.frames.with(chosen(m, 1, recipe.Equal))
 		return m
@@ -167,10 +169,10 @@ func TestHouseFinderAppliesOnlyOnEnter(t *testing.T) {
 	t.Run("opens on the focused chart's own system, whatever frames the comparison", func(t *testing.T) {
 		// Now visits Ben: Ben's Equal frames the comparison; now's own is
 		// Placidus. The finder edits now's own, so the cursor opens on Placidus.
-		m := selectedSet(t, 2, true, 2)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubHouseLookups(t)
+		m := selectedSet(t, 2, true, 2)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m.frames = m.frames.with(chosen(m, 1, recipe.Equal))
 		m.frames = m.frames.with(store.FrameRecord{Floating: true, Houses: recipe.Placidus, HasHouses: true, From: store.FrameFromChosen})
 		m = choosePair(m, scenePair{left: slotAt(m, 1), right: slotAt(m, 2)})
@@ -178,7 +180,7 @@ func TestHouseFinderAppliesOnlyOnEnter(t *testing.T) {
 			t.Fatalf("setup: the comparison should be framed by Ben's Equal, got %v", got)
 		}
 		m = openFinder(t, m)
-		if got := m.houseFinder.matches[m.houseFinder.cursor]; got != recipe.Placidus {
+		if got := m.houseFinder.Matches[m.houseFinder.Cursor]; got != recipe.Placidus {
 			t.Errorf("cursor opened on %s, want now's own Placidus", lookup.HouseName(got))
 		}
 	})
@@ -206,7 +208,7 @@ func TestHouseFinderAppliesOnlyOnEnter(t *testing.T) {
 		m := setup(t)
 		m = openFinder(t, m)
 		m, _ = tpress(t, m, keyDown)
-		want := m.houseFinder.matches[m.houseFinder.cursor]
+		want := m.houseFinder.Matches[m.houseFinder.Cursor]
 		if sessionExists() {
 			t.Fatal("a cursor move wrote the session")
 		}
@@ -298,20 +300,20 @@ func TestHouseFinderTitleNamesItsChart(t *testing.T) {
 		}
 	})
 	t.Run("a selected chart on its own tab frames itself and names no one else", func(t *testing.T) {
-		m := selectedSet(t, 2, false, 1)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubHouseLookups(t)
+		m := selectedSet(t, 2, false, 1)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m = openFinder(t, m)
 		if e := topEdge(t, m); !strings.Contains(e, "Houses · Synthetic 2") || strings.Contains(e, "comparison") {
 			t.Errorf("title = %q", e)
 		}
 	})
 	t.Run("a chart visiting another names itself, the one Enter edits", func(t *testing.T) {
-		m := selectedSet(t, 2, true, 2)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubHouseLookups(t)
+		m := selectedSet(t, 2, true, 2)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m = choosePair(m, scenePair{left: slotAt(m, 1), right: slotAt(m, 2)})
 		m = openFinder(t, m)
 		if e := topEdge(t, m); !strings.Contains(e, "Houses · Now") || strings.Contains(e, "comparison") {
@@ -319,10 +321,10 @@ func TestHouseFinderTitleNamesItsChart(t *testing.T) {
 		}
 	})
 	t.Run("the first selected chart decides for itself", func(t *testing.T) {
-		m := selectedSet(t, 2, false, 0)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubHouseLookups(t)
+		m := selectedSet(t, 2, false, 0)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m = openFinder(t, m)
 		if e := topEdge(t, m); !strings.Contains(e, "Houses · Synthetic 1") || strings.Contains(e, "comparison") {
 			t.Errorf("title = %q", e)
@@ -336,16 +338,16 @@ func TestCtrlHInsideASearchBoxStillDeletes(t *testing.T) {
 	m := openFinder(t, finderModel(t, 1, 0))
 	m = typeInFinder(t, m, "pl")
 	m, _ = tpress(t, m, keyCtrlHMain)
-	if m.startup != startupHouseOpen || m.houseFinder.filterText != "p" {
-		t.Errorf("in the finder ctrl+h left startup %q, filter %q; want it open with %q", m.startup, m.houseFinder.filterText, "p")
+	if m.startup != startupHouseOpen || m.houseFinder.FilterText != "p" {
+		t.Errorf("in the finder ctrl+h left startup %q, filter %q; want it open with %q", m.startup, m.houseFinder.FilterText, "p")
 	}
 	a := finderModel(t, 1, 0)
-	a.atlas.filterText = "ab"
+	a.atlas.FilterText = "ab"
 	a.atlas.prior = a.startup
 	a.startup = startupAtlasOpen
 	a, _ = tpress(t, a, keyCtrlHMain)
-	if a.startup != startupAtlasOpen || a.atlas.filterText != "a" {
-		t.Errorf("in the atlas ctrl+h left startup %q, filter %q", a.startup, a.atlas.filterText)
+	if a.startup != startupAtlasOpen || a.atlas.FilterText != "a" {
+		t.Errorf("in the atlas ctrl+h left startup %q, filter %q", a.startup, a.atlas.FilterText)
 	}
 }
 
@@ -389,7 +391,7 @@ func TestFinderEmptyAndShrinkingResults(t *testing.T) {
 		m := openFinder(t, finderModel(t, 1, 0))
 		before := m.ownHouses(m.focusedSlot())
 		m = typeInFinder(t, m, "zzz")
-		if len(m.houseFinder.matches) != 0 {
+		if len(m.houseFinder.Matches) != 0 {
 			t.Fatalf("zzz matched %v", finderNames(m))
 		}
 		var cmd tea.Cmd
@@ -412,7 +414,7 @@ func TestFinderEmptyAndShrinkingResults(t *testing.T) {
 			m, _ = tpress(t, m, keyDown)
 		}
 		m = typeInFinder(t, m, "placz")
-		if len(m.houseFinder.matches) != 0 {
+		if len(m.houseFinder.Matches) != 0 {
 			t.Fatalf("placz matched %v", finderNames(m))
 		}
 		m, _ = tpress(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
@@ -443,7 +445,7 @@ func TestHouseFinderDoesNotStealOtherOwners(t *testing.T) {
 	})
 	t.Run("console", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		if !m.console.open {
 			t.Fatal("setup: console did not open")
 		}
@@ -475,11 +477,12 @@ func TestHouseFinderLongTitleAt80x24(t *testing.T) {
 	long := "A Considerably Longer Constructed Subject Name Than Any Box Holds"
 	for _, withBase := range []bool{false, true} {
 		var m Model
+		freshModels(t)
 		if withBase {
-			m = selectedSet(t, 2, false, 1)
-			m.cfg = Config{Accessible: true, Color: ColorNever}
 			sessionSandbox(t)
 			stubHouseLookups(t)
+			m = selectedSet(t, 2, false, 1)
+			m.cfg = Config{Accessible: true, Color: ColorNever}
 			m.slots.All()[1].Chart.Name = long
 			m.slots.All()[0].Chart.Name = long + " Two"
 		} else {
@@ -507,7 +510,7 @@ func TestEnterOnCurrentRowRecordsAChoice(t *testing.T) {
 	slot := m.slots.All()[0]
 	m.frames = m.frames.withFile("synthetic-1.as", fileFrame{when: slot.Time, houses: recipe.Equal, has: true})
 	m = openFinder(t, m)
-	if got := m.houseFinder.matches[m.houseFinder.cursor]; got != recipe.Equal {
+	if got := m.houseFinder.Matches[m.houseFinder.Cursor]; got != recipe.Equal {
 		t.Fatalf("cursor opened on %s, want the file's Equal", lookup.HouseName(got))
 	}
 	var cmd tea.Cmd
@@ -547,7 +550,7 @@ func TestScrolledFinderAppliesTheVisibleRow(t *testing.T) {
 		}
 		shown := visibleCursorRow(t, m)
 		// The cursor opened on Whole Sign (row 2), so 17 steps land on row 19.
-		if c := m.houseFinder.cursor; c != 19 || shown != finderNames(m)[c] {
+		if c := m.houseFinder.Cursor; c != 19 || shown != finderNames(m)[c] {
 			t.Errorf("%v: the screen marks %q, the cursor is on row %d, %q", size, shown, c, finderNames(m)[c])
 		}
 		var cmd tea.Cmd

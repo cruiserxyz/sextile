@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,7 +121,7 @@ func wideGlyphFaults(frame string) []string {
 	for n, line := range strings.Split(frame, "\n") {
 		cells := frameCells(line)
 		for i, c := range cells {
-			if !needsRoom(c.r) {
+			if !term.NeedsRoom(c.r) {
 				continue
 			}
 			if i+1 < len(cells) && cells[i+1].r == ' ' && cells[i+1].style == c.style {
@@ -213,12 +214,12 @@ func TestEveryWideGlyphHasRoom(t *testing.T) {
 			kinds[key] = &kind{n: 1, first: n + " " + f}
 		}
 	}
-	var keys []string
+	var kmap []string
 	for k := range kinds {
-		keys = append(keys, k)
+		kmap = append(kmap, k)
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	sort.Strings(kmap)
+	for _, k := range kmap {
 		t.Errorf("%s: %d times, first in %s", k, kinds[k].n, kinds[k].first)
 	}
 }

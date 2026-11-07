@@ -21,11 +21,11 @@ func phaseStub(t *testing.T, calls *int) ChartComputer {
 	t.Helper()
 	return func(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
 		*calls++
-		applying := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Conjunction, aspect.Orb(2))
+		applying := aspect.NewObjectAspect(objSun, objMoon, aspect.Conjunction, aspect.Orb(2))
 		applying.Applying = true
-		separating := aspect.NewAspect(aspect.Sun, aspect.Mars, aspect.Trine, aspect.Orb(1))
+		separating := aspect.NewObjectAspect(objSun, objMars, aspect.Trine, aspect.Orb(1))
 		return payload.RawOutput{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 0}, {Body: aspect.Moon, Longitude: 2}, {Body: aspect.Mars, Longitude: 121}},
+			Positions: []aspect.Position{{Object: objSun, Longitude: 0}, {Object: objMoon, Longitude: 2}, {Object: objMars, Longitude: 121}},
 			Aspects:   []aspect.Aspect{applying, separating},
 		}, nil
 	}
@@ -79,17 +79,17 @@ func TestFirstCallNatalPositions_CarriesAstrologPhaseWithoutProbe(t *testing.T) 
 // primary/secondary and Astrolog's phase verdict rides along unchanged.
 func TestOverlayAspectsFromCross(t *testing.T) {
 	cross := []aspect.CrossAspect{
-		{Primary: aspect.Sun, Secondary: aspect.Saturn, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
-		{Primary: aspect.Moon, Secondary: aspect.Jupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
+		{PrimaryObject: objSun, SecondaryObject: objSaturn, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
+		{PrimaryObject: objMoon, SecondaryObject: objJupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
 	}
 	out := overlayAspectsFromCross(cross)
 	if len(out) != 2 {
 		t.Fatalf("want 2, got %d", len(out))
 	}
-	if out[0].Natal != aspect.Sun || out[0].Transit != aspect.Saturn || !out[0].Applying || out[0].Power != 9 {
+	if out[0].NatalObject != objSun || out[0].TransitObject != objSaturn || !out[0].Applying || out[0].Power != 9 {
 		t.Errorf("first = %+v, want natal Sun / transit Saturn, applying, power 9", out[0])
 	}
-	if out[1].Natal != aspect.Moon || out[1].Transit != aspect.Jupiter || out[1].Applying {
+	if out[1].NatalObject != objMoon || out[1].TransitObject != objJupiter || out[1].Applying {
 		t.Errorf("second = %+v, want natal Moon / transit Jupiter, separating", out[1])
 	}
 }

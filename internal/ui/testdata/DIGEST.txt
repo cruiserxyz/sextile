@@ -1,0 +1,5 @@
+goldens written: 4  changed: 2  unchanged: 2  new: 0
+
+== one-offs (0 lines, each in exactly one golden) ==
+
+== repeated (0 lines, by file count) ==

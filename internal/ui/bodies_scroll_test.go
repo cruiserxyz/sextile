@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"strings"
 	"testing"
 
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -12,24 +14,24 @@ import (
 // 1990-06-15 Berlin chart as testdata/influence-chart.report).
 func fullChartPositions() []aspect.Position {
 	return []aspect.Position{
-		{Body: aspect.Sun, Longitude: 84.2167, Speed: 0.9690, House: 8},
-		{Body: aspect.Moon, Longitude: 346.7500, Speed: 1.0160, House: 5},
-		{Body: aspect.Mercury, Longitude: 65.8667, Speed: 1.7450, House: 8},
-		{Body: aspect.Venus, Longitude: 48.9000, Speed: 1.1930, House: 7},
-		{Body: aspect.Mars, Longitude: 11.1000, Speed: 1.3710, House: 6},
-		{Body: aspect.Jupiter, Longitude: 105.9000, Speed: 2.6080, House: 9},
-		{Body: aspect.Saturn, Longitude: 294.0167, Speed: -1.7550, House: 3},
-		{Body: aspect.Uranus, Longitude: 278.1500, Speed: -3.3200, House: 3},
-		{Body: aspect.Neptune, Longitude: 283.7000, Speed: -4.1870, House: 3},
-		{Body: aspect.Pluto, Longitude: 225.3833, Speed: -5.0650, House: 1},
-		{Body: aspect.Chiron, Longitude: 106.0667, Speed: 5.2110, House: 9},
-		{Body: aspect.NorthNode, Longitude: 308.1167, Speed: -0.2230, House: 4},
-		{Body: aspect.SouthNode, Longitude: 128.1167, Speed: -0.2230, House: 10},
-		{Body: aspect.Lilith, Longitude: 259.1167, Speed: 8.8830, House: 2},
-		{Body: aspect.Ascendant, Longitude: 210.8667, Speed: 0.6890, House: 1},
-		{Body: aspect.ImumCoeli, Longitude: 312.0667, Speed: 0.9940, House: 4},
-		{Body: aspect.Descendant, Longitude: 30.8667, Speed: 0.6890, House: 7},
-		{Body: aspect.Midheaven, Longitude: 132.0667, Speed: 0.9940, House: 10},
+		{Object: objSun, Longitude: 84.2167, Speed: 0.9690, House: 8},
+		{Object: objMoon, Longitude: 346.7500, Speed: 1.0160, House: 5},
+		{Object: objMercury, Longitude: 65.8667, Speed: 1.7450, House: 8},
+		{Object: objVenus, Longitude: 48.9000, Speed: 1.1930, House: 7},
+		{Object: objMars, Longitude: 11.1000, Speed: 1.3710, House: 6},
+		{Object: objJupiter, Longitude: 105.9000, Speed: 2.6080, House: 9},
+		{Object: objSaturn, Longitude: 294.0167, Speed: -1.7550, House: 3},
+		{Object: objUranus, Longitude: 278.1500, Speed: -3.3200, House: 3},
+		{Object: objNeptune, Longitude: 283.7000, Speed: -4.1870, House: 3},
+		{Object: objPluto, Longitude: 225.3833, Speed: -5.0650, House: 1},
+		{Object: objChiron, Longitude: 106.0667, Speed: 5.2110, House: 9},
+		{Object: objNorthNode, Longitude: 308.1167, Speed: -0.2230, House: 4},
+		{Object: objSouthNode, Longitude: 128.1167, Speed: -0.2230, House: 10},
+		{Object: objLilith, Longitude: 259.1167, Speed: 8.8830, House: 2},
+		{Object: objAscendant, Longitude: 210.8667, Speed: 0.6890, House: 1},
+		{Object: objNadir, Longitude: 312.0667, Speed: 0.9940, House: 4},
+		{Object: objDescendant, Longitude: 30.8667, Speed: 0.6890, House: 7},
+		{Object: objMidheaven, Longitude: 132.0667, Speed: 0.9940, House: 10},
 	}
 }
 
@@ -71,11 +73,11 @@ func TestBodiesRuleAboveCusps(t *testing.T) {
 		if rows[ruleRow] != "" {
 			t.Errorf("innerHeight %d: rule row %d is not the blank the post-pass overlays: %q", innerHeight, ruleRow, rows[ruleRow])
 		}
-		if !strings.Contains(rows[ruleRow+1], bodyName(aspect.Ascendant)) {
+		if !strings.Contains(rows[ruleRow+1], panel.BodyName(objAscendant)) {
 			t.Errorf("innerHeight %d: row below the rule = %q, want the Asc row", innerHeight, rows[ruleRow+1])
 		}
 		for _, row := range rows[:ruleRow] {
-			if strings.Contains(row, " "+bodyName(aspect.Ascendant)+" ") {
+			if strings.Contains(row, " "+panel.BodyName(objAscendant)+" ") {
 				t.Errorf("innerHeight %d: an angle row appears above the rule: %q", innerHeight, row)
 			}
 		}
@@ -116,7 +118,7 @@ func TestBodiesThumbMeasuresAllRows(t *testing.T) {
 	if !strings.Contains(rows[len(rows)-1], "12") {
 		t.Errorf("last row of the window = %q, want cusp 12", rows[len(rows)-1])
 	}
-	if !scroll.overflows() {
+	if !scroll.Overflows() {
 		t.Errorf("a 14-row window over %d rows does not report overflow: %+v", total, scroll)
 	}
 }
@@ -151,7 +153,7 @@ func TestBodiesFallbackHasNoRule(t *testing.T) {
 	if strings.Count(body, "\n")+1 != 9 {
 		t.Errorf("no angles: rendered %d rows, want 9", strings.Count(body, "\n")+1)
 	}
-	if want := (viewport{Total: 14, Visible: 9, Offset: 5}); scroll != want {
+	if want := (pane.Viewport{Total: 14, Visible: 9, Offset: 5}); scroll != want {
 		t.Errorf("no angles: viewport = %+v, want %+v", scroll, want)
 	}
 
@@ -178,7 +180,7 @@ func TestBodiesFallbackHasNoRule(t *testing.T) {
 	// Degenerate geometry still renders nothing and reports nothing.
 	for _, tc := range []struct{ w, h int }{{0, 10}, {64, 0}, {-1, -1}} {
 		body, ruleRow, scroll = renderBodiesBody(state, nil, 0, 0, tc.w, tc.h, false, Config{Accessible: true})
-		if body != "" || ruleRow != -1 || scroll.overflows() {
+		if body != "" || ruleRow != -1 || scroll.Overflows() {
 			t.Errorf("%dx%d: body=%q rule=%d scroll=%+v", tc.w, tc.h, body, ruleRow, scroll)
 		}
 	}
@@ -194,23 +196,23 @@ func TestChartViewportNeverOverflows(t *testing.T) {
 			t.Fatalf("%d slots: no layout at 132x60", slots)
 		}
 		chartR := rects[PanelChart]
-		v := viewport{Total: slots, Visible: chartR.h - 2}
+		v := pane.Viewport{Total: slots, Visible: chartR.h - 2}
 		if slots > chartRowsTall {
 			// The panel stopped growing (the specification C21): the list
 			// windows, and the viewport says so instead of the box overflowing.
-			if chartR.h-2 != chartRowsTall || !v.overflows() {
-				t.Errorf("%d slots: chart rows %d, overflows %v, want the panel held at %d rows and reporting its window", slots, chartR.h-2, v.overflows(), chartRowsTall)
+			if chartR.h-2 != chartRowsTall || !v.Overflows() {
+				t.Errorf("%d slots: chart rows %d, overflows %v, want the panel held at %d rows and reporting its window", slots, chartR.h-2, v.Overflows(), chartRowsTall)
 			}
 			continue
 		}
-		if v.overflows() {
+		if v.Overflows() {
 			t.Errorf("%d slots: chart viewport %+v overflows", slots, v)
 		}
 		body := strings.TrimSuffix(strings.Repeat("slot\n", slots), "\n")
 		for _, cfg := range []Config{{Accessible: true}, {Color: ColorAlways}} {
 			for _, focused := range []bool{false, true} {
 				box := renderTitledBox("[1] Chart", chartR.w, chartR.h, focused, cfg, body)
-				if got := withScrollIndicator(box, v, cfg, focused); got != box {
+				if got := pane.WithScrollIndicator(box, v, cfg, focused); got != box {
 					t.Errorf("%d slots cfg=%+v focused=%v: the Chart frame changed", slots, cfg, focused)
 				}
 			}

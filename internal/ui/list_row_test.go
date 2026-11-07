@@ -2,6 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,7 +36,7 @@ func TestListRowWidth(t *testing.T) {
 		for _, left := range lefts {
 			for _, right := range rights {
 				for _, cursor := range []bool{false, true} {
-					got := listRow(listRowSpec{Left: left, Right: right, Cursor: cursor}, plainCfg, width)
+					got := menu.Row(menu.RowSpec{Left: left, Right: right, Cursor: cursor}, plainCfg, width)
 					if w := ansi.StringWidth(ansi.Strip(got)); w != width {
 						t.Errorf("width %d, left %q, right %q: line is %d cells: %q", width, left, right, w, got)
 					}
@@ -49,7 +52,7 @@ var unicodePlainCfg = Config{Color: ColorNever}
 
 func TestListRowRightFlow(t *testing.T) {
 	const width = 60
-	got := listRow(listRowSpec{Left: "Constructed One", Right: []string{"Bremen, DE", "", "20 Mar 1995"}}, unicodePlainCfg, width)
+	got := menu.Row(menu.RowSpec{Left: "Constructed One", Right: []string{"Bremen, DE", "", "20 Mar 1995"}}, unicodePlainCfg, width)
 	if !strings.HasSuffix(got, "Bremen, DE   20 Mar 1995") {
 		t.Errorf("right cells do not end at the last cell, three spaces apart, with the empty one omitted: %q", got)
 	}
@@ -62,7 +65,7 @@ func TestListRowRightFlow(t *testing.T) {
 
 	// A left cell that takes all the room it can still keeps three spaces.
 	left := strings.Repeat("x", 60)
-	got = listRow(listRowSpec{Left: left, Right: []string{"Bremen, DE"}}, unicodePlainCfg, width)
+	got = menu.Row(menu.RowSpec{Left: left, Right: []string{"Bremen, DE"}}, unicodePlainCfg, width)
 	if !strings.HasSuffix(got, "…   Bremen, DE") {
 		t.Errorf("want the shortened left cell, three spaces, then the right cell at the edge: %q", got)
 	}
@@ -70,7 +73,7 @@ func TestListRowRightFlow(t *testing.T) {
 
 func TestListRowNoRightCells(t *testing.T) {
 	for _, right := range [][]string{nil, {""}, {"", ""}} {
-		got := ansi.Strip(listRow(listRowSpec{Left: "Berlin", Right: right, Cursor: true}, plainCfg, 20))
+		got := ansi.Strip(menu.Row(menu.RowSpec{Left: "Berlin", Right: right, Cursor: true}, plainCfg, 20))
 		if want := "> Berlin" + strings.Repeat(" ", 12); got != want {
 			t.Errorf("right %q: got %q, want the cursor column, the left cell and padding %q", right, got, want)
 		}
@@ -80,21 +83,21 @@ func TestListRowNoRightCells(t *testing.T) {
 // Wide characters: a cut that would split one leaves a space instead, so the
 // left cell still holds its 8-cell floor and the line its exact width.
 func TestListRowShorteningWide(t *testing.T) {
-	got := listRow(listRowSpec{Left: "漢漢漢漢漢", Right: []string{"RIGHT"}}, unicodePlainCfg, 18)
+	got := menu.Row(menu.RowSpec{Left: "漢漢漢漢漢", Right: []string{"RIGHT"}}, unicodePlainCfg, 18)
 	if ansi.StringWidth(got) != 18 {
 		t.Errorf("line is %d cells, want 18: %q", ansi.StringWidth(got), got)
 	}
-	if left := strings.TrimSuffix(got, "   RIGHT"); ansi.StringWidth(left) != 2+listRowLeftFloor || !strings.HasSuffix(left, "…") {
-		t.Errorf("left cell %q is %d cells, want the cursor column and the %d-cell floor", left, ansi.StringWidth(left)-2, listRowLeftFloor)
+	if left := strings.TrimSuffix(got, "   RIGHT"); ansi.StringWidth(left) != 2+menu.ListRowLeftFloor || !strings.HasSuffix(left, "…") {
+		t.Errorf("left cell %q is %d cells, want the cursor column and the %d-cell floor", left, ansi.StringWidth(left)-2, menu.ListRowLeftFloor)
 	}
 	// The floor is room the left cell keeps, not just cells it draws: at 20,
 	// the right cell gets 18 - 8 - 3 = 7 cells, not the one a 7-cell left
 	// cell would hand over.
-	got = listRow(listRowSpec{Left: "漢漢漢漢漢", Right: []string{"RIGHTRIGHT"}}, unicodePlainCfg, 20)
+	got = menu.Row(menu.RowSpec{Left: "漢漢漢漢漢", Right: []string{"RIGHTRIGHT"}}, unicodePlainCfg, 20)
 	if !strings.HasSuffix(got, "   …TRIGHT") {
 		t.Errorf("at 20 = %q, want the right cell held to 7 cells by the left cell's floor", got)
 	}
-	got = listRow(listRowSpec{Left: "abcdefgh", Right: []string{"漢漢漢漢漢"}}, unicodePlainCfg, 19)
+	got = menu.Row(menu.RowSpec{Left: "abcdefgh", Right: []string{"漢漢漢漢漢"}}, unicodePlainCfg, 19)
 	if ansi.StringWidth(got) != 19 || !strings.HasPrefix(got, "  abcdefgh   …") || !strings.HasSuffix(got, "漢") {
 		t.Errorf("wide right cell at 19 = %q (%d cells), want the left cell whole and the right cell shortened from its left to the edge", got, ansi.StringWidth(got))
 	}
@@ -122,7 +125,7 @@ func TestListRowShortening(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(strconv.Itoa(tc.width), func(t *testing.T) {
-			got := listRow(listRowSpec{Left: left, Right: []string{place, date}}, unicodePlainCfg, tc.width)
+			got := menu.Row(menu.RowSpec{Left: left, Right: []string{place, date}}, unicodePlainCfg, tc.width)
 			if w := ansi.StringWidth(got); w != tc.width {
 				t.Errorf("line is %d cells, want %d: %q", w, tc.width, got)
 			}
@@ -200,7 +203,7 @@ func backgroundSGR(t *testing.T, c string) string {
 func TestListRowCursor(t *testing.T) {
 	forceColor(t)
 	const width = 30
-	on := listRow(listRowSpec{Left: "Berlin", Right: []string{"DE"}, Cursor: true}, Config{Color: ColorAlways}, width)
+	on := menu.Row(menu.RowSpec{Left: "Berlin", Right: []string{"DE"}, Cursor: true}, Config{Color: ColorAlways}, width)
 	if strings.Contains(on, "▶") || !strings.HasPrefix(ansi.Strip(on), "Berlin") {
 		t.Errorf("colours on: the cursor row carries a marker: %q", ansi.Strip(on))
 	}
@@ -218,16 +221,16 @@ func TestListRowCursor(t *testing.T) {
 		cfg  Config
 		mark string
 	}{{Config{Color: ColorNever}, "▶ Berlin"}, {Config{Accessible: true}, "> Berlin"}} {
-		off := listRow(listRowSpec{Left: "Berlin", Right: []string{"DE"}, Cursor: true}, tc.cfg, width)
-		if !strings.HasPrefix(ansi.Strip(off), tc.mark) || !strings.HasPrefix(off, cursorRowOff) {
+		off := menu.Row(menu.RowSpec{Left: "Berlin", Right: []string{"DE"}, Cursor: true}, tc.cfg, width)
+		if !strings.HasPrefix(ansi.Strip(off), tc.mark) || !strings.HasPrefix(off, term.CursorRowOff) {
 			t.Errorf("%+v: want %q in reverse video, got %q", tc.cfg, tc.mark, off)
 		}
-		if got := listRow(listRowSpec{Left: "Berlin"}, tc.cfg, width); !strings.HasPrefix(got, "  Berlin") {
+		if got := menu.Row(menu.RowSpec{Left: "Berlin"}, tc.cfg, width); !strings.HasPrefix(got, "  Berlin") {
 			t.Errorf("%+v: a row off the cursor must keep the blank cursor column: %q", tc.cfg, got)
 		}
 	}
 	for _, cfg := range []Config{{Color: ColorAlways}, {Color: ColorNever}, {Accessible: true}} {
-		if got := listRow(listRowSpec{Left: "Berlin", Right: []string{"DE"}}, cfg, width); strings.Contains(got, "\x1b[") {
+		if got := menu.Row(menu.RowSpec{Left: "Berlin", Right: []string{"DE"}}, cfg, width); strings.Contains(got, "\x1b[") {
 			t.Errorf("%+v: a row off the cursor carries SGR: %q", cfg, got)
 		}
 	}
@@ -236,7 +239,7 @@ func TestListRowCursor(t *testing.T) {
 func TestChartPickerRowColumns(t *testing.T) {
 	c := testNamedChart("Constructed One", fixtureOneP)
 	c.Year, c.Month, c.Day = 1995, 3, 20
-	got := listRow(chartRow(c, false, time.Time{}), plainCfg, 60)
+	got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60)
 	if !strings.HasPrefix(got, "  Constructed One ") || !strings.HasSuffix(got, "Test Bay, TS   Mar 20, 1995") {
 		t.Errorf("chart row = %q, want the name left and `Test Bay, TS   Mar 20, 1995` at the right edge", got)
 	}
@@ -244,7 +247,7 @@ func TestChartPickerRowColumns(t *testing.T) {
 	t.Run("no date", func(t *testing.T) {
 		c := c
 		c.Month, c.Day = 0, 0
-		got := listRow(chartRow(c, false, time.Time{}), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60)
 		if !strings.HasSuffix(got, "Test Bay, TS") || strings.Contains(got, "1995") {
 			t.Errorf("a chart with no date must end on its place, with no date and no year: %q", got)
 		}
@@ -303,9 +306,9 @@ func TestChartPickerRowColumns(t *testing.T) {
 
 // atlasRowState is a loaded, filtered place picker showing one place.
 func atlasRowState(p location.PlaceInfo) atlasModalState {
-	st := atlasModalState{index: []location.Indexed{}}
-	st.filterText = "ber"
-	st.setMatches([]location.PlaceInfo{p}, false)
+	st := atlasModalState{Atlas: popup.Atlas{Index: []location.Indexed{}}}
+	st.FilterText = "ber"
+	st.SetMatches([]location.PlaceInfo{p}, false)
 	return st
 }
 
@@ -326,10 +329,10 @@ func TestAtlasRowColumns(t *testing.T) {
 }
 
 func TestAspectRowColumns(t *testing.T) {
-	st := openAspectModal(testRegistry(), recipe.AspectPolicy{})
+	st := popup.OpenAspects(testRegistry(), recipe.AspectPolicy{})
 	sq := testRegistry()[3]
 	for _, width := range []int{54, 70, 86} {
-		got := listRow(aspectRow(st, plainCfg, sq, false, width), plainCfg, width)
+		got := menu.Row(popup.AspectRow(st, plainCfg, sq, false, width), plainCfg, width)
 		want := fmt.Sprintf("%-3s   %6.2f°   orb %4.1f", sq.Abbrev, sq.Angle, sq.Orb)
 		if !strings.HasSuffix(got, want) {
 			t.Errorf("width %d: aspect row = %q, want it to end %q — abbreviation, angle, orb, in that order", width, got, want)
@@ -345,9 +348,9 @@ func TestAspectRowColumns(t *testing.T) {
 	long.Name = "Sesquiquadrate-ish long"
 	// The orb leaves every row of a list together, at the width its widest
 	// row (here this one, in the registry) no longer fits whole.
-	st = openAspectModal(append(testRegistry(), long), recipe.AspectPolicy{})
+	st = popup.OpenAspects(append(testRegistry(), long), recipe.AspectPolicy{})
 	for _, width := range []int{30, 44} {
-		got := ansi.Strip(listRow(aspectRow(st, plainCfg, long, true, width), plainCfg, width))
+		got := ansi.Strip(menu.Row(popup.AspectRow(st, plainCfg, long, true, width), plainCfg, width))
 		if strings.Contains(got, "orb") {
 			t.Errorf("width %d: the orb must drop first: %q", width, got)
 		}
@@ -362,12 +365,12 @@ func TestAspectRowColumns(t *testing.T) {
 
 func TestBodyRowColumns(t *testing.T) {
 	st := openBodyTest(recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}, nil)
-	o := aspect.RegistryObject{Number: 1, Name: "Sun"}
-	spec := bodyRow(st, o, true)
+	o := aspect.RegistryObject{Object: aspect.Object{Number: 1, Name: "Sun"}}
+	spec := popup.Row(st, o, true, plainCfg)
 	if len(spec.Right) != 0 {
 		t.Errorf("a body row carries no right cell, got %q", spec.Right)
 	}
-	got := ansi.Strip(listRow(spec, plainCfg, 30))
+	got := ansi.Strip(menu.Row(spec, plainCfg, 30))
 	if want := "> [✓] Sun" + strings.Repeat(" ", 21); got != want {
 		t.Errorf("body row = %q, want %q", got, want)
 	}
@@ -393,11 +396,11 @@ func TestDisplayColoursPreference(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := NewModel(Config{})
+			m := newTestModel(t, Config{}, RealClock{})
 			before := len(m.logPanelLines())
 			m = m.applyDisplayConfig(tc.in)
-			if m.cfg.FocusColour != tc.focus || m.cfg.CursorRowColour != tc.row {
-				t.Errorf("colours = %q, %q; want %q, %q", m.cfg.FocusColour, m.cfg.CursorRowColour, tc.focus, tc.row)
+			if m.cfg.FocusColourName != tc.focus || m.cfg.CursorRowColourName != tc.row {
+				t.Errorf("colours = %q, %q; want %q, %q", m.cfg.FocusColourName, m.cfg.CursorRowColourName, tc.focus, tc.row)
 			}
 			lines := m.logPanelLines()[before:]
 			if tc.loggedNaming == "" && len(lines) > 0 {
@@ -415,7 +418,7 @@ func TestDisplayColoursPreference(t *testing.T) {
 // that now colours the cursor row, and startup carries on. Applying the same
 // block again writes no second note.
 func TestRowStripeRetiredNotedOnce(t *testing.T) {
-	m, _ := applyStartupPerimeter(NewModel(Config{}), ingest.StartupPerimeterReadMsg{
+	m, _ := applyStartupPerimeter(newTestModel(t, Config{}, RealClock{}), ingest.StartupPerimeterReadMsg{
 		Display: store.DisplayConfig{RetiredStripePresent: true},
 	})
 	before := len(m.logPanelLines())

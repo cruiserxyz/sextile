@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"math"
 	"os"
 	"os/exec"
@@ -139,7 +140,7 @@ func TestOldDatesShowAstrologsDate(t *testing.T) {
 				}
 				mm := m
 				mm.focused = PanelChart
-				mm = mm.adoptDetailsReport("[0] Chart", report)
+				mm = mm.adoptWantedReport("[0] Chart", report)
 				h := reOldChartFor.FindStringSubmatch(plainView(mm))
 				if h == nil {
 					t.Fatalf("no Details header in the screen")
@@ -283,7 +284,7 @@ func oldPlace() location.PlaceInfo {
 func oldTimelineRows(t *testing.T, when time.Time) []lookup.TimelineRow {
 	t.Helper()
 	res, err := lookup.TimelineWith(context.Background(),
-		lookup.TimelineRequest{When: when, Place: oldPlace(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, oldSearch, stubDefaults)
+		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry}, When: when, Place: oldPlace(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, oldSearch, stubDefaults)
 	if err != nil {
 		t.Fatalf("old timeline: %v", err)
 	}
@@ -295,7 +296,7 @@ func oldTimelineRows(t *testing.T, when time.Time) []lookup.TimelineRow {
 
 // renderedTimelineRows is the rows as the panel body draws them, ANSI-stripped.
 func renderedTimelineRows(rows []lookup.TimelineRow) []string {
-	body, _ := renderTimelineBody(rows, nil, -1, detailsViewState{}, timelineSearchView{}, 120, len(rows)+2, Config{Accessible: true})
+	body, _ := panel.RenderTimeline(panel.TimelineBag{Rows: rows, Nearest: -1, InnerW: 120, InnerH: len(rows) + 2, Style: Config{Accessible: true}})
 	return strings.Split(ansi.Strip(body), "\n")
 }
 
@@ -304,17 +305,18 @@ func renderedTimelineRows(rows []lookup.TimelineRow) []string {
 // and the requests the searches were asked.
 func oldTimelineModel(t *testing.T, when time.Time) (Model, *[]lookup.TimelineRequest) {
 	t.Helper()
+	freshModels(t)
 	defaultClock(t)
 	calls := &[]lookup.TimelineRequest{}
-	old, oldStubbed := computeTimeline, timelineStubbed
-	computeTimeline = func(ctx context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		*calls = append(*calls, req)
-		return lookup.TimelineWith(ctx, req, oldSearch, stubDefaults)
-	}
-	timelineStubbed = true
-	t.Cleanup(func() { computeTimeline, timelineStubbed = old, oldStubbed })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.timeline = func(ctx context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			*calls = append(*calls, req)
+			return lookup.TimelineWith(ctx, req, oldSearch, stubDefaults)
+		}
+	})
+	markStubbed(t, "timeline")
 
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(when, oldPlace())
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +369,8 @@ func TestEnterOnAnOldRowLandsOnItsMoment(t *testing.T) {
 		t.Fatalf("the row's instant is Unix %d, want %d: the parser has not read the Julian date", got, wantAt)
 	}
 
-	text := stubTextCompute(t)
+	var text *[]textCall
+	m = withNewStubs(t, m, func() { text = stubTextCompute(t) })
 	m, cmd := tpress(t, m, keyEnter)
 	m = pump(t, m, cmd)
 	if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
@@ -488,9 +491,9 @@ func TestStepStopsAtJulianDayZero(t *testing.T) {
 	m.previewActive = true
 	m, imgCmd := m.requestImage()
 	m = pump(t, m, imgCmd)
-	old := computeTimeline
-	computeTimeline = lookup.Timeline
-	t.Cleanup(func() { computeTimeline = old })
+	m = withSpawns(m, func(s *rowSpawns) {
+		s.timeline = lookup.Timeline
+	})
 	m, tlCmd := syncTimelineVisited(m)
 	_ = pump(t, m, tlCmd)
 	if n := started() - before; n != 0 {
@@ -530,7 +533,7 @@ func TestOldDatesFrames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m = m.adoptDetailsReport("[0] Chart", report)
+	m = m.adoptWantedReport("[0] Chart", report)
 	writeDesignFrame(t, "old-dates-144x40-details", m.View())
 
 	tl, _ := oldTimelineModel(t, time.Unix(julianUnix(1500, 2, 10, 12), 0).UTC())

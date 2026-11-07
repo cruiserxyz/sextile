@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,14 +23,14 @@ import (
 func TestBodyConfirmReachesTheCompute(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
 	// Row 0 of the list is Earth (0) and opens unticked; tick it, so the
 	// confirmed set is strictly different from the entry set. The cursor starts
 	// on the group rows, so walk past them first.
-	for i := 0; i < groupRows(); i++ {
+	for i := 0; i < popup.GroupRows(); i++ {
 		tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -56,6 +58,32 @@ func TestBodyConfirmReachesTheCompute(t *testing.T) {
 	}
 }
 
+// After Ctrl+B confirms a new body set, Details waits for the chart text cast
+// with that set and asks for its report again then, as a house change does.
+// Before, the Chart report kept the table of the old set until the next
+// minute, and that minute's quiet refresh never wrote the note about the
+// fixed stars it leaves out (live run, 2026-11-05).
+func TestBodyConfirmRefreshesTheReport(t *testing.T) {
+	m := detailsTestModel(t)
+	m.objectRegistry = testObjectRegistry()
+	m.focused = PanelChart
+	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3}}
+	m.details.title, m.details.body = "Now - Chart", "the report for the old set"
+
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	for i := 0; i < popup.GroupRows(); i++ {
+		tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
+	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	got := tm.(Model)
+	if !got.details.pending || !got.details.waitForText {
+		t.Fatalf("confirming a new body set left the report as it was: pending %v, waitForText %v",
+			got.details.pending, got.details.waitForText)
+	}
+}
+
 // C3 (the cancel half) — Esc restores the policy in force at open, and
 // RECOMPUTES it. Restoring the model alone would leave the previewed set on
 // screen, which makes the cancel a lie.
@@ -64,7 +92,7 @@ func TestBodyCancelRestoresAndRecomputes(t *testing.T) {
 	seen := recordLensSeams(t)
 
 	entry := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3}}
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	m.lens.Objects = entry
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
@@ -96,7 +124,7 @@ func TestBodyCancelRestoresAndRecomputes(t *testing.T) {
 // A cancel that changed nothing must not recompute at all — opening the
 // selector and pressing Esc is a no-op, not a free Astrolog spawn.
 func TestBodyCancelWithoutEditsRecomputesNothing(t *testing.T) {
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
@@ -120,7 +148,7 @@ func TestBodyTogglesStartNoCompute(t *testing.T) {
 		{Type: tea.KeyRunes, Runes: []rune("sun")}, {Type: tea.KeySpace},
 		{Type: tea.KeyBackspace}, {Type: tea.KeyUp},
 	} {
-		var out bodyModalOutcome
+		var out popup.Outcome
 		st, out = updateBodyModalKey(st, msg, 10)
 		if out.Confirmed || out.Cancelled {
 			t.Fatalf("%v ended the modal", msg.Type)
@@ -154,10 +182,10 @@ func TestBodyPreviewFiresOnToggleNotOnTyping(t *testing.T) {
 	pump(t, tm.(Model), open)
 	// The cursor starts on the group rows, where no body is under it: walk
 	// onto the first list row, and let that rest settle too.
-	for i := 0; i < groupRows(); i++ {
+	for i := 0; i < popup.GroupRows(); i++ {
 		var step tea.Cmd
 		tm, step = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
-		if i == groupRows()-1 {
+		if i == popup.GroupRows()-1 {
 			tm = pump(t, tm.(Model), step)
 		}
 	}
@@ -211,11 +239,11 @@ func TestBodyPreviewFiresOnToggleNotOnTyping(t *testing.T) {
 func TestBodyPreviewCarriesTheEditedSet(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
-	for i := 0; i < groupRows(); i++ { // past the group rows
+	for i := 0; i < popup.GroupRows(); i++ { // past the group rows
 		tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	tm, cmd := tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace}) // tick Earth (list row 0)
@@ -242,18 +270,20 @@ func TestBodyPreviewCarriesTheEditedSet(t *testing.T) {
 	}
 }
 
-// C8 — an empty selection computes with no bodies rather than falling back to
-// the lens default. Asserted at the seam, because "falls back" is precisely the
-// failure a model-field assertion cannot see.
-func TestEmptyBodySelectionComputesNothing(t *testing.T) {
+// C8, as the operator's answer of 2026-11-04 changed it: nothing ticked is no
+// choice, so confirming an empty set computes with the default policy and never
+// with an Explicit one that holds no object. Asserted at the seam, because "an
+// empty restriction goes out" is precisely the failure a model-field assertion
+// cannot see.
+func TestEmptyBodySelectionComputesDefaults(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
 	// Untick the only ticked object: the Sun is list row 1, past the group rows.
-	for i := 0; i < groupRows()+1; i++ {
+	for i := 0; i < popup.GroupRows()+1; i++ {
 		tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -264,11 +294,11 @@ func TestEmptyBodySelectionComputesNothing(t *testing.T) {
 		t.Fatal("confirming an empty set ran no compute")
 	}
 	for i, lens := range *seen {
-		if lens.Objects.Baseline != recipe.Explicit {
-			t.Errorf("compute %d fell back to baseline %v; the operator chose none, which is not the same as not having chosen", i, lens.Objects.Baseline)
+		if lens.Objects.Baseline != recipe.AstrologDefault {
+			t.Errorf("compute %d got baseline %v; nothing ticked is no choice, which is the default set", i, lens.Objects.Baseline)
 		}
 		if n := len(lens.Objects.Selected()); n != 0 {
-			t.Errorf("compute %d got %d objects, want none", i, n)
+			t.Errorf("compute %d got an explicit list of %d objects, want none", i, n)
 		}
 	}
 }
@@ -279,10 +309,10 @@ func TestEmptyBodySelectionComputesNothing(t *testing.T) {
 // body they ticked simply not appear — the silent-drop failure this whole
 // treatment exists to avoid.
 func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 
-	m = m.reportUnavailable([]string{"Eris", "Io"})
-	if !logMentions(m, "no ephemeris for Eris, Io") {
+	m = m.reportUnavailable([]string{"Eris", "Io"}, tUnavailable)
+	if !logMentions(m, "Eris, Io can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) {
 		t.Fatal("the dropped objects must be named on the Log")
 	}
 	before := len(m.logLines)
@@ -290,12 +320,12 @@ func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
 	// ONCE means once per change. The text surface recomputes on every
 	// time-step; the same names arriving again must not push the Log out of
 	// its six rows.
-	m = m.reportUnavailable([]string{"Eris", "Io"})
+	m = m.reportUnavailable([]string{"Eris", "Io"}, tUnavailable)
 	if len(m.logLines) != before {
 		t.Error("the same set was reported twice; a held-key sweep would flood the Log")
 	}
 	// Order is Astrolog's, and a reordering is not a change.
-	m = m.reportUnavailable([]string{"Io", "Eris"})
+	m = m.reportUnavailable([]string{"Io", "Eris"}, tUnavailable)
 	if len(m.logLines) != before {
 		t.Error("a reordered set was reported as a change")
 	}
@@ -305,24 +335,24 @@ func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
 // operator sees (the specification). A later loss is
 // still reported, because the set was reset.
 func TestUnavailableRecoveryIsQuiet(t *testing.T) {
-	m := readyModelWithObjects(testObjectRegistry())
-	m = m.reportUnavailable([]string{"Eris"})
+	m := readyModelWithObjects(t, testObjectRegistry())
+	m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
 	before := len(m.logLines)
-	m = m.reportUnavailable(nil)
+	m = m.reportUnavailable(nil, tUnavailable)
 	if len(m.logLines) != before {
 		t.Errorf("recovery wrote %v", m.logPanelLines()[before:])
 	}
-	m = m.reportUnavailable([]string{"Eris"})
-	if !logMentions(m, "no ephemeris for Eris") || len(m.logLines) != before+1 {
+	m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
+	if !logMentions(m, "Eris can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) || len(m.logLines) != before+1 {
 		t.Error("losing the body again was not reported")
 	}
 }
 
 // A chart that never had an unavailable object says nothing at all.
 func TestNoUnavailableObjectsSaysNothing(t *testing.T) {
-	m := readyModelWithObjects(testObjectRegistry())
+	m := readyModelWithObjects(t, testObjectRegistry())
 	before := len(m.logLines)
-	m = m.reportUnavailable(nil)
+	m = m.reportUnavailable(nil, tUnavailable)
 	if len(m.logLines) != before {
 		t.Error("a healthy chart logged a line about unavailable bodies")
 	}
@@ -348,3 +378,6 @@ func TestUnavailableNamesAreUnionedNotDropped(t *testing.T) {
 		t.Errorf("unionNames(nil, nil) = %v, want nil", n)
 	}
 }
+
+// tUnavailable is the date the unavailable-body tests report for.
+var tUnavailable = time.Date(1500, 3, 15, 12, 0, 0, 0, time.UTC)

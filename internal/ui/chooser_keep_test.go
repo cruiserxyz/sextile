@@ -14,6 +14,7 @@ import (
 // and the timeline searches can all be observed.
 func chooserKeepFixture(t *testing.T) (Model, *[]timelineCall) {
 	t.Helper()
+	freshModels(t)
 	calls := bandAwareTimeline(t)
 	stubTextCompute(t)
 	m := loadedTimeline(t, Config{Accessible: true})
@@ -158,12 +159,17 @@ func TestChooserBarsSayClose(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		key  tea.KeyType
-	}{{"aspects", tea.KeyCtrlA}, {"bodies", tea.KeyCtrlB}} {
+		want string
+	}{
+		{"aspects", tea.KeyCtrlA, "Move: ↑↓ | Toggle: space | Close: enter/esc"},
+		// The bodies chooser also offers Ctrl+D, back to the default bodies.
+		{"bodies", tea.KeyCtrlB, "Move: ↑↓ | Toggle: space | Defaults: ⌃d | Close: enter/esc"},
+	} {
 		m := escBase(t)
 		m.cfg = Config{Color: ColorNever}
 		m, _ = escSend(t, m, escKey(c.key))
 		bar := ansi.Strip(m.View())
-		want := "Move: ↑↓ | Toggle: space | Close: enter/esc"
+		want := c.want
 		if !strings.Contains(bar, want) {
 			t.Errorf("%s: the bar does not read %q:\n%s", c.name, want, bar)
 		}

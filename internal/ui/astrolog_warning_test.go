@@ -49,7 +49,7 @@ func serveChart(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return "case \" $* \" in\n  *\" -aa \"*) exec /bin/cat " + shQuote(filepath.Join(fix, "aspects-k.txt")) +
-		" ;;\n  *) exec /bin/cat " + shQuote(filepath.Join(fix, "positions-k.txt")) + " ;;\nesac"
+		" ;;\n  *) exec /usr/bin/python3 -I " + shQuote(filepath.Join(fix, "replay-positions.py")) + " " + shQuote(filepath.Join(fix, "positions-k.txt")) + " \"$@\" ;;\nesac"
 }
 
 func consoleTexts(m Model) string {
@@ -156,7 +156,7 @@ func TestTimelineWarningDropsItsRows(t *testing.T) {
 		}
 	}
 	script := "#!/bin/sh\ncase \" $* \" in\n" +
-		"  *\" -dm \"*) exec /bin/cat " + shQuote(filepath.Join(dir, "sky")) + " ;;\n" +
+		"  *\" -dm \"*|*\" -d \"*) exec /bin/cat " + shQuote(filepath.Join(dir, "sky")) + " ;;\n" +
 		"  *\" -tr \"*) echo " + shQuote(warnOne) + " >&2; exec /bin/cat " + shQuote(filepath.Join(dir, "return")) + " ;;\n" +
 		"  *\" -t \"*) echo " + shQuote(warnOne) + " >&2; exec /bin/cat " + shQuote(filepath.Join(dir, "transit")) + " ;;\n" +
 		"esac\n"
@@ -175,7 +175,7 @@ func TestTimelineWarningDropsItsRows(t *testing.T) {
 		t.Fatalf("the sky search's rows were not shown: complete=%v rows=%d", m.timeline.complete, len(m.timeline.rows))
 	}
 	for _, r := range m.timeline.rows {
-		if !strings.Contains(r.Command, " -dm") {
+		if !strings.Contains(r.Command+" ", " -d ") && !strings.Contains(r.Command+" ", " -dm ") {
 			t.Errorf("a row from a warned search is displayed: %q (command %q)", r.Line, r.Command)
 		}
 	}

@@ -28,7 +28,7 @@ func designPopup(t *testing.T, cfg Config, w, h int, name string) Model {
 		return designStep(m, tea.KeyMsg{Type: tea.KeyCtrlL})
 	case "open-chart":
 		m.picker = listRowsChartState()
-		m.picker.cursor = len(m.picker.matches) / 2
+		m.picker.Cursor = len(m.picker.Matches) / 2
 		m.startup = startupChartOpen
 		return m
 	case "chart-title":
@@ -82,7 +82,7 @@ func TestDesignPopupsV2(t *testing.T) {
 		m.focused = PanelBodies
 		writeDesignFrame(t, "design-position-bodies-focused-"+size.name+"-color", m.View())
 		if size.w == 144 {
-			m, _ = press(t, base, ",", "l")
+			m, _ = press(t, base, ",", "l", "l")
 			writeDesignFrame(t, "design-position-console-"+size.name+"-color", m.View())
 		}
 	}
@@ -101,5 +101,6 @@ func TestDesignPopupsV4(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.slots, m.cursorIdx = slots, 0
+	m = m.restampFrame() // the sheet is the cut place name, not the view rule
 	writeDesignFrame(t, "design-cut-place-80x24-color", m.View())
 }

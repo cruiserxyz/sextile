@@ -2,6 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,6 +19,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -24,12 +29,20 @@ type Model struct {
 	focused       PanelID
 	helpOpen      bool
 	// help is the help popup's cursor and window, reset each time it opens.
-	help    helpState
-	startup startupState
+	help keys.HelpState
+	// actionsOpen is the Actions palette (⌃p, actions_popup_model.go). It is a
+	// flag beside helpOpen and never a startup value: blocked reads
+	// startup == startupReady, and a startup value would grey every row.
+	// recentActions are the commands run through it in this run, most recent
+	// first; nothing is written anywhere.
+	actionsOpen   bool
+	actions       actionsState
+	recentActions []keys.BindingID
+	startup       startupState
 	// limitedViewShown is whether the Limited view notice has been offered this
 	// session; it is offered once.
 	limitedViewShown bool
-	keys             keyMap
+	keys             keys.KeyMap
 	cfg              Config
 	// logLines is the one ordered log buffer. Every line is appended exactly
 	// once, on one lane; the 6-row Log and the console each derive
@@ -66,7 +79,7 @@ type Model struct {
 	// once at startup and kept, so the chooser's list cannot shift under the
 	// operator mid-session. A nil registry means the read failed and the
 	// chooser refuses to open (C10).
-	aspectModal    aspectModalState
+	aspectModal    popup.Aspects
 	aspectRegistry []aspect.RegistryAspect
 	aspectRegErr   error
 	// aspectOpenPending records that the chooser was asked for before the
@@ -77,9 +90,31 @@ type Model struct {
 	// startup, before any restriction this program emits — see C5a and
 	// loadObjectRegistryCmd. A nil registry means the read failed and the
 	// selector refuses to open (C10).
-	bodyModal      bodyModalState
+	bodyModal      popup.Body
 	objectRegistry []aspect.RegistryObject
 	objectRegErr   error
+	// awaitingRegistry is a start held for the object list: the saved session
+	// names a drawn set, which only the list can turn into objects.
+	awaitingRegistry bool
+	// drawnKept are the saved drawn names this Astrolog's registry does not
+	// list, verbatim and in the order read; drawnRaw is the whole saved list
+	// while the registry is not in. Both are written back with the session.
+	drawnKept, drawnRaw []string
+	// fallbackSaid is the line given when a drawn set left nothing drawable or
+	// nothing was ticked, so a key or a confirm does not repeat it.
+	fallbackSaid string
+	// ephemeris is what the startup probe learned about the data folder: which
+	// objects have no ephemeris file. ephemerisSaid is the account the Log and
+	// the footer last gave of it, so it is said once and again only when it changes.
+	ephemeris lookup.EphemerisAvailability
+	// drainSaid is the Log line already written for a selection that draws
+	// nothing because its bodies have no ephemeris file (empty: none), so the
+	// same account is not repeated by every refresh.
+	drainSaid     string
+	ephemerisSaid string
+	// starsLeftSaid is the set of fixed stars the Log last said the influence
+	// chart leaves out (empty: none), so it is said once per set.
+	starsLeftSaid string
 	// bodyOpenPending records that the selector was asked for before the
 	// registry had landed, so the read can open it on arrival.
 	bodyOpenPending bool
@@ -93,10 +128,15 @@ type Model struct {
 	// houseDisplay is how the Bodies house column is drawn (house_display.go):
 	// the whole session's choice, all slots, set live from the `, a` popup and
 	// read from preferences.yaml at start. Never part of the session record.
-	houseDisplay houseForm
+	houseDisplay panel.HouseForm
 	// houseDisplayPopup is the House display popup (`, a`): its list. The
 	// popup writes no file; `, c d` keeps the form.
 	houseDisplayPopup houseDisplayState
+	// experimentsOn holds the Experiments table's ids that are on (experiments.go);
+	// experimentsPopup is the hidden popup's list. Neither is ever written to a
+	// file from here but through the popup's own command.
+	experimentsOn    map[string]bool
+	experimentsPopup popup.Experiments
 	// chooserEntry is the screen as the aspect or body chooser found it,
 	// put back on Esc.
 	chooserEntry chooserEntry
@@ -108,8 +148,21 @@ type Model struct {
 	shown      shownFrame
 	chartEpoch uint64 // last epoch a text commit gave the chart
 	details    detailsViewState
-	// detailsHold keeps Details faint while a navigation key repeats.
-	detailsHold detailsHoldState
+	// textAsked is the key the newest text want was registered for
+	// (noteAsked); textAskedOK says there is one.
+	textAsked   textKey
+	textAskedOK bool
+	// keyRun is the run of equal navigation keys the newest key belongs to.
+	keyRun detailsRunState
+	// keyFirst says the key being handled starts a run of equal keys (it is not
+	// the repeat of one inside holdStartWindow): the reconciler starts what it
+	// newly owes at once. Set by updateSynced for the length of one reconcile.
+	keyFirst bool
+	// mem is what each cached surface remembers (memory.go). RAM only.
+	mem memory
+	// pre is the idle prefetch loop (prefetch.go): not a surface, it touches no
+	// surface's want or run.
+	pre prefetch
 	// timeline is the Details timeline tab's list and the search inputs it
 	// belongs to (timeline.go). Ephemeral: never written to store.
 	timeline timelineState
@@ -181,8 +234,17 @@ type Model struct {
 	// to read): the file is the astrologer's, so no session is written.
 	sessionKept bool
 
+	// sessionForeign is set when the launch runs the general session and the
+	// file it read names another charts folder (applyStartupPerimeter): the
+	// file is that folder's, so this run never writes the general session. It
+	// lasts for the whole launch -- no transition clears it, not saving or
+	// opening a named session, not `<leader> n`, not a city change -- and the
+	// path is never read again, so a file deleted or replaced meanwhile is
+	// still not written. A named session keeps saving as ever.
+	sessionForeign bool
+
 	// named is the named session this window runs; zero while it runs the
-	// general one (sessions_popup.go). sessions is the Sessions list.
+	// general one (sessions_popup_model.go). sessions is the Sessions list.
 	named    namedRun
 	sessions sessionsPopupState
 	// sessionGen numbers the named-session opens; a load that is not the
@@ -256,6 +318,11 @@ type Model struct {
 	// computeGen/dispatchSeq/lastCommittedSeq ordering counters.
 	refresh [numSurfaces]refreshState
 
+	// rows is the refresh table: one row per surface (row_spawns.go
+	// defaultRows), set once in the constructor. The rows carry the spawns a
+	// test replaces, so a stub reaches the Model that holds it and no other.
+	rows [numSurfaces]surfaceRow
+
 	// wheelPublishing / wheelPublishPending serialize the wheel-image PUBLISH
 	// step (preview.Show — HTTP publish + browser launch) OFF the Update
 	// thread. The coordinator already guarantees only the LATEST render commits;
@@ -297,8 +364,8 @@ type Model struct {
 	// leaderMap is the compiled-in prefix tree; leaderBindings is the same
 	// map in the order the help modal lists it. No user-writable map ships
 	// yet, so both are built once and never mutated.
-	leaderMap      *leaderNode
-	leaderBindings []leaderBinding
+	leaderMap      *keys.LeaderNode
+	leaderBindings []keys.LeaderBinding
 
 	// rowStripeNoted is set once the retired display.row_stripe has been
 	// reported, so applying the display block again writes no second note.
@@ -317,9 +384,17 @@ type Model struct {
 	// keyboard, not a focused panel. Ephemeral — never written to the
 	// preferences or session files, zeroed on close.
 	console consoleState
+	// logFocus is the Log panel holding the keyboard (log_focus.go). A mode
+	// beside the console: m.focused is never the Log.
+	logFocus logFocusState
 
 	// yank is the copy confirmation shown in the key bar's right slot.
 	yank yankState
+	// resetArmed is the yank generation of the "`, n` again" notice that armed
+	// the second press of `, n`; 0 when nothing is armed (reset_session.go).
+	resetArmed uint64
+	// loading is when the active Details tab started waiting (loading_overlay.go).
+	loading loadingState
 	// errorUnseen records an error line appended since the console was last
 	// opened. The key bar shows the mark while it is set and no Log panel is
 	// on screen (the specification).
@@ -352,8 +427,9 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 	m := Model{
 		panels:  defaultPanels(),
 		focused: PanelChart,
-		keys:    defaultKeys(),
+		keys:    keys.DefaultKeys(),
 		cfg:     cfg,
+		rows:    defaultRows(),
 		startup: startupBootstrapping,
 		clock:   clock,
 		lens:    lookup.Hellenistic,
@@ -365,11 +441,11 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 		leaderBindings: defaultLeaderMap(),
 	}
 	if text, ok := launchNote(cfg.Launch); ok {
-		// First, so a frame always says what ran.
-		m = m.logNote("launcher", "%s", text)
+		// First, so the large log always says what ran.
+		m = m.logTrace("launcher", "%s", text)
 	}
 	if cfg.Migration != "" {
-		m = m.logNote("state", "%s", cfg.Migration)
+		m = m.logTrace("state", "%s", cfg.Migration)
 	}
 	// A launch with --session runs that named session, whose lock main took;
 	// one it could not open says why, once.
@@ -380,9 +456,10 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 		m = m.logNote("session", "%s", cfg.SessionNote)
 	}
 	if cfg.InstanceLockUnsupported {
-		// The one time the operator hears that a second copy cannot be told
-		// apart from this one (the specification C6).
-		m = m.logNote("lock", "a second copy cannot be detected on this folder")
+		// Said once, that a second copy cannot be told apart from this one
+		// (the specification C6), in the large log only: it is about Sextile's
+		// working, not the operator's charts.
+		m = m.logTrace("lock", "a second copy cannot be detected on this folder")
 	}
 	return m
 }
@@ -410,11 +487,18 @@ func (m Model) Init() tea.Cmd {
 	if m.cantStart.locked() {
 		return nil
 	}
+	// The ephemeris probe runs before anything casts a chart: the first argv
+	// must already leave out an object whose file is missing, and the host's
+	// default object set it reads is the only answer to what a chart draws.
+	// It is bounded (ephemerisProbeDeadline), and a failed or late one is a
+	// can't-start (cantStart.ephemerisProbe), never a start on a guess. Nothing
+	// else needs to wait for it: the reads below start only after it has
+	// answered, and its message is handled before theirs.
 	// Sequence, not Batch: the probe is a PATH lookup that starts no process,
 	// and running it first is what makes "Astrolog is not installed" the FIRST
 	// line rather than a line that may or may not beat the compute failure it
 	// explains. Everything after it still starts together.
-	return tea.Sequence(probeAstrologCmd(), tea.Batch(m.perimeterCmd(), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
+	return tea.Sequence(probeAstrologCmd(), loadEphemerisCmd(), tea.Batch(m.perimeterCmd(), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
 }
 
 // Update is the program's one entry. The work a minute tick starts is quiet in
@@ -438,37 +522,38 @@ func (m Model) updateSynced(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return next, cmd
 	}
-	// Every key is judged for the hold: a held navigation key keeps Details
-	// faint until it is let go, a tap never greys it (followKeyRun).
-	// A burst is replayed through Update one key at a time, which holds there.
-	if k, isKey := msg.(tea.KeyMsg); isKey && !isBurst(k) {
-		var holdCmd tea.Cmd
-		nm, holdCmd = nm.followKeyRun(k, nm.detailsHold.seq != m.detailsHold.seq)
-		cmd = tea.Batch(cmd, holdCmd)
+	// The reconciler: every pane that shows a computed result is owed the
+	// result for the key it wants now, whatever entry point changed it
+	// (reconcile.go). Before the run of equal keys is judged, because a request
+	// it starts counts as the key having changed what Details describes.
+	// A key that starts a run of equal keys has the reconciler start what it
+	// newly owes at once; a repeat inside the run keeps the debounce.
+	k, isKey := msg.(tea.KeyMsg)
+	nm.keyFirst = isKey && !isBurst(k) && !nm.keyJoinsRun(k)
+	nm, rcmd := nm.reconcile()
+	nm.keyFirst = false
+	// Every key is judged for the run of equal keys (followKeyRun). A burst is
+	// replayed through Update one key at a time, which counts there.
+	if isKey && !isBurst(k) {
+		nm = nm.followKeyRun(k, nm.keyRun.seq != m.keyRun.seq)
 	}
-	// A body template tab follows its inputs after every message: the
-	// cursor row, the active tab, the moment and the lens all move it, and
-	// syncTemplate starts a run only when they changed.
-	nm, tplCmd := nm.syncTemplate()
-	// The timeline tab follows the same way: choosing it, or a change of its
-	// inputs while it is active, is what owes its search
-	// (the specification rule 3). Idempotent per key.
-	nm, timelineCmd := nm.syncTimeline()
-	// A tap's wait ends with its content; a later wait draws faint again.
-	if nm.detailsHold.tapped && !nm.detailsTabWaiting(nm.activeTabID(PanelDetails)) {
-		nm.detailsHold.tapped = false
-	}
-	if tplCmd == nil && timelineCmd == nil {
+	// The idle prefetch comes last: whatever the message owed has been started,
+	// and a run of the operator's own stops a call that is out.
+	nm, pcmd := nm.prefetchAfter(msg, m.startup == startupReady)
+	// The loading overlay's timer goes last, after the work this message
+	// started: the program runs them all at once, but a test's pump waits on a
+	// batch in order and must not stall on the timer before the work.
+	nm, lcmd := nm.syncLoading()
+	switch {
+	case rcmd == nil && pcmd == nil && lcmd == nil:
 		return nm, cmd
 	}
-	return nm, tea.Batch(cmd, tplCmd, timelineCmd)
+	return nm, tea.Batch(cmd, rcmd, pcmd, lcmd)
 }
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	msg = deleteFromKeypadNumericMode(msg)
 	switch msg := msg.(type) {
-	case detailsHoldMsg:
-		return m.releaseDetailsHold(msg), nil
 	case tea.WindowSizeMsg:
 		wasDetailsVisible := m.detailsVisible()
 		m.width, m.height = msg.Width, msg.Height
@@ -479,6 +564,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// scroll its window onto a moving cursor. Widening is where that
 		// gets put right.
 		m = m.clampConsole()
+		m = m.settleLogFocus()
 		m = m.settleBodyTop()
 		if wasDetailsVisible && !nowDetailsVisible {
 			m = m.suspendDetails()
@@ -494,6 +580,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.clampTimelineCursor()
 		}
 		return m, nil
+	case experimentWrittenMsg:
+		return applyExperimentWritten(m, msg), nil
 	case ingest.StartupPerimeterReadMsg:
 		var cmd tea.Cmd
 		m, cmd = applyStartupPerimeter(m, msg)
@@ -502,6 +590,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = applyAstrologProbe(m, msg)
 		return m, cmd
+	case EphemerisProbedMsg:
+		return applyEphemerisProbed(m, msg)
 	case ObjectRegistryLoadedMsg:
 		var cmd tea.Cmd
 		m, cmd = applyObjectRegistryLoaded(m, msg)
@@ -571,6 +661,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onLeaderTimeout(msg)
 	case yankFlashMsg:
 		return m.onYankFlash(msg)
+	case loadingTickMsg:
+		return m.onLoadingTick(msg)
+	case prefetchIdleMsg:
+		return m.onPrefetchIdle(msg)
+	case prefetchDoneMsg:
+		return m.onPrefetchDone(msg)
 	case refreshTickMsg:
 		return m.onRefreshTick(msg)
 	case refreshResultMsg:
@@ -601,6 +697,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // dispatchKey hands one key to whatever has the keyboard.
 func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Any key but the two that make `, n` disarms the reset warning.
+	if m.resetArmed != 0 {
+		starts := !m.leader.pending && m.leaderKey != "" && msg.String() == m.leaderKey
+		ends := m.leader.pending && msg.String() == "n"
+		if !starts && !ends {
+			m.resetArmed = 0
+		}
+	}
+	// A layout that lost the Log panel (a third chart widened the left column)
+	// leaves nothing to hold the keyboard: the focus ends before the key runs.
+	if m.logFocus.active && !m.logOnScreen() {
+		m.logFocus = logFocusState{}
+	}
 	switch m.currentOwner() {
 	case ownerCity:
 		return updateAtlasModalKey(m, msg)
@@ -616,6 +725,8 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return updateZodiacFinderKey(m, msg)
 	case ownerDisplay:
 		return updateHouseDisplayKey(m, msg)
+	case ownerExperiments:
+		return updateExperimentsKey(m, msg)
 	case ownerSessions:
 		return updateSessionsKey(m, msg)
 	case ownerSessionName:
@@ -626,11 +737,15 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return updateTitleFormKey(m, msg)
 	case ownerHelp:
 		return m.updateHelpKey(msg)
+	case ownerActions:
+		return updateActionsKey(m, msg)
 	case ownerConsole:
 		return m.updateConsoleKey(msg)
+	case ownerLog:
+		return m.updateLogKey(msg)
 	case ownerDetails:
 		// The leader works inside Details too, with the main screen's
-		// sequences and one more (detailsLeaderMap): `,y` copies.
+		// sequences.
 		if m.leader.pending {
 			return m.updateLeaderKey(msg)
 		}
@@ -652,139 +767,80 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	return m.dispatchMainBinding(matchBinding(msg, m.available(m.keys.mainBindings())), msg)
+	return m.dispatchMainBinding(keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys))), msg)
 }
 
-// dispatchMainBinding is the main table's one switch: what a binding does once
-// a key has matched it. A real key reaches it through updateMainKey.
-func (m Model) dispatchMainBinding(id BindingID, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// dispatchMainBinding is what a main binding does once a key has matched it. A
+// real key reaches it through updateMainKey. The cases here are the ones that
+// need the key message (the time steps read the letter's case for their
+// direction) or are motion: focus, tabs, rows, paging and scrolling. Every
+// other id is a command and runs through runAction.
+func (m Model) dispatchMainBinding(id keys.BindingID, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if p, ok := panelDigits[id]; ok {
 		return m.pressPanelDigit(p)
 	}
 	switch id {
-	case BindingQuit:
-		return m.quit()
-	case BindingOpenAtlas:
-		// Universal re-open of the atlas modal. Honors [PARITY-HARD]
-		// Ctrl+L. The atlas index is already loaded (loadAtlasCmd fired
-		// at Init); the modal opens with an empty filter buffer. The
-		// IANA preseed (system-derived city) only ever pre-fills on first
-		// cold-start without a stored location — re-opens after that show
-		// an empty buffer so the user types fresh, not against leftover
-		// text from a prior pick.
-		//
-		// The phase it opened from is kept, so Esc puts it back: re-opening
-		// the picker from a running app must not drop the app into its
-		// startup phase (the specification C7, C8).
-		m.atlas.prior = m.startup
-		m.startup = startupAtlasOpen
-		m.atlas.filterText = ""
-		m.atlas.cursor = 0
-		m.atlas.refilter()
-		return m, nil
-	case BindingSaveChart:
-		return m.openSavePrompt()
-	case BindingOpenCharts:
-		// The chart picker sets the NATAL ANCHOR for a transit-over-natal
-		// overlay, so it needs a resolved transit workspace first. Before
-		// location resolution (no slots, or a place without a timezone)
-		// Ctrl+O is a no-op — the user resolves their location via the atlas
-		// (Ctrl+L) first. Without this gate, picking a chart pre-resolution
-		// would dispatch an overlay compute against an empty place (the reviewer
-		// a review).
-		if m.slots == nil || !m.place.HasTimezone() {
-			return m, nil
-		}
-		// Open the picker: capture the current view to restore on Esc, reset
-		// the buffer, bump the picker generation (so a stale load from a
-		// prior open is dropped), and lazily load the library — the modal
-		// shows a loading line until ChartsLoadedMsg lands.
-		m.pickerGen++
-		m.picker = chartPickerState{prior: m.startup}
-		m.startup = startupChartOpen
-		return m, loadChartsCmd(m.pickerGen)
-	case BindingAspects:
-		return openAspectChooser(m)
-	case BindingBodies:
-		return openBodySelector(m)
-	case BindingHouses:
-		return openHouseFinder(m)
-	case BindingZodiac:
-		return openZodiacFinder(m)
-	case BindingHelp:
-		m.helpOpen = true
-		m.help = helpState{}
-		return m, nil
-	case BindingNextView:
+	case keys.BindingNextView:
 		return m.setFocusedPanel(m.nextFocus())
-	case BindingPrevView:
+	case keys.BindingPrevView:
 		return m.setFocusedPanel(m.prevFocus())
-	case BindingAttach:
-		return m.attachDetails()
-	case BindingTabNext:
+	case keys.BindingTabNext:
 		return m.cycleTab(m.focusedView(), +1)
-	case BindingTabPrev:
+	case keys.BindingTabPrev:
 		return m.cycleTab(m.focusedView(), -1)
-	case BindingDetailsTab:
+	case keys.BindingDetailsTab:
 		// `0` is Details' digit, and Details is not in the ring: it cycles
 		// Details' tabs from anywhere and never focuses it (D14, C33, C40).
 		return m.cycleTab(PanelDetails, +1)
-	case BindingSelect:
-		return m.toggleFocusedSelection()
-	case BindingSlotCycleUp:
+	case keys.BindingSlotCycleUp:
 		return m.cycleFocusedRow(-1)
-	case BindingSlotCycleDown:
+	case keys.BindingSlotCycleDown:
 		return m.cycleFocusedRow(+1)
-	case BindingSlotMoveUp:
-		return m.moveFocusedSlot(-1)
-	case BindingSlotMoveDown:
-		return m.moveFocusedSlot(+1)
-	case BindingSlotDelete:
-		return m.removeFocusedSlot()
-	case BindingTimeStepYear:
+	case keys.BindingTimeStepYear:
 		return m.advanceTime(unitYear, stepDirectionFromRune(msg))
-	case BindingTimeStepMonth:
+	case keys.BindingTimeStepMonth:
 		return m.advanceTime(unitMonth, stepDirectionFromRune(msg))
-	case BindingTimeStepWeek:
+	case keys.BindingTimeStepWeek:
 		return m.advanceTime(unitWeek, stepDirectionFromRune(msg))
-	case BindingTimeStepDay:
+	case keys.BindingTimeStepDay:
 		return m.advanceTime(unitDay, stepDirectionFromRune(msg))
-	case BindingTimeStepHour:
+	case keys.BindingTimeStepHour:
 		return m.advanceTime(unitHour, stepDirectionFromRune(msg))
-	case BindingTimeStepMinute:
+	case keys.BindingTimeStepMinute:
 		return m.advanceTime(unitMinute, stepDirectionFromRune(msg))
-	case BindingRenderWheel:
-		return m.dispatchRenderWheel()
-	case BindingJumpNow:
-		return m.jumpFloatingToNow()
-	case BindingToggleBack:
-		return m.toggleFloatingBack()
-	case BindingScrollDown:
+	case keys.BindingScrollDown:
 		return m.scrollDetailsTab(detailsScrollStep), nil
-	case BindingScrollUp:
+	case keys.BindingScrollUp:
 		return m.scrollDetailsTab(-detailsScrollStep), nil
-	case BindingPageDown:
+	case keys.BindingPageDown:
 		if m.mainPages() {
-			return m.pageFocusedList(pageDown)
+			return m.pageFocusedList(menu.PageDown)
 		}
 		return m.scrollDetailsTab(detailsScrollStep), nil
-	case BindingPageUp:
+	case keys.BindingPageUp:
 		if m.mainPages() {
-			return m.pageFocusedList(pageUp)
+			return m.pageFocusedList(menu.PageUp)
 		}
 		return m.scrollDetailsTab(-detailsScrollStep), nil
-	case BindingPageHome:
-		return m.pageFocusedList(pageHome)
-	case BindingPageEnd:
-		return m.pageFocusedList(pageEnd)
+	case keys.BindingPageHome:
+		return m.pageFocusedList(menu.PageHome)
+	case keys.BindingPageEnd:
+		return m.pageFocusedList(menu.PageEnd)
+	case keys.BindingActions:
+		// The door to the commands, not one of them (actions_popup_model.go).
+		return openActions(m)
+	}
+	// Everything else is a command, which runs by its id (actions.go).
+	if tm, cmd, ok := m.runAction(id); ok {
+		return tm, cmd
 	}
 	return m, nil
 }
 
 // pageFocusedList routes a paging key to the list the focused panel owns. Each
-// owner calls pageCursor (cursor_page.go) with its own total and the number of
+// owner calls menu.PageCursor (cursor_page.go) with its own total and the number of
 // cursor rows its render shows, and stores both results.
-func (m Model) pageFocusedList(op pageOp) (Model, tea.Cmd) {
+func (m Model) pageFocusedList(op menu.PageOp) (Model, tea.Cmd) {
 	switch m.focused {
 	case PanelChart:
 		return m.pageChart(op)
@@ -798,7 +854,7 @@ func (m Model) pageFocusedList(op pageOp) (Model, tea.Cmd) {
 // Chart window (chartTop) as the offset. The focused slot follows as it does for
 // an arrow step, so Bodies and Details follow it; chartWindow finds nothing to
 // correct afterwards, because the page op already holds the cursor in the window.
-func (m Model) pageChart(op pageOp) (Model, tea.Cmd) {
+func (m Model) pageChart(op menu.PageOp) (Model, tea.Cmd) {
 	if m.slots == nil {
 		return m, nil
 	}
@@ -806,7 +862,7 @@ func (m Model) pageChart(op pageOp) (Model, tea.Cmd) {
 	if total < 1 {
 		return m, nil
 	}
-	idx, top := pageCursor(m.cursorIdx, m.chartTop, total, m.geometry()[PanelChart].h-2, op)
+	idx, top := menu.PageCursor(m.cursorIdx, m.chartTop, total, m.geometry()[PanelChart].h-2, op)
 	m.chartTop = top
 	if idx == m.cursorIdx {
 		return m, nil
@@ -1014,15 +1070,15 @@ func (m Model) walkCursorTo(idx int) Model {
 }
 
 // walkBodyCursorTo steps the Bodies cursor by the Bodies panel's own Up/Down
-// action (stateOnly) until it is on body's row, the twin of walkCursorTo. A
-// body the rows do not list (hidden by the body selector) moves nothing; a
+// action (stateOnly) until it is on o's row, the twin of walkCursorTo. An
+// object the rows do not list (hidden by the body selector) moves nothing; a
 // step that moves nothing stops the walk. The row is then remembered for the focused slot, so
 // entering Bodies later lands on it.
-func (m Model) walkBodyCursorTo(body aspect.Body) Model {
+func (m Model) walkBodyCursorTo(o aspect.Object) Model {
 	rows := m.shownChart()
 	target := -1
-	for i := 0; i < bodyRowCount(rows.positions, rows.cusps); i++ {
-		if b, ok := bodyAtCursor(rows.positions, rows.cusps, i); ok && b == body {
+	for i := 0; i < panel.BodyRowCount(rows.positions, rows.cusps); i++ {
+		if ro, ok := panel.ObjectAtCursor(rows.positions, rows.cusps, i); ok && ro.Number == o.Number {
 			target = i
 			break
 		}
@@ -1241,7 +1297,11 @@ func (m Model) canMoveSlotDown() bool { return m.canMoveSlot(+1) }
 // whether the cursor compares, against which baseline, and which pair); the
 // wheel and the timeline always follow the new order.
 func (m Model) moveFocusedSlot(delta int) (Model, tea.Cmd) {
-	if !m.canMoveSlot(delta) {
+	id := keys.BindingSlotMoveDown
+	if delta < 0 {
+		id = keys.BindingSlotMoveUp
+	}
+	if m.blocked(id) != "" {
 		return m, nil
 	}
 	before := m.comparisonSig()
@@ -1289,7 +1349,7 @@ func (m Model) moveFocusedSlot(delta int) (Model, tea.Cmd) {
 // the floating slot when it was the last anchored one. No chart file is
 // touched; ⌃o brings the chart back.
 func (m Model) removeFocusedSlot() (Model, tea.Cmd) {
-	if !m.anchoredFocused() {
+	if m.blocked(keys.BindingSlotDelete) != "" {
 		return m, nil
 	}
 	gone := m.focusedSlot()
@@ -1336,18 +1396,16 @@ func (m Model) cycleBodyRow(step int) (Model, tea.Cmd) {
 	if m.bodyCursorIdx == old {
 		return m, nil
 	}
-	var detailsCmd, imgCmd tea.Cmd
-	m, detailsCmd = m.deferDetails()
+	// Details follows the cursor through the reconciler (reconcile.go).
 	// The strongest highlight tier follows the cursor.
-	m, imgCmd = m.refreshWheelIfActive()
-	return m, tea.Batch(detailsCmd, imgCmd)
+	return m.refreshWheelIfActive()
 }
 
 func (m Model) cycleBodyCursor(step int) Model {
 	// The rows the operator sees: while a scene change holds the previous
 	// frame, that frame's rows (the live ones are blank until the commit).
 	rows := m.shownChart()
-	n := bodyRowCount(rows.positions, rows.cusps)
+	n := panel.BodyRowCount(rows.positions, rows.cusps)
 	if n <= 1 {
 		m.bodyCursorIdx = 0
 		return m.settleBodyTop()
@@ -1371,7 +1429,7 @@ func (m Model) moveBodyCursorTo(row int) Model {
 // and the window arithmetic read it, so both see the list the render draws.
 func (m Model) bodiesRows() (planets, under, height int) {
 	rows := m.shownChart()
-	planets, under = bodyRowSplit(rows.positions, rows.cusps)
+	planets, under = panel.BodyRowSplit(rows.positions, rows.cusps)
 	return planets, under, m.geometry()[PanelBodies].h - 2
 }
 
@@ -1380,7 +1438,7 @@ func (m Model) bodiesRows() (planets, under, height int) {
 // holds the cursor is not moved.
 func (m Model) settleBodyTop() Model {
 	planets, under, height := m.bodiesRows()
-	m.bodyTop = bodyWindowStart(planets, under, m.bodyCursorIdx, m.bodyTop, height)
+	m.bodyTop = panel.BodyWindowStart(planets, under, m.bodyCursorIdx, m.bodyTop, height)
 	return m
 }
 
@@ -1399,7 +1457,7 @@ func (m Model) resetBodyTop() Model {
 // puts the cursor on its first or last cursor row, so a page up lands on the top
 // drawn row and a page down on the bottom one at every panel height. Bodies
 // follows as it does for an arrow step: Details defers and an open wheel repaints.
-func (m Model) pageBodies(op pageOp) (Model, tea.Cmd) {
+func (m Model) pageBodies(op menu.PageOp) (Model, tea.Cmd) {
 	planets, under, height := m.bodiesRows()
 	n := planets + under
 	if n < 1 {
@@ -1409,35 +1467,35 @@ func (m Model) pageBodies(op pageOp) (Model, tea.Cmd) {
 	row := min(max(m.bodyCursorIdx, 0), n-1)
 	// The window as it is drawn now, and the cursor rows it shows: the page is
 	// counted on those, with the rule inside the window or not.
-	start := bodyWindowStart(planets, under, row, m.bodyTop, height)
-	first, last := bodyDrawnRows(planets, under, height, start)
+	start := panel.BodyWindowStart(planets, under, row, m.bodyTop, height)
+	first, last := panel.BodyDrawnRows(planets, under, height, start)
 	display := n
-	if bodyRuled(planets, under, height) {
+	if panel.BodyRuled(planets, under, height) {
 		display++
 	}
 	var top int
 	switch op {
-	case pageDown:
+	case menu.PageDown:
 		if row < last {
 			row, top = last, start
 		} else {
 			// The row at the edge stays as the one row of context: it leads the
 			// next window, which is then re-derived as the render will draw it.
-			top = bodyWindowStart(planets, under, last, bodyDisplayRow(planets, under, height, last), height)
-			_, row = bodyDrawnRows(planets, under, height, top)
+			top = panel.BodyWindowStart(planets, under, last, panel.BodyDisplayRow(planets, under, height, last), height)
+			_, row = panel.BodyDrawnRows(planets, under, height, top)
 		}
-	case pageUp:
+	case menu.PageUp:
 		if row > first {
 			row, top = first, start
 		} else {
-			top = bodyWindowStart(planets, under, first, bodyDisplayRow(planets, under, height, first)-height+1, height)
-			row, _ = bodyDrawnRows(planets, under, height, top)
+			top = panel.BodyWindowStart(planets, under, first, panel.BodyDisplayRow(planets, under, height, first)-height+1, height)
+			row, _ = panel.BodyDrawnRows(planets, under, height, top)
 		}
-	case pageHome:
-		top = bodyWindowStart(planets, under, 0, 0, height)
+	case menu.PageHome:
+		top = panel.BodyWindowStart(planets, under, 0, 0, height)
 		row = 0
-	case pageEnd:
-		top = bodyWindowStart(planets, under, n-1, display, height)
+	case menu.PageEnd:
+		top = panel.BodyWindowStart(planets, under, n-1, display, height)
 		row = n - 1
 	}
 	old := m.bodyCursorIdx
@@ -1446,17 +1504,15 @@ func (m Model) pageBodies(op pageOp) (Model, tea.Cmd) {
 	if m.bodyCursorIdx == old {
 		return m, nil
 	}
-	var detailsCmd, imgCmd tea.Cmd
-	m, detailsCmd = m.deferDetails()
-	m, imgCmd = m.refreshWheelIfActive()
-	return m, tea.Batch(detailsCmd, imgCmd)
+	// Details follows the cursor through the reconciler (reconcile.go).
+	return m.refreshWheelIfActive()
 }
 
 // toggleFocusedSelection applies Space according to panel context. Selection
 // mutates store only; crossing the two-selected-slot comparison boundary also
 // refreshes text and an active wheel because the projection changes.
 func (m Model) toggleFocusedSelection() (Model, tea.Cmd) {
-	if m.slots == nil {
+	if m.blocked(keys.BindingSelect) != "" {
 		return m, nil
 	}
 	switch m.focused {
@@ -1477,11 +1533,9 @@ func (m Model) toggleFocusedSelection() (Model, tea.Cmd) {
 		}
 		return m.afterComparisonChange()
 	case PanelBodies:
-		body, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx)
-		if !ok {
-			return m, nil
-		}
-		m.slots.ToggleBodySelection(m.cursorIdx, body)
+		// blocked has answered that a row is under the cursor.
+		obj, _ := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx)
+		m.slots.ToggleObjectSelection(m.cursorIdx, obj)
 		// Selected bodies show only themselves on the chart's own surfaces
 		// (showLens), so a changed selection owes all three a refresh: the
 		// Aspects list (the text surface), the Details report (held until that
@@ -1526,19 +1580,23 @@ func (m Model) focusedChart() store.AnchorChart {
 }
 
 // wheelHighlight derives the wheel image's highlight state from the
-// focused slot alone: its selected bodies, plus the Bodies cursor body as the
+// focused slot alone: its marked objects, plus the Bodies cursor object as the
 // strongest tier — but only while the Bodies panel is focused, so an idle
-// cursor does not keep one body lit. bodyAtCursor's ok gate makes an
-// out-of-range cursor mean "no focused body" rather than a stale highlight.
+// cursor does not keep one object lit. ObjectAtCursor's ok gate makes an
+// out-of-range cursor (or a plain frame cusp) mean "no focused object" rather
+// than a stale highlight; a row with no glyph (Fortune, a fixed star) lights like
+// any other.
 func (m Model) wheelHighlight() lookup.WheelHighlight {
 	var hl lookup.WheelHighlight
 	if m.slots == nil {
 		return hl
 	}
-	hl.Selected = m.slots.SelectedBodies(m.cursorIdx)
+	for _, o := range m.slots.SelectedObjects(m.cursorIdx) {
+		hl.Selected = append(hl.Selected, o.Number)
+	}
 	if m.focused == PanelBodies {
-		if b, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx); ok {
-			hl.Focused = b
+		if o, ok := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx); ok {
+			hl.Focused = o
 		}
 	}
 	return hl
@@ -1564,7 +1622,7 @@ func (m Model) focusedSlot() *store.Slot {
 // Sets previewActive so subsequent focused-chart changes auto-refresh. No-op
 // before a slot exists (cold-start).
 func (m Model) dispatchRenderWheel() (Model, tea.Cmd) {
-	if m.focusedSlot() == nil {
+	if m.blocked(keys.BindingRenderWheel) != "" {
 		return m, nil
 	}
 	// A second Ctrl+X on a wheel that is being served closes it. "Being
@@ -1581,7 +1639,7 @@ func (m Model) dispatchRenderWheel() (Model, tea.Cmd) {
 	// Ctrl+X is the one gesture that may open a viewer, including after the
 	// operator closed the last one; a follow refresh never asks.
 	m.wheelOpenSeq++
-	requestViewerOpen()
+	m.rows[surfaceImage].spawn.wheel.requestOpen()
 	return m.requestImageNow()
 }
 
@@ -1592,7 +1650,7 @@ func (m Model) closeWheel() (Model, tea.Cmd) {
 	// Close drops the server and the chart bytes before it stops the listener,
 	// so an error here (the listener failing to close) leaves nothing running
 	// to report and nothing the operator could do; the line below is true.
-	_ = closeWheelServer()
+	_ = m.rows[surfaceImage].spawn.wheel.closeServer()
 	m.previewActive = false
 	m.wheelURL = ""
 	m.wheelPublishPending = nil
@@ -1648,7 +1706,7 @@ func (m Model) focusedIsFloating() bool {
 // now, stashing the prior target so `N` can toggle back. It acts from any
 // cursor position (D37).
 func (m Model) jumpFloatingToNow() (Model, tea.Cmd) {
-	if m.slots == nil {
+	if m.blocked(keys.BindingJumpNow) != "" {
 		return m, nil
 	}
 	m.details.pressedSet = false
@@ -1665,10 +1723,7 @@ func (m Model) jumpFloatingToNow() (Model, tea.Cmd) {
 // stashed previous target, a one-level back-and-forth toggle. A silent
 // no-op when there is no stash yet; from any cursor position like `n` (D37).
 func (m Model) toggleFloatingBack() (Model, tea.Cmd) {
-	if m.slots == nil {
-		return m, nil
-	}
-	if m.previousFloatingTime.IsZero() {
+	if m.blocked(keys.BindingToggleBack) != "" {
 		return m, nil
 	}
 	m.details.pressedSet = false
@@ -1678,33 +1733,50 @@ func (m Model) toggleFloatingBack() (Model, tea.Cmd) {
 	return m.noteWant(surfaceText, true)
 }
 
+// helpBindings is the Keys popup's table. It has nothing to type into, so j
+// and k move as they do on the main screen, q closes it as Esc does, and ?
+// closes it as it opened it.
+func helpBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true},
+		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
+		{ID: keys.BindingScrollUp, Binding: key.NewBinding(key.WithKeys("pgup")), Title: "Page list", HelpKey: "⇞/⇟", BarKey: "⇞⇟", Bar: true},
+		{ID: keys.BindingScrollDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
+		// The text has no filter box, so g and G are Home and End here.
+		{ID: keys.BindingPageHome, Title: "First row", Binding: key.NewBinding(key.WithKeys("home", "g")), BarKey: "home/g"},
+		{ID: keys.BindingPageEnd, Title: "Last row", Binding: key.NewBinding(key.WithKeys("end", "G")), BarKey: "end/G"},
+		{ID: keys.BindingHelp, Binding: key.NewBinding(key.WithKeys("?")), BarKey: "?"},
+		closeOnEscOrQ("Close"),
+	})
+}
+
 // updateHelpKey handles a key while help is open: ↑/↓ walk the bindings
 // (the specification C5b), and ? or Esc close it. The list
 // stops at its ends.
 func (m Model) updateHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	step := 0
-	switch matchBinding(msg, helpBindings()) {
-	case BindingClose, BindingHelp:
+	switch keys.MatchBinding(msg, helpBindings()) {
+	case keys.BindingClose, keys.BindingHelp:
 		m.helpOpen = false
 		return m, nil
-	case BindingListUp:
+	case keys.BindingListUp:
 		step = -1
-	case BindingListDown:
+	case keys.BindingListDown:
 		step = 1
-	case BindingScrollUp:
-		step = -helpListHeight(m.height)
-	case BindingScrollDown:
-		step = helpListHeight(m.height)
-	case BindingPageHome:
-		m.help.offset = 0
+	case keys.BindingScrollUp:
+		step = -keys.HelpListHeight(m.height)
+	case keys.BindingScrollDown:
+		step = keys.HelpListHeight(m.height)
+	case keys.BindingPageHome:
+		m.help.Offset = 0
 		return m, nil
-	case BindingPageEnd:
-		m.help.offset = helpScroll(0, len(m.helpLines()), len(m.helpLines()), helpListHeight(m.height))
+	case keys.BindingPageEnd:
+		m.help.Offset = keys.HelpScroll(0, len(m.helpLines()), len(m.helpLines()), keys.HelpListHeight(m.height))
 		return m, nil
 	default:
 		return m, nil
 	}
-	m.help.offset = helpScroll(m.help.offset, step, len(m.helpLines()), helpListHeight(m.height))
+	m.help.Offset = keys.HelpScroll(m.help.Offset, step, len(m.helpLines()), keys.HelpListHeight(m.height))
 	return m, nil
 }
 
@@ -1714,8 +1786,9 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	// The console covers the panel the wheel would otherwise scroll, and
 	// Details is not rendered underneath it. Pointing at a panel nobody can
-	// see must not move it.
-	if m.console.open {
+	// see must not move it. The focused Log owns the keyboard the same way: a
+	// click behind it would move focus the operator has handed over.
+	if m.console.open || m.logFocus.active {
 		return m, nil
 	}
 	if msg.Action != tea.MouseActionPress {
@@ -1762,10 +1835,10 @@ func (m Model) wheelScroll(panel PanelID, delta int) Model {
 // in Aspects cycles the tabs). Dispatch reads only this table and
 // TestPanelDigitAgainStepsItsTabs walks it, so a panel that gains tabs gains
 // the gesture with no per-panel code.
-var panelDigits = map[BindingID]PanelID{
-	BindingFocusChart:   PanelChart,
-	BindingFocusBodies:  PanelBodies,
-	BindingFocusAspects: PanelAspects,
+var panelDigits = map[keys.BindingID]PanelID{
+	keys.BindingFocusChart:   PanelChart,
+	keys.BindingFocusBodies:  PanelBodies,
+	keys.BindingFocusAspects: PanelAspects,
 }
 
 // pressPanelDigit is every panel digit: focus the panel, or, when it already
@@ -1784,23 +1857,14 @@ func (m Model) setFocusedPanel(panel PanelID) (Model, tea.Cmd) {
 	}
 	crossesBodies := panel == PanelBodies || m.focused == PanelBodies
 	m.focused = panel
-	var detailsCmd tea.Cmd
-	m, detailsCmd = m.deferDetails()
-	if panel == PanelChart {
-		// The timeline is the Chart's tab: coming to the Chart is when its
-		// searches are first owed (the specification).
-		var timelineCmd tea.Cmd
-		m, timelineCmd = m.syncTimeline()
-		detailsCmd = tea.Batch(detailsCmd, timelineCmd)
-	}
+	// Details and the Chart's Timeline follow the focus through the reconciler
+	// (reconcile.go): the new subject's report, and the Timeline's first search.
 	if !crossesBodies {
-		return m, detailsCmd
+		return m, nil
 	}
 	// Entering Bodies lights the cursor body's strongest tier; leaving drops
 	// it — either way the wheel must repaint.
-	var imgCmd tea.Cmd
-	m, imgCmd = m.refreshWheelIfActive()
-	return m, tea.Batch(detailsCmd, imgCmd)
+	return m.refreshWheelIfActive()
 }
 
 // logLane is which of the three lanes a log line was written on. The lane
@@ -1815,6 +1879,7 @@ func (m Model) setFocusedPanel(panel PanelID) (Model, tea.Cmd) {
 //	warning | no        | yes     | no
 //	wheel   | yes       | yes     | no     (two lanes: open, closed)
 //	now     | no        | yes     | no     (at most one line, replaced in place)
+//	trace   | no        | yes     | yes, with argv at MaxLogLines
 type logLane uint8
 
 const (
@@ -1836,7 +1901,7 @@ const (
 	laneWarning
 	// laneWheelOpen is the one line that says where the wheel is served,
 	// written by logWheelOpen when the first publish of a session lands. It is
-	// not an error and not a note: it has its own colour (wheelOpenColour) and
+	// not an error and not a note: it has its own colour (WheelOpenColour) and
 	// its own words, so it takes neither the error form nor the `scope:` form.
 	laneWheelOpen
 	// laneWheelClosed is the one line that says the wheel was closed by a
@@ -1849,12 +1914,27 @@ const (
 	// replaced in place by setNowLine. Its text is the full command, which is
 	// what Enter copies; the console shows it behind `now: ` (live_tick.go).
 	laneNow
+	// laneTrace is what Sextile says about its own working, for the large log
+	// only. The Log panel speaks about the operator's charts and requests: a
+	// request that did not happen, a screen that shows other than what was
+	// asked, data that changed. A workaround that works, Sextile's housekeeping
+	// (how it was launched, the one-time copy of old state files, where a chart's
+	// house system came from, a template's branch trace), and an internal check
+	// that failed when nobody asked for anything, are written here. A line is
+	// not in the Log panel, sets no unseen-error mark and shows no notice; it
+	// is in the console in arrival order, drawn as stored, and the
+	// MaxLogLines cap drops it with the argv lines. Written only by logTrace.
+	laneTrace
 )
 
 // logLine is one entry of the Model's log buffer: its lane and its text.
 type logLine struct {
 	lane logLane
 	text string
+	// failed marks an argv or now line whose Astrolog call ended in an error:
+	// the large log draws a red `!` before it. It is drawn, never stored in
+	// text, so Enter and `,y` copy the plain command.
+	failed bool
 }
 
 // logNote appends a note: `scope: what happened`, the form every note
@@ -1869,6 +1949,12 @@ type logLine struct {
 // a key that had nothing to act on.
 func (m Model) logNote(scope, format string, args ...any) Model {
 	return m.appendLog(laneNote, scope+": "+closeLine(oneLine(fmt.Sprintf(format, args...)), ""))
+}
+
+// logTrace appends a console-only line, `scope: what happened`, formed as
+// logNote forms it. See laneTrace for what belongs here.
+func (m Model) logTrace(scope, format string, args ...any) Model {
+	return m.appendLog(laneTrace, scope+": "+closeLine(oneLine(fmt.Sprintf(format, args...)), ""))
 }
 
 // logWheelOpen appends the line that names where the wheel is served. url is
@@ -1954,11 +2040,25 @@ func (m Model) logWarnings(err error) Model {
 // MaxLogLines cap evicts. Call it at a commit gate and nowhere else: a
 // command belongs in the buffer only once the frame it produced has painted
 // .
-func (m Model) logCommands(commands []string) Model {
-	for _, c := range commands {
-		m = m.appendLog(laneArgv, c)
+//
+// failed lists the indexes of the commands whose call ended in an error; each
+// of those lines is marked (logLine.failed).
+func (m Model) logCommands(commands []string, failed ...int) Model {
+	for i, c := range commands {
+		m = m.appendLogLine(logLine{lane: laneArgv, text: c, failed: slices.Contains(failed, i)})
 	}
 	return m
+}
+
+// failedLast is the failed list for a result that carries commands in spawn
+// order and ended in err: the last command is the call that failed, because
+// the failing call ends the run. No error, or no command (Astrolog could not
+// start), marks nothing.
+func failedLast(err error, commands []string) []int {
+	if err == nil || len(commands) == 0 {
+		return nil
+	}
+	return []int{len(commands) - 1}
 }
 
 // appendLog is the one place a line enters the buffer. An open console is
@@ -1966,8 +2066,14 @@ func (m Model) logCommands(commands []string) Model {
 // took when it opened, so nothing here has to keep a cursor aligned, but a now
 // line replaces the snapshot's own in place (nowInSnapshot), so the tick shows.
 func (m Model) appendLog(lane logLane, text string) Model {
+	return m.appendLogLine(logLine{lane: lane, text: text})
+}
+
+// appendLogLine is appendLog for a line that carries more than its text.
+func (m Model) appendLogLine(line logLine) Model {
+	lane := line.lane
 	if lane == laneNow {
-		m = m.nowInSnapshot(text)
+		m = m.nowInSnapshot(line)
 		// The now line is one line, and it lives at the bottom: a later write
 		// takes the old one out and appends the new. The buffer is copied, not
 		// edited, because earlier Model values share it.
@@ -1979,25 +2085,25 @@ func (m Model) appendLog(lane logLane, text string) Model {
 		}
 		m.logLines = lines
 	}
-	m.logLines = append(m.logLines, logLine{lane: lane, text: text})
+	m.logLines = append(m.logLines, line)
 	if lane == laneError {
 		m.errorUnseen = true
 		m.errorKeptView = false
 	}
-	if lane == laneArgv {
-		m.logLines = trimArgv(m.logLines)
+	if lane == laneArgv || lane == laneTrace {
+		m.logLines = trimConsoleOnly(m.logLines)
 	}
 	return m
 }
 
-// trimArgv drops the oldest argv lines until at most MaxLogLines remain,
-// leaving every error and note line in place. It returns a
+// trimConsoleOnly drops the oldest argv and trace lines until at most
+// MaxLogLines of the two remain, leaving every error and note line in place. It returns a
 // fresh slice when it drops anything, so no caller's copy of the buffer is
 // edited underneath it.
-func trimArgv(lines []logLine) []logLine {
+func trimConsoleOnly(lines []logLine) []logLine {
 	excess := -MaxLogLines
 	for _, l := range lines {
-		if l.lane == laneArgv {
+		if l.lane == laneArgv || l.lane == laneTrace {
 			excess++
 		}
 	}
@@ -2006,7 +2112,7 @@ func trimArgv(lines []logLine) []logLine {
 	}
 	out := make([]logLine, 0, len(lines)-excess)
 	for _, l := range lines {
-		if l.lane == laneArgv && excess > 0 {
+		if (l.lane == laneArgv || l.lane == laneTrace) && excess > 0 {
 			excess--
 			continue
 		}
@@ -2021,7 +2127,7 @@ func trimArgv(lines []logLine) []logLine {
 func (m Model) logPanelLines() []string {
 	out := make([]string, 0, len(m.logLines))
 	for _, l := range m.logLines {
-		if l.lane != laneArgv && l.lane != laneWarning && l.lane != laneNow {
+		if l.lane != laneArgv && l.lane != laneWarning && l.lane != laneNow && l.lane != laneTrace {
 			out = append(out, l.text)
 		}
 	}
@@ -2034,7 +2140,7 @@ func (m Model) logPanelRows() []string {
 	out := make([]string, 0, len(m.logLines))
 	for _, l := range m.logLines {
 		switch l.lane {
-		case laneArgv, laneWarning, laneNow:
+		case laneArgv, laneWarning, laneNow, laneTrace:
 		default:
 			out = append(out, renderLaneLine(l, 0, m.cfg))
 		}
@@ -2078,22 +2184,22 @@ func (m Model) consoleLines() []logLine {
 // nowInSnapshot puts a tick's command into an open console: the snapshot's now
 // line, last by construction, takes the new text, and the cursor and window stay
 // where they were. A console opened before any tick gains the line at its end.
-func (m Model) nowInSnapshot(text string) Model {
+func (m Model) nowInSnapshot(line logLine) Model {
 	if !m.console.open {
 		return m
 	}
 	snap := slices.Clone(m.console.snapshot)
 	if n := len(snap); n > 0 && snap[n-1].lane == laneNow {
-		snap[n-1].text = text
+		snap[n-1] = line
 	} else {
-		snap = append(snap, logLine{lane: laneNow, text: text})
+		snap = append(snap, line)
 	}
 	m.console.snapshot = snap
 	return m
 }
 
 func (m Model) modalOpen() bool {
-	return m.helpOpen || m.startupShowsModal()
+	return m.helpOpen || m.actionsOpen || m.startupShowsModal()
 }
 
 // startupShowsModal reports whether `startup` is currently naming an open modal
@@ -2101,7 +2207,7 @@ func (m Model) modalOpen() bool {
 // transitions startup has to ask which job it is doing.
 func (m Model) startupShowsModal() bool {
 	switch m.startup {
-	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupDisplayOpen, startupSessionsOpen, startupSessionNameOpen, startupSaveOpen, startupTitleOpen:
+	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupDisplayOpen, startupExperimentsOpen, startupSessionsOpen, startupSessionNameOpen, startupSaveOpen, startupTitleOpen:
 		return true
 	}
 	return false
@@ -2109,7 +2215,7 @@ func (m Model) startupShowsModal() bool {
 
 // View is the frame, finished: every glyph a terminal may draw wide has a space
 // of its own style after it (glyph_room.go).
-func (m Model) View() string { return paintGlyphRoom(m.viewFrame()) }
+func (m Model) View() string { return term.PaintGlyphRoom(m.viewFrame()) }
 
 func (m Model) viewFrame() string {
 	if m.width == 0 || m.height == 0 {
@@ -2122,54 +2228,61 @@ func (m Model) viewFrame() string {
 	if m.modalOpen() {
 		visualFocus = PanelNone
 	}
-	composed := compose(m.width, m.height, m.panels, visualFocus, m.modalOpen(), m.keyBarEntries(), m.cfg, m.logPanelRows(), m.paintedChart(), m.detailsFrame(), m.slots, m.cursorIdx, m.bodyCursorIdx, m.chartTop, m.clock.Now(), m.place, m.lens, m.rowTag, m.floatingTitle(), m.tabStrips(), m.console, m.footerIndicator(), m.bodiesView())
+	composed := compose(m.width, m.height, m.panels, visualFocus, m.modalOpen(), m.keysContext(), m.cfg, m.logPanelRows(), m.paintedChart(), m.detailsFrame(), m.slots, m.cursorIdx, m.bodyCursorIdx, m.chartTop, m.clock.Now(), m.place, m.lens, m.rowTag, m.floatingTitle(), m.tabStrips(), m.console, m.bodiesView(), m.logFocusView())
 	if m.helpOpen {
-		modal := renderHelpModal(m.helpLines(), m.cfg, m.help, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		modal := keys.RenderHelp(m.keysContextFor(ownerHelp), popupChrome(m.cfg), m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
+	}
+	if m.currentOwner() == ownerActions {
+		return term.Centered(composed, renderActions(m.actions, m.blocked, m.cfg, m.width, m.height), m.width, m.height)
 	}
 	if m.startup == startupAtlasOpen {
 		modal := renderAtlasModal(m.atlas, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupChartOpen {
 		picker := m.picker
 		picker.now = m.clock.Now()
 		modal := renderChartModal(picker, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupSaveOpen {
 		modal := renderSaveModal(m.save, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupTitleOpen {
 		modal := renderTitleForm(m.title, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupBodyOpen {
 		modal := renderBodyModal(m.bodyModal, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupHouseOpen {
 		modal := renderHouseFinder(m.houseFinder, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupZodiacOpen {
 		modal := renderZodiacFinder(m.zodiacFinder, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupDisplayOpen {
 		modal := renderHouseDisplay(m.houseDisplayPopup, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
+	}
+	if m.startup == startupExperimentsOpen {
+		modal := renderExperiments(m.experimentsPopup, m.cfg, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupAspectOpen {
 		modal := renderAspectModal(m.aspectModal, m.cfg, m.width, m.height)
-		return placeCentered(composed, modal, m.width, m.height)
+		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupSessionsOpen {
-		return placeCentered(composed, renderSessions(m, m.width, m.height), m.width, m.height)
+		return term.Centered(composed, renderSessions(m, m.width, m.height), m.width, m.height)
 	}
 	if m.startup == startupSessionNameOpen {
-		return placeCentered(composed, renderSessionName(m, m.width, m.height), m.width, m.height)
+		return term.Centered(composed, renderSessionName(m, m.width, m.height), m.width, m.height)
 	}
 	return composed
 }

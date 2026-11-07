@@ -28,6 +28,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -98,37 +99,35 @@ func natalLabel(a store.AnchorChart) string { return fmt.Sprintf("n%d", a.When.Y
 func stubHouseLookups(t *testing.T) *houseSpy {
 	t.Helper()
 	spy := &houseSpy{}
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
+			label := natalLabel(c)
+			spy.record(label, lens.Houses)
+			return lookup.Result{
+				Positions:  []aspect.Position{{Object: objSun, Longitude: float64(c.When.Year() % 360)}},
+				Cusps:      aspect.Cusps{100 + float64(lens.Houses)},
+				HousesUsed: spy.usedFor(label, lens.Houses),
+				Commands:   []string{fmt.Sprintf("astrolog natal %s -c %d", label, int(lens.Houses))},
+			}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+			spy.record("now", lens.Houses)
+			return lookup.Result{
+				Positions:  []aspect.Position{{Object: objSun, Longitude: float64(when.Year()%360) + 0.5}},
+				Cusps:      aspect.Cusps{200 + float64(lens.Houses)},
+				HousesUsed: spy.usedFor("now", lens.Houses),
+				Commands:   []string{fmt.Sprintf("astrolog transit -c %d", int(lens.Houses))},
+			}, nil
+		}
+		s.cast.overlay = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			spy.record("cross", lens.Houses)
+			return lookup.OverlayAspects{Report: "transit cross"}, nil
+		}
+		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			spy.record("synastry", lens.Houses)
+			return lookup.OverlayAspects{Report: "synastry cross"}, nil
+		}
 	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
-		label := natalLabel(c)
-		spy.record(label, lens.Houses)
-		return lookup.Result{
-			Positions:  []aspect.Position{{Body: aspect.Sun, Longitude: float64(c.When.Year() % 360)}},
-			Cusps:      aspect.Cusps{100 + float64(lens.Houses)},
-			HousesUsed: spy.usedFor(label, lens.Houses),
-			Commands:   []string{fmt.Sprintf("astrolog natal %s -c %d", label, int(lens.Houses))},
-		}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
-		spy.record("now", lens.Houses)
-		return lookup.Result{
-			Positions:  []aspect.Position{{Body: aspect.Sun, Longitude: float64(when.Year()%360) + 0.5}},
-			Cusps:      aspect.Cusps{200 + float64(lens.Houses)},
-			HousesUsed: spy.usedFor("now", lens.Houses),
-			Commands:   []string{fmt.Sprintf("astrolog transit -c %d", int(lens.Houses))},
-		}, nil
-	}
-	overlayCrossAspects = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		spy.record("cross", lens.Houses)
-		return lookup.OverlayAspects{Report: "transit cross"}, nil
-	}
-	synastryCrossAspects = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		spy.record("synastry", lens.Houses)
-		return lookup.OverlayAspects{Report: "synastry cross"}, nil
-	}
 	return spy
 }
 
@@ -393,14 +392,14 @@ func TestOverlayCuspsComeFromExecutedBaselineCast(t *testing.T) {
 	// Every body the cast itself printed a house for lands in that house when
 	// placed through the overlay's cusps: Astrolog's printed houses, not a Go
 	// computation, are what the overlay is held to.
-	ov := houseOverlay{cusps: m.chart.natalCusps, positions: m.chart.natalPositions}
+	ov := panel.HouseOverlay{Cusps: m.chart.natalCusps, Positions: m.chart.natalPositions}
 	checked := 0
 	for _, p := range direct.Positions {
 		if !p.House.Valid() {
 			continue
 		}
-		if _, live := ov.houses(p); live != p.House {
-			t.Errorf("%v: overlay house %d, Astrolog printed %d", p.Body, live, p.House)
+		if _, live := ov.Houses(p); live != p.House {
+			t.Errorf("%v: overlay house %d, Astrolog printed %d", p.Object.Name, live, p.House)
 		}
 		checked++
 	}
@@ -655,14 +654,14 @@ func TestUnselectedHouseDoesNotLeakIntoComparison(t *testing.T) {
 	spy := stubHouseLookups(t)
 	var raw []recipe.HouseSystem
 	var mu sync.Mutex
-	old := computeRawReport
-	computeRawReport = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
-		mu.Lock()
-		raw = append(raw, lens.Houses)
-		mu.Unlock()
-		return "report", "astrolog report", nil
-	}
-	t.Cleanup(func() { computeRawReport = old })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
+			mu.Lock()
+			raw = append(raw, lens.Houses)
+			mu.Unlock()
+			return "report", "astrolog report", nil
+		}
+	})
 
 	m := selectedSet(t, 3, true, 2)
 	m.slots.SetSlotSelected(2, false)
@@ -716,15 +715,15 @@ func TestWheelChangesWithFocusedHouseSystem(t *testing.T) {
 	stubHouseLookups(t)
 	var mu sync.Mutex
 	var drawn []recipe.HouseSystem
-	oldS, oldShow := renderWheelImage, showWheel
-	t.Cleanup(func() { renderWheelImage, showWheel = oldS, oldShow })
-	renderWheelImage = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		mu.Lock()
-		drawn = append(drawn, lens.Houses)
-		mu.Unlock()
-		return []byte("wheel"), nil
-	}
-	showWheel = func([]byte) (string, error) { return "/tmp/stub.png", nil }
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			mu.Lock()
+			drawn = append(drawn, lens.Houses)
+			mu.Unlock()
+			return []byte("wheel"), nil
+		}
+		s.wheel.show = func([]byte) (string, error) { return "/tmp/stub.png", nil }
+	})
 
 	m := listModel(t, 2, 0)
 	for i := 0; i < 3; i++ {
@@ -823,7 +822,7 @@ func TestRecordsOfDeletedChartsArePruned(t *testing.T) {
 	rec := func(name string) store.FrameRecord {
 		return store.FrameRecord{File: name, When: frameWhenUI, Houses: recipe.Koch, HasHouses: true, From: store.FrameFromChosen}
 	}
-	build := func() Model {
+	build := func(t *testing.T) Model {
 		m := listModel(t, 1, 0)
 		m.frames.records = []store.FrameRecord{rec("gone.as"), rec("present.as"), rec("listed.as")}
 		return m
@@ -836,19 +835,19 @@ func TestRecordsOfDeletedChartsArePruned(t *testing.T) {
 		return out
 	}
 	t.Run("after a listing that lists a chart, only a vanished file's record goes", func(t *testing.T) {
-		m := build()
+		m := build(t)
 		m, _ = applyChartsLoaded(m, ChartsLoadedMsg{Charts: []store.NamedChart{{ID: "listed", Name: "Listed One"}}, Gen: m.pickerGen})
 		if got := files(m); strings.Join(got, ",") != "present.as,listed.as" {
 			t.Errorf("records = %v, want gone.as dropped and the present-but-dropped file kept", got)
 		}
 	})
 	t.Run("no listing yet: nothing is dropped", func(t *testing.T) {
-		if got := files(build()); len(got) != 3 {
+		if got := files(build(t)); len(got) != 3 {
 			t.Errorf("records = %v", got)
 		}
 	})
 	t.Run("a failed or empty listing drops nothing", func(t *testing.T) {
-		m := build()
+		m := build(t)
 		m, _ = applyChartsLoaded(m, ChartsLoadedMsg{Err: os.ErrPermission, Gen: m.pickerGen})
 		m, _ = applyChartsLoaded(m, ChartsLoadedMsg{Gen: m.pickerGen})
 		if got := files(m); len(got) != 3 {
@@ -856,7 +855,7 @@ func TestRecordsOfDeletedChartsArePruned(t *testing.T) {
 		}
 	})
 	t.Run("the pruned set is what the session write carries", func(t *testing.T) {
-		m := build()
+		m := build(t)
 		m, _ = applyChartsLoaded(m, ChartsLoadedMsg{Charts: []store.NamedChart{{ID: "listed"}}, Gen: m.pickerGen})
 		if err := m.writeSessionNow(); err != nil {
 			t.Fatal(err)
@@ -935,9 +934,9 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 		dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 		stubHouseLookups(t)
 		m := openedPicker(t)
-		for i, c := range m.picker.matches {
+		for i, c := range m.picker.Matches {
 			if c.Source.File == "K.as" {
-				m.picker.cursor = i
+				m.picker.Cursor = i
 			}
 		}
 		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -969,9 +968,9 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 		titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 		m := openedPicker(t)
 		m.frames.records = []store.FrameRecord{{File: "K.as", When: frameWhenUI, Houses: recipe.Equal, HasHouses: true, From: store.FrameFromChosen}}
-		for i, c := range m.picker.matches {
+		for i, c := range m.picker.Matches {
 			if c.Source.File == "K.as" {
-				m.picker.cursor = i
+				m.picker.Cursor = i
 			}
 		}
 		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -994,9 +993,9 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 			t.Fatal(err)
 		}
 		m := openedPicker(t)
-		for i, c := range m.picker.matches {
+		for i, c := range m.picker.Matches {
 			if c.Source.File == "K.as" {
-				m.picker.cursor = i
+				m.picker.Cursor = i
 			}
 		}
 		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -1007,7 +1006,7 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 			t.Errorf("the chart file was rewritten although its houses could not be saved:\n%s", got)
 		}
 		noBackup(t, filepath.Join(dir, "K.as"))
-		if m.title.refusal == "" {
+		if m.title.Refusal == "" {
 			t.Error("the form does not say why the rename was refused")
 		}
 		if logHas(m, "house system") == 0 {
@@ -1035,9 +1034,9 @@ func TestFailedRenameDoesNotFreezeFileHouseSystem(t *testing.T) {
 	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 	stubHouseLookups(t)
 	m := openedPicker(t)
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -1050,7 +1049,7 @@ func TestFailedRenameDoesNotFreezeFileHouseSystem(t *testing.T) {
 	}
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = finishRename(t, m, cmd)
-	if m.title.refusal == "" {
+	if m.title.Refusal == "" {
 		t.Fatal("fixture: the rename was not refused")
 	}
 	if _, ok := m.frames.find("K.as", false); ok {
@@ -1078,9 +1077,9 @@ func TestAbandonedRenameKeepsHouseRecordConsistent(t *testing.T) {
 		sessionSandbox(t)
 		dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 		m := openedPicker(t)
-		for i, c := range m.picker.matches {
+		for i, c := range m.picker.Matches {
 			if c.Source.File == "K.as" {
-				m.picker.cursor = i
+				m.picker.Cursor = i
 			}
 		}
 		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -1142,9 +1141,9 @@ func TestUnopenedChartRenamePreservesFileHouseSystem(t *testing.T) {
 	if m.slots.AnchoredCount() != 0 {
 		t.Fatal("fixture: a slot holds a chart")
 	}
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -1187,7 +1186,7 @@ func TestRestoredChartFirstCastUsesFileSystem(t *testing.T) {
 	}
 	spy := stubHouseLookups(t)
 
-	var m tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var m tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	m, _ = m.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP, row.Place})})
 	msg := readPerimeterCmd(false)()
 	p, ok := msg.(ingest.StartupPerimeterReadMsg)
@@ -1266,7 +1265,7 @@ func finishRename(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 	t.Helper()
 	for i := 0; i < 3 && cmd != nil; i++ {
 		m, cmd = runCmd(t, m, cmd)
-		if !m.title.saving {
+		if !m.title.Saving {
 			break
 		}
 	}
@@ -1294,11 +1293,10 @@ func restoredK(t *testing.T, read func(context.Context, string) (lookup.PickedCh
 	}
 	spy := stubHouseLookups(t)
 	old := readChartFile
-	t.Cleanup(func() { readChartFile = old })
 	if read != nil {
 		readChartFile = read
 	}
-	var m tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var m tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	m, _ = m.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP, row.Place})})
 	p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))
 	readChartFile = old
@@ -1354,9 +1352,9 @@ func TestStaleRecordStillReadsTheFile(t *testing.T) {
 	stale := store.FrameRecord{File: "K.as", When: frameWhenUI.Add(-24 * time.Hour), Houses: recipe.Equal, HasHouses: true, From: store.FrameFromChosen}
 	m := openedPicker(t)
 	m.frames.records = []store.FrameRecord{stale}
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	// First cast: the stale record is rejected and the file's Koch applies.
@@ -1381,17 +1379,17 @@ func TestQuitDuringRenameKeepsThePreservationRecord(t *testing.T) {
 	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 	before := fileText(t, filepath.Join(dir, "K.as"))
 	m := openedPicker(t)
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
 	m = typeText(t, m, "Client Kay")
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m, rewrite := runCmd(t, m, cmd) // the read lands; the rewrite is issued, not run
-	if rewrite == nil || !m.title.saving {
-		t.Fatalf("no rewrite was issued (saving %v)", m.title.saving)
+	if rewrite == nil || !m.title.Saving {
+		t.Fatalf("no rewrite was issued (saving %v)", m.title.Saving)
 	}
 	if got := fileText(t, filepath.Join(dir, "K.as")); got != before {
 		t.Fatalf("the chart file was rewritten before the record was in the session:\n%s", got)
@@ -1477,9 +1475,9 @@ func TestRenameRereadsAReplacedFile(t *testing.T) {
 			}
 			sum := sha256.Sum256([]byte(replacement))
 			m.picker.seen = map[string]string{"K.as": hex.EncodeToString(sum[:])}
-			for i, c := range m.picker.matches {
+			for i, c := range m.picker.Matches {
 				if c.Source.File == "K.as" {
-					m.picker.cursor = i
+					m.picker.Cursor = i
 				}
 			}
 			if titled {

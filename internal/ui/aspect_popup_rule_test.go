@@ -2,6 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"strings"
 	"testing"
 
@@ -52,7 +55,7 @@ func TestAspectPopupRuleSitsBetweenGroupsAndList(t *testing.T) {
 	for _, mode := range aspectRuleModes {
 		for _, size := range []struct{ w, h int }{{80, 24}, {132, 40}} {
 			t.Run(fmt.Sprintf("%s-%dx%d", mode.name, size.w, size.h), func(t *testing.T) {
-				st := openAspectModal(bigRegistry(40), recipe.AspectPolicy{})
+				st := popup.OpenAspects(bigRegistry(40), recipe.AspectPolicy{})
 				lines := aspectFrameLines(renderAspectModal(st, mode.cfg, size.w, size.h))
 				all := allRowIndex(t, lines)
 				// The search separator above the families is a '-' rule in
@@ -68,7 +71,7 @@ func TestAspectPopupRuleSitsBetweenGroupsAndList(t *testing.T) {
 				}
 
 				// Scrolling the list never moves the rule.
-				listH := aspectListHeight(size.h)
+				listH := popup.AspectListHeight(size.h)
 				for i := 0; i < 25; i++ {
 					st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, listH)
 				}
@@ -81,9 +84,9 @@ func TestAspectPopupRuleSitsBetweenGroupsAndList(t *testing.T) {
 				}
 
 				// A filter that leaves no aspects keeps the rule above the empty list.
-				st.filterText = "zzz"
-				st.refilter()
-				st.cursor = clampCursor(st.cursor, st.totalRows())
+				st.FilterText = "zzz"
+				st.Refilter()
+				st.Cursor = menu.ClampCursor(st.Cursor, st.TotalRows())
 				empty := aspectFrameLines(renderAspectModal(st, mode.cfg, size.w, size.h))
 				e := allRowIndex(t, empty)
 				if ruleRun(empty[e+1], mode.glyph) == "" || !strings.Contains(empty[e+2], "(no matching aspects)") {
@@ -101,11 +104,11 @@ func TestAspectPopupRuleIsNotARow(t *testing.T) {
 	cfg := Config{Accessible: true, Color: ColorNever}
 	for _, size := range []struct{ w, h int }{{80, 24}, {132, 40}} {
 		t.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(t *testing.T) {
-			st := openAspectModal(bigRegistry(40), recipe.AspectPolicy{})
-			if got, want := st.totalRows(), familyRows()+40; got != want {
+			st := popup.OpenAspects(bigRegistry(40), recipe.AspectPolicy{})
+			if got, want := st.TotalRows(), popup.FamilyRows()+40; got != want {
 				t.Fatalf("totalRows = %d, want %d: the rule must not be a row", got, want)
 			}
-			if got, want := aspectListHeight(size.h), modalListHeight(size.h)-familyRows()-1; got != want {
+			if got, want := popup.AspectListHeight(size.h), dialog.ListHeight(size.h)-popup.FamilyRows()-1; got != want {
 				t.Fatalf("aspectListHeight = %d, want %d", got, want)
 			}
 			lines := aspectFrameLines(renderAspectModal(st, cfg, size.w, size.h))
@@ -115,27 +118,27 @@ func TestAspectPopupRuleIsNotARow(t *testing.T) {
 					visible++
 				}
 			}
-			if want := aspectListHeight(size.h); visible != want {
+			if want := popup.AspectListHeight(size.h); visible != want {
 				t.Errorf("%d aspect rows visible, want %d (list loses one row to the rule)", visible, want)
 			}
 
-			listH := aspectListHeight(size.h)
-			total := st.totalRows()
+			listH := popup.AspectListHeight(size.h)
+			total := st.TotalRows()
 			for step := 1; step < total; step++ {
 				st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, listH)
-				if st.cursor != step {
-					t.Fatalf("down %d put the cursor on %d: it skipped or stopped at the rule", step, st.cursor)
+				if st.Cursor != step {
+					t.Fatalf("down %d put the cursor on %d: it skipped or stopped at the rule", step, st.Cursor)
 				}
 				frame := renderAspectModal(st, cfg, size.w, size.h)
 				if got := countCursors(frame); got != 1 {
-					t.Fatalf("cursor %d: %d cursor markers on screen, want 1", st.cursor, got)
+					t.Fatalf("cursor %d: %d cursor markers on screen, want 1", st.Cursor, got)
 				}
 				if !strings.Contains(plain(frame), "Search:") {
-					t.Fatalf("search line missing at cursor %d", st.cursor)
+					t.Fatalf("search line missing at cursor %d", st.Cursor)
 				}
-				want := fmt.Sprintf("%d of %d", st.cursor+1, total)
+				want := fmt.Sprintf("%d of %d", st.Cursor+1, total)
 				if !strings.Contains(plain(frame), want) {
-					t.Fatalf("cursor %d: frame lacks %q", st.cursor, want)
+					t.Fatalf("cursor %d: frame lacks %q", st.Cursor, want)
 				}
 			}
 		})

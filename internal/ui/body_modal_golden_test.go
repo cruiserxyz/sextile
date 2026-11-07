@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
@@ -21,25 +22,25 @@ import (
 // is once the stars begin.
 func tasteObjectRegistry() []aspect.RegistryObject {
 	return []aspect.RegistryObject{
-		{Number: 0, Name: "Earth"},
-		{Number: 1, Name: "Sun"},
-		{Number: 2, Name: "Moon"},
-		{Number: 3, Name: "Mercury"},
-		{Number: 11, Name: "Chiron"},
-		{Number: 12, Name: "Ceres"},
-		{Number: 16, Name: "North Node"},
-		{Number: 84, Name: "Sirius", Star: true},
-		{Number: 131, Name: "Zeta Retic.", Star: true},
+		{Object: aspect.Object{Number: 0, Name: "Earth"}},
+		{Object: aspect.Object{Number: 1, Name: "Sun"}},
+		{Object: aspect.Object{Number: 2, Name: "Moon"}},
+		{Object: aspect.Object{Number: 3, Name: "Mercury"}},
+		{Object: aspect.Object{Number: 11, Name: "Chiron"}},
+		{Object: aspect.Object{Number: 12, Name: "Ceres"}},
+		{Object: aspect.Object{Number: 16, Name: "North Node"}},
+		{Object: aspect.Object{Number: 84, Name: "Sirius"}, Star: true},
+		{Object: aspect.Object{Number: 131, Name: "Zeta Retic."}, Star: true},
 	}
 }
 
-func tasteBodyState(filter string, selection []int) bodyModalState {
-	st := openBodyModal(tasteObjectRegistry(), recipe.ObjectPolicy{
+func tasteBodyState(filter string, selection []int) popup.Body {
+	st := popup.Open(tasteObjectRegistry(), recipe.ObjectPolicy{
 		Baseline: recipe.Explicit, Selection: selection,
 	}, nil)
 	if filter != "" {
-		st.appendRunes([]rune(filter))
-		st.refilter()
+		st.AppendRunes([]rune(filter))
+		st.Refilter()
 	}
 	return st
 }
@@ -52,7 +53,7 @@ func TestBodyModalGolden(t *testing.T) {
 
 	cases := []struct {
 		name  string
-		state bodyModalState
+		state popup.Body
 		sizes [][2]int
 	}{
 		// V1 — the list at rest. The visible difference from the aspect

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // orderChart is one staged chart of the ring-order test: its moment, the argv
@@ -64,12 +63,12 @@ func TestMultiWheelFirstCastChartIsTheInnerRing(t *testing.T) {
 		if err != nil {
 			t.Fatalf("chart %s: Run: %v", charts[i].name, err)
 		}
-		charts[i].sunLong = findPosition(t, out.Positions, aspect.Sun).Longitude
+		charts[i].sunLong = findPosition(t, out.Positions, objSun).Longitude
 		if charts[i].sunLong < charts[i].lo || charts[i].sunLong >= charts[i].hi {
 			t.Fatalf("fixture: chart %s Sun at %.3f, want [%v,%v)", charts[i].name, charts[i].sunLong, charts[i].lo, charts[i].hi)
 		}
 		if i == 0 {
-			asc = findPosition(t, out.Positions, aspect.Ascendant).Longitude
+			asc = findPosition(t, out.Positions, objAscendant).Longitude
 			// Measured 2026-10-13: with whole-sign houses the wheel puts the
 			// START of the Ascendant's sign, house 1's cusp, at 180 degrees
 			// (Ascendant 14Tau43 drew 14.7 degrees past it), so the reference

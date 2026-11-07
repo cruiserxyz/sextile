@@ -11,6 +11,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/ingest"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // startedFromPrefs is a fresh Model that has read the profile's preferences the
@@ -21,7 +22,7 @@ func startedFromPrefs(t *testing.T) Model {
 	if !ok {
 		t.Fatal("fixture: the perimeter read returned another message")
 	}
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	m.width, m.height = 132, 40
 	tm, _ := m.Update(msg)
 	return tm.(Model)
@@ -70,7 +71,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 		if err := os.WriteFile(path, []byte(before), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		m.houseDisplay = houseMarked
+		m.houseDisplay = panel.HouseMarked
 
 		m, cmd := press(t, m, ",", "c", "d")
 		if cmd == nil {
@@ -114,7 +115,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 
 		// A restart reads it back.
 		restarted := startedFromPrefs(t)
-		if restarted.houseDisplay != houseMarked {
+		if restarted.houseDisplay != panel.HouseMarked {
 			t.Errorf("after a restart the form is %v, want marked", restarted.houseDisplay)
 		}
 		if n := noteCount(restarted, "house_display"); n != 0 {
@@ -132,7 +133,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 		if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		m.houseDisplay = houseNumber
+		m.houseDisplay = panel.HouseNumber
 		m, cmd := press(t, m, ",", "c", "d")
 		m = deliver(m, cmd)
 		got, err := os.ReadFile(path)
@@ -158,7 +159,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 			t.Fatal(err)
 		}
 		m := startedFromPrefs(t)
-		if m.houseDisplay != houseAngularity {
+		if m.houseDisplay != panel.HouseAngularity {
 			t.Errorf("a version 99 file set the form to %v", m.houseDisplay)
 		}
 	})
@@ -201,7 +202,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 			t.Fatal(err)
 		}
 		m := startedFromPrefs(t)
-		if m.houseDisplay != houseAngularity {
+		if m.houseDisplay != panel.HouseAngularity {
 			t.Errorf("an unknown word left the form at %v, want angularity", m.houseDisplay)
 		}
 		if n := noteCount(m, `house_display "spiral" ignored`); n != 1 {
@@ -217,14 +218,14 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 	t.Run("a key that is absent says nothing", func(t *testing.T) {
 		sessionSandbox(t)
 		m := startedFromPrefs(t)
-		if m.houseDisplay != houseAngularity || noteCount(m, "house_display") != 0 {
+		if m.houseDisplay != panel.HouseAngularity || noteCount(m, "house_display") != 0 {
 			t.Errorf("no key: form %v, %d notes", m.houseDisplay, noteCount(m, "house_display"))
 		}
 	})
 
 	t.Run("a house display that could not be written is said, the city still is", func(t *testing.T) {
 		m, _ := guessedStart(t)
-		m, _ = applyDefaultCitySaved(m, DefaultCitySavedMsg{Place: amsterdamNL, House: houseNumber, HouseErr: errors.New("disk full\nsecond line")})
+		m, _ = applyDefaultCitySaved(m, DefaultCitySavedMsg{Place: amsterdamNL, House: panel.HouseNumber, HouseErr: errors.New("disk full\nsecond line")})
 		if want := "default house display not saved: disk full"; lastLine(m).text != want || lastLine(m).lane != laneError {
 			t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 		}

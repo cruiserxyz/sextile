@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -32,6 +33,7 @@ func TestTextKeyCoversTheShownSet(t *testing.T) {
 	// pair ② are unchanged; only the shown order differs, and the text frame
 	// must be computed again. Driven through the real key and the returned
 	// command tree.
+	freshModels(t)
 	calls := stubPairCompute(t)
 	m = selectedSet(t, 3, false, 1)
 	m.focused = PanelChart
@@ -152,7 +154,7 @@ func TestNoComparisonToggleKey(t *testing.T) {
 	}
 
 	// Not in the bar, the Keys popup or help: no binding spells it.
-	for _, e := range defaultKeys().mainBindings() {
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		for _, k := range e.Binding.Keys() {
 			if k == "t" {
 				t.Errorf("binding %v still answers `t`", e.ID)
@@ -163,21 +165,85 @@ func TestNoComparisonToggleKey(t *testing.T) {
 		}
 	}
 	for _, l := range m.helpLines() {
-		if strings.Contains(l.text, "Comparison pair") {
-			t.Errorf("help still lists %q", l.text)
+		if strings.Contains(l.Text, "Comparison pair") {
+			t.Errorf("help still lists %q", l.Text)
 		}
 	}
 
 	// The handler and the second rule are gone from the source.
-	for _, name := range []string{"model.go", "keys.go"} {
+	for _, hit := range sourcesMentioning(bannedKeySources(), []string{"comparisonActive", "toggleComparisonSelection", "BindingToggleOverlay"}) {
+		t.Error(hit)
+	}
+}
+
+// bannedKeySources is the source the banned strings are looked for in:
+// model.go, keys.go, every file that now holds an owner's key table and every
+// file of the keys package.
+func bannedKeySources() []string {
+	return append(append([]string{"model.go", "keys.go"}, keysPackageFiles()...), ownerTableFiles()...)
+}
+
+// keysPackageFiles are the keys package's own source files.
+func keysPackageFiles() []string {
+	matches, err := filepath.Glob("keys/*.go")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, f := range matches {
+		if !strings.HasSuffix(f, "_test.go") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// sourcesMentioning reports each file in names that holds one of banned.
+func sourcesMentioning(names, banned []string) []string {
+	var out []string
+	for _, name := range names {
 		src, err := os.ReadFile(name)
 		if err != nil {
-			t.Fatal(err)
+			out = append(out, name+": "+err.Error())
+			continue
 		}
-		for _, banned := range []string{"comparisonActive", "toggleComparisonSelection", "BindingToggleOverlay"} {
-			if strings.Contains(string(src), banned) {
-				t.Errorf("%s still mentions %s", name, banned)
+		for _, b := range banned {
+			if strings.Contains(string(src), b) {
+				out = append(out, name+" still mentions "+b)
 			}
+		}
+	}
+	return out
+}
+
+// TestBannedStringScanFollowsTheTables is the control for the scan above: a
+// file the scan reads must be reported when it holds a banned string, and the
+// scan must read every file that holds an owner's table.
+func TestBannedStringScanFollowsTheTables(t *testing.T) {
+	planted := filepath.Join(t.TempDir(), "planted.go")
+	if err := os.WriteFile(planted, []byte("package ui\nvar _ = comparisonActive\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := sourcesMentioning([]string{planted}, []string{"comparisonActive"})
+	if len(got) != 1 || !strings.Contains(got[0], "planted.go still mentions comparisonActive") {
+		t.Errorf("a planted banned string was reported as %v", got)
+	}
+	scanned := map[string]bool{}
+	for _, f := range bannedKeySources() {
+		scanned[f] = true
+	}
+	for _, f := range ownerTableFiles() {
+		if !scanned[f] {
+			t.Errorf("the banned-string scan does not read %s, which holds an owner table", f)
+		}
+	}
+	files := keysPackageFiles()
+	if len(files) == 0 {
+		t.Error("the banned-string scan found no keys package file to read")
+	}
+	for _, f := range files {
+		if !scanned[f] {
+			t.Errorf("the banned-string scan does not read %s, which is in the keys package", f)
 		}
 	}
 }

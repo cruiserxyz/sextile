@@ -3,8 +3,6 @@ package recipe
 import (
 	"reflect"
 	"testing"
-
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // objects_only_test.go covers ObjectPolicy.Only, the narrowing that makes a
@@ -12,54 +10,41 @@ import (
 // internal/astrolog (TestOnlyIntersectsTheBodyList); here is the policy's own
 // meaning.
 
-// TestObjectPolicy_OnlyNarrowsVisible: what the chart draws is the resolved set
-// intersected with Only, never a union with it.
-func TestObjectPolicy_OnlyNarrowsVisible(t *testing.T) {
-	p := ObjectPolicy{
-		Baseline: AstrologDefault,
-		Add:      NewBodySet(aspect.Chiron),
-		Remove:   NewBodySet(aspect.Moon),
-		Only:     NewBodySet(aspect.Sun, aspect.Moon, aspect.Chiron, aspect.Lilith),
+// TestOnlySetHoldsAnyObject: Only is object numbers, so an object with no glyph
+// (Fortune 19, a fixed star, a cusp point) is a member like the Sun, in
+// ascending order; a negative number is no object and the policy refuses it.
+func TestOnlySetHoldsAnyObject(t *testing.T) {
+	set := NewObjectSet(60, 19, 1, 23, 19)
+	if got, want := set.Members(), []int{1, 19, 23, 60}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Members = %v, want %v", got, want)
 	}
-	// Moon was removed and Lilith was never added: neither comes back.
-	want := []aspect.Body{aspect.Sun, aspect.Chiron}
-	if got := p.Visible().Members(); !reflect.DeepEqual(got, want) {
-		t.Errorf("Visible with Only = %v, want %v", got, want)
+	if !set.Has(19) || set.Has(2) {
+		t.Error("Has is wrong for Fortune or the Moon")
 	}
-
-	p.Only = nil
-	if got := p.Visible(); len(got) != 13 { // the 13 default bodies, minus Moon, plus Chiron
-		t.Errorf("Visible without Only has %d bodies, want 13: %v", len(got), got.Members())
+	for _, base := range []VisibilityProfile{AstrologDefault, Explicit} {
+		if _, err := NewChartSpec(MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0}, WholeSign, Tropical,
+			ObjectPolicy{Baseline: base, Selection: selectionFor(base), Only: set}); err != nil {
+			t.Errorf("baseline %d: Only with Fortune and a star was refused: %v", int(base), err)
+		}
+		if _, err := NewChartSpec(MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0}, WholeSign, Tropical,
+			ObjectPolicy{Baseline: base, Selection: selectionFor(base), Only: NewObjectSet(-1)}); err == nil {
+			t.Errorf("baseline %d: a negative object number in Only validated", int(base))
+		}
 	}
 }
 
-// TestObjectPolicy_OnlyMustNameKnownBodies: a body that has no Astrolog number
-// would silently narrow to nothing, so the policy refuses it before a compile.
-func TestObjectPolicy_OnlyMustNameKnownBodies(t *testing.T) {
-	for _, base := range []VisibilityProfile{AstrologDefault, Explicit} {
-		_, err := NewChartSpec(
-			MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0},
-			WholeSign, Tropical,
-			ObjectPolicy{Baseline: base, Only: BodySet{aspect.BodyUnknown: true}},
-		)
-		if err == nil {
-			t.Errorf("baseline %d: an unknown body in Only validated", int(base))
-		}
+func selectionFor(base VisibilityProfile) []int {
+	if base == Explicit {
+		return []int{1, 19}
 	}
-	if _, err := NewChartSpec(
-		MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0},
-		WholeSign, Tropical,
-		ObjectPolicy{Baseline: Explicit, Selection: []int{1}, Only: NewBodySet(aspect.Sun)},
-	); err != nil {
-		t.Errorf("Only is valid beside a selection: %v", err)
-	}
+	return nil
 }
 
 // TestObjectPolicy_OnlyObjectDropsOnly: the probe's single-object policy keeps
 // nothing of the policy it came from, Only included, so no narrowing can reach
 // the chooser's ephemeris probe.
 func TestObjectPolicy_OnlyObjectDropsOnly(t *testing.T) {
-	p := ObjectPolicy{Baseline: AstrologDefault, TrueNodeMode: true, Only: NewBodySet(aspect.Sun)}
+	p := ObjectPolicy{Baseline: AstrologDefault, TrueNodeMode: true, Only: NewObjectSet(1)}
 	got := p.OnlyObject(11)
 	if len(got.Only) != 0 || got.Baseline != Explicit || !reflect.DeepEqual(got.Selected(), []int{11}) || !got.TrueNodeMode {
 		t.Errorf("OnlyObject = %+v, want Explicit [11] with the node mode and no Only", got)

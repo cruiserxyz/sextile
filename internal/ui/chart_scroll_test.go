@@ -51,7 +51,7 @@ func TestChartPickerScrollsWithCursor(t *testing.T) {
 				}
 				check := func(step string) {
 					t.Helper()
-					want := m.picker.matches[m.picker.cursor].Name
+					want := m.picker.Matches[m.picker.Cursor].Name
 					out := ansi.Strip(renderChartModal(m.picker, Config{Accessible: true}, m.width, m.height))
 					var marked []string
 					for _, line := range strings.Split(out, "\n") {

@@ -16,7 +16,7 @@ import (
 // no-op. The handler must not panic on nil m.slots and must not dispatch
 // a recompute that would have no input.
 func TestAdvanceTime_NoOpWhenNoSlots(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 
 	_, cmd := m.advanceTime(unitDay, +1)
 	if cmd != nil {
@@ -56,7 +56,7 @@ func TestAdvanceTime_UnitsAndDirections(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+			m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 			slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 			if err != nil {
 				t.Fatalf("NewSlots: %v", err)
@@ -103,7 +103,7 @@ func TestAdvanceTime_UnitsAndDirections(t *testing.T) {
 // presses arrived (instant first frame), with NO chained follow-up —
 // the pending debounce tick computes the settled final target.
 func TestAdvanceTime_LeadingThenCoalesce(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -205,7 +205,7 @@ func TestStepDirectionFromRune(t *testing.T) {
 // passed to compute follows slots.Floating().Time, not m.clock.Now().
 func TestTransitTimeFromWorkspace_FollowsSteppedSlot(t *testing.T) {
 	clockNow := testFrozenTimeUTC()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(clockNow))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(clockNow))
 	slots, err := store.NewSlots(clockNow, testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -239,7 +239,7 @@ func TestTransitTimeFromWorkspace_FollowsSteppedSlot(t *testing.T) {
 // press) — no debounce lag, no skipped frames. The coordinator only
 // coalesces when presses outpace compute.
 func TestAdvanceTime_SlowSteppingCommitsEveryStep(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -248,7 +248,7 @@ func TestAdvanceTime_SlowSteppingCommitsEveryStep(t *testing.T) {
 	m.place = testPlaceBerlin()
 	m.targetFloatingTime = slots.Floating().Time
 
-	positions := []aspect.Position{{Body: aspect.Sun, Longitude: 100}}
+	positions := []aspect.Position{{Object: objSun, Longitude: 100}}
 	for i := uint64(1); i <= 2; i++ {
 		// Press: leading edge starts run i (the surface is idle again).
 		var cmd tea.Cmd
@@ -281,7 +281,7 @@ func TestAdvanceTime_SlowSteppingCommitsEveryStep(t *testing.T) {
 // the old out-of-order-Seq failure mode reduces to this one gate: there
 // is never more than one live run to race.
 func TestTextResult_SupersededRunDropped(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	slots, _ := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 	m.slots = slots
 	m.place = testPlaceBerlin()
@@ -296,7 +296,7 @@ func TestTextResult_SupersededRunDropped(t *testing.T) {
 	// Run 1's late result — superseded RunID — must not paint.
 	var tm tea.Model = m
 	tm, cmd := tm.Update(FirstFrameReadyMsg{
-		Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 999}},
+		Positions: []aspect.Position{{Object: objSun, Longitude: 999}},
 		RunID:     1, WantID: 1,
 	})
 	m = tm.(Model)
@@ -318,7 +318,7 @@ func TestTextResult_SupersededRunDropped(t *testing.T) {
 // computed AT the stepped target.
 func TestApplyAtlasPicked_RePick_PreservesSteppedFloatingTime(t *testing.T) {
 	clockNow := testFrozenTimeUTC()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(clockNow))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(clockNow))
 	{
 		updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		m = updated.(Model)
@@ -367,7 +367,7 @@ func TestApplyAtlasPicked_RePick_PreservesSteppedFloatingTime(t *testing.T) {
 // the held-key target gets discarded by the re-pick.
 func TestApplyAtlasPicked_RePick_PreservesUncommittedTarget(t *testing.T) {
 	clockNow := testFrozenTimeUTC()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(clockNow))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(clockNow))
 	{
 		updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		m = updated.(Model)
@@ -419,7 +419,7 @@ func TestApplyAtlasPicked_RePick_PreservesUncommittedTarget(t *testing.T) {
 // explicit want-axis fence, exercised here with a hand-built result that
 // passes the runID gate).
 func TestTextResult_IdentityFloorDropsQueuedResult(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -440,7 +440,7 @@ func TestTextResult_IdentityFloorDropsQueuedResult(t *testing.T) {
 	// (a) The first identity's real result: superseded RunID → dropped.
 	var tm tea.Model = m
 	tm, _ = tm.Update(FirstFrameReadyMsg{RunID: 1, WantID: 1,
-		Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 999}}})
+		Positions: []aspect.Position{{Object: objSun, Longitude: 999}}})
 	m = tm.(Model)
 	if len(m.chart.positions) != 0 {
 		t.Errorf("(a) superseded-run result painted: %v", m.chart.positions)
@@ -450,7 +450,7 @@ func TestTextResult_IdentityFloorDropsQueuedResult(t *testing.T) {
 	// but whose want predates the identity floor must still drop.
 	tm = m
 	tm, _ = tm.Update(FirstFrameReadyMsg{RunID: m.refresh[surfaceText].runningRunID, WantID: 1,
-		Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 999}}})
+		Positions: []aspect.Position{{Object: objSun, Longitude: 999}}})
 	m = tm.(Model)
 	if len(m.chart.positions) != 0 {
 		t.Errorf("(b) below-floor result painted: %v", m.chart.positions)
@@ -476,7 +476,7 @@ func testPlaceTokyo() location.PlaceInfo {
 // rather than a zero time.
 func TestTransitTimeFromWorkspace_NilSlotsFallsBackToClock(t *testing.T) {
 	clockNow := testFrozenTimeUTC()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(clockNow))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(clockNow))
 	// m.slots stays nil.
 
 	got := transitTimeFromWorkspace(m)
@@ -490,7 +490,7 @@ func TestTransitTimeFromWorkspace_NilSlotsFallsBackToClock(t *testing.T) {
 // Update handler. Smoke test for the binding wiring; the deeper unit
 // coverage is above.
 func TestTimeStepKeyBinding_DispatchesAdvanceTime(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 	{
 		updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		m = updated.(Model)

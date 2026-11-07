@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"regexp"
 	"strings"
@@ -47,40 +49,45 @@ type keyOwnerCase struct {
 func keyOwnerCases() []keyOwnerCase {
 	return []keyOwnerCase{
 		{"main", ownerMain, "", func(t *testing.T, m Model) Model { return m }},
-		{"city", ownerCity, popupTitleCity, func(t *testing.T, m Model) Model {
+		{"city", ownerCity, dialog.TitleCity, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, keysPlaces(), escKey(tea.KeyCtrlL))
 			return m
 		}},
-		{"open chart", ownerOpenChart, popupTitleOpenChart, func(t *testing.T, m Model) Model {
+		{"open chart", ownerOpenChart, dialog.TitleOpenChart, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlO))
 			m, _ = escSend(t, m, ChartsLoadedMsg{Charts: listRowsCharts(), Gen: m.pickerGen})
 			return m
 		}},
-		{"chart title", ownerChartTitle, popupTitleChartTitle, func(t *testing.T, m Model) Model {
+		{"chart title", ownerChartTitle, dialog.TitleChartTitle, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlO))
 			m, _ = escSend(t, m, ChartsLoadedMsg{Charts: listRowsCharts(), Gen: m.pickerGen}, ChartPickedMsg{Chart: keysUntitled()})
 			return m
 		}},
-		{"save chart", ownerSaveChart, popupTitleSaveChart, func(t *testing.T, m Model) Model {
+		{"save chart", ownerSaveChart, dialog.TitleSaveChart, func(t *testing.T, m Model) Model {
 			m.focused = PanelChart
 			m.cursorIdx = len(m.slots.All()) - 1
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlS))
 			return m
 		}},
-		{"bodies", ownerBodies, popupTitleBodies, func(t *testing.T, m Model) Model {
+		{"bodies", ownerBodies, dialog.TitleBodies, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlB))
 			return m
 		}},
-		{"aspects", ownerAspects, popupTitleAspects, func(t *testing.T, m Model) Model {
+		{"aspects", ownerAspects, dialog.TitleAspects, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlA))
 			return m
 		}},
-		{"help", ownerHelp, popupTitleKeys, func(t *testing.T, m Model) Model {
+		{"help", ownerHelp, dialog.TitleKeys, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escRunes("?"))
 			return m
 		}},
 		{"console", ownerConsole, "", func(t *testing.T, m Model) Model {
 			m = m.logCommands([]string{"astrolog -one", "astrolog -two", "astrolog -three"})
+			m, _ = escSend(t, m, escRunes(","), escRunes("l"), escRunes("l"))
+			return m
+		}},
+		{"log", ownerLog, "", func(t *testing.T, m Model) Model {
+			m = m.logNote("test", "one").logNote("test", "two").logNote("test", "three")
 			m, _ = escSend(t, m, escRunes(","), escRunes("l"))
 			return m
 		}},
@@ -90,6 +97,10 @@ func keyOwnerCases() []keyOwnerCase {
 		}},
 		{"house display", ownerDisplay, popupTitleDisplay, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escRunes(","), escRunes("a"))
+			return m
+		}},
+		{"actions", ownerActions, dialog.TitleActions, func(t *testing.T, m Model) Model {
+			m, _ = escSend(t, m, escKey(tea.KeyCtrlP))
 			return m
 		}},
 	}
@@ -117,16 +128,16 @@ func lastRow(view string) string {
 
 // barPairs is a bar's text split into its pairs.
 func barPairs(row string) []string {
-	return strings.Split(strings.TrimPrefix(row, " "), keyBarSep)
+	return strings.Split(strings.TrimPrefix(row, " "), keys.BarSep)
 }
 
 // checkBarShape is C3 and C4 read off the bar: every pair is one of the
 // owner's bar entries, in table order, every pinned entry is there, and if
 // anything is missing it is a run of unpinned entries from the end, with one
 // `…` where they were.
-func checkBarShape(t *testing.T, where string, row string, entries []BindingEntry, width int) {
+func checkBarShape(t *testing.T, where string, row string, entries []keys.BindingEntry, width int) {
 	t.Helper()
-	var bar []BindingEntry
+	var bar []keys.BindingEntry
 	for _, e := range entries {
 		if e.Bar {
 			bar = append(bar, e)
@@ -143,9 +154,9 @@ func checkBarShape(t *testing.T, where string, row string, entries []BindingEntr
 			}
 			continue
 		}
-		for i < len(bar) && bar[i].Action+": "+bar[i].BarKey != p {
+		for i < len(bar) && bar[i].Word+": "+bar[i].BarKey != p {
 			if bar[i].Pinned || more == 0 {
-				t.Fatalf("%s: the bar %q skips %q", where, row, bar[i].Action+": "+bar[i].BarKey)
+				t.Fatalf("%s: the bar %q skips %q", where, row, bar[i].Word+": "+bar[i].BarKey)
 			}
 			i++
 		}
@@ -156,7 +167,7 @@ func checkBarShape(t *testing.T, where string, row string, entries []BindingEntr
 	}
 	for ; i < len(bar); i++ {
 		if bar[i].Pinned || more == 0 {
-			t.Fatalf("%s: the bar %q is missing %q", where, row, bar[i].Action+": "+bar[i].BarKey)
+			t.Fatalf("%s: the bar %q is missing %q", where, row, bar[i].Word+": "+bar[i].BarKey)
 		}
 	}
 	if more > 1 {
@@ -171,13 +182,13 @@ func checkBarShape(t *testing.T, where string, row string, entries []BindingEntr
 		}
 		var dropped []string
 		for _, e := range bar {
-			if p := e.Action + ": " + e.BarKey; !shown[p] {
+			if p := e.Word + ": " + e.BarKey; !shown[p] {
 				dropped = append(dropped, p)
 			}
 		}
 		// Putting the first one back: in place of the `…` if it was the only
 		// one left out, beside it otherwise.
-		back := ansi.StringWidth(row) + len(keyBarSep) + ansi.StringWidth(dropped[0])
+		back := ansi.StringWidth(row) + len(keys.BarSep) + ansi.StringWidth(dropped[0])
 		if len(dropped) == 1 {
 			back = ansi.StringWidth(row) - ansi.StringWidth("…") + ansi.StringWidth(dropped[0])
 		}
@@ -202,8 +213,8 @@ func fullBarModel(t *testing.T) Model {
 func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 	for _, c := range keyOwnerCases() {
 		for _, size := range [][2]int{{80, 24}, {144, 40}} {
-			if c.owner == ownerDetails && size[0] < 144 {
-				continue // Details exists only in the dual column
+			if (c.owner == ownerDetails || c.owner == ownerLog) && size[0] < 144 {
+				continue // Details and the focused Log exist only in the dual column
 			}
 			t.Run(fmt.Sprintf("%s/%dx%d", c.name, size[0], size[1]), func(t *testing.T) {
 				m := reachOwner(t, c, Config{Accessible: true}, size[0], size[1])
@@ -244,15 +255,16 @@ func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 
 	// C4: narrow bars keep the pinned entries and show where pairs went.
 	t.Run("narrow", func(t *testing.T) {
-		main := fullBarModel(t).available(defaultKeys().mainBindings())
-		row := strings.TrimRight(ansi.Strip(renderKeyBar(60, main, Config{}, "")), " ")
+		fm := fullBarModel(t)
+		main := fm.withWords(ownerMain, fm.available(ownerMain, mainBindings(keys.DefaultKeys())))
+		row := strings.TrimRight(ansi.Strip(fm.barText(ownerMain, mainBindings(keys.DefaultKeys()), 60, Config{}, "")), " ")
 		if !strings.HasSuffix(row, " | … | Help: ? | Quit: q") {
 			t.Errorf("the 60-column main bar is %q, want it to end `… | Help: ? | Quit: q`", row)
 		}
 		checkBarShape(t, "main at 60", row, main, 60)
 		for _, c := range keyOwnerCases()[1:] {
 			entries := escBase(t).ownerBindings(c.owner)
-			row := strings.TrimRight(ansi.Strip(renderKeyBar(24, entries, Config{}, "")), " ")
+			row := strings.TrimRight(ansi.Strip(escBase(t).barText(c.owner, entries, 24, Config{}, "")), " ")
 			if !strings.Contains(row, "esc") {
 				t.Errorf("%s at 24 columns dropped its Esc entry: %q", c.name, row)
 			}
@@ -330,8 +342,8 @@ func TestPopupsCarryNoHints(t *testing.T) {
 	var pairs []string
 	for _, c := range keyOwnerCases() {
 		for _, e := range escBase(t).ownerBindings(c.owner) {
-			if e.Action != "" {
-				pairs = append(pairs, strings.ToLower(e.Action+": "+e.BarKey), strings.ToLower(e.BarKey+": "+e.Action))
+			if e.Title != "" {
+				pairs = append(pairs, strings.ToLower(e.Title+": "+e.BarKey), strings.ToLower(e.BarKey+": "+e.Title))
 			}
 		}
 	}
@@ -367,12 +379,12 @@ func TestPopupsCarryNoHints(t *testing.T) {
 		ownerChartTitle: {
 			{"rest", nil, nil},
 			{"typed", typed("Anna"), nil},
-			{"saving", typed("Anna"), func(m Model) Model { m.title.saving = true; return m }},
+			{"saving", typed("Anna"), func(m Model) Model { m.title.Saving = true; return m }},
 		},
 		ownerSaveChart: {
 			{"rest", nil, nil},
 			{"typed", typed("x"), nil},
-			{"saving", typed("x"), func(m Model) Model { m.save.saving = true; return m }},
+			{"saving", typed("x"), func(m Model) Model { m.save.Saving = true; return m }},
 		},
 		ownerBodies: {
 			{"rest", nil, nil},
@@ -461,7 +473,7 @@ func TestKeyMessagesUseTheTable(t *testing.T) {
 		m := reachOwner(t, keyOwnerCases()[3], Config{Color: ColorNever}, 144, 40)
 		m, _ = escSend(t, m, escRunes("Anna"), escKey(tea.KeyTab))
 		m.title.chart.PlaceLabel = ""
-		m.title.form.fields[1].value = ""
+		m.title.Fields.Fields[1].Value = ""
 		m, _ = escSend(t, m, escKey(tea.KeyEnter))
 		view := ansi.Strip(m.View())
 		if !strings.Contains(view, emptyPlaceRefusal) {
@@ -482,18 +494,18 @@ func TestTitleFormEscGoesBack(t *testing.T) {
 	t.Run("esc", func(t *testing.T) {
 		m := openedPicker(t)
 		m, _ = escSend(t, m, escRunes("E"))
-		filter, cursor, gen := m.picker.filterText, m.picker.cursor, m.pickGen
+		filter, cursor, gen := m.picker.FilterText, m.picker.Cursor, m.pickGen
 		m, _ = pickRow(t, m, "Equinox-2026-09.as")
 		if m.startup != startupTitleOpen {
 			t.Fatal("the pick did not ask for a title")
 		}
-		m.picker.cursor = cursor // pickRow moved it onto the row; the list is the list
+		m.picker.Cursor = cursor // pickRow moved it onto the row; the list is the list
 		m, cmd := escSend(t, m, escKey(tea.KeyEsc))
 		if cmd != nil {
 			t.Error("Esc dispatched a command; it must open nothing")
 		}
-		if m.startup != startupChartOpen || m.picker.filterText != filter || m.picker.cursor != cursor {
-			t.Errorf("Esc left startup %s, filter %q, cursor %d; want the list as it was (%q, %d)", m.startup, m.picker.filterText, m.picker.cursor, filter, cursor)
+		if m.startup != startupChartOpen || m.picker.FilterText != filter || m.picker.Cursor != cursor {
+			t.Errorf("Esc left startup %s, filter %q, cursor %d; want the list as it was (%q, %d)", m.startup, m.picker.FilterText, m.picker.Cursor, filter, cursor)
 		}
 		if m.picker.resolving || m.pickGen < gen {
 			t.Error("Esc resolved the pick")
@@ -513,7 +525,7 @@ func TestTitleFormEscGoesBack(t *testing.T) {
 		m = typeText(t, m, "Constructed Title")
 		m, _ = escSend(t, m, escKey(tea.KeyEnter)) // the second step
 		m, write := escSend(t, m, escKey(tea.KeyEnter))
-		if write == nil || !m.title.saving {
+		if write == nil || !m.title.Saving {
 			t.Fatal("Enter with a title did not start the write")
 		}
 		m, cmd := escSend(t, m, escKey(tea.KeyEsc))
@@ -521,10 +533,10 @@ func TestTitleFormEscGoesBack(t *testing.T) {
 			t.Fatalf("Esc during the write: startup %s, command %v", m.startup, cmd != nil)
 		}
 		snap := snapshotForEsc(m)
-		picker := fmt.Sprintf("%q %d", m.picker.filterText, m.picker.cursor)
+		picker := fmt.Sprintf("%q %d", m.picker.FilterText, m.picker.Cursor)
 		m, _ = escSend(t, m, write())
 		requireSameScreen(t, "after the late write", snap, snapshotForEsc(m))
-		if got := fmt.Sprintf("%q %d", m.picker.filterText, m.picker.cursor); got != picker || m.picker.resolving {
+		if got := fmt.Sprintf("%q %d", m.picker.FilterText, m.picker.Cursor); got != picker || m.picker.resolving {
 			t.Errorf("the late write moved the list: %s, resolving %v", got, m.picker.resolving)
 		}
 		if fileText(t, path) == before {
@@ -564,7 +576,7 @@ func TestCtrlCQuitsFromEverywhere(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+		m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 		m, _ = escSend(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 		m.startup = startupAtlasOpen
 		_, cmd := escSend(t, m, escKey(tea.KeyCtrlC))
@@ -582,12 +594,13 @@ func TestCtrlCQuitsFromEverywhere(t *testing.T) {
 // where a field takes letters it is a letter.
 func TestQBacksOutWhereNothingIsTyped(t *testing.T) {
 	typed := map[owner]func(m Model) string{
-		ownerCity:       func(m Model) string { return m.atlas.filterText },
-		ownerOpenChart:  func(m Model) string { return m.picker.filterText },
-		ownerChartTitle: func(m Model) string { return m.title.form.value(m.title.form.focus) },
-		ownerSaveChart:  func(m Model) string { return m.save.form.value(0) },
-		ownerBodies:     func(m Model) string { return m.bodyModal.filterText },
-		ownerAspects:    func(m Model) string { return m.aspectModal.filterText },
+		ownerCity:       func(m Model) string { return m.atlas.FilterText },
+		ownerOpenChart:  func(m Model) string { return m.picker.FilterText },
+		ownerChartTitle: func(m Model) string { return m.title.Fields.Value(m.title.Fields.Focus) },
+		ownerSaveChart:  func(m Model) string { return m.save.Fields.Value(0) },
+		ownerBodies:     func(m Model) string { return m.bodyModal.FilterText },
+		ownerAspects:    func(m Model) string { return m.aspectModal.FilterText },
+		ownerActions:    func(m Model) string { return m.actions.FilterText },
 	}
 	for _, c := range keyOwnerCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -613,9 +626,15 @@ func TestQBacksOutWhereNothingIsTyped(t *testing.T) {
 					t.Fatal("the second q did not quit the main screen")
 				}
 				return
-			case ownerHelp, ownerConsole, ownerDisplay:
-				if got := after.currentOwner(); got != ownerMain {
-					t.Fatalf("q left the keyboard with owner %d, want the main screen", got)
+			case ownerHelp, ownerConsole, ownerDisplay, ownerLog:
+				want := ownerMain
+				if c.owner == ownerConsole {
+					// Reached with ,l l, the console closes onto the focused Log
+					// it was opened from (operator, 2026-11-05).
+					want = ownerLog
+				}
+				if got := after.currentOwner(); got != want {
+					t.Fatalf("q left the keyboard with owner %d, want %d", got, want)
 				}
 				viaEsc, _ := escSend(t, m, escKey(tea.KeyEsc))
 				if after.View() != viaEsc.View() {
@@ -643,8 +662,8 @@ func TestQIsALetterInFindersAndSearchLines(t *testing.T) {
 			t.Fatalf("owner %d, want the house finder", m.currentOwner())
 		}
 		m, cmd := escSend(t, m, escRunes("q"))
-		if quits(cmd) || m.currentOwner() != ownerHouses || !strings.HasSuffix(m.houseFinder.filterText, "q") {
-			t.Errorf("q: owner %d, line %q, quit %v", m.currentOwner(), m.houseFinder.filterText, quits(cmd))
+		if quits(cmd) || m.currentOwner() != ownerHouses || !strings.HasSuffix(m.houseFinder.FilterText, "q") {
+			t.Errorf("q: owner %d, line %q, quit %v", m.currentOwner(), m.houseFinder.FilterText, quits(cmd))
 		}
 	})
 	t.Run("zodiac finder", func(t *testing.T) {
@@ -653,8 +672,8 @@ func TestQIsALetterInFindersAndSearchLines(t *testing.T) {
 			t.Fatalf("owner %d, want the zodiac finder", m.currentOwner())
 		}
 		m, cmd := escSend(t, m, escRunes("q"))
-		if quits(cmd) || m.currentOwner() != ownerZodiac || !strings.HasSuffix(m.zodiacFinder.filterText, "q") {
-			t.Errorf("q: owner %d, line %q, quit %v", m.currentOwner(), m.zodiacFinder.filterText, quits(cmd))
+		if quits(cmd) || m.currentOwner() != ownerZodiac || !strings.HasSuffix(m.zodiacFinder.FilterText, "q") {
+			t.Errorf("q: owner %d, line %q, quit %v", m.currentOwner(), m.zodiacFinder.FilterText, quits(cmd))
 		}
 	})
 	t.Run("timeline line", func(t *testing.T) {
@@ -691,14 +710,14 @@ func TestQIsALetterInFindersAndSearchLines(t *testing.T) {
 // The Close entry of the three non-typing owners carries esc and q, and the
 // bar says so.
 func TestCloseEntryOfTheNonTypingOwnersIsEscOrQ(t *testing.T) {
-	for name, entries := range map[string][]BindingEntry{
+	for name, entries := range map[string][]keys.BindingEntry{
 		"help":    helpBindings(),
 		"console": consoleBindings(),
-		"details": defaultKeys().detailsBindings(),
+		"details": detailsBindings(keys.DefaultKeys()),
 	} {
-		var closer *BindingEntry
+		var closer *keys.BindingEntry
 		for i := range entries {
-			if entries[i].ID == BindingClose {
+			if entries[i].ID == keys.BindingClose {
 				closer = &entries[i]
 			}
 		}
@@ -708,14 +727,14 @@ func TestCloseEntryOfTheNonTypingOwnersIsEscOrQ(t *testing.T) {
 		if closer.BarKey != "esc/q" {
 			t.Errorf("%s: Close shows %q, want esc/q", name, closer.BarKey)
 		}
-		keys := closer.Binding.Keys()
+		kmap := closer.Binding.Keys()
 		hasEsc, hasQ := false, false
-		for _, k := range keys {
+		for _, k := range kmap {
 			hasEsc = hasEsc || k == "esc"
 			hasQ = hasQ || k == "q"
 		}
 		if !hasEsc || !hasQ {
-			t.Errorf("%s: Close keys are %v, want esc and q", name, keys)
+			t.Errorf("%s: Close keys are %v, want esc and q", name, kmap)
 		}
 	}
 }
@@ -759,10 +778,10 @@ func TestListsStopAtTheEnds(t *testing.T) {
 			stubRawReports(t)
 			return onTimeline(t, Config{Accessible: true})
 		}, func(m Model) int { return len(m.timelineRows()) }, up, down},
-		{"city popup", popup("city", "a"), func(m Model) int { return len(m.atlas.matches) }, up, down},
-		{"open chart popup", popup("open chart", ""), func(m Model) int { return len(m.picker.matches) }, up, down},
-		{"bodies popup", popup("bodies", ""), func(m Model) int { return m.bodyModal.totalRows() }, up, down},
-		{"aspects popup", popup("aspects", ""), func(m Model) int { return m.aspectModal.totalRows() }, up, down},
+		{"city popup", popup("city", "a"), func(m Model) int { return len(m.atlas.Matches) }, up, down},
+		{"open chart popup", popup("open chart", ""), func(m Model) int { return len(m.picker.Matches) }, up, down},
+		{"bodies popup", popup("bodies", ""), func(m Model) int { return m.bodyModal.TotalRows() }, up, down},
+		{"aspects popup", popup("aspects", ""), func(m Model) int { return m.aspectModal.TotalRows() }, up, down},
 	}
 	for _, l := range lists {
 		t.Run(l.name, func(t *testing.T) {
@@ -911,7 +930,7 @@ func TestBurstReplayedEverywhere(t *testing.T) {
 	// The save popup took every key, `q` included.
 	m := reachOwner(t, byName["save chart"], Config{Accessible: true}, 144, 40)
 	m, _ = escSend(t, m, escRunes("aqb"))
-	if got := m.save.form.value(0); got != "aqb" {
+	if got := m.save.Fields.Value(0); got != "aqb" {
 		t.Errorf("the save popup holds %q after the burst, want aqb", got)
 	}
 }
@@ -921,28 +940,32 @@ func TestBurstReplayedEverywhere(t *testing.T) {
 func TestHelpModalMatchesBindingTable(t *testing.T) {
 	m := escBase(t)
 	m.cfg = Config{Color: ColorNever}
-	keys := m.keys
+	kmap := m.keys
 	var want []string
-	for _, s := range helpSections(keys.mainBindings()) {
-		for _, e := range s.entries {
-			if helpUnlisted[e.ID] {
+	for _, s := range keys.HelpSections(mainBindings(kmap)) {
+		for _, e := range s.Entries {
+			if keys.HelpUnlisted[e.ID] {
 				continue
 			}
 			// The list keys are listed once the workspace is a list (HelpWhen); this
 			// one-chart workspace is not.
-			if e.Help && (e.HelpWhen == nil || e.HelpWhen(m)) {
-				h := e.Binding.Help()
-				want = append(want, h.Desc+" "+h.Key)
+			if e.Help && (e.HelpWhen == nil || e.HelpWhen(m.keysContextFor(ownerHelp))) {
+				want = append(want, m.titleOf(e)+" "+e.Binding.Help().Key)
 			}
 		}
 	}
+	for _, b := range m.helpPopupBlocks() {
+		for _, r := range b.Rows {
+			want = append(want, r.Title+" "+r.Key)
+		}
+	}
 	for _, b := range m.leaderBindings {
-		want = append(want, bindingDesc(keys, b.ID)+" "+m.leaderKey+showSeq(b.Seq))
+		want = append(want, keys.BindingDesc(m.keysContextFor(ownerHelp), b.ID)+" "+b.Spelling(m.leaderKey))
 	}
 	var got []string
 	for _, l := range m.helpLines() {
-		if l.binding {
-			got = append(got, strings.Join(strings.Fields(l.text), " "))
+		if l.Binding {
+			got = append(got, strings.Join(strings.Fields(l.Text), " "))
 		}
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -961,8 +984,8 @@ func TestHelpModalMatchesBindingTable(t *testing.T) {
 // several states and passes if any of them shows its effect.
 func TestEveryOwnerEntryActs(t *testing.T) {
 	old := yankLine
-	yankLine = func(string) error { return nil }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(string) error { return nil }
 	stubTextCompute(t)
 	stubRawReports(t)
 
@@ -1008,21 +1031,21 @@ func TestEveryOwnerEntryActs(t *testing.T) {
 				// An entry with no key of its own is a leader sequence shown
 				// in the bar (Details' `,y` copy): it is driven the way the
 				// operator types it, leader first.
-				keys := e.Binding.Keys()
+				kmap := e.Binding.Keys()
 				k := ""
-				if len(keys) > 0 {
-					k = keys[0]
-				} else if e.ID == BindingCopy {
+				if len(kmap) > 0 {
+					k = kmap[0]
+				} else if e.ID == keys.BindingCopy {
 					k = "y"
 				} else {
 					t.Fatalf("%s: entry %d has no key and is no known leader sequence", c.name, e.ID)
 				}
 				acted := false
 				for _, s := range states {
-					if e.When != nil && !e.When(s) {
+					if e.When != nil && !e.When(s.keysFacts(c.owner)) {
 						continue
 					}
-					if len(keys) == 0 {
+					if len(kmap) == 0 {
 						s = press(s, ",")
 					}
 					tm, cmd := s.Update(keyMsgFor(t, k))
@@ -1045,14 +1068,14 @@ func TestHelpFirstPageAt80x24(t *testing.T) {
 	page := func(w, h int) string {
 		m, _ := escSend(t, helpFixture(t, w, h), escRunes("?"))
 		var got []string
-		for _, r := range popupInterior(t, m.View(), popupTitleKeys) {
+		for _, r := range popupInterior(t, m.View(), dialog.TitleKeys) {
 			if s := strings.TrimSpace(r); s != "" {
 				got = append(got, strings.Join(strings.Fields(s), " "))
 			}
 		}
 		return strings.Join(got, "\n")
 	}
-	rows := []string{"Next panel tab/→", "Previous row ↑/k", "Next row ↓/j", "Into Details enter", "Open chart ⌃o", "Choose city ⌃l"}
+	rows := []string{"Switch panel tab/→ ⇧ tab/←", "Move row ↑/↓ (j/k)", "Report enter", "Open chart ⌃o", "Choose city ⌃l"}
 	for _, size := range [][2]int{{80, 24}, {144, 40}} {
 		p := page(size[0], size[1])
 		for _, want := range append([]string{"Start here"}, rows...) {
@@ -1075,30 +1098,30 @@ func TestHelpFirstPageAt80x24(t *testing.T) {
 // clamped at the end, and PgUp moves back.
 func TestHelpPagesWithPgDn(t *testing.T) {
 	m, _ := escSend(t, helpFixture(t, 80, 24), escRunes("?"))
-	h := helpListHeight(24)
+	h := keys.HelpListHeight(24)
 	total := len(m.helpLines())
 	if total <= h {
 		t.Fatalf("the list (%d lines) fits one page of %d; nothing to page", total, h)
 	}
 	m, _ = escSend(t, m, escKey(tea.KeyPgDown))
-	if m.help.offset != h {
-		t.Fatalf("PgDn: offset %d, want %d", m.help.offset, h)
+	if m.help.Offset != h {
+		t.Fatalf("PgDn: offset %d, want %d", m.help.Offset, h)
 	}
 	for i := 0; i < total; i++ {
 		m, _ = escSend(t, m, escKey(tea.KeyPgDown))
 	}
-	if want := total - h; m.help.offset != want {
-		t.Fatalf("PgDn past the end: offset %d, want %d", m.help.offset, want)
+	if want := total - h; m.help.Offset != want {
+		t.Fatalf("PgDn past the end: offset %d, want %d", m.help.Offset, want)
 	}
 	m, _ = escSend(t, m, escKey(tea.KeyPgUp))
-	if want := total - 2*h; m.help.offset != max(want, 0) {
-		t.Fatalf("PgUp: offset %d, want %d", m.help.offset, max(want, 0))
+	if want := total - 2*h; m.help.Offset != max(want, 0) {
+		t.Fatalf("PgUp: offset %d, want %d", m.help.Offset, max(want, 0))
 	}
 	for i := 0; i < total; i++ {
 		m, _ = escSend(t, m, escKey(tea.KeyPgUp))
 	}
-	if m.help.offset != 0 {
-		t.Fatalf("PgUp past the top: offset %d, want 0", m.help.offset)
+	if m.help.Offset != 0 {
+		t.Fatalf("PgUp past the top: offset %d, want 0", m.help.Offset)
 	}
 }
 
@@ -1106,13 +1129,13 @@ func TestHelpPagesWithPgDn(t *testing.T) {
 func TestHelpArrowsScrollOneLine(t *testing.T) {
 	m, _ := escSend(t, helpFixture(t, 80, 24), escRunes("?"))
 	m, _ = escSend(t, m, escKey(tea.KeyDown))
-	if m.help.offset != 1 {
-		t.Fatalf("↓: offset %d, want 1", m.help.offset)
+	if m.help.Offset != 1 {
+		t.Fatalf("↓: offset %d, want 1", m.help.Offset)
 	}
 	m, _ = escSend(t, m, escKey(tea.KeyUp))
 	m, _ = escSend(t, m, escKey(tea.KeyUp))
-	if m.help.offset != 0 {
-		t.Fatalf("↑ at the top: offset %d, want 0", m.help.offset)
+	if m.help.Offset != 0 {
+		t.Fatalf("↑ at the top: offset %d, want 0", m.help.Offset)
 	}
 }
 
@@ -1121,39 +1144,10 @@ func barActions(m Model) []string {
 	var out []string
 	for _, e := range m.keyBarEntries() {
 		if e.Bar {
-			out = append(out, e.Action+": "+e.BarKey)
+			out = append(out, e.Word+": "+e.BarKey)
 		}
 	}
 	return out
-}
-
-// Enter label: Enter's label names the tab it opens: Timeline from the Chart,
-// Report from Bodies or Aspects, as the second bar entry.
-func TestEnterLabelFollowsTheTabAttachShows(t *testing.T) {
-	m := helpFixture(t, 144, 40)
-	for _, c := range []struct {
-		panel PanelID
-		want  string
-	}{{PanelChart, "Timeline: enter"}, {PanelBodies, "Report: enter"}, {PanelAspects, "Report: enter"}} {
-		m.focused = c.panel
-		bar := barActions(m)
-		if len(bar) < 2 || bar[1] != c.want {
-			t.Errorf("focus %v: bar = %v, want second entry %q", c.panel, bar, c.want)
-		}
-		// The label is what Enter then shows.
-		after, _ := m.attachDetails()
-		shown := "Report"
-		if after.activeTabID(PanelDetails) == TabDetailsTimeline {
-			shown = "Timeline"
-		}
-		if !strings.HasPrefix(c.want, shown+":") {
-			t.Errorf("focus %v: label %q but Enter shows the %s tab", c.panel, c.want, shown)
-		}
-	}
-	m.focused = PanelChart
-	if line := barLine(m); !strings.Contains(line, "Next panel: → | Timeline: enter | Select: space") {
-		t.Errorf("Chart-focused bar = %q", line)
-	}
 }
 
 // Enter label, absent: no Timeline or Report entry without Details to open or once attached;
@@ -1194,8 +1188,8 @@ func TestPopupConfirmLabels(t *testing.T) {
 	for o, w := range want {
 		got := ""
 		for _, e := range escBase(t).ownerBindings(o) {
-			if e.ID == BindingConfirm {
-				got = e.Action
+			if e.ID == keys.BindingConfirm {
+				got = e.Title
 			}
 		}
 		if got != w {

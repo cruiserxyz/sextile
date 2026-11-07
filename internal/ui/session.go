@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +30,10 @@ import (
 // snapshot outranks nothing at all, and every one of them yields to a
 // workspace that could not be built. A relaunch that restores less than it
 // saved says so on a Log line and carries on; it never refuses to start.
+
+// cleanupPreview ends the preview session at quit. Indirected like yankLine so
+// a test can observe the call without ending the process-wide session.
+var cleanupPreview = preview.Cleanup
 
 // quit ends the session, writing it down first.
 //
@@ -57,7 +63,7 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	// The rendered wheel is a named client's chart held by a localhost server.
 	// The bytes and server go when the session does. Like the session write, a
 	// failure has no frame left to report it in.
-	_ = preview.Cleanup()
+	_ = cleanupPreview()
 	return m, tea.Quit
 }
 
@@ -82,9 +88,16 @@ func (m Model) ownsSession() bool {
 // errSecondWindow is a session write asked of a second window.
 var errSecondWindow = errors.New("another Sextile window keeps the session")
 
+// errForeignSession is a general-session write asked of a run that does not
+// own the general session file: it belongs to another charts folder.
+var errForeignSession = errors.New("the saved session is another folder's")
+
 // saveRunningSession writes the session this window runs: the named one when
 // it runs one, else the general one. A window that owns no session writes
-// nothing, and so does one whose chosen session is still being opened.
+// nothing, and so does one whose chosen session is still being opened. The
+// general session is also left alone when it could not be moved aside
+// (sessionKept) and when it belongs to another charts folder (sessionForeign);
+// both checks sit after the named branch, so a named session keeps saving.
 func (m Model) saveRunningSession() error {
 	if m.slots == nil || !m.ownsSession() || m.named.pending {
 		return nil
@@ -92,7 +105,7 @@ func (m Model) saveRunningSession() error {
 	if m.named.running() {
 		return store.SaveNamedSession(m.named.lock, m.named.name, m.sessionSnapshot())
 	}
-	if m.sessionKept {
+	if m.sessionKept || m.sessionForeign {
 		return nil
 	}
 	return store.SaveSession(m.sessionSnapshot())
@@ -167,7 +180,8 @@ func (m Model) sessionSnapshot() store.Session {
 	s := store.Session{
 		Folder:           store.FolderID(store.ChartsDir()),
 		FloatingSelected: m.slots.SlotSelected(floating),
-		FloatingBodies:   m.slots.SelectedBodies(floating),
+		FloatingBodies:   m.markNames(floating),
+		Drawn:            m.drawnNames(),
 		Frames:           m.frameRecordsToSave(),
 	}
 	for i := 0; i < m.slots.AnchoredCount(); i++ {
@@ -182,10 +196,31 @@ func (m Model) sessionSnapshot() store.Session {
 			Chart:    rec,
 			Usable:   true,
 			Selected: m.slots.SlotSelected(i),
-			Bodies:   m.slots.SelectedBodies(i),
+			Bodies:   m.markNames(i),
 		})
 	}
 	return s
+}
+
+// sessionHoldsMarks reports whether slot i is selected or has bodies marked:
+// what a session file would keep of it besides the chart.
+func (m Model) sessionHoldsMarks(i int) bool {
+	return m.slots.SlotSelected(i) || m.slots.HasMarks(i) || len(m.slots.KeptMarks(i)) > 0
+}
+
+// markNames is slot i's marks for the session file: the registry names of the
+// marked objects in ascending object number, then the names this Astrolog does
+// not list, kept verbatim. A resolved mark whose registry name holds a comma is
+// not written: the reader could not read it back as one name (drawnNames has
+// the same rule). A kept name never holds one, for it came from a split.
+func (m Model) markNames(i int) []string {
+	var names []string
+	for _, o := range m.slots.SelectedObjects(i) {
+		if !strings.Contains(o.Name, ",") {
+			names = append(names, o.Name)
+		}
+	}
+	return append(names, m.slots.KeptMarks(i)...)
 }
 
 // restoreSession puts the last quit's workspace back and reports whether it
@@ -271,10 +306,182 @@ func (m Model) restoreSession(p ingest.StartupPerimeterReadMsg) (Model, bool) {
 		m = m.logError("Couldn't restore %d of the open charts.", dropped)
 	}
 
-	if len(sess.UnknownBodies) > 0 {
-		m = m.logNote("session", "skipped unknown bodies: %s", strings.Join(sess.UnknownBodies, ", "))
-	}
+	m = m.restoreDrawn(sess.Drawn)
 	return m, restored
+}
+
+// drawnNames is the chooser's drawn set for the session file, as Astrolog's
+// names in its number order, then the names this Astrolog did not know, kept
+// verbatim. Nil -- no line -- while the view follows the defaults: only an
+// explicit policy (the chooser was used, or a restored `drawn:` is in force) or
+// kept names are the operator's to keep. Before the object list is in, the
+// saved names are written back as they were read. A name with a comma could not
+// be read back as one name and is left out.
+//
+// An empty set is never given: nothing ticked is the default policy (see
+// chosenObjects) and a bare `drawn:` line reads as no choice, so a set with no
+// name to write is nil, not empty. The store's bare form stays for files that
+// hold it, and no path from here produces one.
+func (m Model) drawnNames() []string {
+	if m.objectRegistry == nil {
+		if len(m.drawnRaw) == 0 {
+			return nil
+		}
+		return slices.Clone(m.drawnRaw)
+	}
+	var names []string
+	if o := m.lens.Objects; o.Baseline == recipe.Explicit {
+		for _, n := range o.Selected() {
+			i := slices.IndexFunc(m.objectRegistry, func(r aspect.RegistryObject) bool { return r.Number == n })
+			if i >= 0 && !strings.Contains(m.objectRegistry[i].Name, ",") {
+				names = append(names, m.objectRegistry[i].Name)
+			}
+		}
+	}
+	if len(m.drawnKept) > 0 {
+		names = append(names, m.drawnKept...)
+	}
+	return names
+}
+
+// restoreDrawn puts the session's drawn set back as the lens' object policy.
+// Names resolve through Astrolog's registry; one it does not list stays on the
+// model, is said once and is written back with the next session; an object with
+// no ephemeris file is not drawn, is said by the startup account of what cannot
+// be drawn (sayEphemeris) and is kept the same way. A set that leaves nothing
+// to draw while names are kept keeps the default policy and says so with the
+// line of a drained selection. A bare line (an empty list, which earlier 0.1.3
+// builds wrote for an empty choice) is no choice: the default set, said once
+// with noBodiesChosenLine. Before the registry is in, the names wait as read. A
+// file with no `drawn:` line (nil) changes nothing.
+func (m Model) restoreDrawn(names []string) Model {
+	m.drawnKept, m.drawnRaw, m.fallbackSaid = nil, nil, ""
+	if names == nil {
+		return m
+	}
+	if m.objectRegistry == nil {
+		m.drawnRaw = slices.Clone(names)
+		return m
+	}
+	var nums []int
+	for _, name := range names {
+		// ByName, not a first match: a name two registry entries share resolves
+		// to neither and is kept (never a guess).
+		o, ok := aspect.Registry(m.objectRegistry).ByName(name)
+		switch {
+		case !ok:
+			m.drawnKept = append(m.drawnKept, name)
+			m = m.logEphemeris(name + " is not an object of this Astrolog, kept in the session")
+		case m.ephemeris.IsAbsent(o.Number):
+			// Not drawn, but still the operator's: a file written where the
+			// ephemeris file exists loses nothing where it is missing.
+			m.drawnKept = append(m.drawnKept, name)
+		default:
+			nums = append(nums, o.Number)
+		}
+	}
+	return m.chosenObjects(recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: nums, TrueNodeMode: m.lens.Objects.TrueNodeMode})
+}
+
+// defaultObjects is the object policy the view follows when the operator has
+// chosen nothing: the active lens's own, as lookup.Hellenistic defines it (the
+// host's default objects plus the lens's additions), with the node mode in
+// force. It is the ONE place that answers "the default bodies" (operator,
+// 2026-11-04: "defined by a lens"), and every way back to them asks here: the
+// chooser's Ctrl+D (openedBodyModal), nothing ticked (chosenObjects), a new
+// session (resetSession), a named session without a drawn: line
+// (applyNamedSessionLoaded) and the ephemeris account's default view
+// (sayEphemeris). When lenses become a registry this is where the active one is
+// looked up by name.
+func (m Model) defaultObjects() recipe.ObjectPolicy {
+	p := lookup.Hellenistic.Objects
+	p.TrueNodeMode = m.lens.Objects.TrueNodeMode
+	return p
+}
+
+// defaultDrawn is the set the default policy draws on this host, as Astrolog's
+// numbers (the lens's drawn set, files that are absent left out). It fails
+// while the host's default objects are not known, and then is nil.
+func (m Model) defaultDrawn() []int {
+	l := m.lens
+	l.Objects = m.defaultObjects()
+	drawn, _ := l.VisibleObjectNumbers()
+	return drawn
+}
+
+// confirmedObjects is chosenObjects for the body chooser's confirm (Enter, or
+// Esc under the default closing rule): ticks that equal what the default policy
+// draws are the default policy, not an explicit copy of it. The run then goes
+// on following the defaults and a quit writes no drawn: line. It is safe
+// because the confirm already fences the text surface and recomputes
+// (confirmChooser), and both policies compile to the one drawn set, so the
+// screen cannot differ. It is the confirm only: the live preview keeps the
+// ticks as an explicit set, so the Esc that puts the entry frame back still
+// finds a policy that differs from the entry whenever a preview was shown. A
+// set short of one default body, or holding one more, stays a chosen set.
+func (m Model) confirmedObjects(p recipe.ObjectPolicy) Model {
+	if p.Baseline == recipe.Explicit {
+		if def := m.defaultDrawn(); len(def) > 0 && slices.Equal(p.Selected(), def) {
+			m.fallbackSaid = ""
+			m.lens.Objects = m.defaultObjects()
+			return m
+		}
+	}
+	return m.chosenObjects(p)
+}
+
+// chosenObjects puts an explicit object policy in force, except that a policy
+// selecting no object is the default policy instead (defaultObjects): nothing
+// ticked in the body chooser is no choice of the operator's (2026-11-04: "the
+// normal set"), not an order to draw no body. The fall back says why, once per fall back and not
+// again by each key or by the confirm that follows: with the line of a drained
+// selection when names are kept and a kept name is a
+// known absent body, with one line saying the defaults are shown when names are
+// kept and none is, and with noBodiesChosenLine when none is kept.
+func (m Model) chosenObjects(p recipe.ObjectPolicy) Model {
+	if p.Baseline != recipe.Explicit || len(p.Selected()) > 0 {
+		m.fallbackSaid = ""
+		m.lens.Objects = p
+		return m
+	}
+	m.lens.Objects = m.defaultObjects()
+	var lines []string
+	if len(m.drawnKept) == 0 {
+		lines = []string{noBodiesChosenLine}
+	} else {
+		if nums := m.keptAbsentNums(); len(nums) > 0 { // nil would mean every absent body
+			if l := m.drainedLine(nums); l != "" {
+				lines = []string{l}
+			}
+		}
+		if len(lines) == 0 {
+			// Only names this Astrolog does not list: the substitution is still said.
+			lines = []string{"the saved set can't be drawn, showing the default set"}
+		}
+	}
+	if said := strings.Join(lines, "\n"); said != m.fallbackSaid {
+		m.fallbackSaid = said
+		for _, l := range lines {
+			m = m.logEphemeris(l)
+		}
+	}
+	return m
+}
+
+// noBodiesChosenLine is the Log line for an empty choice: nothing ticked in the
+// body chooser, or the bare `drawn:` line earlier 0.1.3 builds wrote for it.
+const noBodiesChosenLine = "no bodies chosen, the default bodies are shown"
+
+// keptAbsentNums are the kept names that are objects of this Astrolog with no
+// ephemeris file.
+func (m Model) keptAbsentNums() []int {
+	var nums []int
+	for _, name := range m.drawnKept {
+		if o, ok := aspect.Registry(m.objectRegistry).ByName(name); ok && m.ephemeris.IsAbsent(o.Number) {
+			nums = append(nums, o.Number)
+		}
+	}
+	return nums
 }
 
 // addable reports whether a remembered slot can come back: it could stand on its
@@ -318,11 +525,12 @@ func (m Model) applySessionSelections(p ingest.StartupPerimeterReadMsg) Model {
 		m.slots.SetSlotSelected(i, false)
 	}
 	refused := sess.DroppedSelections
-	apply := func(i int, selected bool, bodies []aspect.Body) {
+	var said []string // kept names already said in this restore
+	apply := func(i int, selected bool, names []string) {
 		if selected && !m.slots.SetSlotSelected(i, true) {
 			refused++
 		}
-		selectBodies(m.slots, i, bodies)
+		m = m.selectObjects(i, names, &said)
 	}
 	i := 0
 	for _, entry := range sess.Slots {
@@ -332,25 +540,54 @@ func (m Model) applySessionSelections(p ingest.StartupPerimeterReadMsg) Model {
 		apply(i, entry.Selected, entry.Bodies)
 		i++
 	}
-	apply(floating, sess.FloatingSelected, sess.FloatingBodies)
+	// A floating slot with no chart beside it has nothing to compare; a file
+	// that saved it selected (0.1.1 allowed that) comes back without the mark.
+	apply(floating, sess.FloatingSelected && m.slots.AnchoredCount() > 0, sess.FloatingBodies)
 	if refused > 0 {
 		m = m.logError("Couldn't keep %d of the selections. At most six slots can be selected.", refused)
 	}
 	return m
 }
 
-// selectBodies marks each body once. Selection is a toggle, so a name the file
-// happens to carry twice would mark a body and then unmark it — the collapse
-// is what keeps a duplicate from meaning the opposite of what it says.
-func selectBodies(slots *store.Slots, slotIdx int, bodies []aspect.Body) {
-	seen := make(map[aspect.Body]struct{}, len(bodies))
-	for _, b := range bodies {
-		if _, dup := seen[b]; dup {
+// selectObjects marks each named object once. A name resolves through the
+// registry, by exact name and then as a 0.1.2 wire name (`north_node`).
+// Selection is a toggle, so a name the file happens to carry twice would mark an
+// object and then unmark it: the collapse is what keeps a duplicate from meaning
+// the opposite of what it says. A name that resolves to no object is kept on the
+// slot verbatim, written back with the next session, and said once, with the
+// drawn set's line, unless the drawn set already said it.
+func (m Model) selectObjects(slotIdx int, names []string, said *[]string) Model {
+	seen := make(map[int]struct{}, len(names))
+	for _, name := range names {
+		o, ok := m.resolveMarkName(name)
+		if !ok {
+			if !slices.Contains(*said, name) && !slices.Contains(m.drawnKept, name) {
+				m = m.logEphemeris(name + " is not an object of this Astrolog, kept in the session")
+				*said = append(*said, name)
+			}
+			m.slots.KeepMark(slotIdx, name)
 			continue
 		}
-		seen[b] = struct{}{}
-		slots.ToggleBodySelection(slotIdx, b)
+		if _, dup := seen[o.Number]; dup {
+			continue
+		}
+		seen[o.Number] = struct{}{}
+		m.slots.ToggleObjectSelection(slotIdx, o)
 	}
+	return m
+}
+
+// resolveMarkName is the object a session name stands for in this Astrolog's
+// registry: the registry's own name, else the 0.1.2 wire name's alias.
+func (m Model) resolveMarkName(name string) (aspect.Object, bool) {
+	reg := aspect.Registry(m.objectRegistry)
+	if o, ok := reg.ByName(name); ok {
+		return o, true
+	}
+	if legacy, ok := aspect.LegacyName(name); ok {
+		return reg.ByName(legacy)
+	}
+	return aspect.Object{}, false
 }
 
 // SessionChartRecheckedMsg carries the re-read of the chart file the session
@@ -730,10 +967,10 @@ const logIdentWidth = 24
 // beats the Log's own clip: the reader can see that a name was shortened
 // rather than misread a truncation as the whole name.
 func logIdent(s string, cfg Config) string {
-	return cutRight(s, logIdentWidth, cfg)
+	return term.CutRight(s, logIdentWidth, cfg)
 }
 
-// sessionPrefill is the name Save as offers (sessions_popup.go): the title of
+// sessionPrefill is the name Save as offers (sessions_popup_model.go): the title of
 // the first selected anchored chart in the Chart panel's order; else of the
 // first anchored chart; else nothing. It reads the selection here, with the
 // rest of what a session keeps, to name what is saved, not to display it.

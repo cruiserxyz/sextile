@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"reflect"
 	"regexp"
 	"strings"
@@ -47,7 +48,7 @@ func logTexts(m Model) []string {
 
 func openedConsole(t *testing.T, lines int) Model {
 	t.Helper()
-	m, _ := press(t, consoleModel(t, lines), ",", "l")
+	m, _ := press(t, consoleModel(t, lines), ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -100,7 +101,7 @@ func consoleBodyLines(t *testing.T, m Model) []string {
 func TestLeaderLOpensConsole(t *testing.T) {
 	m := consoleModel(t, 20)
 	m.focused = PanelBodies
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console is not open")
 	}
@@ -120,7 +121,7 @@ func TestConsoleDoesNotChangePanelFocus(t *testing.T) {
 	m.focused = PanelAspects
 	wantPanels := focusablePanels()
 
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if m.focused != PanelAspects {
 		t.Errorf("m.focused = %q, want it untouched", m.focused)
 	}
@@ -179,7 +180,7 @@ func TestConsoleTakesMainAreaWhenNarrow(t *testing.T) {
 	m := consoleModel(t, 40)
 	var tm tea.Model = m
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = press(t, tm.(Model), ",", "l")
+	m, _ = press(t, tm.(Model), ",", "l", "l")
 
 	r, ok := m.consoleRect()
 	if !ok {
@@ -211,7 +212,7 @@ func TestConsoleLeavesLeftColumnAlone(t *testing.T) {
 		unfocused := m
 		unfocused.focused = PanelNone
 		closed := columnSpan(unfocused.View(), 0, leftBaseWidth)
-		opened, _ := press(t, m, ",", "l")
+		opened, _ := press(t, m, ",", "l", "l")
 		got := columnSpan(opened.View(), 0, leftBaseWidth)
 		if len(closed) != len(got) {
 			t.Fatalf("%+v: frame height changed: %d -> %d", cfg, len(closed), len(got))
@@ -370,13 +371,13 @@ func TestConsoleCarriesScrollIndicator(t *testing.T) {
 	if v.Total != len(m.logLines) || v.Visible != innerH || v.Offset != start {
 		t.Errorf("viewport = %+v, want Total=%d Visible=%d Offset=%d", v, len(m.logLines), innerH, start)
 	}
-	if !v.overflows() {
+	if !v.Overflows() {
 		t.Fatal("a 120-line buffer in this panel must overflow")
 	}
 	r, _ := m.consoleRect()
 	box := renderConsole(m.console.snapshot, m.console, m.tabStrips()[PanelLog], r.w, r.h, true, m.cfg)
 	// The thumb replaces the right border glyph on its rows.
-	if !strings.Contains(ansi.Strip(box), scrollThumbASCII) {
+	if !strings.Contains(ansi.Strip(box), pane.ThumbASCII) {
 		t.Error("no thumb on the console's right border")
 	}
 }
@@ -385,7 +386,7 @@ func TestConsoleCarriesScrollIndicator(t *testing.T) {
 func TestConsoleEscRestoresFocus(t *testing.T) {
 	m := consoleModel(t, 20)
 	m.focused = PanelAspects
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	m, _ = press(t, m, "esc")
 	if m.console.open {
 		t.Error("esc did not close the console")
@@ -396,7 +397,7 @@ func TestConsoleEscRestoresFocus(t *testing.T) {
 }
 
 // C39: the console owns the keyboard. Quit is the one main-mode binding that
-// still acts.
+// still acts, and a panel's digit leaves for that panel.
 func TestConsoleOwnsKeyboard(t *testing.T) {
 	m := openedConsole(t, 20)
 	wantTime := m.targetFloatingTime
@@ -412,7 +413,9 @@ func TestConsoleOwnsKeyboard(t *testing.T) {
 		t.Errorf("home in the console left the cursor at %d", paged.console.cursor)
 	}
 
-	for _, k := range []string{"?", "tab", "1", "2", "3", " ", "y", "Y", "d", "n", "N", "t", "pgup", "pgdown", "ctrl+l", "ctrl+o", "ctrl+x"} {
+	// A panel's digit is not swallowed: it leaves for that panel
+	// (TestConsoleDigitLeavesForThePanel, operator 2026-11-05).
+	for _, k := range []string{"?", "tab", " ", "y", "Y", "d", "n", "N", "t", "pgup", "pgdown", "ctrl+l", "ctrl+o", "ctrl+x"} {
 		m, _ = press(t, m, k)
 	}
 	if m.helpOpen {
@@ -453,7 +456,7 @@ func TestConsoleStartsNoCompute(t *testing.T) {
 	m := consoleModel(t, 20)
 	before := m.refresh
 
-	m, cmd := press(t, m, ",", "l")
+	m, cmd := press(t, m, ",", "l", "l")
 	if !reflect.DeepEqual(before, m.refresh) {
 		t.Error("opening touched a refresh surface")
 	}
@@ -478,7 +481,7 @@ func TestConsoleDoesNotBlockCommits(t *testing.T) {
 	if st.runningRunID == 0 {
 		t.Fatal("no text run is in flight to complete")
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -487,7 +490,7 @@ func TestConsoleDoesNotBlockCommits(t *testing.T) {
 	tm, _ = tm.Update(FirstFrameReadyMsg{
 		RunID:       st.runningRunID,
 		WantID:      st.wantID,
-		Positions:   []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}},
+		Positions:   []aspect.Position{{Object: objSun}, {Object: objMoon}},
 		TransitTime: m.targetFloatingTime,
 	})
 	m = tm.(Model)
@@ -570,12 +573,12 @@ func TestConsoleEmptyBuffer(t *testing.T) {
 	if len(m.logLines) != 0 {
 		t.Fatalf("this workspace already logged %v", m.logLines)
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open over an empty buffer")
 	}
 	innerH := m.consoleInnerHeight()
-	if v := consoleViewport(0, m.console, innerH); v.overflows() {
+	if v := consoleViewport(0, m.console, innerH); v.Overflows() {
 		t.Error("an empty buffer drew an indicator")
 	}
 	// It says so, once, and nothing else (the specification A6).
@@ -602,7 +605,7 @@ func TestConsoleEmptyBuffer(t *testing.T) {
 // the cursor lands on the newest line of the trimmed list.
 func TestConsoleCursorSurvivesTrim(t *testing.T) {
 	m := consoleModel(t, MaxLogLines)
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if m.console.cursor != MaxLogLines-1 {
 		t.Fatalf("cursor = %d, want the newest of a full buffer", m.console.cursor)
 	}
@@ -621,8 +624,9 @@ func TestConsoleCursorSurvivesTrim(t *testing.T) {
 	if got := snapshotTexts(m); !reflect.DeepEqual(wantSnapshot, got) {
 		t.Error("the trim reached into the open console's snapshot")
 	}
-	// Close and reopen: the fresh snapshot is the trimmed buffer, newest last.
-	m, _ = press(t, m, "esc", ",", "l")
+	// Close onto the focused Log and reopen with l: the fresh snapshot is the
+	// trimmed buffer, newest last.
+	m, _ = press(t, m, "esc", "l")
 	if got := len(m.console.snapshot); got != MaxLogLines {
 		t.Fatalf("reopened over %d lines, want the trimmed %d", got, MaxLogLines)
 	}

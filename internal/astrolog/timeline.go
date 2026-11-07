@@ -15,8 +15,8 @@ import (
 )
 
 // The timeline is Astrolog's own dated-event searches read as one list:
-// `-t` transits to a natal chart, `-dm` the sky's own month, `-tr` returns
-// (the specification). This file is the ONE seam all three are
+// `-t` transits to a natal chart, `-d` the sky's own events a day at a time
+// (skySegment), `-tr` returns (the specification). This file is the ONE seam all three are
 // read through (D10), so the reading-contract migration (direction.md M1)
 // replaces one function body and no caller.
 //
@@ -32,7 +32,7 @@ type TimelineSource uint8
 
 const (
 	TimelineTransit TimelineSource = iota + 1 // `-t`, needs a natal chart
-	TimelineSky                               // `-dm`, needs none
+	TimelineSky                               // `-d` per day, needs none
 	TimelineReturn                            // `-tr`, needs a natal chart
 )
 
@@ -48,7 +48,7 @@ func (s TimelineSource) String() string {
 	return "unknown"
 }
 
-// Switch is Astrolog's own switch for the search: `-t`, `-dm` or `-tr`. It is
+// Switch is Astrolog's own switch for the search: `-t`, `-d` or `-tr`. It is
 // the name a failed search is reported under, spelled here so no caller
 // outside this package writes an Astrolog switch.
 func (s TimelineSource) Switch() string {
@@ -56,7 +56,7 @@ func (s TimelineSource) Switch() string {
 	case TimelineTransit:
 		return "-t"
 	case TimelineSky:
-		return "-dm"
+		return "-d"
 	case TimelineReturn:
 		return "-tr"
 	}
@@ -101,16 +101,20 @@ type TimelineRow struct {
 	Direction string
 	Station   string
 
-	// The names resolved to the registries Sextile already holds (bodyFullName,
-	// aspectAbbrev), here because the ui may not import this package
-	// (the specification rule 2). Resolved says every name the
-	// kind needs resolved: an aspect row's two bodies and its aspect, an
-	// ingress or station's body. A name with no entry (a cusp, a star) leaves
-	// it false, and the row is unmarkable.
-	BodyID   aspect.Body
-	OtherID  aspect.Body
+	// The aspect resolved through aspectAbbrev, here because the ui may not
+	// import this package (the specification rule 2). Resolved says every name
+	// the kind needs resolved: an aspect row's two objects and its aspect, an
+	// ingress or station's object. A name with no entry leaves it false, and
+	// the row is unmarkable.
 	AspectID aspect.AspectKind
 	Resolved bool
+
+	// Object and OtherObject are Astrolog's objects for the two names, from
+	// the registry the search carried (ByCut at the seven and ten cells the
+	// columns are). Zero for a name the registry could not resolve, or that
+	// the kind does not have.
+	Object      aspect.Object
+	OtherObject aspect.Object
 }
 
 // TimelineKind says which of the three things a timeline row can be it is.
@@ -131,10 +135,15 @@ const (
 // cut short or reshaped by a format change, which is the change D10 exists to
 // make loud.
 const (
-	tlBody = `(?P<body>[A-Z][A-Za-z.]*(?: [A-Za-z][A-Za-z.]*)*)`
+	// tlName is any registry name as Astrolog prints it: the 134 names of
+	// testdata/ho-all.txt are letters, digits, dots and single spaces
+	// (`11th Cusp`, `Zeta Retic.`, `Rigil Kent.`), so a word may start with a
+	// digit and carry digits.
+	tlName = `[A-Za-z0-9][A-Za-z0-9.]*(?: [A-Za-z0-9][A-Za-z0-9.]*)*`
+	tlBody = `(?P<body>` + tlName + `)`
 	// tlBodyOther is the same shape without a capture: only the FIRST body
 	// is a column.
-	tlBodyOther = `[A-Z][A-Za-z.]*(?: [A-Za-z][A-Za-z.]*)*`
+	tlBodyOther = tlName
 	tlSign      = `(?:\([A-Z][a-z]{2}\)|\[[A-Z][a-z]{2}\]|<[A-Z][a-z]{2}>)`
 	// tlAsp is the three-letter aspect abbreviation as aspectAbbrev spells it:
 	// `Con`, but also `BQn`, `SSx` and `SSq`, whose second letter is a capital.
@@ -175,7 +184,7 @@ func tlDate(c Clock) string {
 }
 
 // timelineGrammar is the pair of line grammars for a clock, anchored at BOTH
-// ends. The sky grammar (-dm) is a weekday, the date and time, then an aspect
+// ends. The sky grammar (-d, -dm) is a weekday, the date and time, then an aspect
 // between two bodies, a sign ingress (--> forward, <-- by retrograde) or a
 // station (S/R, S/D), then optional labels and void. The transit grammar
 // (-t/-tr) is the date and time, Astrolog's `trans` and `natal` markers around
@@ -201,7 +210,7 @@ var (
 )
 
 // The two lines Astrolog prints when a search has no events at all: `-t`/`-tr`
-// print the first, `-dm` the second. A band that hides every body a month
+// print the first, `-d` and `-dm` the second (one Astrolog function prints both). A band that hides every body a month
 // would have named (the operator unticked the only body with events, or chose
 // none) makes this the ordinary result, not a format change, so they read as
 // an empty list. Measured on 8.00, 2026-10-03: `-dm -R0` and `-t 10 2026 -R0`.
@@ -210,7 +219,7 @@ const (
 	noSkyEventsFound = "No transit events found."
 )
 
-// ParseTimeline reads the output of one `-t`, `-dm` or `-tr` search whose
+// ParseTimeline reads the output of one `-t`, `-d`, `-dm` or `-tr` search whose
 // times are expressed in zone, and returns each dated event line's instant
 // and the line byte-identically (C1). The same output under a different zone
 // resolves to different instants (C1a): the zone is the reader's to supply,
@@ -222,7 +231,7 @@ const (
 // whole parse fails naming it and returns no rows (C2) — including a line
 // that looks dated but whose date or time cannot be read (C55). A format
 // change is meant to be loud here rather than to lose a row silently.
-func ParseTimeline(out string, zone *time.Location) ([]TimelineRow, error) {
+func ParseTimeline(out string, zone *time.Location, reg aspect.Registry) ([]TimelineRow, error) {
 	if zone == nil {
 		return nil, fmt.Errorf("astrolog: ParseTimeline: no zone to read the printed times in")
 	}
@@ -234,7 +243,7 @@ func ParseTimeline(out string, zone *time.Location) ([]TimelineRow, error) {
 			line == noTransitsFound || line == noSkyEventsFound {
 			continue
 		}
-		row, err := timelineRow(line, zone)
+		row, err := timelineRow(line, zone, reg)
 		if err != nil {
 			return nil, &TimelineLineError{Line: line, Reason: err.Error()}
 		}
@@ -257,7 +266,7 @@ func (e *TimelineLineError) Error() string {
 
 // timelineRow reads one event line: its instant (date and clock time in
 // zone) and its columns, cut from the groups of the grammar that matched.
-func timelineRow(line string, zone *time.Location) (TimelineRow, error) {
+func timelineRow(line string, zone *time.Location, reg aspect.Registry) (TimelineRow, error) {
 	var re *regexp.Regexp
 	var m []string
 	transit := false
@@ -290,22 +299,22 @@ func timelineRow(line string, zone *time.Location) (TimelineRow, error) {
 	}
 	row := TimelineRow{Instant: parsed.Instant, Line: line, Weekday: weekday, Date: g("date"), Time: g("time"),
 		Transit: transit, Body: g("body"), Rest: g("rest"), Julian: parsed.Julian}
-	row.cutKind(g("asp"), g("other"), g("dir"), g("ingress"), g("station"))
+	row.cutKind(reg, g("asp"), g("other"), g("dir"), g("ingress"), g("station"))
 	return row, nil
 }
 
 // cutKind fills the kind columns from the groups of the match and resolves the
-// names through the registries parse.go already holds (rule 2 of
-// the specification). Only the groups that matched are set.
-func (r *TimelineRow) cutKind(asp, other, dir, ingress, station string) {
-	body, bodyOK := bodyFullName[r.Body]
-	r.BodyID = body
+// names through the registry the search carried (rule 2 of the
+// specification). Only the groups that matched are set.
+func (r *TimelineRow) cutKind(reg aspect.Registry, asp, other, dir, ingress, station string) {
+	object, bodyOK := reg.ByCut(r.Body, leftNameWidth)
+	r.Object = object
 	switch {
 	case asp != "":
 		r.Kind, r.Aspect, r.Other = TimelineKindAspect, asp, other
-		second, otherOK := bodyFullName[other]
+		second, otherOK := reg.ByCut(other, rightNameWidth)
 		kind, aspectOK := aspectAbbrev[asp]
-		r.OtherID, r.AspectID = second, kind
+		r.OtherObject, r.AspectID = second, kind
 		r.Resolved = bodyOK && otherOK && aspectOK
 	case dir != "":
 		r.Kind, r.Direction, r.Sign = TimelineKindIngress, dir, ingress
@@ -413,9 +422,14 @@ func timelineSegments(year int, month time.Month, zone *time.Location) ([]Timeli
 // moment and a place. It carries no zone, because the moment is an instant —
 // it is entered in UT, so the floating zone the search reports in can never
 // move it (C6).
+//
+// Objects is the object policy of the searches run against this chart: the
+// slot's own lens with its own marks (Only), so each natal of a comparing
+// timeline narrows its own side (TimelineRequest.Objects is the sky search's).
 type TimelineNatal struct {
 	When     time.Time
 	Lon, Lat float64
+	Objects  recipe.ObjectPolicy
 }
 
 // TimelineRequest is everything the searches depend on: the floating slot's
@@ -424,7 +438,11 @@ type TimelineNatal struct {
 // reach the chart (the specification).
 //
 // Defaults are the two object sets Astrolog lists unfiltered, as read from the
-// binary (ReadDefaultSets): the timeline's body band is hide-only against them.
+// binary (ReadDefaultSets): the timeline's body band is compared against them
+// and the transiting side keeps the binary's own exclusions (timelineBand).
+//
+// Objects is the object policy of the sky search; a natal search takes
+// Natal.Objects.
 type TimelineRequest struct {
 	Year  int
 	Month time.Month
@@ -440,6 +458,8 @@ type TimelineRequest struct {
 	Objects  recipe.ObjectPolicy
 	Aspects  recipe.AspectPolicy
 	Defaults DefaultSets
+	// Registry is the binary's object list, handed to the call for its parser.
+	Registry aspect.Registry
 }
 
 // TimelineCall is one search as a body call: the argv and the chooser band the
@@ -456,7 +476,16 @@ type TimelineRequest struct {
 // Julian Day every other call for the slot sends, never calendar fields built in
 // Go (the specification C1). The spec's measurements used `-qa <local time>
 // <zone>`; the UT form was measured to emit byte-identical rows (2026-09-30).
+//
+// The sky's call is Astrolog's day search for the local day seg starts in, at
+// seg's offset, in Astrolog's own calendar (Julian before its reform).
 func TimelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest) (BodyCall, error) {
+	return timelineCall(src, seg, req, false)
+}
+
+// timelineCall is TimelineCall; voids makes the sky's call the month search
+// over the Moon and the planets that marks the Moon void of course (skySegment).
+func timelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest, voids bool) (BodyCall, error) {
 	if req.Month < time.January || req.Month > time.December {
 		return BodyCall{}, fmt.Errorf("astrolog: TimelineArgv: month %d out of range", int(req.Month))
 	}
@@ -468,7 +497,12 @@ func TimelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest) 
 	var argv []string
 	switch src {
 	case TimelineSky:
-		argv = append(zone, "-qm", month, year, "-dm")
+		if voids {
+			argv = append(zone, "-qm", month, year, "-dm")
+			break
+		}
+		y, m, d := AstrologCalendar{}.DateOf(seg.Start, seg.Offset)
+		argv = append(zone, "-qd", strconv.Itoa(int(m)), strconv.Itoa(d), strconv.Itoa(y), "-d")
 	case TimelineTransit, TimelineReturn:
 		if req.Natal == nil {
 			return BodyCall{}, fmt.Errorf("astrolog: TimelineArgv: the %s search needs a natal chart", src)
@@ -500,11 +534,19 @@ func TimelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest) 
 	argv = append(argv, frame...)
 	argv = append(argv, reformPin...)
 	argv = append(argv, CurrentClock().Pins()...)
-	band, err := timelineBand(src, req.Objects, req.Aspects, req.Defaults)
+	objects, transitMarks := req.Objects, recipe.ObjectSet(nil)
+	if src != TimelineSky {
+		// The natal side takes the chart's policy and marks; the transiting
+		// side the now slot's marks, which the sky search's policy carries.
+		objects, transitMarks = req.Natal.Objects, req.Objects.Only
+	}
+	band, err := timelineBand(src, objects, transitMarks, req.Aspects, req.Defaults, voids)
 	if err != nil {
 		return BodyCall{}, err
 	}
-	return newBodyCall(append(argv, band.tokens...), band), nil
+	call := newBodyCall(append(argv, band.tokens...), band)
+	call.Registry = req.Registry
+	return call, nil
 }
 
 // formatSearchZone renders an offset (seconds east) as Astrolog's `-z` value,
@@ -557,7 +599,8 @@ func RunTimelineSearch(ctx context.Context, call BodyCall) (string, string, erro
 }
 
 // ComputeTimeline runs the given searches for the request's month — each
-// once per offset segment (C24, C46) — and returns their rows in source order
+// once per offset segment (C24, C46), the sky a day at a time (skySegment) —
+// and returns their rows in source order
 // (the order of srcs), each source's rows in Astrolog's output order. It does
 // not merge, sort or deduplicate: arranging the union is lookup's job.
 //
@@ -585,8 +628,8 @@ func ComputeTimeline(ctx context.Context, req TimelineRequest, srcs []TimelineSo
 	var commands []string
 	for _, src := range srcs {
 		for _, seg := range segs {
-			got, command, err := timelineSegment(ctx, req, src, seg, search)
-			commands = recordCommand(commands, command)
+			got, spawned, err := timelineSegment(ctx, req, src, seg, search)
+			commands = append(commands, spawned...)
 			if err != nil {
 				return nil, commands, err
 			}
@@ -598,7 +641,9 @@ func ComputeTimeline(ctx context.Context, req TimelineRequest, srcs []TimelineSo
 
 // skyOverflowLine is the line Astrolog 8.00 can print in a `-dm` search that
 // is a miscount, not a loss (the specification). It is printed
-// inside the day loop, so event rows may follow it.
+// inside the day loop, so event rows may follow it. A day search (`-d`) holds
+// nothing back, so there it comes only with 300 rows on its day, past the bound
+// below, and is refused.
 const skyOverflowLine = "Too many transit events found."
 
 // skyDayRowBound is the printed-date row count at which a sky output carrying
@@ -622,8 +667,8 @@ const skyDayRowBound = 75
 // when no printed date has skyDayRowBound or more rows (counted over this
 // one invocation's raw rows, before the segment filter). Every other case is
 // ParseTimeline's own refusal.
-func parseSearchOutput(src TimelineSource, out string, zone *time.Location) ([]TimelineRow, error) {
-	rows, err := ParseTimeline(out, zone)
+func parseSearchOutput(src TimelineSource, out string, zone *time.Location, reg aspect.Registry) ([]TimelineRow, error) {
+	rows, err := ParseTimeline(out, zone, reg)
 	var lineErr *TimelineLineError
 	if err == nil || src != TimelineSky || !errors.As(err, &lineErr) || lineErr.Line != skyOverflowLine {
 		return rows, err
@@ -634,7 +679,7 @@ func parseSearchOutput(src TimelineSource, out string, zone *time.Location) ([]T
 			kept = append(kept, line)
 		}
 	}
-	stripped, serr := ParseTimeline(strings.Join(kept, "\n"), zone)
+	stripped, serr := ParseTimeline(strings.Join(kept, "\n"), zone, reg)
 	if serr != nil {
 		return nil, serr
 	}
@@ -648,19 +693,98 @@ func parseSearchOutput(src TimelineSource, out string, zone *time.Location) ([]T
 	return stripped, nil
 }
 
-// timelineSegment is one search call: one source over one offset segment. It
-// returns the rows that fall inside the segment and the command of the spawn
-// (empty when none started), and the error of the call, if any.
-func timelineSegment(ctx context.Context, req TimelineRequest, src TimelineSource, seg TimelineSegment, search TimelineSearcher) ([]TimelineRow, string, error) {
+// timelineSegment is one source over one offset segment: one search call, or
+// the sky's calls (skySegment). It returns the rows that fall inside the
+// segment, the commands of the spawns that started, and the error, if any.
+func timelineSegment(ctx context.Context, req TimelineRequest, src TimelineSource, seg TimelineSegment, search TimelineSearcher) ([]TimelineRow, []string, error) {
+	if src == TimelineSky {
+		return skySegment(ctx, req, seg, search)
+	}
 	call, err := TimelineCall(src, seg, req)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
+	rows, command, err := searchCall(ctx, call, src, seg, search)
+	return rows, recordCommand(nil, command), err
+}
+
+// skySegment is the sky over one offset segment: Astrolog's day search (`-d`)
+// for each local day of it, because its month search drops events once a month
+// averages more than 75 a day (Astrolog_8.0 NEXT.md BUG 8: the planets' moons
+// alone make 95 to 129), and first one month search (`-dm`) over the Moon and
+// the planets for the void-of-course marks, which a day search prints only
+// when the Moon changes sign that same day. A day row the month search printed
+// with a mark is that month row, its own command with it; the month search's
+// other rows are not used. Any failed call fails the segment.
+func skySegment(ctx context.Context, req TimelineRequest, seg TimelineSegment, search TimelineSearcher) ([]TimelineRow, []string, error) {
+	var commands []string
+	call, err := timelineCall(TimelineSky, seg, req, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	month, command, err := searchCall(ctx, call, TimelineSky, seg, search)
+	commands = recordCommand(commands, command)
+	if err != nil {
+		return nil, commands, err
+	}
+	marked := map[string]TimelineRow{}
+	for _, row := range month {
+		if bare := voidMark.ReplaceAllString(row.Line, ""); bare != row.Line {
+			marked[bare] = row
+		}
+	}
+	var rows []TimelineRow
+	for _, day := range skyDays(seg) {
+		call, err := TimelineCall(TimelineSky, day, req)
+		if err != nil {
+			return nil, commands, err
+		}
+		got, command, err := searchCall(ctx, call, TimelineSky, day, search)
+		commands = recordCommand(commands, command)
+		if err != nil {
+			return nil, commands, err
+		}
+		for _, row := range got {
+			if m, ok := marked[voidMark.ReplaceAllString(row.Line, "")]; ok {
+				row = m
+			}
+			rows = append(rows, row)
+		}
+	}
+	return rows, commands, nil
+}
+
+// voidMark is the void-of-course mark that ends a sky row.
+var voidMark = regexp.MustCompile(` ` + tlVoid + `$`)
+
+// skyDays cuts an offset segment into the local days, at its offset, that
+// Astrolog's day search covers, each cut to the segment: a transition day is
+// one day in each of its two segments.
+func skyDays(seg TimelineSegment) []TimelineSegment {
+	const day = 86400
+	off, end := int64(seg.Offset), seg.End.Unix()
+	var days []TimelineSegment
+	for t := floorDiv(seg.Start.Unix()+off, day)*day - off; t < end; t += day {
+		from, to := time.Unix(t, 0).UTC(), time.Unix(t+day, 0).UTC()
+		if from.Before(seg.Start) {
+			from = seg.Start
+		}
+		if to.After(seg.End) {
+			to = seg.End
+		}
+		days = append(days, TimelineSegment{Start: from, End: to, Offset: seg.Offset})
+	}
+	return days
+}
+
+// searchCall runs one call and keeps the rows that fall inside seg, each with
+// its source and the call's command.
+func searchCall(ctx context.Context, call BodyCall, src TimelineSource, seg TimelineSegment, search TimelineSearcher) ([]TimelineRow, string, error) {
 	out, command, err := search(ctx, call)
 	if err != nil {
 		return nil, command, err
 	}
-	parsed, err := parseSearchOutput(src, out, time.FixedZone("", seg.Offset))
+	parsed, err := parseSearchOutput(src, out, time.FixedZone("", seg.Offset), call.Registry)
 	if err != nil {
 		return nil, command, err
 	}
@@ -675,15 +799,15 @@ func timelineSegment(ctx context.Context, req TimelineRequest, src TimelineSourc
 	return rows, command, nil
 }
 
-// TimelineCallResult is one search call's own outcome: the source and segment
-// it ran, the rows it contributed, the command of the spawn (empty when none
-// started) and its error. A failed call has no rows.
+// TimelineCallResult is one segment's own outcome: the source and segment it
+// ran, the rows it contributed, the commands of its spawns (the sky's are one
+// a day and its void marks') and its error. A failed segment has no rows.
 type TimelineCallResult struct {
-	Source  TimelineSource
-	Segment TimelineSegment
-	Rows    []TimelineRow
-	Command string
-	Err     error
+	Source   TimelineSource
+	Segment  TimelineSegment
+	Rows     []TimelineRow
+	Commands []string
+	Err      error
 }
 
 // ComputeTimelineCalls runs one source over each offset segment of the
@@ -706,8 +830,8 @@ func ComputeTimelineCalls(ctx context.Context, req TimelineRequest, src Timeline
 	}
 	var results []TimelineCallResult
 	for _, seg := range segs {
-		rows, command, err := timelineSegment(ctx, req, src, seg, search)
-		results = append(results, TimelineCallResult{Source: src, Segment: seg, Rows: rows, Command: command, Err: err})
+		rows, commands, err := timelineSegment(ctx, req, src, seg, search)
+		results = append(results, TimelineCallResult{Source: src, Segment: seg, Rows: rows, Commands: commands, Err: err})
 		if ctx.Err() != nil {
 			break
 		}

@@ -20,8 +20,8 @@ func recordWheelFormat(t *testing.T) *[]recipe.ImageFormat {
 	t.Helper()
 	var got []recipe.ImageFormat
 	prev := setWheelFormat
-	setWheelFormat = func(f recipe.ImageFormat) { got = append(got, f) }
 	t.Cleanup(func() { setWheelFormat = prev })
+	setWheelFormat = func(f recipe.ImageFormat) { got = append(got, f) }
 	return &got
 }
 

@@ -3,8 +3,37 @@
 # installs it under PREFIX (default ~/.local): the same recipe as the
 # Dockerfile's first stage, for a machine that is not a container (CI, a
 # developer without Docker). The archive is verified before it is unzipped.
+#
+#   scripts/build-astrolog [--moons | --no-moons]
+#
+# --moons also installs the planetary moons' files (27 moons and 5 centres of
+# body, about 240 MB), which no Astrolog distribution ships; --no-moons, or
+# neither, leaves them out. Without either flag the environment's SEXTILE_MOONS
+# decides as before (1 on; 0, empty or unset off), the variable the Docker image
+# and the sextile launcher also read; a flag outranks it. Their names and sha256
+# are in ephemeris-moons.sha256, next to this script. Each file is downloaded
+# once into the cache and a re-run fetches nothing that is already there.
 set -Eeuo pipefail
 PREFIX=${PREFIX:-$HOME/.local}
+# Refused before anything is built or downloaded.
+FLAG=
+for a in "$@"; do
+  case $a in
+    --moons) FLAG=1 ;;
+    --no-moons) FLAG=0 ;;
+    *) echo "scripts/build-astrolog takes --moons or --no-moons, not '$a'" >&2; exit 2 ;;
+  esac
+done
+if [ -n "$FLAG" ]; then
+  MOONS=$FLAG
+else
+  MOONS=${SEXTILE_MOONS-}
+  case $MOONS in
+    '' | 0 | 1) ;;
+    *) echo "SEXTILE_MOONS must be 1 or 0 (or unset), not '$MOONS'" >&2; exit 2 ;;
+  esac
+fi
+[ "$MOONS" = 1 ] || MOONS=
 ARCHIVE=ast80src.zip
 SHA256=8c0c33eac2c40d158c007f3a4168516972c9fc78830f65eba38ac2be46541d63
 URL="https://www.astrolog.org/ftp/$ARCHIVE"
@@ -12,6 +41,13 @@ URL="https://www.astrolog.org/ftp/$ARCHIVE"
 SWE_COMMIT=c69c14adb7a0f94829586ffd92cd422aacb21e86
 SWE_URL="https://raw.githubusercontent.com/aloistr/swisseph/$SWE_COMMIT/ephe"
 SWE_FILES="sepl_12.se1:8dccace2557601a223d5f8a7cf64de4e6bbb8a82b9b130b95a54d49adfbe546d semo_12.se1:1c65fdbb854f350d3de36afc3e4ac126a53f360ae4f6dcb57beed7c690e7eb61 seas_12.se1:3345555097e2080f4e2582026a6008ebbccfdca27600ba48019ca9c6e3e7a211"
+# The planetary moons' files: swisseph repository at a pinned commit, one file
+# each, the names and sha256 in the list.
+MOONS_COMMIT=94621aba9f3ff9c32cb721eac0380c30dbb153fe
+MOONS_URL="https://raw.githubusercontent.com/aloistr/swisseph/$MOONS_COMMIT/ephe/sat"
+# Absolute: the script changes directory below.
+MOONS_LIST=$(cd "$(dirname "$0")" && pwd)/ephemeris-moons.sha256
+[ -z "$MOONS" ] || [ -f "$MOONS_LIST" ] || { echo "the planetary moons need $MOONS_LIST" >&2; exit 1; }
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 cache=${ASTROLOG_CACHE:-$HOME/.cache/astrolog}
 mkdir -p "$cache" "$PREFIX/bin" "$PREFIX/share/astrolog"
@@ -22,6 +58,15 @@ for e in $SWE_FILES; do
   [ -f "$cache/$n" ] || curl -fsSL -o "$cache/$n" "$SWE_URL/$n"
   printf '%s  %s\n' "${e#*:}" "$cache/$n" | sha256sum -c -
 done
+if [ -n "$MOONS" ]; then
+  # A download goes to a .part name first, so an interrupted one never passes
+  # for a cached file.
+  while read -r sum n; do
+    case $sum in '#'* | '') continue ;; esac
+    [ -f "$cache/$n" ] || { curl -fsSL -o "$cache/$n.part" "$MOONS_URL/$n" && mv "$cache/$n.part" "$cache/$n"; }
+  done < "$MOONS_LIST"
+  grep -v '^#' "$MOONS_LIST" | (cd "$cache" && sha256sum -c --quiet -)
+fi
 unzip -q "$cache/$ARCHIVE" -d "$work"
 cd "$work"
 sed -i 's|^#define X11|//#define X11|' astrolog.h
@@ -29,15 +74,49 @@ sed -i "s|^#define DEFAULT_DIR \"\"|#define DEFAULT_DIR \"$PREFIX/share/astrolog
 sed -i 's|-lX11||' Makefile
 make -j"$(nproc)" >/dev/null
 install -m 0755 astrolog "$PREFIX/bin/astrolog"
-install -m 0644 astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt "$PREFIX/share/astrolog/"
+# The text files may hold the operator's own settings (astrolog.as above all):
+# one that is already there and differs from Astrolog's own is never
+# overwritten. Astrolog's goes beside it as <name>.stock, and a line says so.
+install_text() { # $1: the file in the source tree, $2: the data folder
+  local dst="$2/$1"
+  if [ -f "$dst" ] && ! cmp -s "$1" "$dst"; then
+    install -m 0644 "$1" "$dst.stock"
+    echo "kept your $dst, Astrolog's own is beside it as $1.stock" >&2
+  else
+    install -m 0644 "$1" "$dst"
+  fi
+}
+for f in astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt; do
+  install_text "$f" "$PREFIX/share/astrolog"
+done
 install -m 0644 ephem/sepl_18.se1 ephem/semo_18.se1 ephem/seas_18.se1 "$PREFIX/share/astrolog/"
 # Numbered-asteroid and dwarf-planet files (the Bodies chooser marks a body
 # whose file is absent), then the 1200-1800 files for charts before 1800.
 (cd ephem && install -m 0644 se00010s.se1 se50000s.se1 se90377s.se1 se90482s.se1 \
   s136108s.se1 s136199s.se1 s136472s.se1 s225088s.se1 "$PREFIX/share/astrolog/")
 for e in $SWE_FILES; do install -m 0644 "$cache/${e%%:*}" "$PREFIX/share/astrolog/"; done
+if [ -n "$MOONS" ]; then
+  while read -r sum n; do
+    case $sum in '#'* | '') continue ;; esac
+    install -m 0644 "$cache/$n" "$PREFIX/share/astrolog/"
+  done < "$MOONS_LIST"
+fi
 "$PREFIX/bin/astrolog" -Hc | grep -F 'Astrolog version 8.00' >/dev/null
 "$PREFIX/bin/astrolog" -qa 6 15 1990 14:30 5:00 122W 37N | grep -q '^Sun :.*Gem'
-! "$PREFIX/bin/astrolog" -qa 6 15 1500 12:00 0:00 0W 51N -R0 11 2>&1 | grep -q 'not found'
-! "$PREFIX/bin/astrolog" -qa 6 15 1990 14:30 5:00 122W 37N -R0 43 2>&1 | grep -q 'not found'
+# Each check below must be able to stop the script: errexit ignores a negated
+# pipeline (`! ... | grep -q`), so a missing file is caught by a case on the
+# captured output instead.
+needs_file() { # $1: what is checked, then Astrolog's arguments
+  local what=$1 out
+  shift
+  out=$("$PREFIX/bin/astrolog" "$@" 2>&1)
+  case $out in
+    *'not found'*) echo "Astrolog is installed but cannot find the ephemeris file for $what" >&2; exit 1 ;;
+  esac
+}
+needs_file 'a chart in 1500' -qa 6 15 1500 12:00 0:00 0W 51N -R0 11
+needs_file 'Hygiea' -qa 6 15 1990 14:30 5:00 122W 37N -R0 43
+if [ -n "$MOONS" ]; then
+  needs_file 'Titan (the planetary moons)' -qa 6 15 1990 14:30 5:00 122W 37N -R0 58
+fi
 echo "astrolog 8.00 installed in $PREFIX/bin (data in $PREFIX/share/astrolog)"

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -51,9 +52,14 @@ type TimelineRequest struct {
 
 // TimelineNatal is one anchored selected slot of a comparing timeline: its
 // numeral (its 1-based position in the selected set) and its chart.
+//
+// Objects is the object policy of this natal's own -t and -tr searches: the
+// slot's lens with its own marks (Only), so each natal narrows its own side.
+// The sky search takes Lens.Objects.
 type TimelineNatal struct {
 	Numeral int
 	Chart   store.AnchorChart
+	Objects recipe.ObjectPolicy
 }
 
 // TimelineRow is one presented event: its absolute instant, Astrolog's line
@@ -78,7 +84,7 @@ type TimelineRow struct {
 
 	// What the row is, the words of its Rest and the registry names they
 	// resolve to (astrolog.TimelineRow; the specification rule
-	// 2). Resolved says every name the kind needs resolved to a body or
+	// 2). Resolved says every name the kind needs resolved to an object or
 	// aspect Sextile knows; a row where it is false is unmarkable.
 	Kind      TimelineKind
 	Aspect    string
@@ -86,10 +92,12 @@ type TimelineRow struct {
 	Sign      string
 	Direction string
 	Station   string
-	BodyID    aspect.Body
-	OtherID   aspect.Body
-	AspectID  aspect.AspectKind
-	Resolved  bool
+	// Object and OtherObject are Astrolog's objects for the two names
+	// (astrolog.TimelineRow).
+	Object      aspect.Object
+	OtherObject aspect.Object
+	AspectID    aspect.AspectKind
+	Resolved    bool
 
 	// Julian is the branch Astrolog's reader took for the printed date: the day
 	// is before 15 Oct 1582 (astrolog.TimelineRow). The ui marks the date.
@@ -108,7 +116,7 @@ type TimelineResult struct {
 }
 
 // TimelineFailure is one search that failed in a Natals request: the slot's
-// numeral (0 for the sky search), Astrolog's own switch for the search ("-dm",
+// numeral (0 for the sky search), Astrolog's own switch for the search ("-d",
 // "-t" or "-tr") and the error. The rows of every other search are still in
 // the result.
 type TimelineFailure struct {
@@ -129,7 +137,8 @@ type TimelineSearcher func(ctx context.Context, call BodyCall) (out, command str
 type BodyCall = astrolog.BodyCall
 
 // DefaultSets are the object sets Astrolog lists unfiltered, as read from the
-// binary; the timeline's body band is hide-only against them.
+// binary; the timeline's body band is compared against them and its transiting
+// side keeps the binary's own exclusions.
 type DefaultSets = astrolog.DefaultSets
 
 // DefaultSetReader reads the default sets. nil means the real binary.
@@ -184,14 +193,14 @@ func TimelineWith(ctx context.Context, req TimelineRequest, search TimelineSearc
 	areq := astrolog.TimelineRequest{
 		Year: year, Month: month, Zone: zone,
 		Houses: req.Lens.Houses, Zodiac: req.Lens.Zodiac,
-		Objects: req.Lens.Objects, Aspects: req.Lens.Aspects, Defaults: sets,
+		Objects: req.Lens.Objects, Aspects: req.Lens.Aspects, Defaults: sets, Registry: req.Lens.Registry,
 	}
 	if len(req.Natals) > 0 {
 		return timelineNatals(ctx, req.Natals, areq, search)
 	}
 	srcs := []astrolog.TimelineSource{astrolog.TimelineSky}
 	if !req.Natal.IsZero() {
-		areq.Natal = &astrolog.TimelineNatal{When: req.Natal.When, Lon: req.Natal.Place.Lon, Lat: req.Natal.Place.Lat}
+		areq.Natal = &astrolog.TimelineNatal{When: req.Natal.When, Lon: req.Natal.Place.Lon, Lat: req.Natal.Place.Lat, Objects: req.Lens.Objects}
 		srcs = []astrolog.TimelineSource{astrolog.TimelineTransit, astrolog.TimelineSky, astrolog.TimelineReturn}
 	}
 	var run astrolog.TimelineSearcher
@@ -245,7 +254,7 @@ func timelineNatals(ctx context.Context, natals []TimelineNatal, areq astrolog.T
 	}
 	var plan []one
 	asNatal := func(n TimelineNatal) *astrolog.TimelineNatal {
-		return &astrolog.TimelineNatal{When: n.Chart.When, Lon: n.Chart.Place.Lon, Lat: n.Chart.Place.Lat}
+		return &astrolog.TimelineNatal{When: n.Chart.When, Lon: n.Chart.Place.Lon, Lat: n.Chart.Place.Lat, Objects: n.Objects}
 	}
 	for _, n := range natals {
 		plan = append(plan, one{n.Numeral, astrolog.TimelineTransit, asNatal(n)})
@@ -268,9 +277,7 @@ func timelineNatals(ctx context.Context, natals []TimelineNatal, areq astrolog.T
 			return res, fmt.Errorf("lookup: Timeline: %w", err)
 		}
 		for _, c := range calls {
-			if c.Command != "" {
-				res.Commands = append(res.Commands, c.Command)
-			}
+			res.Commands = append(res.Commands, c.Commands...)
 			if c.Err != nil {
 				if ctx.Err() != nil {
 					return res, fmt.Errorf("lookup: Timeline: %w", c.Err)
@@ -286,6 +293,15 @@ func timelineNatals(ctx context.Context, natals []TimelineNatal, areq astrolog.T
 	}
 	if succeeded == 0 {
 		return res, fmt.Errorf("lookup: Timeline: %w", res.Failures[0].Err)
+	}
+	// A missing-ephemeris refusal on any search refuses the whole result (any
+	// other warning drops only its own search's rows, as before): the
+	// other searches' rows would be a list that silently lacks that slot's events.
+	for _, f := range res.Failures {
+		var w *astrolog.WarnedError
+		if errors.As(f.Err, &w) && w.MissingEphemeris() {
+			return res, fmt.Errorf("lookup: Timeline: %w", f.Err)
+		}
 	}
 	res.Rows = mergeNumbered(rows)
 	return res, nil
@@ -337,7 +353,7 @@ func mergeNumbered(rows []numberedRow) []TimelineRow {
 		out = append(out, TimelineRow{Instant: r.Instant, Line: r.Line, Command: r.Command, Numeral: r.numeral,
 			Weekday: r.Weekday, Date: r.Date, Time: r.Time, Transit: r.Transit, Body: r.Body, Rest: r.Rest, Julian: r.Julian,
 			Kind: r.Kind, Aspect: r.Aspect, Other: r.Other, Sign: r.Sign, Direction: r.Direction, Station: r.Station,
-			BodyID: r.BodyID, OtherID: r.OtherID, AspectID: r.AspectID, Resolved: r.Resolved})
+			Object: r.Object, OtherObject: r.OtherObject, AspectID: r.AspectID, Resolved: r.Resolved})
 	}
 	return out
 }
@@ -354,7 +370,7 @@ var stationWord = regexp.MustCompile(`(<[A-Za-z]+> )S/([RD])`)
 //
 // correction: node station words on the timeline
 func relabelNodeStation(r astrolog.TimelineRow) astrolog.TimelineRow {
-	if r.Kind != astrolog.TimelineKindStation || (r.BodyID != aspect.NorthNode && r.BodyID != aspect.SouthNode) {
+	if r.Kind != astrolog.TimelineKindStation || (r.Object.Name != "North Node" && r.Object.Name != "South Node") {
 		return r
 	}
 	swap := func(text string) string {
@@ -377,7 +393,7 @@ func relabelNodeStation(r astrolog.TimelineRow) astrolog.TimelineRow {
 
 // DefaultSetsError is the timeline's refusal to run when Astrolog's default
 // object sets could not be read or were unusable (C12). Without them the
-// searches cannot be banded hide-only, and an unbanded search would show the
+// searches cannot be banded, and an unbanded search would show the
 // bodies the operator hid, so nothing is spawned.
 type DefaultSetsError struct{ Err error }
 

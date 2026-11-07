@@ -17,7 +17,7 @@ import (
 // fail here — earlier nil-check-only tests could not catch that, the reviewer
 // flagged it in review.
 func TestSelectComputeMode_TransitOnlyWhenNoAnchor(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
 	m.place = testPlaceBerlin()
 	if !anchorHandle(m).IsZero() {
 		t.Fatalf("precondition: lastChart should be zero, got %+v", anchorHandle(m))
@@ -37,7 +37,7 @@ func TestSelectComputeMode_TransitOnlyWhenNoAnchor(t *testing.T) {
 // degenerate pre-resolution model (nil slots, zero place) must produce a
 // compute (wall-clock transit fallback).
 func TestBuildTextCmd_NeverNil(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
 	// nil slots, zero place — the most degenerate workspace possible.
 	if cmd := buildTextCmd(m, context.Background(), 1, 1); cmd == nil {
 		t.Fatal("buildTextCmd returned nil for the degenerate workspace — unmet wants could strand")
@@ -49,7 +49,7 @@ func TestBuildTextCmd_NeverNil(t *testing.T) {
 // flips the decision to computeModeOverlay. Together with the previous
 // test, this prevents accidental routing regressions.
 func TestSelectComputeMode_OverlayWhenAnchorPresent(t *testing.T) {
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
 	m.place = testPlaceBerlin()
 	natal := store.AnchorChart{
 		When:  time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC),

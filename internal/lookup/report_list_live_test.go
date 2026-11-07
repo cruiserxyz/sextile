@@ -11,7 +11,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // Acceptance 9 of the specification: against the live binary, for
@@ -38,7 +37,7 @@ func TestReportListHoldsExactlyAstrologsRowsLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	reports = append(reports, report{"own-chart list", astrolog.GrammarAspects, own})
-	body, _, err := ComputeRawReport(ctx, when, place, Hellenistic, RawReportRequest{Kind: RawReportBody, Body: aspect.Moon})
+	body, _, err := ComputeRawReport(ctx, when, place, Hellenistic, RawReportRequest{Kind: RawReportBody, Object: objMoon})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,12 +47,12 @@ func TestReportListHoldsExactlyAstrologsRowsLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	reports = append(reports, report{"comparison list", astrolog.GrammarCrossAspects, full.Report})
-	cross, _, err := CrossBodyRawReport(ctx, Hellenistic, natal, when, place, aspect.Moon)
+	cross, _, err := CrossBodyRawReport(ctx, Hellenistic, natal, when, place, objMoon)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reports = append(reports, report{"cross body report", astrolog.GrammarCrossAspects, cross})
-	syn, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, when, place, store.ReportLabel{}, aspect.Moon)
+	syn, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, when, place, store.ReportLabel{}, objMoon)
 	if err != nil {
 		t.Fatal(err)
 	}

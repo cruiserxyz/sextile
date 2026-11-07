@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"reflect"
 	"strings"
 	"testing"
@@ -41,6 +42,12 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlPgDown}
 	case "ctrl+c":
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "ctrl+l":
+		return tea.KeyMsg{Type: tea.KeyCtrlL}
+	case "ctrl+o":
+		return tea.KeyMsg{Type: tea.KeyCtrlO}
+	case "ctrl+x":
+		return tea.KeyMsg{Type: tea.KeyCtrlX}
 	case "shift+tab":
 		return tea.KeyMsg{Type: tea.KeyShiftTab}
 	case "backspace":
@@ -50,7 +57,7 @@ func keyMsg(s string) tea.KeyMsg {
 }
 
 func TestKeyMsgNamesRoundTrip(t *testing.T) {
-	for _, k := range []string{"esc", "enter", "up", "down", "tab", "pgup", "pgdown", "home", "end", "ctrl+pgup", "ctrl+pgdown", ",", "l", "q", "y", " ", "?"} {
+	for _, k := range []string{"esc", "enter", "up", "down", "tab", "pgup", "pgdown", "home", "end", "ctrl+pgup", "ctrl+pgdown", "ctrl+l", "ctrl+o", "ctrl+x", ",", "l", "q", "y", " ", "?"} {
 		if got := keyMsg(k).String(); got != k {
 			t.Errorf("keyMsg(%q).String() = %q", k, got)
 		}
@@ -60,11 +67,11 @@ func TestKeyMsgNamesRoundTrip(t *testing.T) {
 // press sends one key through the whole Update path, exactly as the terminal
 // would — no test reaches into a mode's handler directly, so the routing is
 // under test too.
-func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
+func press(t *testing.T, m Model, kmap ...string) (Model, tea.Cmd) {
 	t.Helper()
 	var tm tea.Model = m
 	var cmd tea.Cmd
-	for _, k := range keys {
+	for _, k := range kmap {
 		tm, cmd = tm.Update(keyMsg(k))
 	}
 	return tm.(Model), cmd
@@ -78,11 +85,11 @@ func leaderModel(t *testing.T) Model {
 
 // threeDeepMap is a test-only map proving the trie is a trie: `g s x` is three
 // keys deep, and `g` and `g s` are prefixes of it, not bindings.
-func threeDeepMap(t *testing.T) *leaderNode {
+func threeDeepMap(t *testing.T) *keys.LeaderNode {
 	t.Helper()
-	root, err := newLeaderMap([]leaderBinding{
-		{Seq: []string{"l"}, ID: BindingLogConsole},
-		{Seq: []string{"g", "s", "x"}, ID: BindingHelp},
+	root, err := keys.NewLeaderMap([]keys.LeaderBinding{
+		{Seq: []string{"l"}, ID: keys.BindingLogConsole},
+		{Seq: []string{"g", "s", "x"}, ID: keys.BindingHelp},
 	})
 	if err != nil {
 		t.Fatalf("newLeaderMap: %v", err)
@@ -96,30 +103,30 @@ func TestLeaderResolveOutcomes(t *testing.T) {
 	root := threeDeepMap(t)
 	cases := []struct {
 		seq  []string
-		want leaderOutcome
-		id   BindingID
+		want keys.LeaderOutcome
+		id   keys.BindingID
 	}{
-		{nil, resolvePrefix, 0},
-		{[]string{"l"}, resolveAction, BindingLogConsole},
-		{[]string{"g"}, resolvePrefix, 0},
-		{[]string{"g", "s"}, resolvePrefix, 0},
-		{[]string{"g", "s", "x"}, resolveAction, BindingHelp},
-		{[]string{"z"}, resolveNone, 0},
-		{[]string{"l", "z"}, resolveNone, 0},
-		{[]string{"g", "z"}, resolveNone, 0},
-		{[]string{"g", "s", "z"}, resolveNone, 0},
+		{nil, keys.ResolvePrefix, 0},
+		{[]string{"l"}, keys.ResolveAction, keys.BindingLogConsole},
+		{[]string{"g"}, keys.ResolvePrefix, 0},
+		{[]string{"g", "s"}, keys.ResolvePrefix, 0},
+		{[]string{"g", "s", "x"}, keys.ResolveAction, keys.BindingHelp},
+		{[]string{"z"}, keys.ResolveNone, 0},
+		{[]string{"l", "z"}, keys.ResolveNone, 0},
+		{[]string{"g", "z"}, keys.ResolveNone, 0},
+		{[]string{"g", "s", "z"}, keys.ResolveNone, 0},
 	}
 	for _, tc := range cases {
-		got, id := root.resolve(tc.seq)
+		got, id := root.Resolve(tc.seq)
 		switch got {
-		case resolveNone, resolvePrefix, resolveAction:
+		case keys.ResolveNone, keys.ResolvePrefix, keys.ResolveAction:
 		default:
 			t.Fatalf("resolve(%v) returned %d, which is none of the three outcomes", tc.seq, got)
 		}
 		if got != tc.want {
 			t.Errorf("resolve(%v) = %v, want %v", tc.seq, got, tc.want)
 		}
-		if got == resolveAction && id != tc.id {
+		if got == keys.ResolveAction && id != tc.id {
 			t.Errorf("resolve(%v) carried id %v, want %v", tc.seq, id, tc.id)
 		}
 	}
@@ -127,8 +134,8 @@ func TestLeaderResolveOutcomes(t *testing.T) {
 
 // A nil tree resolves nothing rather than taking the process down.
 func TestLeaderResolveNilMapIsInert(t *testing.T) {
-	var root *leaderNode
-	if got, _ := root.resolve([]string{"l"}); got != resolveNone {
+	var root *keys.LeaderNode
+	if got, _ := root.Resolve([]string{"l"}); got != keys.ResolveNone {
 		t.Errorf("nil map resolved %v", got)
 	}
 }
@@ -136,10 +143,10 @@ func TestLeaderResolveNilMapIsInert(t *testing.T) {
 // The shipped map must build, since mustDefaultLeaderMap falls back to an
 // empty tree rather than panicking.
 func TestDefaultLeaderMapBuilds(t *testing.T) {
-	if _, err := newLeaderMap(defaultLeaderMap()); err != nil {
+	if _, err := keys.NewLeaderMap(defaultLeaderMap()); err != nil {
 		t.Fatalf("the shipped leader map does not build: %v", err)
 	}
-	if got, id := mustDefaultLeaderMap().resolve([]string{"l"}); got != resolveAction || id != BindingLogConsole {
+	if got, id := mustDefaultLeaderMap().Resolve([]string{"l"}); got != keys.ResolveAction || id != keys.BindingLogConsole {
 		t.Errorf("shipped map resolves l to (%v, %v)", got, id)
 	}
 }
@@ -147,19 +154,19 @@ func TestDefaultLeaderMapBuilds(t *testing.T) {
 // C2: a sequence that is both a binding and the start of a longer one is
 // refused at construction, in either declaration order, naming both.
 func TestLeaderMapRejectsPrefixAmbiguity(t *testing.T) {
-	cases := map[string][]leaderBinding{
+	cases := map[string][]keys.LeaderBinding{
 		"shorter first": {
-			{Seq: []string{"g"}, ID: BindingHelp},
-			{Seq: []string{"g", "s"}, ID: BindingLogConsole},
+			{Seq: []string{"g"}, ID: keys.BindingHelp},
+			{Seq: []string{"g", "s"}, ID: keys.BindingLogConsole},
 		},
 		"longer first": {
-			{Seq: []string{"g", "s"}, ID: BindingLogConsole},
-			{Seq: []string{"g"}, ID: BindingHelp},
+			{Seq: []string{"g", "s"}, ID: keys.BindingLogConsole},
+			{Seq: []string{"g"}, ID: keys.BindingHelp},
 		},
 	}
 	for name, bindings := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := newLeaderMap(bindings)
+			_, err := keys.NewLeaderMap(bindings)
 			if err == nil {
 				t.Fatal("an ambiguous map was accepted")
 			}
@@ -200,7 +207,7 @@ func TestLeaderCompletesAction(t *testing.T) {
 	if m.leader.pending {
 		t.Error("pending survived a completed sequence")
 	}
-	if !m.console.open {
+	if !m.logFocus.active {
 		t.Error("the action did not run")
 	}
 }
@@ -230,7 +237,7 @@ func TestLeaderHoldsPrefix(t *testing.T) {
 	}
 }
 
-// C6: a key that resolves to nothing is swallowed — a mistyped `,y` must not
+// C6: a key that resolves to nothing is swallowed — a mistyped `,x` must not
 // reach the time-step binding and move the chart a year.
 func TestLeaderUnmappedKeySwallowed(t *testing.T) {
 	m := leaderModel(t)
@@ -238,7 +245,7 @@ func TestLeaderUnmappedKeySwallowed(t *testing.T) {
 	beforeRefresh := m.refresh
 	beforeLog := len(m.logLines)
 
-	m, cmd := press(t, m, ",", "y")
+	m, cmd := press(t, m, ",", "x")
 	if m.leader.pending {
 		t.Error("pending survived an unmapped key")
 	}
@@ -307,7 +314,7 @@ func TestLeaderStaleTickDropped(t *testing.T) {
 	if cmd != nil {
 		t.Error("a stale tick returned a command")
 	}
-	if !reflect.DeepEqual(before, tm.(Model)) {
+	if !sameModel(before, tm.(Model)) {
 		t.Error("a stale tick changed the Model")
 	}
 }
@@ -332,8 +339,8 @@ func TestLeaderInertInModal(t *testing.T) {
 		if m.leader.pending {
 			t.Error("the leader armed under the atlas modal")
 		}
-		if m.atlas.filterText != "," {
-			t.Errorf("the atlas filter did not receive the key, it reads %q", m.atlas.filterText)
+		if m.atlas.FilterText != "," {
+			t.Errorf("the atlas filter did not receive the key, it reads %q", m.atlas.FilterText)
 		}
 	})
 	t.Run("charts", func(t *testing.T) {
@@ -343,26 +350,41 @@ func TestLeaderInertInModal(t *testing.T) {
 		if m.leader.pending {
 			t.Error("the leader armed under the chart picker")
 		}
-		if m.picker.filterText != "," {
-			t.Errorf("the chart picker did not receive the key, it reads %q", m.picker.filterText)
+		if m.picker.FilterText != "," {
+			t.Errorf("the chart picker did not receive the key, it reads %q", m.picker.FilterText)
 		}
 	})
 }
 
-// C11: the console owns the keyboard, so no leader arms inside it.
-func TestLeaderInertInConsole(t *testing.T) {
+// C11: the console owns the keyboard, and the leader works in it for one chord,
+// `,y`, which copies every line. A sequence that completes any other action is
+// swallowed like a mistyped one: it opens nothing and leaves the console open.
+func TestLeaderInConsoleTakesOnlyCopy(t *testing.T) {
+	copied := captureYank(t)
 	m := leaderModel(t)
 	m = m.testNote("a line to look at")
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
 	m, _ = press(t, m, ",")
-	if m.leader.pending {
-		t.Error("the leader armed inside the console")
+	if !m.leader.pending || !m.console.open {
+		t.Fatalf("the leader did not arm inside the console: pending %v, open %v", m.leader.pending, m.console.open)
 	}
-	if !m.console.open {
-		t.Error("the leader key closed the console")
+	m, _ = press(t, m, "s")
+	if m.leader.pending || !m.console.open || m.startup == startupSaveOpen {
+		t.Errorf(",s inside the console: pending %v, open %v, startup %v", m.leader.pending, m.console.open, m.startup)
+	}
+	m, _ = press(t, m, ",", "l")
+	if m.leader.pending || !m.console.open || m.logFocus.active {
+		t.Errorf(",l inside the console: pending %v, open %v, log focus %v", m.leader.pending, m.console.open, m.logFocus.active)
+	}
+	if len(*copied) != 0 {
+		t.Fatalf("copied before ,y: %q", *copied)
+	}
+	m, _ = press(t, m, ",", "y")
+	if len(*copied) != 1 || !m.console.open {
+		t.Errorf(",y inside the console: copied %d, open %v", len(*copied), m.console.open)
 	}
 }
 
@@ -546,9 +568,9 @@ func TestLeaderShadowsBinding(t *testing.T) {
 
 // C49: the help modal names the active leader and lists every leader binding.
 func TestHelpListsLeaderMap(t *testing.T) {
-	keys := defaultKeys()
+	kmap := keys.DefaultKeys()
 	for _, leader := range []string{",", ";"} {
-		got := helpListText(keys, leader, defaultLeaderMap())
+		got := helpListText(kmap, leader, defaultLeaderMap())
 		if !strings.Contains(got, "leader: "+leader) {
 			t.Errorf("help does not name the active leader %q", leader)
 		}
@@ -578,23 +600,22 @@ func TestLeaderSurvivesResize(t *testing.T) {
 	}
 }
 
-// Acceptance 9: `c` is only a prefix. Both shipped maps build with `c d` in
-// them; `,c` alone does nothing when its window runs out, and `,c x` is a
+// Acceptance 9: `c` is only a prefix. The shipped map builds with `c d` in
+// it; `,c` alone does nothing when its window runs out, and `,c x` is a
 // mistyped sequence that is swallowed. Neither writes a Log line, starts a
 // command or touches the profile.
 func TestCommaCIsOnlyAPrefix(t *testing.T) {
-	for name, tree := range map[string]func() (*leaderNode, error){
-		"main":    func() (*leaderNode, error) { return newLeaderMap(defaultLeaderMap()) },
-		"details": func() (*leaderNode, error) { return newLeaderMap(detailsLeaderMap()) },
+	for name, tree := range map[string]func() (*keys.LeaderNode, error){
+		"main": func() (*keys.LeaderNode, error) { return keys.NewLeaderMap(defaultLeaderMap()) },
 	} {
 		root, err := tree()
 		if err != nil {
 			t.Fatalf("%s: the shipped leader map does not build: %v", name, err)
 		}
-		if got, _ := root.resolve([]string{"c"}); got != resolvePrefix {
+		if got, _ := root.Resolve([]string{"c"}); got != keys.ResolvePrefix {
 			t.Errorf("%s: `c` resolves to %v, want only a prefix", name, got)
 		}
-		if got, id := root.resolve([]string{"c", "d"}); got != resolveAction || id != BindingSaveCity {
+		if got, id := root.Resolve([]string{"c", "d"}); got != keys.ResolveAction || id != keys.BindingSaveCity {
 			t.Errorf("%s: `c d` resolves to (%v, %v)", name, got, id)
 		}
 	}

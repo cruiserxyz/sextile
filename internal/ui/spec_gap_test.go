@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,7 +54,7 @@ func fixtureAstrolog(t *testing.T, transform func(string) string) func() [][]str
 		"{ printf '%s\\n' \"$@\"; printf '%s\\n' '" + fixtureSpawnEnd + "'; } >> " + strconv.Quote(logPath) + "\n" +
 		"case \" $* \" in\n" +
 		"  *\" -aa \"*) exec /bin/cat " + strconv.Quote(aspectsPath) + " ;;\n" +
-		"  *) exec /bin/cat " + strconv.Quote(positionsPath) + " ;;\n" +
+		"  *) exec /usr/bin/python3 -I " + strconv.Quote(replayFilter(t)) + " " + strconv.Quote(positionsPath) + " \"$@\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(filepath.Join(dir, "astrolog"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -155,7 +156,7 @@ func TestBodyConfirmAppliesCancelRestores(t *testing.T) {
 			m.lens.Objects = entry
 
 			tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
-			for i := 0; i < groupRows(); i++ { // past the group rows
+			for i := 0; i < popup.GroupRows(); i++ { // past the group rows
 				tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 			}
 			tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace}) // tick Earth (registry row 0)
@@ -189,7 +190,7 @@ func TestRegistryReadPrecedesAnyRestriction(t *testing.T) {
 		t.Fatalf("startup registry reads = %d, want 1", reads)
 	}
 
-	m := readyModelWithObjects(nil)
+	m := readyModelWithObjects(t, nil)
 	m, _ = applyObjectRegistryLoaded(m, msg)
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}}
 	for i := 0; i < 2; i++ {
@@ -283,15 +284,15 @@ func TestAspectsKeepUnnameableEndpoints(t *testing.T) {
 	}
 	labelled := 0
 	for _, a := range changed.Aspects {
-		if a.A == aspect.BodyUnknown {
-			if a.ALabel != "Ceres" {
-				t.Errorf("untyped side of %+v lacks the printed name Ceres", a)
-			}
+		if a.AObject == (aspect.Object{}) || a.BObject == (aspect.Object{}) {
+			t.Errorf("a side of %+v has no object", a)
+		}
+		if a.AObject.Name == "Ceres" {
 			labelled++
 		}
 	}
 	if labelled == 0 {
-		t.Fatal("no aspect kept the untyped Ceres side")
+		t.Fatal("no aspect kept the Ceres side")
 	}
 	body := renderAspectsBody(chartViewState{aspects: changed.Aspects}, TabAspects, 64, 6, Config{Accessible: true, Color: ColorNever})
 	if strings.TrimSpace(body) == "" || strings.Contains(body, "?") || !strings.Contains(body, "·") {
@@ -317,4 +318,17 @@ func stripSpawnPrefix(argv []string) (own, prefix []string, ok bool) {
 		return nil, nil, false
 	}
 	return argv[i:], argv[:i], true
+}
+
+// replayFilter is the path of the stand-in that prints only the objects a
+// replayed positions listing was asked for (see the script): the fixture holds
+// the eighteen objects the lens draws, and a call for fewer must get fewer
+// rows, as the binary prints them.
+func replayFilter(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("..", "astrolog", "testdata", "provenance", "replay-positions.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

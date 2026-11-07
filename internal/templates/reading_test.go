@@ -72,7 +72,7 @@ func TestLeadingTermIsTheLabel(t *testing.T) {
 // whose verdict holds, no otherwise, the criterion as the aside.
 func TestRuleRendersAsQuestionAndAnswers(t *testing.T) {
 	ts, _ := Shipped(reg, set(t))
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	for _, tc := range []struct {
 		elong        float64
 		first, later string
@@ -149,7 +149,7 @@ func TestGroupsSeparatedByOneBlankLine(t *testing.T) {
 // R9 — trailing parenthesised terms go to the aside, not the value.
 func TestQualifiersSitInTheThirdColumn(t *testing.T) {
 	ts, _ := Shipped(reg, set(t))
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, nil)}, set(t))
 	if err != nil {
 		t.Fatal(err)

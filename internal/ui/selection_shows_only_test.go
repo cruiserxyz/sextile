@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"os/exec"
 	"reflect"
 	"slices"
@@ -18,6 +19,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -31,14 +33,14 @@ import (
 // positions, the pair, the timeline) shows it in the frame, and one that never
 // handed it on shows nothing restricted at all.
 
-var selFixtureBodies = []aspect.Body{aspect.Sun, aspect.Moon, aspect.Mercury, aspect.Venus, aspect.Mars, aspect.Jupiter}
+var selFixtureBodies = []aspect.Object{objSun, objMoon, objMercury, objVenus, objMars, objJupiter}
 
 var selFixtureAspects = []aspect.Aspect{
-	{A: aspect.Sun, B: aspect.Moon, Kind: aspect.Trine, Power: 9},
-	{A: aspect.Sun, B: aspect.Mars, Kind: aspect.Square, Power: 8},
-	{A: aspect.Moon, B: aspect.Venus, Kind: aspect.Sextile, Power: 7},
-	{A: aspect.Mars, B: aspect.Jupiter, Kind: aspect.Opposition, Power: 6},
-	{A: aspect.Mercury, B: aspect.Venus, Kind: aspect.Conjunction, Power: 5},
+	{AObject: objSun, BObject: objMoon, Kind: aspect.Trine, Power: 9},
+	{AObject: objSun, BObject: objMars, Kind: aspect.Square, Power: 8},
+	{AObject: objMoon, BObject: objVenus, Kind: aspect.Sextile, Power: 7},
+	{AObject: objMars, BObject: objJupiter, Kind: aspect.Opposition, Power: 6},
+	{AObject: objMercury, BObject: objVenus, Kind: aspect.Conjunction, Power: 5},
 }
 
 // selCalls records the lens every seam was handed.
@@ -77,31 +79,39 @@ func (c *selCalls) reset() {
 }
 
 // onlyOf is the names in a lens's Only, ascending, or nil.
-func onlyOf(l lookup.Lens) []aspect.Body {
+func onlyOf(l lookup.Lens) []aspect.Object {
 	if len(l.Objects.Only) == 0 {
 		return nil
 	}
-	return l.Objects.Only.Members()
+	var out []aspect.Object
+	for _, n := range l.Objects.Only.Members() {
+		o, err := fixtureObjectNumbered(n)
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, o)
+	}
+	return out
 }
 
 // visibleIn is the fixture bodies a lens leaves drawn: all of them, or those in Only.
-func visibleIn(l lookup.Lens) []aspect.Body {
+func visibleIn(l lookup.Lens) []aspect.Object {
 	if len(l.Objects.Only) == 0 {
 		return slices.Clone(selFixtureBodies)
 	}
-	var out []aspect.Body
+	var out []aspect.Object
 	for _, b := range selFixtureBodies {
-		if l.Objects.Only.Has(b) {
+		if l.Objects.Only.Has(b.Number) {
 			out = append(out, b)
 		}
 	}
 	return out
 }
 
-func selBodyNames(bs []aspect.Body) string {
+func selBodyNames(bs []aspect.Object) string {
 	var out []string
 	for _, b := range bs {
-		out = append(out, bodyName(b))
+		out = append(out, panel.BodyName(b))
 	}
 	return strings.Join(out, " ")
 }
@@ -111,10 +121,10 @@ func selResult(l lookup.Lens) lookup.Result {
 	vis := visibleIn(l)
 	var r lookup.Result
 	for i, b := range vis {
-		r.Positions = append(r.Positions, aspect.Position{Body: b, Longitude: float64(20 + 40*i), Speed: 1, House: 1})
+		r.Positions = append(r.Positions, aspect.Position{Object: b, Longitude: float64(20 + 40*i), Speed: 1, House: 1})
 	}
 	for _, a := range selFixtureAspects {
-		if slices.Contains(vis, a.A) && slices.Contains(vis, a.B) {
+		if slices.Contains(vis, a.AObject) && slices.Contains(vis, a.BObject) {
 			r.Aspects = append(r.Aspects, a)
 		}
 	}
@@ -132,67 +142,63 @@ func selResult(l lookup.Lens) lookup.Result {
 func stubSelectionSeams(t *testing.T) *selCalls {
 	t.Helper()
 	c := &selCalls{}
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	oldRaw, oldCB, oldSB := computeRawReport, computeCrossBodyReport, computeSynastryBodyReport
-	oldW, oldOW, oldMW, oldShow := renderWheelImage, renderOverlayWheelImage, renderMultiWheelImage, showWheel
-	oldTL, oldProbe := computeTimeline, probeBody
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
-		computeRawReport, computeCrossBodyReport, computeSynastryBodyReport = oldRaw, oldCB, oldSB
-		renderWheelImage, renderOverlayWheelImage, renderMultiWheelImage, showWheel = oldW, oldOW, oldMW, oldShow
-		computeTimeline, probeBody = oldTL, oldProbe
+	oldProbe := probeBody
+	t.Cleanup(func() { probeBody = oldProbe })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
+			c.add(&c.natal, l)
+			return selResult(l), nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, _ time.Time, _ location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
+			c.add(&c.transit, l)
+			return selResult(l), nil
+		}
 	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
-		c.add(&c.natal, l)
-		return selResult(l), nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, _ time.Time, _ location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
-		c.add(&c.transit, l)
-		return selResult(l), nil
-	}
 	cross := func(l lookup.Lens) (lookup.OverlayAspects, error) {
 		c.add(&c.cross, l)
 		return lookup.OverlayAspects{
-			Aspects:  []lookup.OverlayAspect{{Transit: aspect.Sun, Natal: aspect.Moon, Kind: aspect.Trine, Power: 5}, {Transit: aspect.Mars, Natal: aspect.Venus, Kind: aspect.Square, Power: 4}},
+			Aspects:  []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objMoon, Kind: aspect.Trine, Power: 5}, {TransitObject: objMars, NatalObject: objVenus, Kind: aspect.Square, Power: 4}},
 			Report:   "CROSS ASPECTS",
 			Commands: []string{"astrolog -r0 cross"},
 		}, nil
 	}
-	overlayCrossAspects = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		return cross(l)
-	}
-	synastryCrossAspects = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		return cross(l)
-	}
-	computeRawReport = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, req lookup.RawReportRequest) (string, string, error) {
-		c.add(&c.raw, l)
-		return fmt.Sprintf("REPORT kind=%d body=%s lists %s", int(req.Kind), bodyName(req.Body), selBodyNames(visibleIn(l))), "astrolog report", nil
-	}
-	computeCrossBodyReport = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, b aspect.Body) (string, string, error) {
-		c.add(&c.pairBody, l)
-		return "PAIR REPORT " + bodyName(b), "astrolog -rt report", nil
-	}
-	computeSynastryBodyReport = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel, b aspect.Body) (string, string, error) {
-		c.add(&c.pairBody, l)
-		return "PAIR REPORT " + bodyName(b), "astrolog -r0 report", nil
-	}
-	renderWheelImage = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		c.add(&c.wheel, l)
-		return []byte("wheel " + selBodyNames(visibleIn(l))), nil
-	}
-	renderOverlayWheelImage = func(_ context.Context, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, l lookup.Lens) ([]byte, error) {
-		c.add(&c.overlay, l)
-		return []byte("overlay"), nil
-	}
-	renderMultiWheelImage = func(_ context.Context, _ []lookup.WheelRing, l lookup.Lens) ([]byte, []string, error) {
-		c.add(&c.rings, l)
-		return []byte("rings"), []string{"astrolog rings"}, nil
-	}
-	showWheel = func([]byte) (string, error) { return "/tmp/stub.png", nil }
-	computeTimeline = func(_ context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		c.add(&c.timeline, req.Lens)
-		return lookup.TimelineResult{}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.overlay = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			return cross(l)
+		}
+		s.cast.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			return cross(l)
+		}
+		s.reports.raw = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, req lookup.RawReportRequest) (string, string, error) {
+			c.add(&c.raw, l)
+			return fmt.Sprintf("REPORT kind=%d body=%s lists %s", int(req.Kind), panel.BodyName(req.Object), selBodyNames(visibleIn(l))), "astrolog report", nil
+		}
+		s.reports.cross = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, b aspect.Object) (string, string, error) {
+			c.add(&c.pairBody, l)
+			return "PAIR REPORT " + panel.BodyName(b), "astrolog -rt report", nil
+		}
+		s.reports.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel, b aspect.Object) (string, string, error) {
+			c.add(&c.pairBody, l)
+			return "PAIR REPORT " + panel.BodyName(b), "astrolog -r0 report", nil
+		}
+		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			c.add(&c.wheel, l)
+			return []byte("wheel " + selBodyNames(visibleIn(l))), nil
+		}
+		s.wheel.renderOverlay = func(_ context.Context, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, l lookup.Lens) ([]byte, error) {
+			c.add(&c.overlay, l)
+			return []byte("overlay"), nil
+		}
+		s.wheel.renderRings = func(_ context.Context, _ []lookup.WheelRing, l lookup.Lens) ([]byte, []string, error) {
+			c.add(&c.rings, l)
+			return []byte("rings"), []string{"astrolog rings"}, nil
+		}
+		s.wheel.show = func([]byte) (string, error) { return "/tmp/stub.png", nil }
+		s.timeline = func(_ context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			c.add(&c.timeline, req.Lens)
+			return lookup.TimelineResult{}, nil
+		}
+	})
 	probeBody = func(_ context.Context, _ *lookup.Probers, _ time.Time, _ location.PlaceInfo, l lookup.Lens, _ int) (lookup.BodyProbe, error) {
 		c.add(&c.probe, l)
 		return lookup.BodyProbe{Drawable: true}, nil
@@ -244,7 +250,7 @@ func pressSpace(t *testing.T, m Model) (Model, tea.Cmd) {
 func aspectPairs(as []aspect.Aspect) string {
 	var out []string
 	for _, a := range as {
-		out = append(out, bodyName(a.A)+"-"+bodyName(a.B))
+		out = append(out, panel.BodyName(a.AObject)+"-"+panel.BodyName(a.BObject))
 	}
 	return strings.Join(out, ",")
 }
@@ -262,11 +268,11 @@ func TestShowLensCarriesTheSelection(t *testing.T) {
 		t.Errorf("nothing selected: Only = %v, want nil (not an empty set)", got)
 	}
 
-	m.slots.ToggleBodySelection(m.cursorIdx, aspect.Moon)
-	m.slots.ToggleBodySelection(m.cursorIdx, aspect.Sun)
+	m.slots.ToggleObjectSelection(m.cursorIdx, objMoon)
+	m.slots.ToggleObjectSelection(m.cursorIdx, objSun)
 	got := m.showLens(slot)
 	want := m.lensFor(slot)
-	want.Objects.Only = recipe.NewBodySet(aspect.Sun, aspect.Moon)
+	want.Objects.Only = recipe.NewObjectSet(objSun.Number, objMoon.Number)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("selected Sun and Moon: showLens = %+v, want lensFor plus Only {Sun, Moon}: %+v", got, want)
 	}
@@ -305,7 +311,7 @@ func TestSpaceOnABodyArmsAspectsDetailsAndWheel(t *testing.T) {
 			// Details report, held until that frame commits, and the wheel.
 			textWant, imageWant := m.refresh[surfaceText].wantID, m.refresh[surfaceImage].wantID
 			m, cmd := pressSpace(t, m)
-			if !m.slots.BodySelected(m.cursorIdx, aspect.Sun) {
+			if !m.slots.ObjectSelected(m.cursorIdx, objSun.Number) {
 				t.Fatal("Space did not select Sun")
 			}
 			if m.refresh[surfaceText].wantID == textWant {
@@ -332,7 +338,7 @@ func TestSpaceOnABodyArmsAspectsDetailsAndWheel(t *testing.T) {
 			m = pump(t, m, cmd)
 			m, cmd = pressSpace(t, m)
 			m = pump(t, m, cmd)
-			if !m.slots.BodySelected(m.cursorIdx, aspect.Moon) {
+			if !m.slots.ObjectSelected(m.cursorIdx, objMoon.Number) {
 				t.Fatalf("the cursor is on %v, not Moon", m.bodyCursorIdx)
 			}
 
@@ -348,7 +354,7 @@ func TestSpaceOnABodyArmsAspectsDetailsAndWheel(t *testing.T) {
 				t.Errorf("Details = %q, want a report of Sun and Moon only", m.details.body)
 			}
 			wheels := calls.snapshot(&calls.wheel)
-			if len(wheels) == 0 || !reflect.DeepEqual(onlyOf(wheels[len(wheels)-1]), []aspect.Body{aspect.Sun, aspect.Moon}) {
+			if len(wheels) == 0 || !reflect.DeepEqual(onlyOf(wheels[len(wheels)-1]), []aspect.Object{objSun, objMoon}) {
 				t.Errorf("the wheel was last asked for Only %v, want Sun and Moon (calls: %d)", onlyOf(lastLens(wheels)), len(wheels))
 			}
 			if m.wheelKey == base.wheelKey {
@@ -363,8 +369,8 @@ func TestSpaceOnABodyArmsAspectsDetailsAndWheel(t *testing.T) {
 			m = pump(t, m, cmd)
 			m, cmd = pressSpace(t, m)
 			m = pump(t, m, cmd)
-			if len(m.slots.SelectedBodies(m.cursorIdx)) != 0 {
-				t.Fatalf("selection left over: %v", m.slots.SelectedBodies(m.cursorIdx))
+			if len(markedObjects(m.slots, m.cursorIdx)) != 0 {
+				t.Fatalf("selection left over: %v", markedObjects(m.slots, m.cursorIdx))
 			}
 			if !reflect.DeepEqual(m.chart.aspects, baseAspects) {
 				t.Errorf("after deselecting: Aspects = %q, want the unselected %q", aspectPairs(m.chart.aspects), aspectPairs(baseAspects))
@@ -428,7 +434,7 @@ func TestWheelStillKeyFollowsTheSelection(t *testing.T) {
 	}
 	lensBefore := lensLeg(m)
 
-	m.slots.ToggleBodySelection(m.cursorIdx, aspect.Sun)
+	m.slots.ToggleObjectSelection(m.cursorIdx, objSun)
 	if lensLeg(m) == lensBefore {
 		t.Error("the wheel's key, without its highlight, did not change with the selection: the lens leg ignores Only")
 	}
@@ -467,8 +473,8 @@ func TestBodiesTableStaysCompleteUnderSelection(t *testing.T) {
 	before := bodiesPanel(m)
 	positions := slices.Clone(m.chart.positions)
 
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	m, cmd := m.refreshAfterSelectionForTest()
 	m = pump(t, m, cmd)
@@ -477,7 +483,7 @@ func TestBodiesTableStaysCompleteUnderSelection(t *testing.T) {
 		t.Fatalf("Bodies positions under a selection = %v, want all %d of the unselected frame", m.chart.positions, len(positions))
 	}
 	after := bodiesPanel(m)
-	mark := ansi.StringWidth(rowMarkerBlank)
+	mark := ansi.StringWidth(menu.RowMarkerBlank)
 	beforeRows, afterRows := strings.Split(before, "\n"), strings.Split(after, "\n")
 	if len(beforeRows) != len(afterRows) {
 		t.Fatalf("the table has %d rows, was %d", len(afterRows), len(beforeRows))
@@ -538,13 +544,14 @@ func TestSelectionDoesNotReachComparisonSurfaces(t *testing.T) {
 	}
 	calls.reset()
 
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	m, cmd = m.refreshAfterSelectionForTest()
 	m = pump(t, m, cmd)
 	// A Details request for the cursor body, as the pair has it, and a wheel
 	// asked for again (the key did not move, so the selection alone asked for none).
+	m = m.forgetMemory() // the test reads the report asked for after the selection, not one remembered
 	m, cmd = m.startDetailsNow()
 	m = pump(t, m, cmd)
 	m.refresh[surfaceImage].cancel = nil
@@ -596,7 +603,7 @@ func TestRestoredSelectionRestrictsAtStart(t *testing.T) {
 		m.slots.SetSlotSelected(i, false)
 	}
 	// What applySessionSelections does with the file's marks.
-	selectBodies(m.slots, m.cursorIdx, []aspect.Body{aspect.Sun, aspect.Moon})
+	m = m.selectObjects(m.cursorIdx, []string{"Sun", "Moon"}, new([]string))
 	m.focused = PanelBodies
 	m.previewActive = true
 
@@ -615,18 +622,20 @@ func TestRestoredSelectionRestrictsAtStart(t *testing.T) {
 	if !strings.Contains(m.details.body, "lists Sun Moon") || strings.Contains(m.details.body, "Mercury") {
 		t.Errorf("restored: Details = %q, want a report of Sun and Moon only", m.details.body)
 	}
-	if got := lastLens(calls.snapshot(&calls.wheel)); !reflect.DeepEqual(onlyOf(got), []aspect.Body{aspect.Sun, aspect.Moon}) {
+	if got := lastLens(calls.snapshot(&calls.wheel)); !reflect.DeepEqual(onlyOf(got), []aspect.Object{objSun, objMoon}) {
 		t.Errorf("restored: the wheel was asked for Only %v", onlyOf(got))
 	}
 }
 
-// B7: the timeline and the chooser's probes keep the full lens; so do the
-// template tab's inputs.
-func TestTimelineAndProbingKeepTheFullLens(t *testing.T) {
+// B7, amended by F14 (2026-11-04): the chooser's probes keep the full lens; so
+// do the template tab's inputs. The timeline no longer does: the marks of the
+// floating slot narrow the sky search, and each natal's its own (see
+// TestTimelineKeyCarriesTheMarks).
+func TestTimelineFollowsTheMarksAndProbingKeepsTheFullLens(t *testing.T) {
 	calls := stubSelectionSeams(t)
 	m := selectionModel(t, false)
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	if len(m.showLens(m.focusedSlot()).Objects.Only) != 2 {
 		t.Fatal("setup: the selection did not reach showLens")
@@ -638,15 +647,20 @@ func TestTimelineAndProbingKeepTheFullLens(t *testing.T) {
 	if !ok {
 		t.Fatal("no timeline request for the floating chart")
 	}
-	if len(req.Lens.Objects.Only) != 0 {
-		t.Errorf("the timeline request carries Only %v", onlyOf(req.Lens))
+	if len(req.Lens.Objects.Only) != 2 {
+		t.Errorf("the timeline request carries Only %v, want the two marks", onlyOf(req.Lens))
 	}
 	// And the search the model actually runs.
-	m, cmd := m.syncTimeline()
+	m.focused = PanelChart
+	m, cmd := syncTimelineVisited(m)
 	m = pump(t, m, cmd)
-	for _, l := range calls.snapshot(&calls.timeline) {
-		if len(l.Objects.Only) != 0 {
-			t.Errorf("a timeline search ran under Only %v", onlyOf(l))
+	ran := calls.snapshot(&calls.timeline)
+	if len(ran) == 0 {
+		t.Error("no timeline search ran, so there is nothing to observe")
+	}
+	for _, l := range ran {
+		if len(l.Objects.Only) != 2 {
+			t.Errorf("a timeline search ran under Only %v, want the two marks", onlyOf(l))
 		}
 	}
 
@@ -675,13 +689,13 @@ func TestTimelineAndProbingKeepTheFullLens(t *testing.T) {
 // commands are on the argv lane. Run against the fixture binary so the argv is
 // the compiler's own.
 func TestSelectionArgvThroughTheCompiler(t *testing.T) {
+	stubShowWheel(t)
 	spawns := chartFileCapturingAstrolog(t)
 	m := listModel(t, 1, 0)
 	for i := range m.slots.All() {
 		m.slots.SetSlotSelected(i, false)
 	}
 	m.focused = PanelBodies
-	stubShowWheel(t)
 	m.previewActive = true
 	m, cmd := m.bumpIdentity(surfaceText)
 	m = pumpPatient(t, m, cmd)
@@ -695,8 +709,8 @@ func TestSelectionArgvThroughTheCompiler(t *testing.T) {
 	}
 	plainCount := len(plain)
 
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	m, cmd = m.refreshAfterSelectionForTest()
 	m = pumpPatient(t, m, cmd)
@@ -776,8 +790,8 @@ func TestSelectionLeavesComparisonArgvAlone(t *testing.T) {
 		t.Fatal("no -r0 spawn before the selection")
 	}
 
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	m, cmd = m.refreshAfterSelectionForTest()
 	m = pumpPatient(t, m, cmd)
@@ -826,8 +840,8 @@ func TestSelectionShowsOnlyAgainstLiveAstrolog(t *testing.T) {
 			strongest = a
 		}
 	}
-	for _, b := range []aspect.Body{strongest.A, strongest.B} {
-		m.slots.ToggleBodySelection(m.cursorIdx, b)
+	for _, b := range []aspect.Object{strongest.AObject, strongest.BObject} {
+		m.slots.ToggleObjectSelection(m.cursorIdx, b)
 	}
 	m, cmd = m.refreshAfterSelectionForTest()
 	m = pumpPatient(t, m, cmd)
@@ -835,11 +849,11 @@ func TestSelectionShowsOnlyAgainstLiveAstrolog(t *testing.T) {
 	if len(m.chart.positions) != rows {
 		t.Errorf("Bodies has %d rows under the selection, want all %d", len(m.chart.positions), rows)
 	}
-	if len(m.chart.aspects) != 1 || m.chart.aspects[0].A != strongest.A || m.chart.aspects[0].B != strongest.B {
-		t.Errorf("Aspects = %s, want only %s-%s", aspectPairs(m.chart.aspects), bodyName(strongest.A), bodyName(strongest.B))
+	if len(m.chart.aspects) != 1 || m.chart.aspects[0].AObject != strongest.AObject || m.chart.aspects[0].BObject != strongest.BObject {
+		t.Errorf("Aspects = %s, want only %s-%s", aspectPairs(m.chart.aspects), panel.BodyName(strongest.AObject), panel.BodyName(strongest.BObject))
 	}
-	if !strings.Contains(m.chart.aspectsReport, bodyName(strongest.A)) {
-		t.Errorf("the Aspects report does not name %s: %q", bodyName(strongest.A), m.chart.aspectsReport)
+	if !strings.Contains(m.chart.aspectsReport, panel.BodyName(strongest.AObject)) {
+		t.Errorf("the Aspects report does not name %s: %q", panel.BodyName(strongest.AObject), m.chart.aspectsReport)
 	}
 	if len(m.chart.aspectsReport) >= len(fullReport) {
 		t.Errorf("the restricted report (%d bytes) is not shorter than the full one (%d)", len(m.chart.aspectsReport), len(fullReport))
@@ -847,7 +861,7 @@ func TestSelectionShowsOnlyAgainstLiveAstrolog(t *testing.T) {
 
 	// One body alone makes no aspect: Astrolog answers "No aspects in list.",
 	// which is an empty list and not a failed frame.
-	m.slots.ToggleBodySelection(m.cursorIdx, strongest.B)
+	m.slots.ToggleObjectSelection(m.cursorIdx, strongest.BObject)
 	m, cmd = m.refreshAfterSelectionForTest()
 	m = pumpPatient(t, m, cmd)
 	if len(m.chart.aspects) != 0 || !m.chart.settled {

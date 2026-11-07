@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/payload"
@@ -75,8 +76,6 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	if err != nil {
 		return payload.RawOutput{}, err
 	}
-	var positionsMissing, aspectsMissing []string
-	positionsCall = positionsCall.reportingMissing(&positionsMissing)
 	positionsOut, command, err := spawn(ctx, positionsCall)
 	commands = recordCommand(commands, command)
 	if err != nil {
@@ -89,12 +88,15 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
+	positions, err := parsePositions(positionsOut, call.Objects, call.Registry)
+	if err != nil {
+		return payload.RawOutput{Commands: commands}, err
+	}
 
 	aspectsCall, err := call.derive(aspectsArgv)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
-	aspectsCall = aspectsCall.reportingMissing(&aspectsMissing)
 	aspectsOut, command, err := spawn(ctx, aspectsCall)
 	commands = recordCommand(commands, command)
 	if err != nil {
@@ -106,18 +108,16 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	}
 
 	return payload.RawOutput{
-		Positions:     parsePositions(positionsOut),
+		Positions:     positions,
 		Unavailable:   unavailableObjects(positionsOut),
-		BodyStyles:    mapBodyStyles(styles),
-		Aspects:       parseAspects(aspectsOut),
-		AspectStyles:  mapAspectStyles(aspectRows),
+		BodyStyles:    mapBodyStyles(styles, call.Objects, call.Registry),
+		Aspects:       parseAspects(aspectsOut, call.Registry),
+		AspectStyles:  mapAspectStyles(aspectRows, call.Registry),
 		Raw:           positionsOut + "\n---\n" + aspectsOut,
 		AspectsReport: reportText(aspectsOut),
 		Commands:      commands,
 		Cusps:         parseCusps(positionsOut),
 		HousesUsed:    parseHousesUsed(positionsOut),
-		// Each file once, positions invocation first.
-		MissingEphemeris: mergeFiles(positionsMissing, aspectsMissing),
 	}, nil
 }
 
@@ -164,6 +164,17 @@ func aspectsArgv(positionsArgv []string) []string {
 // Sanity check is preserved: positions output is still scanned for
 // the 0Ari00 forbid pattern.
 func RunPositionsOnly(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
+	return runPositions(ctx, call, false)
+}
+
+// RunPositionsProbing is RunPositionsOnly for a caller that asks about one
+// body to learn why Astrolog cannot draw it: a missing-ephemeris line is not a
+// refusal there, its file names come back in RawOutput.MissingEphemeris.
+func RunPositionsProbing(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
+	return runPositions(ctx, call, true)
+}
+
+func runPositions(ctx context.Context, call BodyCall, collect bool) (payload.RawOutput, error) {
 	if err := validateArgv(call.argv); err != nil {
 		return payload.RawOutput{}, err
 	}
@@ -172,7 +183,10 @@ func RunPositionsOnly(ctx context.Context, call BodyCall) (payload.RawOutput, er
 		return payload.RawOutput{}, err
 	}
 	var positionsMissing []string
-	positionsCall = positionsCall.reportingMissing(&positionsMissing)
+	var said string
+	if collect {
+		positionsCall = positionsCall.reportingMissing(&positionsMissing).sayingFirst(&said).probingCall()
+	}
 	positionsOut, command, err := spawn(ctx, positionsCall)
 	commands := recordCommand(nil, command)
 	if err != nil {
@@ -185,14 +199,19 @@ func RunPositionsOnly(ctx context.Context, call BodyCall) (payload.RawOutput, er
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
+	positions, err := parsePositions(positionsOut, call.Objects, call.Registry)
+	if err != nil {
+		return payload.RawOutput{Commands: commands}, err
+	}
 	return payload.RawOutput{
-		Positions:        parsePositions(positionsOut),
-		BodyStyles:       mapBodyStyles(styles),
+		Positions:        positions,
+		BodyStyles:       mapBodyStyles(styles, call.Objects, call.Registry),
 		Raw:              positionsOut,
 		Commands:         commands,
 		Cusps:            parseCusps(positionsOut),
 		HousesUsed:       parseHousesUsed(positionsOut),
 		MissingEphemeris: mergeFiles(positionsMissing),
+		Said:             said,
 	}, nil
 }
 
@@ -213,42 +232,58 @@ func colorArgv(argv []string) []string {
 	return append(append([]string{}, argv...), "-k")
 }
 
-func mapBodyStyles(rows astrologstyle.Rows) astrologstyle.Bodies {
+// mapBodyStyles gives each `-k` body row to the object it stands for. Astrolog
+// prints one row per object asked for, in ascending object number, so the rows
+// are zipped with the asked numbers (sorted, without repeats) and the registry
+// the way parsePositions zips positions; the row's four-cell label identifies
+// nothing (Titan and Titania both print `Tita`). A row count that differs from
+// the asked count gives no colours at all, never a guessed identity.
+func mapBodyStyles(rows astrologstyle.Rows, asked []int, reg aspect.Registry) astrologstyle.Bodies {
 	out := make(astrologstyle.Bodies)
-	for abbrev, style := range rows {
-		if body, ok := bodyAbbrev4[abbrev]; ok {
-			out[body] = style
+	nums := askedNumbers(asked)
+	if len(rows) != len(nums) {
+		return out
+	}
+	for i, n := range nums {
+		if o, ok := reg.ByNumber(n); ok {
+			out[o] = rows[i]
 		}
 	}
 	return out
 }
 
-func mapAspectStyles(rows []astrologstyle.AspectRow) astrologstyle.Aspects {
+// mapAspectStyles keys each colored aspect row by its two objects in the order
+// parseAspects gives the aspect (aspect.NewObjectAspect's), with the spans
+// following their side. A row whose side the registry cannot resolve gets no
+// key: the zero Object is not an identity.
+func mapAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry) astrologstyle.Aspects {
 	out := make(astrologstyle.Aspects)
 	for _, row := range rows {
-		first, okFirst := bodyFullName[row.FirstName]
-		second, okSecond := bodyFullName[row.SecondName]
+		first := resolveSide(reg, row.FirstName, leftNameWidth)
+		second := resolveSide(reg, row.SecondName, rightNameWidth)
 		kind, okKind := aspectAbbrev[row.KindName]
-		if !okFirst || !okSecond || !okKind {
+		if first == (aspect.Object{}) || second == (aspect.Object{}) || !okKind {
 			continue
 		}
-		typed := aspect.NewAspect(first, second, kind, 0)
+		pair := aspect.NewObjectAspect(first, second, kind, 0)
 		style := row.Style
-		if typed.A != first {
+		if pair.AObject != first {
 			style.First, style.Second = style.Second, style.First
 		}
-		out[astrologstyle.AspectIdentity{First: typed.A, Second: typed.B, Kind: kind}] = style
+		out[astrologstyle.AspectIdentity{First: pair.AObject, Second: pair.BObject, Kind: kind}] = style
 	}
 	return out
 }
 
-func mapCrossAspectStyles(rows []astrologstyle.AspectRow) astrologstyle.Aspects {
+// mapCrossAspectStyles is mapAspectStyles for a relationship list, which keeps
+// Astrolog's primary and secondary roles instead of reordering.
+func mapCrossAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry) astrologstyle.Aspects {
 	out := make(astrologstyle.Aspects)
 	for _, row := range rows {
-		primary, okPrimary := resolveCrossBody(row.FirstName)
-		secondary, okSecondary := resolveCrossBody(row.SecondName)
+		primary := resolveSide(reg, row.FirstName, leftNameWidth)
+		secondary := resolveSide(reg, row.SecondName, rightNameWidth)
 		kind, okKind := aspectAbbrev[row.KindName]
-		if !okPrimary || !okSecondary || !okKind {
+		if primary == (aspect.Object{}) || secondary == (aspect.Object{}) || !okKind {
 			continue
 		}
 		out[astrologstyle.AspectIdentity{First: primary, Second: secondary, Kind: kind}] = row.Style
@@ -264,6 +299,9 @@ func mapCrossAspectStyles(rows []astrologstyle.AspectRow) astrologstyle.Aspects 
 // failure. This is the cancellation contract the async-refresh work (S1,
 // refresh-coordinator plan) builds on.
 func invokeError(ctx context.Context, err error) error {
+	if sig, ok := endedBySignal(ctx, err); ok {
+		return &CrashedError{Signal: sig}
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return fmt.Errorf("astrolog: canceled: %w", ctxErr)
 	}
@@ -274,6 +312,37 @@ func invokeError(ctx context.Context, err error) error {
 		return fmt.Errorf("astrolog exec: %w", ErrNotInstalled)
 	}
 	return fmt.Errorf("astrolog exec: %w", err)
+}
+
+// ErrAstrologCrashed means the astrolog process was ended by a signal that the
+// call's own context did not send: it died (a segmentation fault, an abort).
+// What it printed first is not returned and not parsed. Match it with
+// errors.Is; CrashedError carries the signal's name.
+var ErrAstrologCrashed = errors.New("astrolog crashed")
+
+// CrashedError is the error of a call whose process ended on a signal.
+type CrashedError struct{ Signal string }
+
+func (e *CrashedError) Error() string {
+	return ErrAstrologCrashed.Error() + ": " + e.Signal
+}
+
+// Is makes errors.Is(err, ErrAstrologCrashed) true.
+func (e *CrashedError) Is(target error) bool { return target == ErrAstrologCrashed }
+
+// endedBySignal reports the name of the signal that ended the process behind
+// err, unless the call's own context is done: a cancelled or timed-out call
+// is ended by our own kill and stays what it is.
+func endedBySignal(ctx context.Context, err error) (string, bool) {
+	var ee *exec.ExitError
+	if ctx.Err() != nil || !errors.As(err, &ee) {
+		return "", false
+	}
+	ws, ok := ee.Sys().(syscall.WaitStatus)
+	if !ok || !ws.Signaled() {
+		return "", false
+	}
+	return ws.Signal().String(), true
 }
 
 // validateArgv enforces the switch-toggle safety contract. Refuses argv

@@ -1,6 +1,7 @@
 package astrolog
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"slices"
@@ -127,7 +128,25 @@ func Compile(spec recipe.ChartSpec, p recipe.Projection) (ExecutionPlan, error) 
 	if err != nil {
 		return ExecutionPlan{}, err
 	}
+	if err := carryRegistry(invs, spec); err != nil {
+		return ExecutionPlan{}, err
+	}
 	return ExecutionPlan{Projection: p.Label(), Invocations: invs}, nil
+}
+
+// carryRegistry hands the spec's object list, and the numbers its argv draws,
+// to each call the compiler issued, so the parsers can name every row. It
+// fails when the objects the host draws are not known (drawnObjectNumbers).
+func carryRegistry(invs []Invocation, spec recipe.ChartSpec) error {
+	objects, err := ArgvObjectNumbers(spec.Objects)
+	if err != nil {
+		return err
+	}
+	for i := range invs {
+		invs[i].call.Registry = spec.Registry
+		invs[i].call.Objects = objects
+	}
+	return nil
 }
 
 // isComparison reports whether the spec's source is a two-chart relationship.
@@ -201,6 +220,9 @@ func CompileBundle(spec recipe.ChartSpec, ps ...recipe.Projection) (PlanBundle, 
 		}
 		invs, err := emitProjection(prefix, temps, band, spec.Objects, comp, p)
 		if err != nil {
+			return PlanBundle{}, err
+		}
+		if err := carryRegistry(invs, spec); err != nil {
 			return PlanBundle{}, err
 		}
 		plans = append(plans, ExecutionPlan{Projection: p.Label(), Invocations: invs})
@@ -316,6 +338,12 @@ func emitPrefix(spec recipe.ChartSpec, zoned, labelled bool) ([]string, []TempFi
 			return nil, nil, Band{}, err
 		}
 		argv = append(argv, obj...)
+		// An `-rt` comparison reads its second chart's objects from the
+		// TRANSIT set, which `-R` never touches: a host that lists an
+		// absent object there would still make Astrolog compute it.
+		if src.Relation == recipe.TransitToNatal {
+			argv = append(argv, emitTransitAbsentOff(CurrentAvailability())...)
+		}
 		// The comparison path inherits the same aspect set: -r0 honors the
 		// aspect restrictions exactly as a single chart does, so nothing
 		// here treats the relationship specially.
@@ -429,35 +457,173 @@ func frameBand(houses recipe.HouseSystem, zodiac recipe.Zodiac) ([]string, error
 // chart the lens says shows it, and `-R0 … 11 …` does not. An operator who
 // ticked a set gets that set.
 //
-// A policy with Only narrows that set to the bodies in Only and always takes
-// the `-R0` form, under either profile (a body outside Only, or already
-// removed by the policy, is not in the list). The timeline's band does not read
-// Only: it follows the lens the operator committed, not the surface's selection.
+// A policy with Only narrows that set to the bodies in Only and takes the `-R0`
+// form, under either profile: the list is what drawnObjectNumbers answers, the
+// one rule for what a chart draws (a body outside Only, already removed by the
+// policy, or without an ephemeris file is not in it). Marks narrow, they never
+// leave a chart with nothing: an Only that no drawn body is in is dropped, and
+// the policy's own baseline goes out (withoutDrainedOnly). The timeline's band
+// reads Only for the natal side alone (timelineBand): a mark narrows that
+// slot's own side.
 func emitObjects(o recipe.ObjectPolicy) ([]string, error) {
+	av := CurrentAvailability()
 	argv := emitNodeMode(o)
 	if len(o.Only) > 0 {
 		// Only narrows whatever the baseline resolved to, and a delta cannot
 		// say "just these" (`-R <n>` flips against the host), so the
 		// intersection goes out as the exact show-list, the same `-R0 <list>`
-		// an Explicit policy compiles to. It may be bare (`-R0`): the
-		// operator selected bodies the lens or the chooser had removed, and
-		// Astrolog gets the list that results.
-		return append(argv, emitShowList(flagMainShow, DrawnObjectNumbers(o))...), nil
+		// an Explicit policy compiles to. It is never bare because the marked
+		// bodies are not drawn (they have no ephemeris file, the chart's set
+		// does not list them, the lens removed them): a bare `-R0` restricts
+		// every body and leaves on screen only what the host's astrolog.as
+		// enables beyond them (the cusp points), an empty chart. The
+		// narrowing is dropped and the policy's own baseline goes out instead.
+		without, drained, err := withoutDrainedOnly(o, av)
+		if err != nil {
+			return nil, err
+		}
+		if drained {
+			return emitObjects(without)
+		}
+		drawn, err := drawnObjects(o, av)
+		if err != nil {
+			return nil, err
+		}
+		return append(argv, emitShowList(flagMainShow, sortedMembers(drawn))...), nil
 	}
 	if o.Baseline == recipe.Explicit {
 		// A bare `-R0` is the empty selection, and it is a real chart: the
 		// operator chose no bodies. It is not the same as no override, which
-		// is a delta baseline and emits no restriction at all.
-		return append(argv, emitShowList(flagMainShow, o.Selected())...), nil
+		// is a delta baseline and emits no restriction at all. It is the only
+		// bare list: no narrowing produces one.
+		drawn, err := drawnObjects(o, av)
+		if err != nil {
+			return nil, err
+		}
+		return append(argv, emitShowList(flagMainShow, sortedMembers(drawn))...), nil
 	}
-	nums, err := toggleNumbers(o)
+	flips, err := deltaFlips(o, av)
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range nums {
+	for _, n := range deltaToggles(flips, av) {
 		argv = append(argv, "-R", strconv.Itoa(n))
 	}
 	return argv, nil
+}
+
+// withoutDrainedOnly is o without its Only narrowing when that narrowing leaves
+// nothing to draw, whatever the reason: every body in it has no ephemeris file,
+// or the chart's set does not draw it (the host's astrolog.as does not list it,
+// the lens removed it, an Explicit selection does not hold it). drained says so.
+// A mark narrows a chart, it never blanks one (operator, 2026-11-02: a panel may
+// never blank), so the policy's own baseline is drawn instead of a bare list;
+// the bare `-R0` is left to an Explicit policy with no selection and no
+// narrowing, where the operator chose no bodies.
+func withoutDrainedOnly(o recipe.ObjectPolicy, av Availability) (recipe.ObjectPolicy, bool, error) {
+	if len(o.Only) == 0 {
+		return o, false, nil
+	}
+	wanted, err := wantedObjects(o, av)
+	if err != nil {
+		return o, false, err
+	}
+	if len(withoutAbsentSet(wanted, av)) != 0 {
+		return o, false, nil
+	}
+	o.Only = nil
+	return o, true, nil
+}
+
+// DrainedObjects is every object of an Only narrowing that was dropped because it
+// left nothing to draw, as numbers, ascending: the absent ones (no ephemeris
+// file) and the ones the chart's set does not draw, both. nil when the narrowing
+// still draws something. emitObjects falls back to the baseline for it, and the
+// caller says so once, saying for each object which of the two it is.
+func DrainedObjects(o recipe.ObjectPolicy) ([]int, error) {
+	av := CurrentAvailability()
+	without, drained, err := withoutDrainedOnly(o, av)
+	if err != nil || !drained {
+		return nil, err
+	}
+	// A baseline that draws nothing either (an Explicit policy with no
+	// selection: the operator chose no bodies) has no set to fall back to, so
+	// there is nothing to say.
+	baseline, err := drawnObjects(without, av)
+	if err != nil || len(baseline) == 0 {
+		return nil, err
+	}
+	return o.Only.Members(), nil
+}
+
+// emitTransitAbsentOff is the `-RT <n>` flips that switch OFF each absent
+// object the host's own transit set lists (Availability.DefaultTransit). A flip
+// is against the host, so only a listed object is flipped: an unlisted one is
+// already off, and flipping it would switch it ON.
+func emitTransitAbsentOff(av Availability) []string {
+	var argv []string
+	for _, n := range av.DefaultTransit {
+		if av.IsAbsent(n) {
+			argv = append(argv, flagTransitToggle, strconv.Itoa(n))
+		}
+	}
+	return argv
+}
+
+// withoutAbsentSet is set minus the objects with no ephemeris file, as a new
+// set: the point of the availability fact is that such an object never reaches
+// Astrolog's object list, so it is never computed at 0 Aries.
+func withoutAbsentSet(set map[int]bool, av Availability) map[int]bool {
+	out := make(map[int]bool, len(set))
+	for n, in := range set {
+		if in && !av.IsAbsent(n) {
+			out[n] = true
+		}
+	}
+	return out
+}
+
+// sortedMembers is the numbers of a set, ascending.
+func sortedMembers(set map[int]bool) []int {
+	out := make([]int, 0, len(set))
+	for n, in := range set {
+		if in {
+			out = append(out, n)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+// deltaToggles is a delta baseline's `-R <n>` flips made safe for absent
+// objects. A flip is against the host's astrolog.as, so: a flip that would
+// switch an absent object ON is dropped, and an absent object the host lists by
+// default gets a flip that switches it OFF. The host's default is the one the
+// probe read (Availability.Default).
+func deltaToggles(nums []int, av Availability) []int {
+	if len(av.Absent) == 0 {
+		return nums
+	}
+	hostLists := map[int]bool{}
+	for _, n := range av.Default {
+		hostLists[n] = true
+	}
+	var out []int
+	flipped := map[int]bool{}
+	for _, n := range nums {
+		flipped[n] = true
+		if av.IsAbsent(n) && !hostLists[n] {
+			continue
+		}
+		out = append(out, n)
+	}
+	for _, n := range av.AbsentNumbers() {
+		if hostLists[n] && !flipped[n] {
+			out = append(out, n)
+		}
+	}
+	sort.Ints(out)
+	return out
 }
 
 // The four band switches. Each is written ONCE, here, and every emitter in this
@@ -465,10 +631,11 @@ func emitObjects(o recipe.ObjectPolicy) ([]string, error) {
 // TestOneEncoderPerBand counts, and why the Details timeline cannot carry a
 // second, drifting encoding of the chart's body, aspect or node-mode band.
 const (
-	flagTrueNode    = "-Yn"  // true node / Lilith variants of objects 16 and 18
-	flagMainShow    = "-R0"  // exact show-list for the main (natal / sky) object set
-	flagTransitShow = "-RT0" // exact show-list for the transiting object set
-	flagAspectShow  = "-RA0" // exact show-list for aspects
+	flagTrueNode      = "-Yn"  // true node / Lilith variants of objects 16 and 18
+	flagMainShow      = "-R0"  // exact show-list for the main (natal / sky) object set
+	flagTransitShow   = "-RT0" // exact show-list for the transiting object set
+	flagTransitToggle = "-RT"  // flips one object of the transiting set against the host
+	flagAspectShow    = "-RA0" // exact show-list for aspects
 )
 
 // emitNodeMode is the `-Yn` token of a policy, or nothing.
@@ -606,11 +773,7 @@ func emitProjection(prefix []string, temps []TempFileInput, band Band, objects r
 		case recipe.RawReportChart:
 			argv = append(argv, influenceChartMode)
 		case recipe.RawReportBody:
-			n, ok := bodyObjectNum[proj.Body()]
-			if !ok {
-				return nil, fmt.Errorf("astrolog: Compile: body %s has no astrolog object number", proj.Body())
-			}
-			argv = append(cmp.textSource(argv), aspectListMode, "-RO", strconv.Itoa(n))
+			argv = append(cmp.textSource(argv), aspectListMode, "-RO", strconv.Itoa(proj.Object().Number))
 		case recipe.RawReportAspects:
 			argv = append(cmp.textSource(argv), aspectListMode)
 		default:
@@ -630,7 +793,10 @@ func emitProjection(prefix []string, temps []TempFileInput, band Band, objects r
 		image := func(a []string) Invocation {
 			return newInvocation(a, ImageFile, ParseNone, temps, band)
 		}
-		members := highlightMembers(objects, proj.Render.Highlight)
+		members, err := highlightMembers(objects, proj.Render.Highlight)
+		if err != nil {
+			return nil, err
+		}
 		// A comparison bi-wheel, an inactive highlight, and a highlight whose
 		// every member is undrawn or unnumbered all compile to the single
 		// plain wheel.
@@ -698,105 +864,179 @@ func emitRender(r recipe.RenderSpec) []string {
 }
 
 // highlightMembers resolves a highlight to the foreground show-list: the
-// object numbers of (Selected ∪ Focused) ∩ drawn ∩ numbered, ascending. The
-// failure posture: a member
-// Astrolog cannot number, or that the current lens does not draw, is omitted
-// — never unrestricted into the wheel, never emitted malformed.
+// object numbers of (Selected ∪ Focused) ∩ drawn, ascending. The failure
+// posture: a member that the current lens does not draw (or that has no
+// ephemeris file) is omitted — never unrestricted into the wheel, never
+// emitted malformed, and never added: a highlight narrows what is drawn.
 //
-// "Drawn" is asked of the policy, and the two profiles answer it differently.
-// A delta baseline answers in bodies, via Visible(). An Explicit policy answers
-// in object NUMBERS, and Visible() cannot speak for it at all — it returns
-// aspect.Body values and recipe holds no number→body mapping. That mapping
-// lives here, which is why this is the layer that reconciles them: without
-// this branch an Explicit chart's highlight would find nothing drawn, collapse
-// to the plain wheel, and do it silently, because an image renders either way.
-func highlightMembers(objects recipe.ObjectPolicy, h recipe.HighlightSpec) []int {
+// "Drawn" is asked of drawnObjectNumbers, the one rule for it, under both
+// profiles: without it an Explicit chart's highlight would find nothing drawn,
+// collapse to the plain wheel, and do it silently, because an image renders
+// either way.
+func highlightMembers(objects recipe.ObjectPolicy, h recipe.HighlightSpec) ([]int, error) {
 	if !h.Active() {
-		return nil
+		return nil, nil
 	}
-	drawn := drawnObjectNumbers(objects)
+	drawn, err := drawnObjectNumbers(objects)
+	if err != nil {
+		return nil, err
+	}
 	// Selected ∪ Focused, as a set, so a focused body that is also selected
 	// contributes one show-list entry rather than two.
-	wanted := recipe.NewBodySet(h.Selected.Members()...)
-	if h.Focused != aspect.BodyUnknown {
-		wanted[h.Focused] = true
+	wanted := recipe.NewObjectSet(h.Selected.Members()...)
+	if h.HasFocus {
+		wanted[h.FocusedObject] = true
 	}
 	var members []int
-	for _, b := range wanted.Members() {
-		n, ok := bodyObjectNum[b]
-		if !ok || !drawn[n] {
-			continue
+	for _, n := range wanted.Members() {
+		if drawn[n] {
+			members = append(members, n)
 		}
-		members = append(members, n)
 	}
-	sort.Ints(members)
-	return members
+	return members, nil
 }
 
-// DrawnObjectNumbers is the policy's visible set as Astrolog object numbers,
-// ascending. It is the exported face of drawnObjectNumbers, and it exists for
-// one caller: the body selector has to seed its checklist from whatever the
-// chart is drawing NOW, and the body→number map lives here, behind an
-// isolation boundary `internal/ui` may not cross. The UI reaches it through
-// `internal/lookup`.
-func DrawnObjectNumbers(o recipe.ObjectPolicy) []int {
-	drawn := drawnObjectNumbers(o)
-	out := make([]int, 0, len(drawn))
-	for n := range drawn {
-		out = append(out, n)
+// ArgvObjectNumbers is the set of objects the chart the policy compiles to
+// really draws on this host, as object numbers: what the argv asks for, cut by
+// the availability fact. It is the host's own default set (Availability.Default)
+// with the policy's flips, or the Explicit selection, narrowed by Only: the
+// objects with no glyph that the host enables (Fortune, Vertex, East Point) are in it, and
+// an absent object, which the argv switches off or leaves out, is not. The body
+// selector seeds its ticks from it, so a tick shows what is drawn and a change
+// of one tick changes one object. It fails before the host's default set is
+// known (drawnObjectNumbers).
+func ArgvObjectNumbers(o recipe.ObjectPolicy) ([]int, error) {
+	av := CurrentAvailability()
+	if without, drained, err := withoutDrainedOnly(o, av); err != nil {
+		return nil, err
+	} else if drained {
+		o = without
 	}
-	sort.Ints(out)
-	return out
+	drawn, err := drawnObjects(o, av)
+	if err != nil {
+		return nil, err
+	}
+	return sortedMembers(drawn), nil
 }
 
-// drawnObjectNumbers is the set of Astrolog object numbers the policy puts on
-// the wheel. It is the one place the two VisibilityProfiles are reconciled into
-// a common currency; every caller that needs "is this object drawn" asks here
-// rather than reaching for Visible(), which is delta-only.
-func drawnObjectNumbers(o recipe.ObjectPolicy) map[int]bool {
-	drawn := make(map[int]bool)
+// WantedObjectNumbers is the policy's set before the absent cut, as numbers,
+// ascending, resolved against the given availability: the objects the view
+// would draw if every ephemeris file were there. The ephemeris account needs it
+// (it names the ones that are not, so it lives in internal/ui, which may not
+// import this package: the seam is internal/lookup), and it is the same rule as
+// drawnObjectNumbers up to that cut. What the chart really draws, the chooser's
+// ticks, is ArgvObjectNumbers.
+func WantedObjectNumbers(o recipe.ObjectPolicy, av Availability) ([]int, error) {
+	wanted, err := wantedObjects(o, av)
+	if err != nil {
+		return nil, err
+	}
+	return sortedMembers(wanted), nil
+}
+
+// errNoHostDefault is what the rule answers before the host's default object
+// set is known. Nothing guesses it: the typed list that stood in for it until
+// slice 8c drew objects the host did not, and left out ones it did.
+var errNoHostDefault = errors.New("astrolog: which objects are drawn is not known: the host's default object set has not been read (the ephemeris probe has not answered)")
+
+// drawnObjectNumbers is the ONE answer to "what does this policy draw on this
+// host": wantedObjects with the objects that have no ephemeris file taken out.
+// Every consumer asks here (the `-R0` list emitObjects sends, the numbers the
+// parsers expect, the wheel highlight, the drained-selection fallback, the
+// chooser's ticks, the ephemeris account) and none of them keeps a Go-side
+// list, or reads the policy's Add and Remove, of its own. The one thing that
+// does read them is the unnarrowed delta's `-R` flips, which deltaFlips derives
+// from the same deltaSet this rule starts from, so the argv and the answer
+// cannot disagree.
+func drawnObjectNumbers(o recipe.ObjectPolicy) (map[int]bool, error) {
+	return drawnObjects(o, CurrentAvailability())
+}
+
+// drawnObjects is drawnObjectNumbers against a given availability.
+func drawnObjects(o recipe.ObjectPolicy, av Availability) (map[int]bool, error) {
+	wanted, err := wantedObjects(o, av)
+	if err != nil {
+		return nil, err
+	}
+	return withoutAbsentSet(wanted, av), nil
+}
+
+// wantedObjects is the rule before the absent cut: under a delta baseline the
+// host's own default set (av.Default, read from `astrolog -HO` at startup) with
+// the policy's Add and Remove applied to it as set operations (deltaSet), under
+// Explicit the selection; then narrowed to Only, a plain intersection that can
+// only take objects away, so an object the host does not draw is not drawn
+// because it is marked. The policy's typed profile is not read, because there
+// is none: a number needs no table, and the host's default is the only
+// baseline.
+//
+// av.Default is empty until the startup probe answers, and then this is an
+// error, never a guess.
+func wantedObjects(o recipe.ObjectPolicy, av Availability) (map[int]bool, error) {
+	if len(av.Default) == 0 {
+		return nil, errNoHostDefault
+	}
+	var on map[int]bool
 	if o.Baseline == recipe.Explicit {
-		// Only is bodies, the selection is object numbers: the narrowing is
-		// done in numbers, here, where the body-to-number table lives. (A
-		// delta baseline is narrowed by Visible, in bodies.)
-		var only map[int]bool
-		if len(o.Only) > 0 {
-			only = make(map[int]bool, len(o.Only))
-			for _, b := range o.Only.Members() {
-				if n, ok := bodyObjectNum[b]; ok {
-					only[n] = true
-				}
-			}
-		}
+		on = make(map[int]bool)
 		for _, n := range o.Selected() {
-			if only == nil || only[n] {
-				drawn[n] = true
+			on[n] = true
+		}
+	} else {
+		on = deltaSet(o, av)
+	}
+	if len(o.Only) > 0 {
+		for n := range on {
+			if !o.Only.Has(n) {
+				delete(on, n)
 			}
 		}
-		return drawn
 	}
-	for _, b := range o.Visible().Members() {
-		if n, ok := bodyObjectNum[b]; ok {
-			drawn[n] = true
-		}
-	}
-	return drawn
+	return on, nil
 }
 
-// toggleNumbers maps the policy's toggle bodies to astrolog object numbers,
-// sorted ascending so emission is deterministic (and matches legacy order).
-func toggleNumbers(o recipe.ObjectPolicy) ([]int, error) {
-	bodies := o.Toggles()
-	nums := make([]int, 0, len(bodies))
-	for _, b := range bodies {
-		n, ok := bodyObjectNum[b]
-		if !ok {
-			return nil, fmt.Errorf("astrolog: Compile: body %s has no astrolog object number", b)
-		}
-		nums = append(nums, n)
+// deltaSet is the host's default set with the policy's Add and Remove applied
+// as set operations: an Add is shown whether or not the host already lists it,
+// a Remove is hidden whether or not it does, and neither ever does the
+// opposite. (The policy cannot be validated against the host's set, so a
+// Remove of an object the host does not list, or an Add of one it does, is a
+// policy like any other and draws what it says.)
+func deltaSet(o recipe.ObjectPolicy, av Availability) map[int]bool {
+	on := make(map[int]bool, len(av.Default)+len(o.Add))
+	for _, n := range av.Default {
+		on[n] = true
 	}
-	sort.Ints(nums)
-	return nums, nil
+	for _, n := range o.Add.Members() {
+		on[n] = true
+	}
+	for _, n := range o.Remove.Members() {
+		delete(on, n)
+	}
+	return on
+}
+
+// deltaFlips is the `-R <n>` switches that take the host's default set to
+// deltaSet, ascending: an object the policy names whose state differs from the
+// host's. `-R` flips the host's own state, so an Add of an object the host
+// already lists, or a Remove of one it does not, needs none; sending one anyway
+// would do the opposite of what the policy says, and the set the argv draws
+// would stop being the set drawnObjectNumbers answers.
+func deltaFlips(o recipe.ObjectPolicy, av Availability) ([]int, error) {
+	if len(av.Default) == 0 {
+		return nil, errNoHostDefault
+	}
+	listed := make(map[int]bool, len(av.Default))
+	for _, n := range av.Default {
+		listed[n] = true
+	}
+	on := deltaSet(o, av)
+	var out []int
+	for _, n := range o.Toggles() {
+		if on[n] != listed[n] {
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }
 
 // fingerprint is a stable hash of the shared prefix — a cache/reuse key, not a
@@ -828,109 +1068,212 @@ func houseCode(h recipe.HouseSystem) (string, bool) {
 	return strconv.Itoa(int(h)), true
 }
 
-// bodyObjectNum maps a Sextile body to astrolog's internal object number. The
-// classical ten coincide (Sun=1 … Pluto=10); the nodes and angles do not, so
-// the table is explicit: 16 North Node, 17 South Node, 11 Chiron, 18 Lilith,
-// 22 Ascendant, 31 Midheaven, 28 Descendant, 25 Nadir/Imum Coeli. Objects 22
-// through 33 are the house wheel (recipe.HouseWheelObjectFirst/Last).
-var bodyObjectNum = map[aspect.Body]int{
-	aspect.Sun: 1, aspect.Moon: 2, aspect.Mercury: 3, aspect.Venus: 4, aspect.Mars: 5,
-	aspect.Jupiter: 6, aspect.Saturn: 7, aspect.Uranus: 8, aspect.Neptune: 9, aspect.Pluto: 10,
-	aspect.NorthNode: 16, aspect.SouthNode: 17, aspect.Chiron: 11, aspect.Lilith: 18,
-	aspect.Ascendant: 22, aspect.Midheaven: 31, aspect.Descendant: 28, aspect.ImumCoeli: 25,
-}
-
 // timelineBand is the chooser band of one Details timeline search: the node
 // mode, the object show-lists per search side, and the aspect band, in that
 // order, built from this file's own emitters so the timeline cannot encode any
 // of them a second way.
 //
-// Objects are HIDE-ONLY (the specification D1). The
-// visible set is resolved from the policy alone — Explicit is its Selection;
-// AstrologDefault is the main default set plus Add minus Remove, as Astrolog
-// numbers — and a side is banded only when visible ∩ that side's default
-// differs from that side's default. So ticking a body Astrolog leaves off a
-// side (the transiting Moon) never adds rows, and an unfiltered timeline
-// carries no object band at all.
+// A TICK LISTS AND AN UNTICK HIDES, on both sides (the specification D1,
+// rewritten 2026-11-04 from hide-only). The visible set is resolved from the
+// policy alone (Explicit is its Selection; AstrologDefault is the main default
+// set plus Add minus Remove, as Astrolog numbers) minus the objects without an
+// ephemeris file. Then, per side:
 //
-// `-R0` is the natal/sky side and `-RT0` the transiting side of `-t`/`-tr`. A
-// sky search (`-dm`) has the one side.
-func timelineBand(src TimelineSource, o recipe.ObjectPolicy, a recipe.AspectPolicy, d DefaultSets) (Band, error) {
-	visible, err := visibleObjectNumbers(o, d.Main)
+//   - the natal side (`-R0`; the whole of a sky search) is the visible set,
+//     narrowed to the policy's Only (the Space marks) unless that narrowing
+//     leaves nothing to draw, for any reason (the fallback emitObjects uses:
+//     never a bare `-R0` from a mark), and banded as the exact list whenever
+//     it differs from the binary's main default;
+//   - the transiting side of `-t` (`-RT0`) is the visible set minus what the
+//     binary keeps off its own transit default while listing it on its main
+//     default (Main minus Transit as read from the binary: on 8.00 the Moon and
+//     the two angles, measured to flood) minus every cusp point, banded
+//     whenever it differs from the binary's transit default; marks do not touch
+//     it;
+//   - the transiting side of `-tr` (`-RT0`) is the visible set minus the cusp
+//     points, before the marks (a return is one row per cycle, so the lunar
+//     return stays), banded whenever it differs from the main default, which is
+//     what Astrolog's return default carries.
+//
+// A cusp point has no sky rows, so a sky search carries it harmlessly. An empty
+// Explicit set stays the bare `-R0` and `-RT0`.
+// transitMarks are the now slot's marks: they narrow the transiting side of a
+// transit or return search the way a chart's own marks (o.Only) narrow its
+// natal side, as Astrolog's -RT0 list, never by filtering rows (operator,
+// 2026-11-04: "only if we can do it with astrolog-only"). Marks never add: an
+// object the side leaves out stays out, so a mark on the transiting Moon, which
+// the binary keeps off that side, narrows nothing. Marks that leave nothing on
+// the side, for any reason, are ignored, as for o.Only (narrowByMarks).
+//
+// voids narrows a sky search's side to the Moon and the planets, the objects
+// Astrolog's void-of-course rule counts (FAspectVoid, extern.h: both objects up
+// to Pluto), for the month search that only marks the Moon void (skySegment).
+func timelineBand(src TimelineSource, o recipe.ObjectPolicy, transitMarks recipe.ObjectSet, a recipe.AspectPolicy, d DefaultSets, voids bool) (Band, error) {
+	av := CurrentAvailability()
+	visible := visibleObjectNumbers(o, d.Main)
+	// An object without its ephemeris file is not visible, whatever the policy
+	// or the host's default says: the side is then banded without it.
+	for _, n := range av.AbsentNumbers() {
+		delete(visible, n)
+	}
+	natal := visible
+	without, drained, err := withoutDrainedOnly(o, av)
 	if err != nil {
 		return Band{}, err
 	}
+	if !drained && len(without.Only) > 0 {
+		natal = make(map[int]bool, len(visible))
+		for _, n := range without.Only.Members() {
+			if visible[n] {
+				natal[n] = true
+			}
+		}
+	}
+	if voids {
+		planets := make(map[int]bool, len(natal))
+		for n := range natal {
+			planets[n] = natal[n] && n <= voidObjectLast
+		}
+		natal = planets
+	}
 	objects := emitNodeMode(o)
-	if show, banded := bandedSide(visible, d.Main); banded {
+	if show, banded := bandedList(natal, d.Main); banded {
 		objects = append(objects, emitShowList(flagMainShow, show)...)
 	}
-	if src == TimelineTransit || src == TimelineReturn {
-		if show, banded := bandedSide(visible, d.Transit); banded {
+	switch src {
+	case TimelineTransit:
+		transiting := make(map[int]bool, len(visible))
+		for n := range visible {
+			transiting[n] = !isCuspPoint(n)
+		}
+		for _, n := range d.Main {
+			if !slices.Contains(d.Transit, n) {
+				transiting[n] = false
+			}
+		}
+		narrowByMarks(transiting, transitMarks, av)
+		if show, banded := bandedList(transiting, d.Transit); banded {
+			objects = append(objects, emitShowList(flagTransitShow, show)...)
+		}
+	case TimelineReturn:
+		transiting := make(map[int]bool, len(visible))
+		for n := range visible {
+			transiting[n] = !isCuspPoint(n)
+		}
+		// Astrolog's return side by default is its main set; the cusp points
+		// leave both, so an untouched lens emits no transiting band at all.
+		var mainNoCusps []int
+		for _, n := range d.Main {
+			if !isCuspPoint(n) {
+				mainNoCusps = append(mainNoCusps, n)
+			}
+		}
+		narrowByMarks(transiting, transitMarks, av)
+		if show, banded := bandedList(transiting, mainNoCusps); banded {
 			objects = append(objects, emitShowList(flagTransitShow, show)...)
 		}
 	}
 	return newBand(objects, emitAspects(a)), nil
 }
 
+// narrowByMarks keeps on a side only the marked objects, in place. Marks that
+// leave nothing on the side narrow nothing: every mark is absent (the drained
+// guard), or the side does not list any marked object. A mark narrows a side, it
+// never blanks one, and it never adds an object the side leaves out (operator,
+// 2026-11-02 and 2026-11-04).
+func narrowByMarks(side map[int]bool, marks recipe.ObjectSet, av Availability) {
+	live := make(map[int]bool, len(marks))
+	for n := range marks {
+		if marks[n] && !av.IsAbsent(n) {
+			live[n] = true
+		}
+	}
+	kept := false
+	for n := range side {
+		if side[n] && live[n] {
+			kept = true
+			break
+		}
+	}
+	if !kept {
+		return
+	}
+	for n := range side {
+		if !live[n] {
+			side[n] = false
+		}
+	}
+}
+
+// voidObjectLast is Astrolog's Pluto (oPlu), the last object its void-of-course
+// rule counts.
+const voidObjectLast = 10
+
+// isCuspPoint is the class fact that an object is one of the house wheel's
+// points (objects 22 to 33): a transiting one is a daily flood, a natal one
+// is a handful of rows.
+func isCuspPoint(n int) bool {
+	_, ok := aspect.CuspHouse(aspect.Object{Number: n})
+	return ok
+}
+
 // cycleConjunctionAspect is Astrolog's number for the conjunction, its first
 // aspect (`-RA0 1` lists the same events as `-A 1`, measured 2026-10-16).
 const cycleConjunctionAspect = 1
 
-// cycleBand is the cycle search's band: the Sun and one other body on the
+// cycleBand is the cycle search's band: the Sun and one other object on the
 // main side, and the conjunction alone, built from the compiler's own
-// emitters (C9). It takes bodies, not a policy: the cycle's bodies are the
-// template's subject and the Sun, never the lens's show list.
-func cycleBand(other aspect.Body) (Band, error) {
-	n, ok := bodyObjectNum[other]
-	if !ok || other == aspect.Sun {
-		return Band{}, fmt.Errorf("astrolog: cycle band: body %s cannot be searched against the Sun", other)
+// emitters (C9). It takes an object, not a policy: the cycle's objects are the
+// template's subject and the Sun, never the lens's show list. The object is
+// Astrolog's own number (the Sun is 1), so any object the binary prints works.
+func cycleBand(other aspect.Object) (Band, error) {
+	n := other.Number
+	if n <= 0 || n == sunObjectNumber {
+		return Band{}, fmt.Errorf("astrolog: cycle band: object %d (%q) cannot be searched against the Sun", n, other.Name)
 	}
-	return newBand(emitShowList(flagMainShow, []int{bodyObjectNum[aspect.Sun], n}), emitShowList(flagAspectShow, []int{cycleConjunctionAspect})), nil
+	if av := CurrentAvailability(); av.IsAbsent(n) {
+		return Band{}, fmt.Errorf("%w: %s, no ephemeris file %s", ErrBodyUnavailable, other.Name, av.Absent[n])
+	}
+	return newBand(emitShowList(flagMainShow, []int{sunObjectNumber, n}), emitShowList(flagAspectShow, []int{cycleConjunctionAspect})), nil
 }
 
 // visibleObjectNumbers is the policy's visible set as Astrolog object numbers,
 // resolved without consulting any Go-side default list: under a delta baseline
 // the starting point is mainDefault, which was read from Astrolog.
-func visibleObjectNumbers(o recipe.ObjectPolicy, mainDefault []int) (map[int]bool, error) {
+func visibleObjectNumbers(o recipe.ObjectPolicy, mainDefault []int) map[int]bool {
 	visible := make(map[int]bool)
 	if o.Baseline == recipe.Explicit {
 		for _, n := range o.Selected() {
 			visible[n] = true
 		}
-		return visible, nil
+		return visible
 	}
 	for _, n := range mainDefault {
 		visible[n] = true
 	}
-	for _, b := range o.Add.Members() {
-		n, ok := bodyObjectNum[b]
-		if !ok {
-			return nil, fmt.Errorf("astrolog: timeline band: body %s has no astrolog object number", b)
-		}
+	for _, n := range o.Add.Members() {
 		visible[n] = true
 	}
-	for _, b := range o.Remove.Members() {
-		n, ok := bodyObjectNum[b]
-		if !ok {
-			return nil, fmt.Errorf("astrolog: timeline band: body %s has no astrolog object number", b)
-		}
+	for _, n := range o.Remove.Members() {
 		delete(visible, n)
 	}
-	return visible, nil
+	return visible
 }
 
-// bandedSide returns visible ∩ side, ascending, and whether it differs from
-// side (so a band is needed). side is a default set read from Astrolog.
-func bandedSide(visible map[int]bool, side []int) ([]int, bool) {
-	side = uniqueInts(side)
+// bandedList returns the members of set (true entries), ascending, and whether
+// that list differs from the side's default set read from Astrolog (so a band is
+// needed). An empty set differs from any non-empty default and is the bare list.
+func bandedList(set map[int]bool, side []int) ([]int, bool) {
 	var shown []int
-	for _, n := range side {
-		if visible[n] {
+	for n, in := range set {
+		if in {
 			shown = append(shown, n)
 		}
 	}
 	sort.Ints(shown)
-	return shown, len(shown) != len(side)
+	want := uniqueInts(side)
+	sort.Ints(want)
+	return shown, !slices.Equal(shown, want)
 }
 
 // uniqueInts is the distinct values of s. A side's default is a set; this keeps

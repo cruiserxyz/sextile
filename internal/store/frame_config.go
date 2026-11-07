@@ -50,7 +50,7 @@ func readFrame(path string) FrameConfig {
 		return cfg
 	}
 	lines := splitAfterNewlines(string(data))
-	fb, ok := findFrame(lines)
+	fb, ok := findBlock(lines, "frame")
 	if !ok || fb.scalar {
 		return cfg
 	}
@@ -67,31 +67,38 @@ func readFrame(path string) FrameConfig {
 	return cfg
 }
 
-// frameBlock is where the first `frame:` block sits in a file's lines, as the
-// reader and the writer both find it, so they cannot disagree on what the
-// block owns.
-type frameBlock struct {
-	start, end int // the `frame:` line, and the line that closes the block
-	// scalar reports `frame: <value>`: the key has a value of its own, so
+// prefBlock is where the first top-level block of one name sits in a file's
+// lines, as its reader and its writer both find it, so they cannot disagree on
+// what the block owns. The `frame:` and `experimental:` blocks share it.
+type prefBlock struct {
+	start, end int // the header line, and the line that closes the block
+	// scalar reports `<name>: <value>`: the key has a value of its own, so
 	// it opens no mapping and has no children to read or to add to.
 	scalar bool
 	// childIndent is the indent of the first line in the block that is
 	// neither blank nor a comment. Only a key at exactly that indent is a
-	// frame key; a deeper line belongs to some nested mapping.
+	// child of the block; a deeper line belongs to some nested mapping.
 	childIndent string
 	// at maps a direct child's key to its first line.
 	at map[string]int
-	// last is the block's last non-blank line (start when it has none).
+	// last is the block's last line that is neither blank nor a comment in
+	// column zero (start when it has none). A column-zero comment introduces
+	// what follows it, so a key added to the block goes above it.
 	last int
+	// stray is the first line of the span, -1 for none, that sits in column
+	// zero and is neither blank, a comment nor a top-level key: YAML would not
+	// read the lines under it as the block's children, so a writer that added
+	// one would add a line its own reader then ignores.
+	stray int
 }
 
-// findFrame finds the first top-level `frame:` block. It ends at the next
+// findBlock finds the first top-level `<name>:` block. It ends at the next
 // top-level key, or at a YAML document marker (`---`, `...` in column zero),
 // whichever comes first.
-func findFrame(lines []string) (frameBlock, bool) {
-	fb := frameBlock{start: -1, end: len(lines), at: map[string]int{}}
+func findBlock(lines []string, name string) (prefBlock, bool) {
+	fb := prefBlock{start: -1, end: len(lines), at: map[string]int{}, stray: -1}
 	for i, l := range lines {
-		if k, ok := topLevelKey(l); ok && k == "frame" {
+		if k, ok := topLevelKey(l); ok && k == name {
 			fb.start = i
 			break
 		}
@@ -100,12 +107,16 @@ func findFrame(lines []string) (frameBlock, bool) {
 		return fb, false
 	}
 	head := strings.TrimRight(lines[fb.start], "\r\n")
-	rest := head[len("frame:"):]
+	rest := head[len(name)+1:]
 	value := strings.TrimLeft(rest, " \t")
 	// A comment after the colon still opens a mapping; a value does not.
 	fb.scalar = value != "" && !(len(value) < len(rest) && value[0] == '#')
 	for i := fb.start + 1; i < len(lines); i++ {
-		if _, ok := topLevelKey(lines[i]); ok || isDocumentMarker(lines[i]) {
+		// A column-zero list entry (`- houses: Koch`) carries a colon, but it
+		// is the block's value, not the next key: it stays in the span, where
+		// it is a stray line. topLevelKey itself is left alone, because the
+		// whole-block writers (mergeBlock) would then swallow such lines.
+		if _, ok := topLevelKey(lines[i]); (ok && !isSequenceEntry(lines[i])) || isDocumentMarker(lines[i]) {
 			fb.end = i
 			break
 		}
@@ -117,11 +128,17 @@ func findFrame(lines []string) (frameBlock, bool) {
 		if trimmed == "" {
 			continue
 		}
-		fb.last = i
+		indent := lines[i][:len(lines[i])-len(strings.TrimLeft(lines[i], " \t"))]
 		if strings.HasPrefix(trimmed, "#") {
+			if indent != "" {
+				fb.last = i
+			}
 			continue
 		}
-		indent := lines[i][:len(lines[i])-len(strings.TrimLeft(lines[i], " \t"))]
+		fb.last = i
+		if indent == "" && fb.stray < 0 {
+			fb.stray = i
+		}
 		if !indented {
 			indented = true
 			if indent != "" {
@@ -143,6 +160,13 @@ func findFrame(lines []string) (frameBlock, bool) {
 	return fb, true
 }
 
+// isSequenceEntry reports a YAML block sequence entry in column zero: a dash
+// alone, or followed by a space or tab.
+func isSequenceEntry(line string) bool {
+	line = strings.TrimRight(line, "\r\n")
+	return line == "-" || strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "-\t")
+}
+
 // isDocumentMarker reports a YAML document start or end (`---`, `...`) in
 // column zero, bare or followed by a space or tab.
 func isDocumentMarker(line string) bool {
@@ -162,16 +186,18 @@ func isDocumentMarker(line string) bool {
 // recipe parses; a value outside them is refused and nothing is written,
 // because the store judges nothing it reads but vouches for what it writes.
 //
-// The write owns those two keys and nothing else. In the block it replaces the
-// value of the first direct-child `houses:` line and `zodiac:` line in place,
-// keeping each line's indentation, inline comment and terminator; a missing key
-// goes after the block's last non-blank line, at the block's child indent.
+// The write owns those two keys' value tokens and nothing else. In the block it
+// replaces the value of the first direct-child `houses:` line and `zodiac:`
+// line in place (setValueToken), keeping the key as spelled, what follows the
+// value and the terminator; a missing key goes after the block's last line
+// that is neither blank nor a column-zero comment, at the block's child indent.
 // Every other line — a `base:` the retired switch left, a comment, a nested
 // mapping with a `houses:` of its own, a key this package does not know — and
 // every byte outside the block is carried through byte-for-byte, which is why
 // this is not mergeBlock: that owns the whole span and would drop what the
 // writer did not author. A `frame:` that holds a value instead of a block is
-// refused, because keys cannot be added under it.
+// refused, because keys cannot be added under it, and so is a block with a
+// column-zero line YAML would not read as part of it.
 func SetFrame(houses, zodiac string) error {
 	if _, ok := recipe.ParseHouseSystem(houses); !ok {
 		return fmt.Errorf("store: frame: %q is not a house system name", houses)
@@ -187,7 +213,7 @@ func SetFrame(houses, zodiac string) error {
 // mergeFrame is SetFrame's text edit.
 func mergeFrame(existing, houses, zodiac string) (string, error) {
 	lines := splitAfterNewlines(existing)
-	fb, found := findFrame(lines)
+	fb, found := findBlock(lines, "frame")
 	if !found {
 		if existing != "" && !strings.HasSuffix(existing, "\n") {
 			existing += "\n"
@@ -198,17 +224,17 @@ func mergeFrame(existing, houses, zodiac string) (string, error) {
 		return "", fmt.Errorf("store: preferences.yaml has '%s', not a block. The frame was not saved",
 			strings.TrimSpace(lines[fb.start]))
 	}
+	if fb.stray >= 0 {
+		return "", fmt.Errorf("store: preferences.yaml's frame: block holds '%s', which YAML does not read as part of it. The frame was not saved",
+			strings.TrimSpace(lines[fb.stray]))
+	}
 	var inserted []string
 	for _, kv := range [][2]string{{"houses", houses}, {"zodiac", zodiac}} {
 		if i, ok := fb.at[kv[0]]; ok {
-			// Only the value moves: the indent before the key, and the
-			// whitespace and comment after the value, stay as written.
-			l := lines[i]
-			body := strings.TrimRight(l, "\r\n")
-			lead := body[:len(body)-len(strings.TrimLeft(body, " \t"))]
-			value := stripInlineComment(strings.TrimSpace(body))
-			tail := body[len(lead)+len(value):]
-			lines[i] = lead + kv[0] + ": " + kv[1] + tail + l[len(body):]
+			// Only the value token moves (setValueToken, the experimental
+			// writer's): the key as spelled, the whitespace and comment after
+			// the value and the line ending stay as written.
+			lines[i] = setValueToken(lines[i], kv[1])
 			continue
 		}
 		inserted = append(inserted, fb.childIndent+kv[0]+": "+kv[1]+"\n")

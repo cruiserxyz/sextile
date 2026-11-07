@@ -7,7 +7,12 @@ import (
 	"testing/fstest"
 
 	"github.com/cruiserxyz/sextile/internal/rules"
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
+
+// venusObject is Venus as Astrolog's registry gives it (number 4), the object
+// the shipped template is for.
+var venusObject = aspect.Object{Number: 4, Name: "Venus"}
 
 // testRegistry is the fact keys this slice's template names, with kinds.
 type testRegistry map[string]Kind
@@ -80,11 +85,11 @@ func TestEveryShippedTemplateLoads(t *testing.T) {
 	if len(ts) == 0 {
 		t.Fatal("no shipped template")
 	}
-	tpl, ok := ForBody(ts, "venus")
-	if !ok || tpl.ID != "body-inferior-planet" || tpl.Tab != "Details" {
-		t.Errorf("ForBody(venus) = %+v, %v", tpl, ok)
+	tpl, subject, ok := ForObject(ts, venusObject)
+	if !ok || subject != "venus" || tpl.ID != "body-inferior-planet" || tpl.Tab != "Details" {
+		t.Errorf("ForObject(Venus) = %+v, %q, %v", tpl, subject, ok)
 	}
-	if _, ok := ForBody(ts, "mars"); ok {
+	if _, _, ok := ForObject(ts, aspect.Object{Number: 5, Name: "Mars"}); ok {
 		t.Error("a template for mars")
 	}
 	// A template with an invalid slot is a load error naming its file and
@@ -156,7 +161,7 @@ func TestAbsentOmitsTheLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	now := nowFacts(14.87, []string{"Oct 24, 2026   0°45′ Sco"})
 	full, err := Render(tpl, "venus", map[string]Section{"now": now}, set(t))
 	if err != nil {
@@ -203,7 +208,7 @@ func TestAbsentOmitsTheLine(t *testing.T) {
 // A list fact renders one item per line under its first line.
 func TestListFactRepeats(t *testing.T) {
 	ts, _ := Shipped(reg, set(t))
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	items := []string{"Oct 24, 2026   0°45′ Sco", "Mar 23, 2025   2°50′ Ari", "Aug 13, 2023  20°28′ Leo", "Jan  9, 2022  18°43′ Cap", "Jun  3, 2020  13°36′ Gem"}
 	r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, items)}, set(t))
 	if err != nil {
@@ -269,7 +274,7 @@ func nowFacts(elong float64, items []string) factSection {
 // section reads in the contract's three columns.
 func TestRuleRendersEveryAttestedRow(t *testing.T) {
 	ts, _ := Shipped(reg, set(t))
-	tpl, _ := ForBody(ts, "venus")
+	tpl, _, _ := ForObject(ts, venusObject)
 	r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, nil)}, set(t))
 	if err != nil {
 		t.Fatal(err)
@@ -300,5 +305,46 @@ func TestRuleRendersEveryAttestedRow(t *testing.T) {
 	}
 	if strings.Join(r.RuleRows, " ") != "solar.beams/17 solar.beams/12 solar.combust/8.5" {
 		t.Errorf("rule rows %v", r.RuleRows)
+	}
+}
+
+// A template lists objects by lower-case ids; an object finds its template when
+// the id is its registry name lower-cased with spaces as underscores, or the
+// legacy wire name of its registry name (imum_coeli for Nadir), and the match
+// returns the id the template was written with, which Render takes as its
+// subject. Ceres is in no Sextile table, so only the first rule can find it.
+func TestForObjectMatchesByIdOrAlias(t *testing.T) {
+	list := func(id string, bodies ...string) Template { return Template{ID: id, Bodies: bodies} }
+	ts := []Template{
+		list("inner", "venus", "mercury"),
+		list("nodes", "north_node", "south_node"),
+		list("angles", "imum_coeli", "midheaven"),
+		list("minor", "ceres", "11th_cusp"),
+	}
+	for _, tc := range []struct {
+		name    string
+		object  aspect.Object
+		want    string
+		subject string
+	}{
+		{"Venus by venus", aspect.Object{Number: 4, Name: "Venus"}, "inner", "venus"},
+		{"North Node by north_node", aspect.Object{Number: 16, Name: "North Node"}, "nodes", "north_node"},
+		{"Nadir by imum_coeli", aspect.Object{Number: 25, Name: "Nadir"}, "angles", "imum_coeli"},
+		{"Ceres by ceres, object 12", aspect.Object{Number: 12, Name: "Ceres"}, "minor", "ceres"},
+		{"11th Cusp by 11th_cusp", aspect.Object{Number: 32, Name: "11th Cusp"}, "minor", "11th_cusp"},
+	} {
+		got, subject, ok := ForObject(ts, tc.object)
+		if !ok || got.ID != tc.want || subject != tc.subject {
+			t.Errorf("%s: ForObject = %q, %q, %v; want %q, %q", tc.name, got.ID, subject, ok, tc.want, tc.subject)
+		}
+	}
+	for _, o := range []aspect.Object{
+		{Number: 19, Name: "Fortune"}, // no template lists it
+		{Number: 5, Name: "Mars"},     // an object with a glyph that no template lists
+		{},                            // no object under the cursor
+	} {
+		if got, subject, ok := ForObject(ts, o); ok {
+			t.Errorf("ForObject(%+v) = %q, %q; want none", o, got.ID, subject)
+		}
 	}
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,8 +13,9 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// body_groups_test.go covers the specification: five group rows
-// above the Bodies list that toggle their members, like the aspect families.
+// body_groups_test.go covers the specification: seven group rows (five until
+// 2026-11-04) above the Bodies list that toggle their members, like the aspect
+// families. Their order, members and counts are chooser_groups_test.go's.
 
 // groupsRegistry is every Astrolog object number 0..133, named "Objnnn" except
 // the few the tests look for by name.
@@ -25,17 +27,17 @@ func groupsRegistry() []aspect.RegistryObject {
 		if !ok {
 			name = fmt.Sprintf("Obj%03d", i)
 		}
-		reg = append(reg, aspect.RegistryObject{Number: i, Name: name, Star: i >= 84})
+		reg = append(reg, aspect.RegistryObject{Object: aspect.Object{Number: i, Name: name}, Star: i >= 84})
 	}
 	return reg
 }
 
 // groupWant is the member count of each group over groupsRegistry, from the
-// spec's table.
+// spec's table (Earth is in Planets' list and not among its members).
 var groupWant = []struct {
 	name string
 	n    int
-}{{"Planets", 11}, {"Points & angles", 18}, {"Asteroids", 14}, {"Uranians", 9}, {"Other", 82}}
+}{{"Planets", 10}, {"Angles", 4}, {"Points", 6}, {"House cusps", 8}, {"Asteroids", 14}, {"Uranians", 9}, {"Other", 82}}
 
 func plainBodyCfg() Config { return Config{Accessible: true, Color: ColorNever} }
 
@@ -51,7 +53,7 @@ func TestBodyGroupRowsComeFirst(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {132, 40}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			cfg := plainBodyCfg()
-			st := openBodyModal(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}, nil)
+			st := popup.Open(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}, nil)
 			lines := strings.Split(renderBodyModal(st, cfg, size[0], size[1]), "\n")
 
 			search := -1
@@ -65,25 +67,26 @@ func TestBodyGroupRowsComeFirst(t *testing.T) {
 				t.Fatal("no search line")
 			}
 			// The box draws its own separator under the search line; the
-			// five group rows follow it, then the dashed rule, then the list.
+			// seven group rows follow it, then the dashed rule, then the list.
 			first := search + 2
+			last := len(groupWant)
 			for i, g := range groupWant {
 				l := lines[first+i]
-				if !strings.Contains(l, g.name) || !strings.Contains(l, fmt.Sprintf("(%d)", g.n)) {
-					t.Errorf("group row %d = %q, want %q with (%d)", i, l, g.name, g.n)
+				if !strings.Contains(l, g.name) || !strings.Contains(l, fmt.Sprintf("/%d)", g.n)) {
+					t.Errorf("group row %d = %q, want %q with /%d)", i, l, g.name, g.n)
 				}
 			}
 			if !strings.Contains(lines[first], "[◐ ] Planets") {
 				t.Errorf("Planets holds the ticked Sun and others, so it reads [◐ ]: %q", lines[first])
 			}
-			if !strings.Contains(lines[first+1], "[○ ] Points & angles") {
+			if !strings.Contains(lines[first+1], "[○ ] Angles") {
 				t.Errorf("an untouched group reads [○ ]: %q", lines[first+1])
 			}
-			if !onlyDashes(lines[first+5]) {
-				t.Errorf("the line after the group rows = %q, want the dashed rule", lines[first+5])
+			if !onlyDashes(lines[first+last]) {
+				t.Errorf("the line after the group rows = %q, want the dashed rule", lines[first+last])
 			}
-			if !strings.Contains(lines[first+6], "Earth") {
-				t.Errorf("the list starts under the rule: %q", lines[first+6])
+			if !strings.Contains(lines[first+last+1], "Earth") {
+				t.Errorf("the list starts under the rule: %q", lines[first+last+1])
 			}
 
 			// Acceptance 2: the cursor walks the group rows first, then the
@@ -92,26 +95,26 @@ func TestBodyGroupRowsComeFirst(t *testing.T) {
 				if !strings.Contains(lines[first+i], "> [") {
 					t.Fatalf("cursor %d is not on group row %d:\n%s", i, i, strings.Join(lines, "\n"))
 				}
-				st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, bodyListHeight(size[1]))
+				st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, popup.ListHeight(size[1]))
 				lines = strings.Split(renderBodyModal(st, cfg, size[0], size[1]), "\n")
 			}
-			if !strings.Contains(lines[first+6], "> [ ] Earth") {
-				t.Errorf("after five Downs the cursor is on the first list row: %q", lines[first+6])
+			if !strings.Contains(lines[first+last+1], "> [ ] Earth") {
+				t.Errorf("after seven Downs the cursor is on the first list row: %q", lines[first+last+1])
 			}
-			if got := strings.Join(lines, "\n"); !strings.Contains(got, "6 of 139") {
-				t.Errorf("position should count 5 group rows + 134 objects (6 of 139):\n%s", got)
+			if got := strings.Join(lines, "\n"); !strings.Contains(got, "8 of 141") {
+				t.Errorf("position should count 7 group rows + 134 objects (8 of 141):\n%s", got)
 			}
 		})
 	}
 }
 
-// Acceptance 7: at every cursor position, at 80x24, the five group rows, the
+// Acceptance 7: at every cursor position, at 80x24, the seven group rows, the
 // rule, the cursor row and the Enabled bar are all on screen.
 func TestBodyGroupBlockAndCursorStayVisibleAt80x24(t *testing.T) {
 	cfg := plainBodyCfg()
-	st := openBodyModal(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}, nil)
-	h := bodyListHeight(24)
-	for pos := 0; pos < st.totalRows(); pos++ {
+	st := popup.Open(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}, nil)
+	h := popup.ListHeight(24)
+	for pos := 0; pos < st.TotalRows(); pos++ {
 		out := renderBodyModal(st, cfg, 80, 24)
 		lines := strings.Split(out, "\n")
 		for _, g := range groupWant {
@@ -140,8 +143,8 @@ func TestBodyGroupBlockAndCursorStayVisibleAt80x24(t *testing.T) {
 		if marks != 1 {
 			t.Fatalf("cursor %d: %d cursor rows on screen, want 1:\n%s", pos, marks, out)
 		}
-		if pos >= groupRows() {
-			obj, ok := st.objectUnderCursor()
+		if pos >= popup.GroupRows() {
+			obj, ok := st.ObjectUnderCursor()
 			if !ok || !strings.Contains(out, "> [") || !strings.Contains(out, obj.Name) {
 				t.Fatalf("cursor %d: the row under the cursor (%q) is not drawn:\n%s", pos, obj.Name, out)
 			}
@@ -153,11 +156,11 @@ func TestBodyGroupBlockAndCursorStayVisibleAt80x24(t *testing.T) {
 // Acceptance 3, 4, 5 and 6.
 func TestBodyGroupsToggleTheirMembers(t *testing.T) {
 	oldChooserRule(t)
-	planets := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	planets := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10} // Earth is ticked by its own row
 	entry := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}
 
 	open := func(t *testing.T) Model {
-		m := readyModelWithObjects(groupsRegistry())
+		m := readyModelWithObjects(t, groupsRegistry())
 		m.lens.Objects = entry
 		tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
 		return tm.(Model)
@@ -168,7 +171,7 @@ func TestBodyGroupsToggleTheirMembers(t *testing.T) {
 		m := open(t)
 		tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 		got := tm.(Model)
-		if on := ticksOn(got.bodyModal.selected); len(on) != len(planets) {
+		if on := ticksOn(got.bodyModal.Selected); len(on) != len(planets) {
 			t.Fatalf("a partial group toggled to %d ticked, want all %d: %v", len(on), len(planets), on)
 		}
 		if cmd == nil {
@@ -184,7 +187,7 @@ func TestBodyGroupsToggleTheirMembers(t *testing.T) {
 			}
 		}
 		tm, _ = got.Update(tea.KeyMsg{Type: tea.KeySpace})
-		if on := ticksOn(tm.(Model).bodyModal.selected); len(on) != 0 {
+		if on := ticksOn(tm.(Model).bodyModal.Selected); len(on) != 0 {
 			t.Errorf("toggling an all-ticked group left %v ticked, want none", on)
 		}
 	})
@@ -195,39 +198,42 @@ func TestBodyGroupsToggleTheirMembers(t *testing.T) {
 			tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 			m = tm.(Model)
 		}
-		rows := strings.Join(bodyGroupRows(m.bodyModal, plainBodyCfg(), 60), "\n")
-		if !strings.Contains(rows, "Asteroids") || !strings.Contains(rows, "Asteroids       (1)") {
-			t.Errorf("with hyg typed Asteroids should read (1):\n%s", rows)
+		rows := strings.Join(popup.PinnedGroupRows(m.bodyModal, plainBodyCfg(), 60), "\n")
+		if !strings.Contains(rows, "Asteroids   (0/1)") {
+			t.Errorf("with hyg typed Asteroids should read (0/1):\n%s", rows)
 		}
-		for i := 0; i < 2; i++ { // Planets -> Points & angles -> Asteroids
+		for i := 0; i < 4; i++ { // Planets -> Angles -> Points -> House cusps -> Asteroids
 			tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 			m = tm.(Model)
 		}
 		tm, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
-		on := ticksOn(tm.(Model).bodyModal.selected)
+		on := ticksOn(tm.(Model).bodyModal.Selected)
 		if _, ok := on[43]; !ok || len(on) != 2 { // Sun from the entry set, plus Hygiea
 			t.Errorf("the filtered Asteroids toggle should tick Hygiea only (plus the entry Sun): %v", on)
 		}
 	})
 
-	t.Run("5 a probe-marked body is ticked and unticked by its group", func(t *testing.T) {
+	t.Run("5 a probe-marked body is not ticked by its group, but is unticked by it", func(t *testing.T) {
+		// Round 2 of the ephemeris review (1.1): a body this opening's probe
+		// found undrawable cannot be ticked; one already ticked can be unticked.
 		m := open(t)
-		m.bodyModal.recordProbe(43, false, []string{"seas_00.se1"})
-		if _, marked := m.bodyModal.undrawable(43); !marked {
+		m.bodyModal.RecordProbe(43, false, []string{"seas_00.se1"})
+		if _, marked := m.bodyModal.Undrawable(43); !marked {
 			t.Fatal("setup: Hygiea is not marked")
 		}
 		st := m.bodyModal
-		st.toggleAt(2) // Asteroids
-		if !st.selected[43] {
-			t.Error("a marked body was skipped by its group's tick")
+		st.ToggleAt(4) // Asteroids
+		if st.Selected[43] {
+			t.Error("a marked body was ticked by its group")
 		}
-		rows := strings.Join(bodyListRows(st, plainBodyCfg(), 60, 200), "\n")
+		rows := strings.Join(popup.ListRows(st, plainBodyCfg(), 60, 200), "\n")
 		if !strings.Contains(rows, "! Hygiea") {
 			t.Errorf("the mark must survive the toggle:\n%s", rows)
 		}
-		st.toggleAt(2)
-		if st.selected[43] {
-			t.Error("a marked body was skipped by its group's untick")
+		st.Selected[43] = true
+		st.ToggleAt(4)
+		if st.Selected[43] {
+			t.Error("a marked, ticked body was skipped by its group's untick")
 		}
 	})
 
@@ -262,13 +268,13 @@ func TestBodyGroupsToggleTheirMembers(t *testing.T) {
 // group and pressing Esc leaves the lens' object policy as it was.
 func TestBodyGroupUntickThenEscRestoresEntry(t *testing.T) {
 	oldChooserRule(t)
-	m := readyModelWithObjects(groupsRegistry())
-	planets := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	m := readyModelWithObjects(t, groupsRegistry())
+	planets := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10} // Earth is no member of the group
 	m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: planets}
 	entry := m.lens.Objects
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
 	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace}) // cursor on Planets: unticks all
-	if got := tm.(Model).bodyModal.policy().Selected(); len(got) != 0 {
+	if got := tm.(Model).bodyModal.Policy().Selected(); len(got) != 0 {
 		t.Fatalf("setup: Planets still ticked: %v", got)
 	}
 	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -315,10 +321,10 @@ func TestBodyGroupsGolden(t *testing.T) {
 			}{{"color", Config{Color: ColorAlways}}, {"accessible", Config{Accessible: true, Color: ColorNever}}} {
 				name := fmt.Sprintf("body-modal-groups-%s-%dx%d-%s", tc.name, size[0], size[1], md.name)
 				t.Run(name, func(t *testing.T) {
-					st := openBodyModal(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 43}}, nil)
+					st := popup.Open(groupsRegistry(), recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 43}}, nil)
 					if tc.filter != "" {
-						st.appendRunes([]rune(tc.filter))
-						st.refilter()
+						st.AppendRunes([]rune(tc.filter))
+						st.Refilter()
 					}
 					checkGolden(t, name, renderBodyModal(st, md.cfg, size[0], size[1]))
 				})

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestErrorMarkWhenLogIsHidden(t *testing.T) {
 		t.Errorf("after more lines footer = %q", got)
 	}
 	// ...goes when the console opens...
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -105,11 +106,11 @@ func TestErrorMarkYieldsToIndicators(t *testing.T) {
 // the specification 4: colours on paint the `!` in the error colour.
 func TestErrorMarkColour(t *testing.T) {
 	forceColor(t)
-	on := errorMarkText(",", Config{})
+	on := keys.ErrorMarkText(",", Config{})
 	if !strings.Contains(on, "\x1b[") || ansi.Strip(on) != "! error · ,l" {
 		t.Errorf("coloured mark = %q", on)
 	}
-	if got := errorMarkText(",", Config{Color: ColorNever}); got != "! error · ,l" {
+	if got := keys.ErrorMarkText(",", Config{Color: ColorNever}); got != "! error · ,l" {
 		t.Errorf("colours-off mark = %q", got)
 	}
 }

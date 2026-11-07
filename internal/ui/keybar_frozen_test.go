@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 )
@@ -14,8 +15,9 @@ import (
 // (the specification); regenerating it with -update is a
 // deliberate act, not a way past a failure.
 func TestKeyBarUnchangedByLeader(t *testing.T) {
-	all := defaultKeys().mainBindings()
-	rest := NewModel(Config{}).available(all) // no Details on screen
+	tm := newTestModel(t, Config{}, RealClock{})
+	all := withoutConditions(mainBindings(keys.DefaultKeys()))
+	rest := mainBindings(keys.DefaultKeys()) // no Details on screen: the conditions drop its entries
 	var sb strings.Builder
 	for _, width := range []int{80, 132, 200} {
 		for _, cfg := range []struct {
@@ -32,7 +34,7 @@ func TestKeyBarUnchangedByLeader(t *testing.T) {
 					entries = all
 				}
 				fmt.Fprintf(&sb, "== %d %s details=%v ==\n%s\n", width, cfg.name, withDetails,
-					renderKeyBar(width, entries, cfg.cfg, ""))
+					tm.barText(ownerMain, entries, width, cfg.cfg, ""))
 			}
 		}
 	}

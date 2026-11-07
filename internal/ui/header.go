@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"time"
 
@@ -18,7 +20,7 @@ import (
 
 // chartSlotsBody renders the [1] Chart panel body — one line per slot in the
 // workspace. The cursor row carries the shared cursor-row treatment while
-// Chart owns the keyboard (renderRowState); with colours off it also gets the
+// Chart owns the keyboard (menu.RenderRowState); with colours off it also gets the
 // cursor column. Persistent slot selection remains visible independently. Pre-resolution (slots == nil)
 // falls back to the clock+place line so the body is never empty.
 //
@@ -53,21 +55,21 @@ func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, 
 		return ""
 	}
 	if slots == nil {
-		prefix := rowPrefix(panelFocused, true, false, false, cfg)
+		prefix := menu.RowPrefix(panelFocused, true, false, false, cfg)
 		line := tagSlotLine(now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
 		if line == "" {
 			return ""
 		}
-		return renderRow(prefix+line, width, cursorRowState(panelFocused, true), cfg)
+		return menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, true), cfg)
 	}
 	all := slots.All()
 	if len(all) == 0 {
-		prefix := rowPrefix(panelFocused, true, false, false, cfg)
+		prefix := menu.RowPrefix(panelFocused, true, false, false, cfg)
 		line := tagSlotLine(now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
 		if line == "" {
 			return ""
 		}
-		return renderRow(prefix+line, width, cursorRowState(panelFocused, true), cfg)
+		return menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, true), cfg)
 	}
 	set := selectionOf(slots)
 	selectionColumn := len(set) > 0
@@ -85,7 +87,7 @@ func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, 
 			}
 			momentW = max(momentW, ansi.StringWidth(slotMoment(s.Time, s.Location)))
 			tagW = max(tagW, ansi.StringWidth(rowTagOf(s, lens, tag)))
-			rowW = min(rowW, width-ansi.StringWidth(chartRowPrefix(panelFocused, i == cursorIdx, numeralIn(set, s), selectionColumn, cfg)))
+			rowW = min(rowW, width-ansi.StringWidth(menu.ChartRowPrefix(panelFocused, i == cursorIdx, numeralMark(numeralIn(set, s), cfg), selectionColumn, cfg)))
 		}
 		nameCap = min(nameColumnMax, rowW-nameGutter-momentW-1-tagW)
 	}
@@ -124,7 +126,7 @@ func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, 
 		// panels have not been recomputed against — a trust-breaking lie
 		// during consults. Time-stepping advances slot.Time and
 		// triggers recompute so the two stay in step.
-		prefix := chartRowPrefix(panelFocused, i == cursorIdx, numeralIn(set, s), selectionColumn, cfg)
+		prefix := menu.ChartRowPrefix(panelFocused, i == cursorIdx, numeralMark(numeralIn(set, s), cfg), selectionColumn, cfg)
 		rowLens := lens
 		var line string
 		if oneChart {
@@ -141,7 +143,7 @@ func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, 
 		} else {
 			line = tagNamedSlotLine(names[i], nameW, zoneW, s.Time, s.Location, rowLens.HouseAbbrev()+rowLens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
 		}
-		lines[i] = renderRow(prefix+line, width, cursorRowState(panelFocused, i == cursorIdx), cfg)
+		lines[i] = menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, i == cursorIdx), cfg)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -185,7 +187,7 @@ func fitFloatTitle(all []*store.Slot, names []string, nameW, width int, lens loo
 // one-chart layout and still leave the row its moment, zone, place and tag
 // whole (oneChartLine drops the place first when room runs out).
 func floatTitleRoom(s *store.Slot, width int, lens lookup.Lens, tag func(*store.Slot) string, panelFocused, cursor bool, numeral int, selectionColumn bool, cfg Config) int {
-	rowW := width - ansi.StringWidth(chartRowPrefix(panelFocused, cursor, numeral, selectionColumn, cfg))
+	rowW := width - ansi.StringWidth(menu.ChartRowPrefix(panelFocused, cursor, numeralMark(numeral, cfg), selectionColumn, cfg))
 	used := ansi.StringWidth(slotMoment(s.Time, s.Location)) + 1 + ansi.StringWidth(slotZone(s.Time, s.Location)) +
 		1 + ansi.StringWidth(s.Location.Display()) + 1 + ansi.StringWidth(rowTagOf(s, lens, tag))
 	return rowW - nameGutter - used
@@ -253,7 +255,7 @@ func tagNamedSlotLine(name string, nameW, zoneW int, now time.Time, place locati
 	cell := name + strings.Repeat(" ", nameW-ansi.StringWidth(name)) + "  "
 	if ansi.StringWidth(cell) >= width {
 		// No room for anything past the name: the row still fits its width.
-		return cutRight(cell, width, cfg)
+		return term.CutRight(cell, width, cfg)
 	}
 	zone := slotZone(now, place)
 	left := slotMoment(now, place) + " " + zone + strings.Repeat(" ", max(0, zoneW-ansi.StringWidth(zone)))
@@ -357,7 +359,7 @@ func abbreviateNameTo(name string, w int, cfg Config) string {
 	tokens := strings.Fields(name)
 	joined := strings.Join(tokens, " ")
 	fits := func(s string) bool { return ansi.StringWidth(s) <= w }
-	cut := func(s string) string { return cutRight(s, w, cfg) }
+	cut := func(s string) string { return term.CutRight(s, w, cfg) }
 	if fits(joined) {
 		return joined
 	}
@@ -411,7 +413,7 @@ func layoutSlotLine(left, loc, right string, width int, cfg Config) string {
 	if avail < 1 {
 		return clampLine(left, right, width, cfg)
 	}
-	loc = cutRight(loc, avail, cfg)
+	loc = term.CutRight(loc, avail, cfg)
 	pad := width - lw - 1 - ansi.StringWidth(loc) - rw
 	if pad < 1 {
 		pad = 1
@@ -424,11 +426,11 @@ func layoutSlotLine(left, loc, right string, width int, cfg Config) string {
 func clampLine(left, right string, width int, cfg Config) string {
 	rw := ansi.StringWidth(right)
 	if width <= rw {
-		return cutRight(right, width, cfg)
+		return term.CutRight(right, width, cfg)
 	}
 	lw := ansi.StringWidth(left)
 	if lw+rw > width {
-		left = cutRight(left, width-rw, cfg)
+		left = term.CutRight(left, width-rw, cfg)
 		lw = ansi.StringWidth(left)
 	}
 	return left + strings.Repeat(" ", width-lw-rw) + right

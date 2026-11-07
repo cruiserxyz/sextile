@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,24 +44,26 @@ func stubSwapLookups(t *testing.T) *swapSpawns {
 	s := &swapSpawns{columns: stubColumnLookups(t, nil)}
 	row := func(other int) lookup.OverlayAspects {
 		return lookup.OverlayAspects{
-			Aspects: []lookup.OverlayAspect{{Natal: aspect.Sun, Transit: aspect.Moon, Kind: aspect.Square, Orb: aspect.Orb(float64(other%9) + 0.5), Power: 5}},
+			Aspects: []lookup.OverlayAspect{{NatalObject: objSun, TransitObject: objMoon, Kind: aspect.Square, Orb: aspect.Orb(float64(other%9) + 0.5), Power: 5}},
 			Report:  "cross",
 		}
 	}
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		s.mu.Lock()
-		s.cross++
-		s.crossFst = append(s.crossFst, natal)
-		s.mu.Unlock()
-		return row(when.Year()), nil
-	}
-	synastryCrossAspects = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		s.mu.Lock()
-		s.cross++
-		s.crossFst = append(s.crossFst, natal)
-		s.mu.Unlock()
-		return row(when.Year()), nil
-	}
+	stubSpawns(t, func(sp *rowSpawns) {
+		sp.cast.overlay = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			s.mu.Lock()
+			s.cross++
+			s.crossFst = append(s.crossFst, natal)
+			s.mu.Unlock()
+			return row(when.Year()), nil
+		}
+		sp.cast.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			s.mu.Lock()
+			s.cross++
+			s.crossFst = append(s.crossFst, natal)
+			s.mu.Unlock()
+			return row(when.Year()), nil
+		}
+	})
 	return s
 }
 
@@ -151,7 +154,11 @@ func pumpViews(t *testing.T, m Model, cmd tea.Cmd) (Model, []string) {
 
 // Rules 1, 2 and 3 for every trigger: the screen goes from the old scene's
 // Bodies and Aspects to the new one's in one View, and no View between shows a
-// mixture; the Chart list reacts at the key press.
+// mixture; the Chart list reacts at the key press. By the view rule
+// (subject.go) the key-press frame is the old scene exactly as it was when the
+// subject stays (the main panels never dim, operator 2026-11-06), or another
+// subject's `…`, the same for both panels, and it is the one frame allowed
+// between the old scene and the new.
 func TestSceneChangeSwapsMainPanelsTogether(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -176,8 +183,17 @@ func TestSceneChangeSwapsMainPanelsTogether(t *testing.T) {
 
 			m1, cmd := tc.trigger(t, m)
 			list1, mid := leftColumn(t, m1.View())
-			if mid != before {
-				t.Fatalf("in the key-press frame Bodies and Aspects changed before their frame landed:\n--- before\n%s\n--- key-press frame\n%s", before, mid)
+			b, a := m1.textPaneState(PanelBodies), m1.textPaneState(PanelAspects)
+			if b != a {
+				t.Fatalf("in the key-press frame Bodies is %v and Aspects %v, want the same", b, a)
+			}
+			// The content stays; the strips may lose a tab the key removed (the
+			// active one stays, or the subject would have changed).
+			if b == paneCurrent && panelBodies(mid) != panelBodies(before) {
+				t.Fatalf("the key-press frame changed Bodies or Aspects before the new scene landed:\n--- before\n%s\n--- key-press frame\n%s", before, mid)
+			}
+			if b == paneEmpty && strings.Count(mid, emptyPaneLine) < 2 {
+				t.Fatalf("the key-press frame owes another subject but does not read `…` in both panels:\n%s", mid)
 			}
 			if tc.listMoves && list1 == list0 {
 				t.Errorf("the Chart list did not react in the key-press frame:\n%s", list1)
@@ -189,8 +205,8 @@ func TestSceneChangeSwapsMainPanelsTogether(t *testing.T) {
 				t.Fatalf("the scene change never reached Bodies and Aspects:\n%s", after)
 			}
 			for i, v := range views {
-				if _, got := leftColumn(t, v); got != before && got != after {
-					t.Fatalf("view %d of %d shows a mixture of the two scenes:\n--- before\n%s\n--- after\n%s\n--- got\n%s", i+1, len(views), before, after, got)
+				if _, got := leftColumn(t, v); got != before && got != mid && got != after {
+					t.Fatalf("view %d of %d shows a mixture of the two scenes:\n--- before\n%s\n--- key-press frame\n%s\n--- after\n%s\n--- got\n%s", i+1, len(views), before, mid, after, got)
 				}
 			}
 		})
@@ -198,7 +214,8 @@ func TestSceneChangeSwapsMainPanelsTogether(t *testing.T) {
 }
 
 // Rule 3: the Chart list shows the new cursor in the frame of the key press,
-// while Bodies and Aspects are still the old scene's.
+// while Bodies and Aspects read `…`: they hold nothing of the chart the cursor
+// is on (C5), and nothing of the old one under its new name.
 func TestChartListReactsBeforeTheSwap(t *testing.T) {
 	stubSwapLookups(t)
 	m := settledComparing(t, 1)
@@ -212,8 +229,8 @@ func TestChartListReactsBeforeTheSwap(t *testing.T) {
 	if list1 == list0 {
 		t.Fatalf("the Chart list did not move in the key-press frame:\n%s", list1)
 	}
-	if panels1 != panels0 {
-		t.Fatalf("Bodies and Aspects moved in the key-press frame:\n%s", panels1)
+	if panels1 == panels0 || strings.Count(panels1, emptyPaneLine) < 2 {
+		t.Fatalf("Bodies and Aspects in the key-press frame: want `…` in both, none of the old chart:\n%s", panels1)
 	}
 	if cmd == nil {
 		t.Fatal("the key press asked for no recompute")
@@ -268,10 +285,11 @@ func TestSwapAddsNoSpawn(t *testing.T) {
 	}
 }
 
-// Rule 6, as the try of 2026-10-24 left it: a tap's pending report keeps
-// its previous body as drawn; from the second key of a run its body is faint
-// (colours on) and its title ends " …" (colours off); the frame the new
-// report commits after the key is let go, both go.
+// Rule 6, as the view rule leaves it (specs/details-follows-its-tab.md C3-C8):
+// a pending report is never the previous body under the new caption, tap or
+// held key alike. Another subject reads one `…` (no waiting sign: nothing of
+// the old report is on screen to be faint), and the frame the new report
+// commits is bright.
 func TestDetailsDimsWhileAKeyIsHeld(t *testing.T) {
 	stubSwapLookups(t)
 	stubRawReports(t)
@@ -283,7 +301,7 @@ func TestDetailsDimsWhileAKeyIsHeld(t *testing.T) {
 		{"colours on", Config{Color: ColorAlways}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.cfg.useColor() {
+			if tc.cfg.UseColor() {
 				forceColor(t)
 			}
 			m := settledComparing(t, 1)
@@ -302,13 +320,13 @@ func TestDetailsDimsWhileAKeyIsHeld(t *testing.T) {
 			if !m1.details.pending {
 				t.Fatal("fixture: the scene change left Details settled")
 			}
-			if got := detailsWaitingSigns(m1.View()); got != "" {
-				t.Fatalf("a tap's pending Details shows the waiting sign: %s", got)
-			}
 			m1, cmd2 := tpress(t, m1, keyDown)
 			cmd = tea.Batch(cmd, cmd2)
-			if got := detailsWaitingSigns(m1.View()); got == "" {
-				t.Fatalf("a held key's pending Details shows no waiting sign:\n%s", m1.View())
+			if m1.detailsReportState() != paneEmpty {
+				t.Fatalf("a held key moving to another chart: the report pane is %v, want empty", m1.detailsReportState())
+			}
+			if got := detailsWaitingSigns(m1.View()); got != "" {
+				t.Fatalf("another subject's pending Details shows a waiting sign, or the old report: %s", got)
 			}
 
 			m2 := pump(t, m1, cmd)
@@ -318,18 +336,22 @@ func TestDetailsDimsWhileAKeyIsHeld(t *testing.T) {
 			if got := detailsWaitingSigns(m2.View()); got != "" {
 				t.Fatalf("the frame the new report committed still shows the waiting sign: %s", got)
 			}
+			if m2.detailsReportState() != paneCurrent || !strings.Contains(m2.View(), "single raw") {
+				t.Fatalf("the committed report is not drawn: %v", m2.detailsReportState())
+			}
 		})
 	}
 }
 
 // detailsWaitingSigns names the waiting sign the Details panel shows, "" for
-// none: the title's trailing ellipsis colours off, a faint report line colours on.
+// none: the title's trailing ellipsis, a faint report line, or the report of
+// another subject (the stub's `single raw`) under a caption that moved on.
 func detailsWaitingSigns(view string) string {
-	if strings.Contains(ansi.Strip(view), "Chart …") {
+	if strings.Contains(ansi.Strip(view), "Now …") || strings.Contains(ansi.Strip(view), "Chart …") {
 		return "title ends …"
 	}
 	for _, ln := range strings.Split(view, "\n") {
-		if strings.Contains(ln, sgrFaint+"single raw") {
+		if strings.Contains(ln, term.SGRFaint+"single raw") {
 			return "faint report"
 		}
 	}
@@ -383,8 +405,8 @@ func TestCrossRowLeftBodyIsTheTabsFirstChart(t *testing.T) {
 			if !strings.Contains(panels, tc.title) {
 				t.Fatalf("no %q tab in\n%s", tc.title, panels)
 			}
-			if !strings.Contains(panels, "☉ □ ☽") || strings.Contains(panels, "☽ □ ☉") {
-				t.Fatalf("the cell does not read ①'s body first:\n%s", panels)
+			if !strings.Contains(panels, "☽ □ ☉") || strings.Contains(panels, "☉ □ ☽") {
+				t.Fatalf("the cell does not read the cursor's body first:\n%s", panels)
 			}
 		})
 	}
@@ -418,10 +440,11 @@ func TestFloatingSlotIsNeverTheTabsFirstNumeral(t *testing.T) {
 }
 
 // detailsWaitingFrame is a comparing pair with Details' report loaded, one
-// scene change in by a held ↑ (a tap draws no waiting sign): Details is
-// waiting for the new report.
+// scene change in by ↑ to another chart: Details is waiting for that chart's
+// report and reads one `…` meanwhile.
 func detailsWaitingFrame(t *testing.T, cfg Config, w, h int) string {
 	t.Helper()
+	freshModels(t)
 	stubSwapLookups(t)
 	stubRawReports(t)
 	m := selectedSet(t, 1, true, 1)
@@ -435,11 +458,9 @@ func detailsWaitingFrame(t *testing.T, cfg Config, w, h int) string {
 	if m.details.body != "single raw" {
 		t.Fatalf("fixture: details body %q", m.details.body)
 	}
-	// The run's first ↑ arrived just now; this one is its first repeat.
-	m.detailsHold.key, m.detailsHold.keys, m.detailsHold.last = keyUp.String(), 1, m.clock.Now()
 	m, _ = tpress(t, m, keyUp)
-	if !m.details.pending || !m.detailsHold.on {
-		t.Fatalf("fixture: Details is not waiting in a hold (pending=%v held=%v)", m.details.pending, m.detailsHold.on)
+	if !m.details.pending {
+		t.Fatalf("fixture: Details is not waiting (pending=%v)", m.details.pending)
 	}
 	return m.View()
 }
@@ -449,13 +470,14 @@ func TestSceneSwapFrames(t *testing.T) {
 	// No 80x24 frame: Details is not in the layout below dualColumnMinWidth
 	// (layoutGeometry), so at 80x24 there is no Details panel to wait.
 	frame := detailsWaitingFrame(t, Config{Color: ColorNever}, 144, 40)
-	if !strings.Contains(ansi.Strip(frame), "Chart …") {
-		t.Fatalf("no waiting mark in\n%s", frame)
+	if !strings.Contains(ansi.Strip(frame), emptyPaneLine) || strings.Contains(ansi.Strip(frame), "single raw") {
+		t.Fatalf("Details waiting for another chart's report is not the `…` pane:\n%s", frame)
 	}
 	checkGolden(t, "scene-swap-details-waiting-144x40-never", frame)
 	forceColor(t)
 	checkGolden(t, "scene-swap-details-waiting-144x40-color", detailsWaitingFrame(t, Config{Color: ColorAlways}, 144, 40))
 
+	freshModels(t)
 	stubSwapLookups(t)
 	m := settledComparing(t, 1)
 	m.cfg = Config{Color: ColorNever}
@@ -540,8 +562,8 @@ func TestHardResetDuringAHoldDropsIt(t *testing.T) {
 	if !m1.holding() {
 		t.Fatal("fixture: the scene change held nothing")
 	}
-	if _, got := leftColumn(t, m1.View()); got != settled {
-		t.Fatal("fixture: the hold does not paint the settled scene")
+	if m1.textPaneState(PanelBodies) == paneCurrent {
+		t.Fatal("fixture: the held frame is painted as current under another scene")
 	}
 
 	cand := m1.slots.All()[0].Chart
@@ -549,7 +571,22 @@ func TestHardResetDuringAHoldDropsIt(t *testing.T) {
 	if m2.holding() {
 		t.Fatal("the re-anchor left the old frame held")
 	}
-	if _, got := leftColumn(t, m2.View()); got == settled {
-		t.Fatalf("Bodies and Aspects still paint the held frame after the reset:\n%s", got)
+	if _, got := leftColumn(t, m2.View()); got == settled || strings.Count(got, emptyPaneLine) < 2 {
+		t.Fatalf("Bodies and Aspects still paint the held frame after the reset, or do not read `…`:\n%s", got)
 	}
+	if m2.shownFrameValid() {
+		t.Fatal("the reset left a frame counted as shown")
+	}
+}
+
+// panelBodies is a left column without its panels' top borders, which carry
+// the tab strips: what the panels show, not which tabs they offer.
+func panelBodies(col string) string {
+	var out []string
+	for _, l := range strings.Split(col, "\n") {
+		if !strings.HasPrefix(ansi.Strip(l), "╭") {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
 }

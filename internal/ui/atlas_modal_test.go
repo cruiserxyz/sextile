@@ -2,6 +2,8 @@ package ui
 
 import (
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
@@ -12,13 +14,13 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 )
 
-// Ctrl+L (re-open) must clear filterText so leftover text from a previous
+// Ctrl+L (re-open) must clear FilterText so leftover text from a previous
 // pick / typing session never pre-fills. The IANA preseed pre-fill is
 // reserved for first cold-start without a stored location.
 func TestOpenAtlas_ClearsFilterTextOnReopen(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
-	m.atlas.filterText = "Berlin"
-	m.atlas.cursor = 3
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
+	m.atlas.FilterText = "Berlin"
+	m.atlas.Cursor = 3
 	m.startup = startupReady
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
@@ -27,21 +29,21 @@ func TestOpenAtlas_ClearsFilterTextOnReopen(t *testing.T) {
 	if got.startup != startupAtlasOpen {
 		t.Fatalf("startup = %q, want %q", got.startup, startupAtlasOpen)
 	}
-	if got.atlas.filterText != "" {
-		t.Errorf("filterText = %q, want empty (sticky text must be cleared on re-open)", got.atlas.filterText)
+	if got.atlas.FilterText != "" {
+		t.Errorf("filterText = %q, want empty (sticky text must be cleared on re-open)", got.atlas.FilterText)
 	}
-	if got.atlas.cursor != 0 {
-		t.Errorf("cursor = %d, want 0", got.atlas.cursor)
+	if got.atlas.Cursor != 0 {
+		t.Errorf("cursor = %d, want 0", got.atlas.Cursor)
 	}
 }
 
 // First cold-start without a stored location keeps the IANA preseed pre-fill —
-// this is the one and only place filterText is pre-populated with a system
+// this is the one and only place FilterText is pre-populated with a system
 // guess. cp3: resolution defers until both perimeter + atlas msgs are in,
 // then on full-chain miss (empty atlas can't resolve preseed) the modal
 // opens with the preseed pre-filled.
 func TestStartupPerimeter_NoLocation_PreseedFillsFilterText(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 
 	// Inject empty-but-non-nil atlas so resolution actually fires (an
 	// atlas-not-loaded state would just wait).
@@ -54,8 +56,8 @@ func TestStartupPerimeter_NoLocation_PreseedFillsFilterText(t *testing.T) {
 	if got.startup != startupAtlasOpen {
 		t.Fatalf("startup = %q, want %q", got.startup, startupAtlasOpen)
 	}
-	if got.atlas.filterText != "Berlin" {
-		t.Errorf("filterText = %q, want %q (IANA preseed should pre-fill on full-miss modal open)", got.atlas.filterText, "Berlin")
+	if got.atlas.FilterText != "Berlin" {
+		t.Errorf("filterText = %q, want %q (IANA preseed should pre-fill on full-miss modal open)", got.atlas.FilterText, "Berlin")
 	}
 }
 
@@ -79,7 +81,7 @@ func TestAtlasOtherListMessagesUnchanged(t *testing.T) {
 	if none != "(no matches)" {
 		t.Errorf("no-match line = %q", none)
 	}
-	failed := atlasModalState{loadErr: errors.New("boom")}
+	failed := atlasModalState{Atlas: popup.Atlas{LoadErr: errors.New("boom")}}
 	if got := strings.TrimSpace(renderResultList(failed, Config{}, 80, 5)); got != strings.TrimSpace(atlasModalHint) {
 		t.Errorf("load-error line = %q, want atlasModalHint %q", got, atlasModalHint)
 	}
@@ -92,16 +94,16 @@ func TestCityShowsACutNameInTheEdge(t *testing.T) {
 	const name = "San Pedro de la Paz del Valle Verde del Norte" // 45 cells: a row holds 43
 	for _, cfg := range []Config{{Color: ColorAlways}, {Accessible: true, Color: ColorNever}} {
 		st := liftState("san", 0)
-		st.setMatches([]location.PlaceInfo{{Name: name, Country: "CL"}, {Name: "Santiago", Country: "CL"}}, false)
+		st.SetMatches([]location.PlaceInfo{{Name: name, Country: "CL"}, {Name: "Santiago", Country: "CL"}}, false)
 		first := ansi.Strip(renderAtlasModal(st, cfg, 80, 24))
 		lines := strings.Split(first, "\n")
 		if edge := lines[len(lines)-1]; !strings.Contains(edge, name) {
 			t.Errorf("%+v: the edge does not show %q whole:\n%s", cfg, name, first)
 		}
-		if row := lines[4]; strings.Contains(row, name) || !strings.Contains(row, cutMark(cfg)) {
-			t.Errorf("%+v: the row should be cut with %q: %q", cfg, cutMark(cfg), row)
+		if row := lines[4]; strings.Contains(row, name) || !strings.Contains(row, term.CutMark(cfg)) {
+			t.Errorf("%+v: the row should be cut with %q: %q", cfg, term.CutMark(cfg), row)
 		}
-		st.cursor = 1
+		st.Cursor = 1
 		second := ansi.Strip(renderAtlasModal(st, cfg, 80, 24))
 		l2 := strings.Split(second, "\n")
 		if len(l2) != len(lines) || ansi.StringWidth(l2[0]) != ansi.StringWidth(lines[0]) {

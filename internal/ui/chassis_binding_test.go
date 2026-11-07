@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -31,12 +32,12 @@ var listStateFields = []string{"filterText", "cursor", "matches", "truncated"}
 // C8a — the atlas picker binds the shared chassis rather than carrying its own
 // list, cursor and search buffer.
 func TestAtlasModalBindsChassis(t *testing.T) {
-	_, f := parseUIFile(t, "atlas_modal.go")
+	_, f := parseUIFile(t, "popup/atlas.go")
 
 	var state *ast.StructType
 	ast.Inspect(f, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
-		if !ok || ts.Name.Name != "atlasModalState" {
+		if !ok || ts.Name.Name != "Atlas" {
 			return true
 		}
 		if st, ok := ts.Type.(*ast.StructType); ok {
@@ -45,14 +46,14 @@ func TestAtlasModalBindsChassis(t *testing.T) {
 		return false
 	})
 	if state == nil {
-		t.Fatal("atlasModalState not found in atlas_modal.go")
+		t.Fatal("Atlas not found in popup/atlas.go")
 	}
 
 	embedsChassis := false
 	declared := map[string]bool{}
 	for _, fld := range state.Fields.List {
 		if len(fld.Names) == 0 { // embedded
-			if strings.Contains(exprString(fld.Type), "fuzzyList") {
+			if isMenuFuzzyList(fld.Type) {
 				embedsChassis = true
 			}
 			continue
@@ -63,11 +64,11 @@ func TestAtlasModalBindsChassis(t *testing.T) {
 	}
 
 	if !embedsChassis {
-		t.Error("atlasModalState does not embed the fuzzyList chassis")
+		t.Error("popup.Atlas does not embed the menu.FuzzyList chassis")
 	}
 	for _, name := range listStateFields {
 		if declared[name] {
-			t.Errorf("atlasModalState declares %q itself; it must come from the chassis", name)
+			t.Errorf("popup.Atlas declares %q itself; it must come from the chassis", name)
 		}
 	}
 }
@@ -75,7 +76,7 @@ func TestAtlasModalBindsChassis(t *testing.T) {
 // C8 — the chassis names no domain concept, so a second caller can bind it.
 // The word is spelled in pieces so this test does not fail itself.
 func TestChassisIsAspectAgnostic(t *testing.T) {
-	_, f := parseUIFile(t, "fuzzy_checklist.go")
+	_, f := parseUIFile(t, "menu/fuzzy_checklist.go")
 	forbidden := "as" + "pect"
 
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -102,7 +103,7 @@ func TestChassisIsAspectAgnostic(t *testing.T) {
 func TestChassisPinnedBlocks(t *testing.T) {
 	const width, height = 40, 6
 
-	empty := renderPinnedBody(pinnedBody{Rows: []string{"one", "two"}}, width, height)
+	empty := menu.RenderPinnedBody(menu.PinnedBody{Rows: []string{"one", "two"}}, width, height)
 	if lines := strings.Count(empty, "\n") + 1; lines != height {
 		t.Errorf("empty-blocks body is %d lines, want %d", lines, height)
 	}
@@ -110,7 +111,7 @@ func TestChassisPinnedBlocks(t *testing.T) {
 		t.Error("empty-blocks body dropped its rows")
 	}
 
-	full := renderPinnedBody(pinnedBody{
+	full := menu.RenderPinnedBody(menu.PinnedBody{
 		Above: []string{"GROUPS"},
 		Rows:  []string{"one", "two"},
 		Below: []string{"ENABLED: a b c"},
@@ -126,7 +127,7 @@ func TestChassisPinnedBlocks(t *testing.T) {
 
 	// The pinned tail survives a list long enough to fill the box — the
 	// property that makes a tag bar trustworthy.
-	crowded := renderPinnedBody(pinnedBody{
+	crowded := menu.RenderPinnedBody(menu.PinnedBody{
 		Above: []string{"GROUPS"},
 		Rows:  []string{"1", "2", "3", "4", "5", "6", "7", "8"},
 		Below: []string{"TAGBAR"},
@@ -163,12 +164,12 @@ func exprString(e ast.Expr) string {
 // all three callers are held to the same clause, so none of them can grow a
 // third implementation.
 func TestBodyModalBindsChassis(t *testing.T) {
-	_, f := parseUIFile(t, "body_modal.go")
+	_, f := parseUIFile(t, "popup/body.go")
 
 	var state *ast.StructType
 	ast.Inspect(f, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
-		if !ok || ts.Name.Name != "bodyModalState" {
+		if !ok || ts.Name.Name != "Body" {
 			return true
 		}
 		if st, ok := ts.Type.(*ast.StructType); ok {
@@ -177,14 +178,14 @@ func TestBodyModalBindsChassis(t *testing.T) {
 		return false
 	})
 	if state == nil {
-		t.Fatal("bodyModalState not found in body_modal.go")
+		t.Fatal("Body not found in popup/body.go")
 	}
 
 	embedsChassis := false
 	declared := map[string]bool{}
 	for _, fld := range state.Fields.List {
 		if len(fld.Names) == 0 { // embedded
-			if strings.Contains(exprString(fld.Type), "fuzzyList") {
+			if isMenuFuzzyList(fld.Type) {
 				embedsChassis = true
 			}
 			continue
@@ -195,11 +196,28 @@ func TestBodyModalBindsChassis(t *testing.T) {
 	}
 
 	if !embedsChassis {
-		t.Error("bodyModalState does not embed the fuzzyList chassis")
+		t.Error("popup.Body does not embed the menu.FuzzyList chassis")
 	}
 	for _, name := range listStateFields {
 		if declared[name] {
-			t.Errorf("bodyModalState declares %q itself; it must come from the chassis", name)
+			t.Errorf("popup.Body declares %q itself; it must come from the chassis", name)
 		}
 	}
+}
+
+// isMenuFuzzyList reports whether an embedded field's type is menu.FuzzyList,
+// with or without type arguments or a pointer.
+func isMenuFuzzyList(e ast.Expr) bool {
+	switch t := e.(type) {
+	case *ast.StarExpr:
+		return isMenuFuzzyList(t.X)
+	case *ast.IndexExpr:
+		return isMenuFuzzyList(t.X)
+	case *ast.IndexListExpr:
+		return isMenuFuzzyList(t.X)
+	case *ast.SelectorExpr:
+		x, ok := t.X.(*ast.Ident)
+		return ok && x.Name == "menu" && t.Sel.Name == "FuzzyList"
+	}
+	return false
 }

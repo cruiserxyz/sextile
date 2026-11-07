@@ -31,7 +31,7 @@ func TestDetailsCaptionNamesTheSubject(t *testing.T) {
 	p := tabsOnPair(t, Config{Accessible: true})
 	p.width, p.height = 144, 40
 	p.focused = PanelBodies
-	p.chart.positions = []aspect.Position{{Body: aspect.Venus}}
+	p.chart.positions = []aspect.Position{{Object: objVenus}}
 	p.bodyCursorIdx = 0
 	if req, ok := p.detailsRequestFor(); !ok || req.title != "[0] Venus 2 in 1" {
 		t.Errorf("Bodies on Venus comparing: caption %q (ok=%v), want %q", req.title, ok, "[0] Venus 2 in 1")
@@ -60,14 +60,22 @@ func TestDetailsCaptionNamesTheSubject(t *testing.T) {
 		t.Errorf("Aspects pair: caption %q, want %q", pp.details.title, "[0] 2 in 1")
 	}
 
-	// Before any report: the focused ring panel's own title.
-	for panel, want := range map[PanelID]string{PanelChart: "Chart", PanelBodies: "Bodies", PanelAspects: "Aspects"} {
+	// The caption is the wanted key's, report or none: the floating chart's
+	// name for the Chart, the body under the cursor, the Aspects tab, and the
+	// panel's own title when there is no row.
+	for panel, want := range map[PanelID]string{PanelChart: "Now", PanelBodies: "Sun", PanelAspects: "Aspects"} {
 		s := detailsTestModel(t)
 		s.focused = panel
 		s.details.title = ""
 		if got := s.panelTabs(PanelDetails)[0].Title; got != want {
 			t.Errorf("no report yet, %v focused: caption %q, want %q", panel, got, want)
 		}
+	}
+	empty := detailsTestModel(t)
+	empty.focused = PanelBodies
+	empty.chart.positions = nil
+	if got := empty.panelTabs(PanelDetails)[0].Title; got != "Bodies" {
+		t.Errorf("no rows, Bodies focused: caption %q, want Bodies", got)
 	}
 	for _, p := range defaultPanels() {
 		if p.Name() == PanelDetails && strings.Contains(p.Title(), "Details") {

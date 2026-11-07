@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // bodiesPageModel is a ready Bodies panel with the full test chart: 14 planets,
@@ -24,7 +25,7 @@ func bodiesPageModel(t *testing.T, inner int) Model {
 	if got := m.geometry()[PanelBodies].h - 2; got != inner {
 		t.Fatalf("fixture: the Bodies panel is %d rows tall, want %d", got, inner)
 	}
-	if n := bodyRowCount(m.chart.positions, m.chart.cusps); n != fullChartPlanets+fullChartCuspRows {
+	if n := panel.BodyRowCount(m.chart.positions, m.chart.cusps); n != fullChartPlanets+fullChartCuspRows {
 		t.Fatalf("fixture: %d body rows, want %d", n, fullChartPlanets+fullChartCuspRows)
 	}
 	return m
@@ -56,7 +57,7 @@ func sansCursorMark(rows []string) []string {
 func storedTopIsDrawn(t *testing.T, m Model, when string) {
 	t.Helper()
 	p, u, h := m.bodiesRows()
-	if got := bodyWindowStart(p, u, m.bodyCursorIdx, m.bodyTop, h); got != m.bodyTop {
+	if got := panel.BodyWindowStart(p, u, m.bodyCursorIdx, m.bodyTop, h); got != m.bodyTop {
 		t.Errorf("%s: bodyTop %d is stale, the render draws from %d (cursor %d, %d+%d rows, %d tall)", when, m.bodyTop, got, m.bodyCursorIdx, p, u, h)
 	}
 }
@@ -129,7 +130,7 @@ func TestBodiesPageKeysKeepTheWindow(t *testing.T) {
 // the list: the panel's rows less the rule.
 func bodyPageRowsForTest(m Model) int {
 	p, u, h := m.bodiesRows()
-	if bodyRuled(p, u, h) {
+	if panel.BodyRuled(p, u, h) {
 		return h - 1
 	}
 	return h
@@ -157,7 +158,7 @@ func TestBodiesWindowFollowsResizeAndRecompute(t *testing.T) {
 	committed, _ := applyTextCommit(m, FirstFrameReadyMsg{Positions: fullChartPositions()[:fullChartPlanets]})
 	if got := markedRow(committed); got < 0 {
 		t.Errorf("rows dropped under the cursor: row %d of %d, drawn at %d, bodyTop %d",
-			committed.bodyCursorIdx, bodyRowCount(committed.chart.positions, committed.chart.cusps), got, committed.bodyTop)
+			committed.bodyCursorIdx, panel.BodyRowCount(committed.chart.positions, committed.chart.cusps), got, committed.bodyTop)
 	}
 	storedTopIsDrawn(t, committed, "rows dropped under the cursor")
 	// Another slot has its own list: its window is derived from its own cursor.

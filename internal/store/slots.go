@@ -1,9 +1,8 @@
 package store
 
 import (
-	"sort"
-
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/location"
@@ -26,8 +25,12 @@ type Slot struct {
 	Floating bool
 	Chart    SessionChart
 
-	selected       bool
-	selectedBodies map[aspect.Body]struct{}
+	selected bool
+	// marks are the objects marked in this slot, keyed on Astrolog's object
+	// number (the Object carries its name for the file). keptMarks are names
+	// this Astrolog does not list, kept verbatim in file order, no duplicates.
+	marks     map[int]aspect.Object
+	keptMarks []string
 }
 
 // MaxSelectedSlots is how many slots may be selected at once (M7).
@@ -210,6 +213,16 @@ func (s *Slots) Floating() Slot {
 	return s.floating
 }
 
+// FloatingAt is a copy of the workspace whose floating slot sits at t. The
+// anchored slots are shared with the receiver and the floating slot's marks
+// too: the copy is for reading what the workspace would answer one step away
+// (the UI's prefetch), never for mutating.
+func (s *Slots) FloatingAt(t time.Time) *Slots {
+	c := *s
+	c.floating.Time = t
+	return &c
+}
+
 // SlotSelected reports persistent selection for a slot index in All order.
 func (s *Slots) SlotSelected(index int) bool {
 	slot := s.slotAt(index)
@@ -309,58 +322,82 @@ func (s *Slots) SetComparisonSelected(selected bool) bool {
 	return true
 }
 
-// BodySelected reports whether body is selected within one slot. Body
-// selection is deliberately per-slot: selecting natal Mars must not silently
-// select transit Mars.
-func (s *Slots) BodySelected(slotIndex int, body aspect.Body) bool {
+// ObjectSelected reports whether the object with number n is marked within one
+// slot. Marks are deliberately per-slot: marking natal Mars must not silently
+// mark transit Mars.
+func (s *Slots) ObjectSelected(slotIndex, n int) bool {
 	slot := s.slotAt(slotIndex)
-	if slot == nil || body == aspect.BodyUnknown {
+	if slot == nil {
 		return false
 	}
-	_, ok := slot.selectedBodies[body]
+	_, ok := slot.marks[n]
 	return ok
 }
 
-// HasBodySelections reports whether a slot has any selected body. Renderers use
+// HasMarks reports whether a slot has any resolved mark, of any object. Renderers use
 // this to reserve one marker column for the entire Bodies table only while the
-// table contains a selection.
-func (s *Slots) HasBodySelections(slotIndex int) bool {
+// table contains a selection; a kept name is no row and reserves nothing.
+func (s *Slots) HasMarks(slotIndex int) bool {
 	slot := s.slotAt(slotIndex)
-	return slot != nil && len(slot.selectedBodies) > 0
+	return slot != nil && len(slot.marks) > 0
 }
 
-// SelectedBodies returns one slot's selected bodies in ascending body order —
-// a stable order so consumers (the earlier change wheel highlight) derive deterministic
-// output from it. Nil for an invalid slot or an empty selection.
-func (s *Slots) SelectedBodies(slotIndex int) []aspect.Body {
+// SelectedObjects returns one slot's marked objects in ascending object number
+// (a stable order so consumers derive deterministic output from it). Nil for
+// an invalid slot or an empty selection.
+func (s *Slots) SelectedObjects(slotIndex int) []aspect.Object {
 	slot := s.slotAt(slotIndex)
-	if slot == nil || len(slot.selectedBodies) == 0 {
+	if slot == nil || len(slot.marks) == 0 {
 		return nil
 	}
-	out := make([]aspect.Body, 0, len(slot.selectedBodies))
-	for b := range slot.selectedBodies {
-		out = append(out, b)
+	out := make([]aspect.Object, 0, len(slot.marks))
+	for _, o := range slot.marks {
+		out = append(out, o)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
 	return out
 }
 
-// ToggleBodySelection flips a body's selection within one slot. The returned
-// bool is the new state; ok is false for an invalid slot or unknown body.
-func (s *Slots) ToggleBodySelection(slotIndex int, body aspect.Body) (selected, ok bool) {
+// ToggleObjectSelection flips an object's mark within one slot. The returned
+// bool is the new state; ok is false for an invalid slot or the zero Object.
+func (s *Slots) ToggleObjectSelection(slotIndex int, o aspect.Object) (selected, ok bool) {
 	slot := s.slotAt(slotIndex)
-	if slot == nil || body == aspect.BodyUnknown {
+	if slot == nil || o == (aspect.Object{}) {
 		return false, false
 	}
-	if slot.selectedBodies == nil {
-		slot.selectedBodies = make(map[aspect.Body]struct{})
+	if slot.marks == nil {
+		slot.marks = make(map[int]aspect.Object)
 	}
-	if _, exists := slot.selectedBodies[body]; exists {
-		delete(slot.selectedBodies, body)
+	if _, exists := slot.marks[o.Number]; exists {
+		delete(slot.marks, o.Number)
 		return false, true
 	}
-	slot.selectedBodies[body] = struct{}{}
+	slot.marks[o.Number] = o
 	return true, true
+}
+
+// KeepMark records a name this Astrolog does not list on one slot, verbatim.
+// A name already kept is not added twice.
+func (s *Slots) KeepMark(slotIndex int, name string) {
+	slot := s.slotAt(slotIndex)
+	if slot == nil {
+		return
+	}
+	for _, k := range slot.keptMarks {
+		if k == name {
+			return
+		}
+	}
+	slot.keptMarks = append(slot.keptMarks, name)
+}
+
+// KeptMarks returns one slot's kept names, in the order they were kept.
+func (s *Slots) KeptMarks(slotIndex int) []string {
+	slot := s.slotAt(slotIndex)
+	if slot == nil || len(slot.keptMarks) == 0 {
+		return nil
+	}
+	return append([]string(nil), slot.keptMarks...)
 }
 
 // CopySelectionsFrom transfers selection by list position (the i-th anchored
@@ -390,13 +427,16 @@ func (s *Slots) slotAt(index int) *Slot {
 
 func copySlotSelection(dst, src *Slot) {
 	dst.selected = src.selected
-	if len(src.selectedBodies) == 0 {
-		dst.selectedBodies = nil
-		return
+	dst.marks = nil
+	if len(src.marks) > 0 {
+		dst.marks = make(map[int]aspect.Object, len(src.marks))
+		for n, o := range src.marks {
+			dst.marks[n] = o
+		}
 	}
-	dst.selectedBodies = make(map[aspect.Body]struct{}, len(src.selectedBodies))
-	for body := range src.selectedBodies {
-		dst.selectedBodies[body] = struct{}{}
+	dst.keptMarks = append([]string(nil), src.keptMarks...)
+	if len(dst.keptMarks) == 0 {
+		dst.keptMarks = nil
 	}
 }
 

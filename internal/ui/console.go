@@ -1,6 +1,12 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"io"
 	"os"
 	"strings"
@@ -57,6 +63,10 @@ type consoleState struct {
 	cursor     int
 	offset     int
 	priorFocus PanelID
+	// priorLog is the Log's focus as it stood when the console opened. Closing
+	// gives it back, so the console opened with `l` from the focused Log closes
+	// onto the focused Log, and only the Log's own Esc returns to the panel.
+	priorLog logFocusState
 }
 
 // yankState is the copy confirmation: whether one is showing and which
@@ -90,6 +100,8 @@ const (
 	noticeNothingCopy   = "Nothing to copy"
 	noticeCopyFailed    = "Copy failed: the clipboard is unavailable."
 	noticeDefaultsSaved = "Defaults saved"
+	// noticeActionsInDetails answers Ctrl+P while Details is attached.
+	noticeActionsInDetails = "Actions: leave Details first (Esc)"
 	// noticeSecondWindow is shown once, when a second window starts.
 	noticeSecondWindow = "Another Sextile window runs the general session. This one keeps nothing until saved as a named session."
 )
@@ -114,7 +126,7 @@ func (m Model) showNotice(text string) (Model, tea.Cmd) {
 // isNotice reports whether a footer indicator is one of the notices.
 func isNotice(indicator string) bool {
 	s := ansi.Strip(indicator)
-	return s == noticeOnlyNow || s == noticeNothingCopy || s == noticeCopyFailed || s == noticeDefaultsSaved || s == noticeSecondWindow || strings.HasPrefix(s, limitedViewPrefix)
+	return s == noticeOnlyNow || s == noticeNothingCopy || s == noticeCopyFailed || s == noticeDefaultsSaved || s == noticeActionsInDetails || s == noticeSecondWindow || strings.HasPrefix(s, limitedViewPrefix) || strings.Contains(s, ephemerisNoticeMark)
 }
 
 // consoleRect is the console's rectangle: the whole right column when the
@@ -156,7 +168,7 @@ func consoleWindow(total, offset, innerHeight int) (start, end int) {
 	if total <= 0 || innerHeight <= 0 {
 		return 0, 0
 	}
-	start = clampOffset(offset, total, innerHeight)
+	start = pane.ClampOffset(offset, total, innerHeight)
 	end = start + innerHeight
 	if end > total {
 		end = total
@@ -168,35 +180,9 @@ func consoleWindow(total, offset, innerHeight int) (start, end int) {
 // indicator: the WHOLE snapshot measured against the window actually
 // rendered. Total is the snapshot length rather than the window's, so the
 // thumb reports how much of the list lies off screen.
-func consoleViewport(total int, st consoleState, innerHeight int) viewport {
+func consoleViewport(total int, st consoleState, innerHeight int) pane.Viewport {
 	start, _ := consoleWindow(total, st.offset, innerHeight)
-	return viewport{Total: total, Visible: innerHeight, Offset: start}
-}
-
-// scrollToShow nudges the window the least it can to keep line inside it with
-// listScrollMargin rows of context above and below (specs/
-// focus-and-nearest-event.md rule 6): a cursor moving inside the margins does
-// not scroll the window, one that would come within the margin of an edge
-// scrolls it. A window too short to hold both margins plus a row centres on
-// the line instead, because it would otherwise scroll on every step. The
-// popups' fuzzy lists, the Log console, help and the timeline all use this.
-func scrollToShow(offset, line, total, visible int) int {
-	if visible <= 0 {
-		return offset
-	}
-	if total <= visible {
-		return 0
-	}
-	if visible < 2*listScrollMargin+1 {
-		return clampOffset(line-visible/2, total, visible)
-	}
-	if line-offset < listScrollMargin {
-		offset = line - listScrollMargin
-	}
-	if line-offset > visible-1-listScrollMargin {
-		offset = line - (visible - 1 - listScrollMargin)
-	}
-	return clampOffset(offset, total, visible)
+	return pane.Viewport{Total: total, Visible: innerHeight, Offset: start}
 }
 
 // openConsole opens the console over a snapshot of the argv+error lines,
@@ -205,7 +191,9 @@ func scrollToShow(offset, line, total, visible int) int {
 func (m Model) openConsole() (tea.Model, tea.Cmd) {
 	m.errorUnseen = false
 	m.errorKeptView = false
-	m.console = consoleState{open: true, priorFocus: m.focused, snapshot: m.consoleLines()}
+	prior := m.logFocus
+	m.logFocus = logFocusState{}
+	m.console = consoleState{open: true, priorFocus: m.focused, priorLog: prior, snapshot: m.consoleLines()}
 	if n := len(m.console.snapshot); n > 0 {
 		at := n - 1
 		// The now line is last; the cursor lands on it only while the floating
@@ -215,16 +203,29 @@ func (m Model) openConsole() (tea.Model, tea.Cmd) {
 			at = n - 2
 		}
 		m.console.cursor = at
-		m.console.offset = scrollToShow(0, at, n, m.consoleInnerHeight())
+		m.console.offset = menu.ScrollToShow(0, at, n, m.consoleInnerHeight())
 	}
 	return m, nil
 }
 
-// closeConsole puts focus back where it was and zeroes the console's state.
+// closeConsole puts focus back where it was, the Log's focus included, and
+// zeroes the console's state. Lines may have arrived while it was open, and a
+// resize may have taken the Log panel away: settleLogFocus answers both.
 func (m Model) closeConsole() (tea.Model, tea.Cmd) {
 	m.focused = m.console.priorFocus
+	m.logFocus = m.console.priorLog
 	m.console = consoleState{}
-	return m, nil
+	return m.settleLogFocus(), nil
+}
+
+// leaveConsoleFor is a panel's digit pressed in the console: the console and
+// the Log's focus close together and the digit runs on the main screen, as it
+// does from the focused Log.
+func (m Model) leaveConsoleFor(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.focused = m.console.priorFocus
+	m.console = consoleState{}
+	m.logFocus = logFocusState{}
+	return m.dispatchKey(msg)
 }
 
 // moveConsoleCursor steps the cursor towards the oldest (negative) or newest
@@ -243,7 +244,7 @@ func (m Model) moveConsoleCursor(delta int) (tea.Model, tea.Cmd) {
 		cursor = total - 1
 	}
 	m.console.cursor = cursor
-	m.console.offset = scrollToShow(m.console.offset, cursor, total, m.consoleInnerHeight())
+	m.console.offset = menu.ScrollToShow(m.console.offset, cursor, total, m.consoleInnerHeight())
 	return m, nil
 }
 
@@ -267,47 +268,84 @@ func (m Model) clampConsole() Model {
 	if m.console.cursor < 0 {
 		m.console.cursor = 0
 	}
-	m.console.offset = scrollToShow(m.console.offset, m.console.cursor, total, m.consoleInnerHeight())
+	m.console.offset = menu.ScrollToShow(m.console.offset, m.console.cursor, total, m.consoleInnerHeight())
 	return m
 }
 
-// updateConsoleKey owns the keyboard while the console is open: Esc closes,
-// the cursor keys move, Enter copies, and everything else — `q` included — is
-// swallowed rather than falling through to a chart the operator cannot see the
-// effect of (the specification C11). Ctrl+C still quits; Update
-// takes it before the console sees it.
+// consoleBindings is the Log console's table.
+func consoleBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true, When: func(c keys.Context) bool { return c.Console.Lines > 1 }},
+		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
+		{ID: keys.BindingCopy, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Copy line", BarKey: "enter", Bar: true, When: func(c keys.Context) bool { return c.Console.Lines > 0 }},
+		// ⇞ ⇟ Home End (and g G, the console has nothing to type) page the cursor.
+		{ID: keys.BindingPageUp, Title: "Page list", HelpKey: "⇞/⇟", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "⇞"},
+		{ID: keys.BindingPageDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
+		{ID: keys.BindingPageHome, Title: "First row", Binding: key.NewBinding(key.WithKeys("home", "g")), BarKey: "home/g"},
+		{ID: keys.BindingPageEnd, Title: "Last row", Binding: key.NewBinding(key.WithKeys("end", "G")), BarKey: "end/G"},
+		closeOnEscOrQ("Close"),
+	})
+}
+
+// updateConsoleKey owns the keyboard while the console is open: Esc and `q`
+// close it (onto the focused Log when it was opened from there, and so does
+// `l` then), the cursor
+// keys move, Enter copies, a panel's digit leaves for that panel, and
+// everything else is swallowed rather than falling through to a chart the
+// operator cannot see the effect of (the specification C11). Ctrl+C still
+// quits; Update takes it before the console sees it.
 func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch matchBinding(msg, consoleBindings()) {
-	case BindingClose:
+	// The leader works for one chord here, `,y`, which copies every line.
+	if m.leader.pending {
+		return m.updateLeaderKeyAmong(msg, func(id keys.BindingID) bool { return id == keys.BindingCopy })
+	}
+	if m.leaderKey != "" && msg.String() == m.leaderKey {
+		return m.armLeader()
+	}
+	if key.Matches(msg, m.keys.FocusChart, m.keys.FocusBodies, m.keys.FocusAspects) {
+		return m.leaveConsoleFor(msg)
+	}
+	// Opened with l from the focused Log, l closes it onto the Log again: the
+	// one key toggles between the two (operator, 2026-11-05). Opened by ,l
+	// where no Log panel is on screen, l stays swallowed like any letter.
+	if msg.Type == tea.KeyRunes && string(msg.Runes) == "l" && !msg.Alt && m.console.priorLog.active {
 		return m.closeConsole()
-	case BindingListUp:
+	}
+	// The hidden door of the Experiments popup: in no table, bar or help.
+	if isPlainKey(msg, "p") {
+		return m.openExperiments()
+	}
+	switch keys.MatchBinding(msg, consoleBindings()) {
+	case keys.BindingClose:
+		return m.closeConsole()
+	case keys.BindingListUp:
 		return m.moveConsoleCursor(-1)
-	case BindingListDown:
+	case keys.BindingListDown:
 		return m.moveConsoleCursor(+1)
-	case BindingCopy:
+	case keys.BindingCopy:
 		return m.yankConsoleLine()
-	case BindingPageUp:
-		return m.pageConsole(pageUp)
-	case BindingPageDown:
-		return m.pageConsole(pageDown)
-	case BindingPageHome:
-		return m.pageConsole(pageHome)
-	case BindingPageEnd:
-		return m.pageConsole(pageEnd)
+	case keys.BindingPageUp:
+		return m.pageConsole(menu.PageUp)
+	case keys.BindingPageDown:
+		return m.pageConsole(menu.PageDown)
+	case keys.BindingPageHome:
+		return m.pageConsole(menu.PageHome)
+	case keys.BindingPageEnd:
+		return m.pageConsole(menu.PageEnd)
 	}
 	return m, nil
 }
 
 // pageConsole applies a paging key to the console's cursor by the one rule
-// (pageCursor) over the snapshot and the rows the panel shows. The panel can
+// (menu.PageCursor) over the snapshot and the rows the panel shows. The panel can
 // have no rows after a resize; the rule reads that as one and keeps the cursor
 // inside the snapshot. The window is stored exactly: the console draws from it.
-func (m Model) pageConsole(op pageOp) (tea.Model, tea.Cmd) {
+func (m Model) pageConsole(op menu.PageOp) (tea.Model, tea.Cmd) {
 	total := len(m.console.snapshot)
 	if total == 0 {
 		return m, nil
 	}
-	m.console.cursor, m.console.offset = pageCursor(m.console.cursor, m.console.offset, total, m.consoleInnerHeight(), op)
+	m.console.cursor, m.console.offset = menu.PageCursor(m.console.cursor, m.console.offset, total, m.consoleInnerHeight(), op)
 	return m, nil
 }
 
@@ -336,6 +374,9 @@ func (m Model) yankConsoleLine() (tea.Model, tea.Cmd) {
 // onYankFlash retires a copy confirmation. A tick carrying any generation but
 // the current one belongs to a flash that is already gone.
 func (m Model) onYankFlash(msg yankFlashMsg) (tea.Model, tea.Cmd) {
+	if m.resetArmed != 0 && msg.gen == m.resetArmed {
+		m.resetArmed = 0 // the `, n` warning ran out
+	}
 	if !m.yank.active || msg.gen != m.yank.gen {
 		return m, nil
 	}
@@ -368,7 +409,7 @@ func renderConsole(lines []logLine, st consoleState, strip tabStrip, width, heig
 		rows = append(rows, consoleEmptyLine)
 	}
 	box := renderTabbedBox(strip, width, height, focused, cfg, strings.Join(rows, "\n"))
-	box = withScrollIndicator(box, scroll, cfg, focused)
+	box = pane.WithScrollIndicator(box, scroll, cfg, focused)
 	return withPositionCounter(box, listPosition{Cursor: st.cursor, Total: total}, cfg, focused)
 }
 
@@ -376,10 +417,54 @@ func renderConsole(lines []logLine, st consoleState, strip tabStrip, width, heig
 // treatment so the console's cursor looks like every other panel's cursor
 // and follows the same operator setting. Log lines are prose, not table
 // rows, so no selection column is reserved. An error line is drawn as one
-// (renderErrorLine); the stored text, and so what Enter copies, is never
+// (RenderErrorLine); the stored text, and so what Enter copies, is never
 // edited here.
 func consoleRow(line logLine, cursorRow bool, innerW int, cfg Config) string {
-	prefix := rowPrefix(true, cursorRow, false, false, cfg)
+	prefix := menu.RowPrefix(true, cursorRow, false, false, cfg)
 	text := renderLaneLine(line, innerW-ansi.StringWidth(prefix), cfg)
-	return renderRowState(prefix+text, innerW, cursorRow, cfg)
+	return menu.RenderRowState(prefix+text, innerW, cursorRow, cfg)
+}
+
+// failedMarkWidth is the cells failedMark takes: the `!` and one space.
+const failedMarkWidth = 2
+
+// failedMark opens a command line whose Astrolog call failed: a `!` in the
+// error colour with colours on, the plain `! ` with colours off (the form
+// ErrorLinePrefix uses), then one space.
+func failedMark(cfg Config) string {
+	return term.RenderErrorMark("!", cfg) + " "
+}
+
+// renderLaneLine draws one stored line the way its lane is drawn: an error line
+// in the error colour (or behind ErrorLinePrefix with colours off), the wheel
+// lines in WheelOpenColour and WheelClosedColour. Colours off, a wheel line is
+// its plain text: the words carry the meaning, so it needs no mark. Every other lane is its
+// text as stored.
+//
+// w is the cells the text may take; an argv line is fitted to it by
+// argvDisplay, and w <= 0 shows it whole.
+func renderLaneLine(l logLine, w int, cfg Config) string {
+	switch l.lane {
+	case laneError:
+		return term.RenderErrorLine(l.text, cfg)
+	case laneWheelOpen:
+		if cfg.UseColor() {
+			return lipgloss.NewStyle().Foreground(term.WheelOpenColour).Render(l.text)
+		}
+	case laneWheelClosed:
+		if cfg.UseColor() {
+			return lipgloss.NewStyle().Foreground(term.WheelClosedColour).Render(l.text)
+		}
+	case laneArgv:
+		if l.failed {
+			return failedMark(cfg) + argvDisplay(l.text, w-failedMarkWidth, cfg)
+		}
+		return argvDisplay(l.text, w, cfg)
+	case laneNow:
+		if l.failed {
+			return failedMark(cfg) + nowLinePrefix + argvDisplay(l.text, w-failedMarkWidth-ansi.StringWidth(nowLinePrefix), cfg)
+		}
+		return nowLinePrefix + argvDisplay(l.text, w-ansi.StringWidth(nowLinePrefix), cfg)
+	}
+	return l.text
 }

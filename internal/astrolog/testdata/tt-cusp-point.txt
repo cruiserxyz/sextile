@@ -1,0 +1,389 @@
+Astrolog 8.00 chart for Sun Jan  2, 2000  0:00 (ST Zone 0W)   0:00W 52:00N
+
+Transits during Jan 2026 (ST Zone 0W)
+ 1/ 1/2026  4:10 trans     Sun (Cap) Sep natal (Sco) Moon
+ 1/ 1/2026  5:41 trans    Moon (Gem) SSq natal (Ari) Jupiter
+ 1/ 1/2026  5:51 trans    Moon (Gem) SSx natal [Tau] Saturn
+ 1/ 1/2026  6:38 trans    Moon (Gem) Inc natal (Cap) Sun
+ 1/ 1/2026  7:18 trans     Sun (Cap) Con natal (Cap) Sun (Solar Return)
+ 1/ 1/2026  7:35 trans    Moon (Gem) Opp natal (Sag) Pluto
+ 1/ 1/2026 12:58 trans    Moon (Gem) Tri natal (Aqu) Uranus
+ 1/ 1/2026 15:26 trans    Moon (Gem) SQn natal [Tau] Saturn
+ 1/ 1/2026 15:57 trans    Moon (Gem) Sep natal (Ari) Jupiter
+ 1/ 1/2026 18:21 trans    Moon (Gem) Ses natal (Aqu) Neptune
+ 1/ 1/2026 18:34 trans Mercury (Sag) SSq natal (Aqu) Uranus
+ 1/ 1/2026 20:07 trans    Moon (Gem) Inc natal (Sco) Moon
+ 1/ 1/2026 20:45 trans    Mars (Cap) SSq natal (Aqu) Mars
+ 1/ 1/2026 21:17 trans     Sun (Cap) SSx natal (Sag) Pluto
+ 1/ 1/2026 22:29 trans   Venus (Cap) Tri natal [Tau] Saturn
+ 1/ 2/2026  5:21 trans   Venus (Cap) Sep natal (Sco) Moon
+ 1/ 2/2026  5:36 trans    Moon (Gem) Sex natal (Ari) Jupiter
+ 1/ 2/2026  5:40 trans    Moon (Gem) BQn natal (Sco) Moon
+ 1/ 2/2026  5:47 trans    Moon (Gem) SSq natal [Tau] Saturn
+ 1/ 2/2026  7:53 trans   Venus (Cap) Con natal (Cap) Sun
+ 1/ 2/2026  8:42 trans    Moon (Gem) BQn natal (Aqu) Neptune
+ 1/ 2/2026 10:31 trans    Moon (Gem) Tri natal (Aqu) Mars
+ 1/ 2/2026 12:53 trans    Moon (Gem) Ses natal (Aqu) Uranus
+ 1/ 2/2026 16:03 trans    Moon (Can) Sep natal [Tau] Saturn
+ 1/ 2/2026 16:37 trans    Moon (Can) Inc natal (Sag) Venus
+ 1/ 2/2026 17:25 trans    Moon (Can) Opp natal (Cap) Mercury
+ 1/ 2/2026 18:17 trans    Moon (Can) Inc natal (Aqu) Neptune
+ 1/ 2/2026 19:13 trans   Venus (Cap) SSx natal (Sag) Pluto
+ 1/ 2/2026 20:03 trans    Moon (Can) Ses natal (Sco) Moon
+ 1/ 3/2026  0:47 trans    Moon (Can) Qui natal (Ari) Jupiter
+ 1/ 3/2026  2:14 trans    Moon (Can) BQn natal (Sag) Venus
+ 1/ 3/2026  3:18 trans    Moon (Can) BQn natal (Aqu) Uranus
+ 1/ 3/2026  5:48 trans    Moon (Can) Sex natal [Tau] Saturn
+ 1/ 3/2026  6:35 trans    Moon (Can) Opp natal (Cap) Sun
+ 1/ 3/2026  7:06 trans Mercury (Cap) SSx natal (Sag) Venus
+ 1/ 3/2026  7:33 trans    Moon (Can) Inc natal (Sag) Pluto
+ 1/ 3/2026 10:34 trans    Moon (Can) Ses natal (Aqu) Mars
+ 1/ 3/2026 12:57 trans    Moon (Can) Inc natal (Aqu) Uranus
+ 1/ 3/2026 14:52 trans Mercury (Cap) Con natal (Cap) Mercury (Mercury Return)
+ 1/ 3/2026 16:45 trans    Moon (Can) Ses natal (Sag) Venus
+ 1/ 3/2026 17:14 trans    Moon (Can) BQn natal (Sag) Pluto
+ 1/ 3/2026 17:32 trans     Sun (Cap) SSq natal (Aqu) Mars
+ 1/ 3/2026 19:07 trans    Mars (Cap) SSx natal (Aqu) Uranus
+ 1/ 3/2026 20:14 trans    Moon (Can) Tri natal (Sco) Moon
+ 1/ 3/2026 23:18 trans Mercury (Cap) SSx natal (Aqu) Neptune
+ 1/ 4/2026  1:10 trans    Moon (Can) BQn natal (Aqu) Mars
+ 1/ 4/2026  1:14 trans    Moon (Can) Qui natal [Tau] Saturn
+ 1/ 4/2026  5:56 trans    Moon (Can) Squ natal (Ari) Jupiter
+ 1/ 4/2026  7:03 trans   Venus (Cap) SSq natal (Aqu) Mars
+ 1/ 4/2026  7:55 trans    Moon (Can) Ses natal (Sag) Pluto
+ 1/ 4/2026 11:01 trans    Moon (Can) Inc natal (Aqu) Mars
+ 1/ 4/2026 16:30 trans Mercury (Cap) SSq natal (Sco) Moon
+ 1/ 4/2026 17:20 trans    Moon (Leo) Tri natal (Sag) Venus
+ 1/ 4/2026 18:09 trans    Moon (Leo) Inc natal (Cap) Mercury
+ 1/ 4/2026 19:03 trans    Moon (Leo) Opp natal (Aqu) Neptune
+ 1/ 5/2026  4:12 trans    Moon (Leo) BQn natal (Cap) Mercury
+ 1/ 5/2026  4:29 trans     Sun (Cap) SSx natal (Aqu) Uranus
+ 1/ 5/2026  7:06 trans    Moon (Leo) Squ natal [Tau] Saturn
+ 1/ 5/2026  7:55 trans    Moon (Leo) Inc natal (Cap) Sun
+ 1/ 5/2026  8:55 trans    Moon (Leo) Tri natal (Sag) Pluto
+ 1/ 5/2026 11:21 trans   Venus (Cap) SSx natal (Aqu) Uranus
+ 1/ 5/2026 14:38 trans    Moon (Leo) Opp natal (Aqu) Uranus
+ 1/ 5/2026 16:10 trans    Moon (Leo) Con natal (Leo) 11th Cusp
+ 1/ 5/2026 18:08 trans    Moon (Leo) BQn natal (Cap) Sun
+ 1/ 5/2026 19:30 trans    Moon (Leo) Ses natal (Cap) Mercury
+ 1/ 5/2026 22:20 trans    Moon (Leo) Squ natal (Sco) Moon
+ 1/ 6/2026  8:40 trans    Moon (Leo) Tri natal (Ari) Jupiter
+ 1/ 6/2026  8:46 trans Mercury (Cap) Sep natal (Aqu) Mars
+ 1/ 6/2026  9:43 trans    Moon (Leo) Ses natal (Cap) Sun
+ 1/ 6/2026 14:04 trans    Moon (Leo) Opp natal (Aqu) Mars
+ 1/ 6/2026 20:01 trans    Mars (Cap) SSq natal (Sag) Venus
+ 1/ 6/2026 20:48 trans    Moon (Vir) Squ natal (Sag) Venus
+ 1/ 6/2026 21:42 trans    Moon (Vir) Tri natal (Cap) Mercury
+ 1/ 6/2026 22:40 trans    Moon (Vir) Inc natal (Aqu) Neptune
+ 1/ 6/2026 22:59 trans   Pluto (Aqu) Sep natal (Sag) Pluto
+ 1/ 7/2026  3:58 trans Mercury (Cap) SQn natal (Sag) Venus
+ 1/ 7/2026  5:25 trans    Mars (Cap) SQn natal (Sag) Pluto
+ 1/ 7/2026  6:03 trans    Moon (Vir) Qui natal (Sco) Moon
+ 1/ 7/2026  7:55 trans   Venus (Cap) SSq natal (Sag) Venus
+ 1/ 7/2026  9:27 trans    Moon (Vir) BQn natal (Aqu) Neptune
+ 1/ 7/2026 11:22 trans    Moon (Vir) Ses natal (Ari) Jupiter
+ 1/ 7/2026 11:30 trans     Sun (Cap) SSq natal (Sag) Venus
+ 1/ 7/2026 11:34 trans    Moon (Vir) Tri natal [Tau] Saturn
+ 1/ 7/2026 12:28 trans    Moon (Vir) Tri natal (Cap) Sun
+ 1/ 7/2026 13:34 trans    Moon (Vir) Squ natal (Sag) Pluto
+ 1/ 7/2026 13:40 trans   Venus (Cap) SQn natal (Sag) Pluto
+ 1/ 7/2026 14:09 trans Mercury (Cap) SQn natal (Aqu) Uranus
+ 1/ 7/2026 18:37 trans     Sun (Cap) SQn natal (Sag) Pluto
+ 1/ 7/2026 19:44 trans    Moon (Vir) Inc natal (Aqu) Uranus
+ 1/ 7/2026 19:48 trans    Moon (Vir) Con natal (Vir) 12th Cusp
+ 1/ 8/2026  1:56 trans    Moon (Vir) Ses natal (Aqu) Neptune
+ 1/ 8/2026  3:54 trans    Moon (Vir) BQn natal (Ari) Jupiter
+ 1/ 8/2026  3:59 trans    Moon (Vir) Sex natal (Sco) Moon
+ 1/ 8/2026  5:35 trans    Moon (Vir) Qui natal (Sag) Venus
+ 1/ 8/2026  6:50 trans    Moon (Vir) BQn natal (Aqu) Uranus
+ 1/ 8/2026 13:53 trans Mercury (Cap) Tri natal [Tau] Saturn
+ 1/ 8/2026 15:09 trans    Moon (Vir) Inc natal (Ari) Jupiter
+ 1/ 8/2026 15:22 trans    Moon (Vir) Ses natal [Tau] Saturn
+ 1/ 8/2026 19:23 trans Mercury (Cap) Sep natal (Sco) Moon
+ 1/ 8/2026 20:05 trans    Moon (Vir) Sep natal (Sco) Moon
+ 1/ 8/2026 20:58 trans    Moon (Vir) Inc natal (Aqu) Mars
+ 1/ 8/2026 21:24 trans Mercury (Cap) Con natal (Cap) Sun
+ 1/ 8/2026 23:07 trans    Moon (Vir) Qui natal (Sag) Pluto
+ 1/ 8/2026 23:48 trans    Moon (Vir) Ses natal (Aqu) Uranus
+ 1/ 9/2026  0:52 trans   Venus (Cap) Sex natal (Sco) Moon
+ 1/ 9/2026  4:16 trans    Moon (Lib) Sex natal (Sag) Venus
+ 1/ 9/2026  5:13 trans    Moon (Lib) Squ natal (Cap) Mercury
+ 1/ 9/2026  6:15 trans    Moon (Lib) Tri natal (Aqu) Neptune
+ 1/ 9/2026  6:27 trans Mercury (Cap) SSx natal (Sag) Pluto
+ 1/ 9/2026  8:22 trans    Moon (Lib) SSq natal (Sco) Moon
+ 1/ 9/2026  8:26 trans    Moon (Lib) BQn natal (Aqu) Mars
+ 1/ 9/2026  8:30 trans    Moon (Lib) BQn natal [Tau] Saturn
+ 1/ 9/2026 14:04 trans     Sun (Cap) Sex natal (Sco) Moon
+ 1/ 9/2026 14:50 trans    Mars (Cap) Sex natal (Sco) Moon
+ 1/ 9/2026 20:08 trans    Moon (Lib) Inc natal [Tau] Saturn
+ 1/ 9/2026 20:49 trans    Moon (Lib) Sep natal (Sag) Venus
+ 1/ 9/2026 21:05 trans    Moon (Lib) Squ natal (Cap) Sun
+ 1/ 9/2026 22:14 trans    Moon (Lib) Sex natal (Sag) Pluto
+ 1/10/2026  1:50 trans    Moon (Lib) SQn natal (Sco) Moon
+ 1/10/2026  1:54 trans    Moon (Lib) Ses natal (Aqu) Mars
+ 1/10/2026  4:49 trans    Moon (Lib) Tri natal (Aqu) Uranus
+ 1/10/2026  9:25 trans    Moon (Lib) SSq natal (Sag) Venus
+ 1/10/2026 10:58 trans Mercury (Cap) SSq natal (Aqu) Mars
+ 1/10/2026 13:39 trans    Moon (Lib) SSx natal (Sco) Moon
+ 1/10/2026 15:05 trans    Moon (Lib) Sep natal (Sag) Pluto
+ 1/10/2026 16:19 trans    Moon (Lib) Qui natal (Cap) Mercury
+ 1/11/2026  1:29 trans    Moon (Lib) Opp natal (Ari) Jupiter
+ 1/11/2026  3:16 trans    Moon (Lib) SQn natal (Sag) Venus
+ 1/11/2026  3:52 trans    Moon (Lib) SSq natal (Sag) Pluto
+ 1/11/2026  7:37 trans    Moon (Lib) Tri natal (Aqu) Mars
+ 1/11/2026  8:40 trans    Moon (Lib) Qui natal (Cap) Sun
+ 1/11/2026  9:22 trans Mercury (Cap) SSx natal (Aqu) Uranus
+ 1/11/2026 10:45 trans   Venus (Cap) SQn natal (Aqu) Mars
+ 1/11/2026 15:17 trans    Moon (Sco) SSx natal (Sag) Venus
+ 1/11/2026 16:17 trans    Moon (Sco) Sex natal (Cap) Mercury
+ 1/11/2026 17:22 trans    Moon (Sco) Squ natal (Aqu) Neptune
+ 1/11/2026 21:55 trans    Moon (Sco) SQn natal (Sag) Pluto
+ 1/12/2026  7:50 trans    Moon (Sco) Opp natal [Tau] Saturn
+ 1/12/2026  8:50 trans    Moon (Sco) Sex natal (Cap) Sun
+ 1/12/2026  9:33 trans    Moon (Sco) Sep natal (Cap) Mercury
+ 1/12/2026 10:02 trans    Moon (Sco) SSx natal (Sag) Pluto
+ 1/12/2026 10:34 trans   Venus (Cap) Sep natal (Sag) Venus
+ 1/12/2026 13:32 trans     Sun (Cap) SQn natal (Aqu) Mars
+ 1/12/2026 16:50 trans    Moon (Sco) Squ natal (Aqu) Uranus
+ 1/12/2026 20:28 trans Mercury (Cap) SSq natal (Sag) Venus
+ 1/12/2026 22:34 trans    Moon (Sco) SSq natal (Cap) Mercury
+ 1/13/2026  0:59 trans Mercury (Cap) SQn natal (Sag) Pluto
+ 1/13/2026  1:54 trans    Moon (Sco) Con natal (Sco) Moon (Lunar Return)
+ 1/13/2026  2:11 trans    Moon (Sco) Sep natal (Cap) Sun
+ 1/13/2026  5:45 trans    Moon (Sco) Qui natal (Aqu) Neptune
+ 1/13/2026 13:01 trans    Mars (Cap) SQn natal (Aqu) Mars
+ 1/13/2026 13:59 trans    Moon (Sco) Inc natal (Ari) Jupiter
+ 1/13/2026 15:12 trans    Moon (Sco) SSq natal (Cap) Sun
+ 1/13/2026 16:48 trans    Moon (Sco) SQn natal (Cap) Mercury
+ 1/13/2026 18:31 trans   Venus (Cap) Squ natal (Ari) Jupiter
+ 1/13/2026 18:56 trans     Sun (Cap) Sep natal (Sag) Venus
+ 1/13/2026 20:13 trans    Moon (Sco) Squ natal (Aqu) Mars
+ 1/14/2026  2:08 trans    Moon (Sag) BQn natal (Ari) Jupiter
+ 1/14/2026  3:57 trans    Moon (Sag) Con natal (Sag) Venus
+ 1/14/2026  4:30 trans Mercury (Cap) Sex natal (Sco) Moon
+ 1/14/2026  4:57 trans    Moon (Sag) SSx natal (Cap) Mercury
+ 1/14/2026  5:17 trans    Moon (Sag) Qui natal (Aqu) Uranus
+ 1/14/2026  6:03 trans    Moon (Sag) Sex natal (Aqu) Neptune
+ 1/14/2026  9:25 trans    Moon (Sag) SQn natal (Cap) Sun
+ 1/14/2026 17:23 trans   Venus (Cap) SSq natal (Sag) Pluto
+ 1/14/2026 20:19 trans    Moon (Sag) Ses natal (Ari) Jupiter
+ 1/14/2026 20:32 trans    Moon (Sag) Inc natal [Tau] Saturn
+ 1/14/2026 21:32 trans    Moon (Sag) SSx natal (Cap) Sun
+ 1/14/2026 22:43 trans    Moon (Sag) Con natal (Sag) Pluto
+ 1/14/2026 23:21 trans    Moon (Sag) Sep natal (Aqu) Neptune
+ 1/15/2026  3:40 trans    Mars (Cap) Sep natal (Sag) Venus
+ 1/15/2026  5:30 trans    Moon (Sag) Sex natal (Aqu) Uranus
+ 1/15/2026  8:32 trans    Moon (Sag) Qui natal (Aqu) Mars
+ 1/15/2026  8:36 trans    Moon (Sag) BQn natal [Tau] Saturn
+ 1/15/2026 10:23 trans     Sun (Cap) Squ natal (Ari) Jupiter
+ 1/15/2026 12:16 trans    Moon (Sag) SSq natal (Aqu) Neptune
+ 1/15/2026 14:29 trans    Moon (Sag) SSx natal (Sco) Moon
+ 1/15/2026 22:39 trans    Moon (Sag) Sep natal (Aqu) Uranus
+ 1/16/2026  1:24 trans Mercury (Cap) SQn natal (Aqu) Mars
+ 1/16/2026  2:22 trans    Moon (Sag) Tri natal (Ari) Jupiter
+ 1/16/2026  2:27 trans    Moon (Sag) SQn natal (Sco) Moon
+ 1/16/2026  2:36 trans    Moon (Sag) Ses natal [Tau] Saturn
+ 1/16/2026  5:15 trans   Venus (Cap) SSx natal (Aqu) Mars
+ 1/16/2026  5:55 trans Jupiter [Can] Tri natal (Sco) Moon
+ 1/16/2026  6:14 trans    Moon (Sag) SQn natal (Aqu) Neptune
+ 1/16/2026  8:30 trans    Moon (Sag) Sex natal (Aqu) Mars
+ 1/16/2026 11:27 trans    Moon (Sag) SSq natal (Aqu) Uranus
+ 1/16/2026 14:37 trans     Sun (Cap) SSq natal (Sag) Pluto
+ 1/16/2026 16:04 trans    Moon (Cap) SSx natal (Sag) Venus
+ 1/16/2026 17:03 trans    Moon (Cap) Con natal (Cap) Mercury
+ 1/16/2026 18:07 trans    Moon (Cap) SSx natal (Aqu) Neptune
+ 1/16/2026 19:09 trans   Pluto (Aqu) Con natal (Aqu) Neptune
+ 1/16/2026 19:45 trans Mercury (Cap) Sep natal (Sag) Venus
+ 1/16/2026 20:18 trans    Moon (Cap) SSq natal (Sco) Moon
+ 1/17/2026  1:27 trans    Moon (Cap) Sep natal (Aqu) Mars
+ 1/17/2026  3:54 trans    Moon (Cap) SQn natal (Sag) Venus
+ 1/17/2026  5:12 trans    Moon (Cap) SQn natal (Aqu) Uranus
+ 1/17/2026  7:28 trans    Mars (Cap) Squ natal (Ari) Jupiter
+ 1/17/2026  8:15 trans    Moon (Cap) Tri natal [Tau] Saturn
+ 1/17/2026  8:57 trans    Moon (Cap) Sep natal (Sco) Moon
+ 1/17/2026  9:12 trans    Moon (Cap) Con natal (Cap) Sun
+ 1/17/2026 10:22 trans    Moon (Cap) SSx natal (Sag) Pluto
+ 1/17/2026 14:03 trans    Moon (Cap) SSq natal (Aqu) Mars
+ 1/17/2026 16:57 trans    Moon (Cap) SSx natal (Aqu) Uranus
+ 1/17/2026 20:15 trans Mercury (Cap) Squ natal (Ari) Jupiter
+ 1/17/2026 21:30 trans    Moon (Cap) SSq natal (Sag) Venus
+ 1/17/2026 22:05 trans    Moon (Cap) SQn natal (Sag) Pluto
+ 1/18/2026  1:40 trans    Moon (Cap) Sex natal (Sco) Moon
+ 1/18/2026  7:33 trans    Moon (Cap) SQn natal (Aqu) Mars
+ 1/18/2026  9:58 trans    Moon (Cap) Sep natal (Sag) Venus
+ 1/18/2026 10:53 trans     Sun (Cap) SSx natal (Aqu) Mars
+ 1/18/2026 13:12 trans    Moon (Cap) Squ natal (Ari) Jupiter
+ 1/18/2026 13:42 trans Mercury (Cap) SSq natal (Sag) Pluto
+ 1/18/2026 13:51 trans   Venus (Aqu) Qui natal (Sco) Moon
+ 1/18/2026 15:30 trans    Moon (Cap) SSq natal (Sag) Pluto
+ 1/18/2026 19:07 trans    Moon (Cap) SSx natal (Aqu) Mars
+ 1/18/2026 20:30 trans    Mars (Cap) SSq natal (Sag) Pluto
+ 1/19/2026  0:49 trans    Moon (Aqu) Qui natal (Sco) Moon
+ 1/19/2026  2:27 trans    Moon (Aqu) Sex natal (Sag) Venus
+ 1/19/2026  3:24 trans    Moon (Aqu) SSx natal (Cap) Mercury
+ 1/19/2026  3:50 trans    Moon (Aqu) Sep natal (Sag) Pluto
+ 1/19/2026  4:26 trans    Moon (Aqu) Con natal (Aqu) Neptune
+ 1/19/2026  6:09 trans   Venus (Aqu) Sex natal (Sag) Venus
+ 1/19/2026 14:49 trans    Moon (Aqu) SQn natal (Cap) Mercury
+ 1/19/2026 15:39 trans   Venus (Aqu) SSx natal (Cap) Mercury
+ 1/19/2026 16:56 trans Mercury (Cap) SSx natal (Aqu) Mars
+ 1/19/2026 18:05 trans    Moon (Aqu) Squ natal [Tau] Saturn
+ 1/19/2026 18:48 trans Neptune (Pis) SSq natal (Aqu) Uranus
+ 1/19/2026 19:01 trans    Moon (Aqu) SSx natal (Cap) Sun
+ 1/19/2026 20:05 trans   Venus (Aqu) Sep natal (Sag) Pluto
+ 1/19/2026 20:08 trans    Moon (Aqu) Sex natal (Sag) Pluto
+ 1/19/2026 23:32 trans    Moon (Aqu) Qui natal (Ari) Jupiter
+ 1/20/2026  1:13 trans    Moon (Aqu) Qui natal (Sag) Venus
+ 1/20/2026  2:00 trans   Venus (Aqu) Con natal (Aqu) Neptune
+ 1/20/2026  2:28 trans    Moon (Aqu) Con natal (Aqu) Uranus
+ 1/20/2026  6:19 trans    Moon (Aqu) SQn natal (Cap) Sun
+ 1/20/2026  7:49 trans    Moon (Aqu) SSq natal (Cap) Mercury
+ 1/20/2026 10:54 trans    Moon (Aqu) Squ natal (Sco) Moon
+ 1/20/2026 18:40 trans    Moon (Aqu) Qui natal (Sag) Pluto
+ 1/20/2026 19:50 trans    Moon (Aqu) Sep natal (Cap) Mercury
+ 1/20/2026 22:02 trans    Moon (Aqu) Sex natal (Ari) Jupiter
+ 1/20/2026 23:10 trans    Moon (Aqu) SSq natal (Cap) Sun
+ 1/21/2026  3:45 trans    Moon (Aqu) Con natal (Aqu) Mars
+ 1/21/2026  3:49 trans    Moon (Aqu) Qui natal [Tau] Saturn
+ 1/21/2026  6:28 trans    Mars (Cap) SSx natal (Aqu) Mars
+ 1/21/2026  8:48 trans     Sun (Aqu) Qui natal (Sco) Moon
+ 1/21/2026 10:49 trans    Moon (Pis) Squ natal (Sag) Venus
+ 1/21/2026 11:04 trans    Moon (Pis) Sep natal (Cap) Sun
+ 1/21/2026 11:33 trans Mercury (Aqu) Qui natal (Sco) Moon
+ 1/21/2026 11:44 trans    Moon (Pis) Sex natal (Cap) Mercury
+ 1/21/2026 12:45 trans    Moon (Pis) SSx natal (Aqu) Neptune
+ 1/21/2026 13:55 trans    Moon (Pis) Sep natal (Ari) Jupiter
+ 1/21/2026 23:44 trans Mercury (Aqu) Sex natal (Sag) Venus
+ 1/21/2026 23:46 trans    Moon (Pis) SQn natal (Aqu) Neptune
+ 1/22/2026  1:43 trans    Moon (Pis) SSq natal (Ari) Jupiter
+ 1/22/2026  1:55 trans    Moon (Pis) Sex natal [Tau] Saturn
+ 1/22/2026  2:49 trans    Moon (Pis) Sex natal (Cap) Sun
+ 1/22/2026  3:55 trans    Moon (Pis) Squ natal (Sag) Pluto
+ 1/22/2026  4:55 trans     Sun (Aqu) Sex natal (Sag) Venus
+ 1/22/2026  6:50 trans Mercury (Aqu) SSx natal (Cap) Mercury
+ 1/22/2026  9:45 trans    Moon (Pis) Qui natal (Cap) Mercury
+ 1/22/2026 10:03 trans    Moon (Pis) SSx natal (Aqu) Uranus
+ 1/22/2026 10:08 trans Mercury (Aqu) Sep natal (Sag) Pluto
+ 1/22/2026 14:32 trans Mercury (Aqu) Con natal (Aqu) Neptune
+ 1/22/2026 16:10 trans    Moon (Pis) SSq natal (Aqu) Neptune
+ 1/22/2026 16:39 trans     Sun (Aqu) SSx natal (Cap) Mercury
+ 1/22/2026 17:32 trans    Moon (Pis) Sep natal [Tau] Saturn
+ 1/22/2026 18:06 trans    Moon (Pis) SQn natal (Ari) Jupiter
+ 1/22/2026 18:11 trans    Moon (Pis) Tri natal (Sco) Moon
+ 1/22/2026 20:56 trans    Moon (Pis) SQn natal (Aqu) Uranus
+ 1/22/2026 22:08 trans     Sun (Aqu) Sep natal (Sag) Pluto
+ 1/23/2026  0:38 trans    Moon (Pis) Qui natal (Cap) Sun
+ 1/23/2026  3:47 trans    Moon (Pis) Sep natal (Aqu) Neptune
+ 1/23/2026  4:56 trans    Moon (Pis) SSx natal (Ari) Jupiter
+ 1/23/2026  5:08 trans    Moon (Pis) SSq natal [Tau] Saturn
+ 1/23/2026  5:27 trans     Sun (Aqu) Con natal (Aqu) Neptune
+ 1/23/2026 10:27 trans    Moon (Pis) SSx natal (Aqu) Mars
+ 1/23/2026 13:07 trans    Moon (Pis) SSq natal (Aqu) Uranus
+ 1/23/2026 17:17 trans    Moon (Ari) Tri natal (Sag) Venus
+ 1/23/2026 18:10 trans    Moon (Ari) Squ natal (Cap) Mercury
+ 1/23/2026 19:08 trans    Moon (Ari) Sex natal (Aqu) Neptune
+ 1/23/2026 21:06 trans    Moon (Ari) Ses natal (Sco) Moon
+ 1/23/2026 21:10 trans    Moon (Ari) SQn natal (Aqu) Mars
+ 1/23/2026 21:13 trans    Moon (Ari) SQn natal [Tau] Saturn
+ 1/24/2026  0:33 trans    Moon (Ari) Sep natal (Aqu) Uranus
+ 1/24/2026  7:52 trans    Moon (Ari) SSx natal [Tau] Saturn
+ 1/24/2026  8:44 trans    Moon (Ari) Squ natal (Cap) Sun
+ 1/24/2026  9:46 trans    Moon (Ari) Tri natal (Sag) Pluto
+ 1/24/2026 10:13 trans   Venus (Aqu) SQn natal (Cap) Mercury
+ 1/24/2026 13:01 trans    Moon (Ari) BQn natal (Sco) Moon
+ 1/24/2026 13:05 trans    Moon (Ari) SSq natal (Aqu) Mars
+ 1/24/2026 15:41 trans    Moon (Ari) Sex natal (Aqu) Uranus
+ 1/24/2026 16:21 trans    Moon (Ari) Qui natal (Aqu) Neptune
+ 1/24/2026 19:47 trans    Moon (Ari) Ses natal (Sag) Venus
+ 1/24/2026 23:32 trans    Moon (Ari) Inc natal (Sco) Moon
+ 1/25/2026  0:21 trans    Moon (Ari) Sep natal (Aqu) Mars
+ 1/25/2026  1:49 trans    Mars (Aqu) Qui natal (Sco) Moon
+ 1/25/2026  9:54 trans    Moon (Ari) Con natal (Ari) Jupiter
+ 1/25/2026 11:28 trans    Moon (Ari) BQn natal (Sag) Venus
+ 1/25/2026 11:59 trans    Moon (Ari) Ses natal (Sag) Pluto
+ 1/25/2026 12:37 trans    Moon (Ari) Qui natal (Aqu) Uranus
+ 1/25/2026 15:14 trans    Moon (Ari) Sex natal (Aqu) Mars
+ 1/25/2026 19:03 trans   Venus (Aqu) Squ natal [Tau] Saturn
+ 1/25/2026 19:23 trans Mercury (Aqu) SQn natal (Cap) Mercury
+ 1/25/2026 21:48 trans    Moon (Tau) Inc natal (Sag) Venus
+ 1/25/2026 22:39 trans    Moon (Tau) Tri natal (Cap) Mercury
+ 1/25/2026 23:35 trans    Moon (Tau) Squ natal (Aqu) Neptune
+ 1/26/2026  3:28 trans    Moon (Tau) BQn natal (Sag) Pluto
+ 1/26/2026  4:04 trans    Mars (Aqu) Sex natal (Sag) Venus
+ 1/26/2026  4:27 trans   Venus (Aqu) SSx natal (Cap) Sun
+ 1/26/2026 11:47 trans    Moon (Tau) Qui natal (Aqu) Mars
+ 1/26/2026 11:51 trans    Moon (Tau) Con natal [Tau] Saturn
+ 1/26/2026 12:41 trans    Moon (Tau) Tri natal (Cap) Sun
+ 1/26/2026 13:42 trans    Moon (Tau) Inc natal (Sag) Pluto
+ 1/26/2026 15:48 trans   Venus (Aqu) Sex natal (Sag) Pluto
+ 1/26/2026 19:19 trans Mercury (Aqu) Squ natal [Tau] Saturn
+ 1/26/2026 19:21 trans    Mars (Aqu) SSx natal (Cap) Mercury
+ 1/26/2026 19:25 trans    Moon (Tau) Squ natal (Aqu) Uranus
+ 1/27/2026  0:12 trans    Moon (Tau) Ses natal (Cap) Mercury
+ 1/27/2026  2:09 trans Mercury (Aqu) SSx natal (Cap) Sun
+ 1/27/2026  2:31 trans    Mars (Aqu) Sep natal (Sag) Pluto
+ 1/27/2026  2:59 trans    Moon (Tau) Opp natal (Sco) Moon
+ 1/27/2026 10:22 trans Mercury (Aqu) Sex natal (Sag) Pluto
+ 1/27/2026 12:02 trans    Mars (Aqu) Con natal (Aqu) Neptune
+ 1/27/2026 13:00 trans    Moon (Tau) SSx natal (Ari) Jupiter
+ 1/27/2026 14:01 trans    Moon (Tau) Ses natal (Cap) Sun
+ 1/27/2026 15:20 trans    Moon (Tau) BQn natal (Cap) Mercury
+ 1/27/2026 18:08 trans    Moon (Tau) Squ natal (Aqu) Mars
+ 1/27/2026 23:01 trans    Moon (Gem) SQn natal (Ari) Jupiter
+ 1/28/2026  0:31 trans    Moon (Gem) Opp natal (Sag) Venus
+ 1/28/2026  1:21 trans    Moon (Gem) Inc natal (Cap) Mercury
+ 1/28/2026  2:14 trans   Venus (Aqu) Qui natal (Ari) Jupiter
+ 1/28/2026  2:15 trans    Moon (Gem) Tri natal (Aqu) Neptune
+ 1/28/2026  5:02 trans    Moon (Gem) BQn natal (Cap) Sun
+ 1/28/2026 11:14 trans Mercury (Aqu) Qui natal (Ari) Jupiter
+ 1/28/2026 13:59 trans    Moon (Gem) SSq natal (Ari) Jupiter
+ 1/28/2026 14:10 trans    Moon (Gem) SSx natal [Tau] Saturn
+ 1/28/2026 14:17 trans     Sun (Aqu) SQn natal (Cap) Mercury
+ 1/28/2026 14:59 trans    Moon (Gem) Inc natal (Cap) Sun
+ 1/28/2026 15:58 trans    Moon (Gem) Opp natal (Sag) Pluto
+ 1/28/2026 19:22 trans   Venus (Aqu) Qui natal (Sag) Venus
+ 1/28/2026 21:31 trans    Moon (Gem) Tri natal (Aqu) Uranus
+ 1/28/2026 23:34 trans Mercury (Aqu) Qui natal (Sag) Venus
+ 1/29/2026  0:05 trans    Moon (Gem) SQn natal [Tau] Saturn
+ 1/29/2026  0:19 trans  Saturn (Pis) SSx natal (Aqu) Mars
+ 1/29/2026  0:36 trans    Moon (Gem) Sep natal (Ari) Jupiter
+ 1/29/2026  3:06 trans    Moon (Gem) Ses natal (Aqu) Neptune
+ 1/29/2026  4:55 trans    Moon (Gem) Inc natal (Sco) Moon
+ 1/29/2026  8:04 trans   Venus (Aqu) Con natal (Aqu) Uranus
+ 1/29/2026  8:41 trans Mercury (Aqu) Con natal (Aqu) Uranus
+ 1/29/2026 14:44 trans    Moon (Gem) Sex natal (Ari) Jupiter
+ 1/29/2026 14:49 trans    Moon (Gem) BQn natal (Sco) Moon
+ 1/29/2026 14:55 trans    Moon (Gem) SSq natal [Tau] Saturn
+ 1/29/2026 17:56 trans    Moon (Gem) BQn natal (Aqu) Neptune
+ 1/29/2026 19:48 trans    Moon (Gem) Tri natal (Aqu) Mars
+ 1/29/2026 22:15 trans    Moon (Gem) Ses natal (Aqu) Uranus
+ 1/30/2026  1:30 trans    Moon (Can) Sep natal [Tau] Saturn
+ 1/30/2026  2:05 trans    Moon (Can) Inc natal (Sag) Venus
+ 1/30/2026  2:55 trans    Moon (Can) Opp natal (Cap) Mercury
+ 1/30/2026  3:48 trans    Moon (Can) Inc natal (Aqu) Neptune
+ 1/30/2026  5:38 trans    Moon (Can) Ses natal (Sco) Moon
+ 1/30/2026  6:53 trans     Sun (Aqu) Squ natal [Tau] Saturn
+ 1/30/2026 10:30 trans    Moon (Can) Qui natal (Ari) Jupiter
+ 1/30/2026 11:58 trans    Moon (Can) BQn natal (Sag) Venus
+ 1/30/2026 12:39 trans Mercury (Aqu) SQn natal (Cap) Sun
+ 1/30/2026 13:04 trans    Moon (Can) BQn natal (Aqu) Uranus
+ 1/30/2026 15:37 trans    Moon (Can) Sex natal [Tau] Saturn
+ 1/30/2026 16:26 trans    Moon (Can) Opp natal (Cap) Sun
+ 1/30/2026 17:25 trans    Moon (Can) Inc natal (Sag) Pluto
+ 1/30/2026 18:32 trans     Sun (Aqu) SSx natal (Cap) Sun
+ 1/30/2026 20:31 trans    Moon (Can) Ses natal (Aqu) Mars
+ 1/30/2026 22:58 trans    Moon (Can) Inc natal (Aqu) Uranus
+ 1/30/2026 23:09 trans   Venus (Aqu) SQn natal (Cap) Sun
+ 1/30/2026 23:25 trans Mercury (Aqu) SSq natal (Cap) Mercury
+ 1/31/2026  0:09 trans Jupiter [Can] BQn natal (Sag) Pluto
+ 1/31/2026  2:50 trans    Moon (Can) Ses natal (Sag) Venus
+ 1/31/2026  3:20 trans    Moon (Can) BQn natal (Sag) Pluto
+ 1/31/2026  6:23 trans    Moon (Can) Tri natal (Sco) Moon
+ 1/31/2026  8:34 trans     Sun (Aqu) Sex natal (Sag) Pluto
+ 1/31/2026 11:25 trans    Moon (Can) BQn natal (Aqu) Mars
+ 1/31/2026 11:28 trans    Moon (Can) Qui natal [Tau] Saturn
+ 1/31/2026 14:15 trans   Venus (Aqu) SSq natal (Cap) Mercury
+ 1/31/2026 16:17 trans    Moon (Can) Squ natal (Ari) Jupiter
+ 1/31/2026 18:16 trans    Moon (Can) Ses natal (Sag) Pluto
+ 1/31/2026 21:24 trans    Moon (Can) Inc natal (Aqu) Mars
+ 1/31/2026 21:52 trans Mercury (Aqu) Squ natal (Sco) Moon

@@ -244,7 +244,7 @@ func TestTimelineShowsDefaultSetRefusal(t *testing.T) {
 	}
 	shown := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
 	if len(m.timeline.rows) != 0 || strings.TrimSpace(shown) != "" {
-		t.Errorf("the tab holds %d rows after a refusal, and renders:\n%s", len(m.timeline.rows), shown)
+		t.Errorf("the tab holds %d rows after a refusal, and renders (want a blank pane, C5 as amended 2026-11-06):\n%s", len(m.timeline.rows), shown)
 	}
 	var lane []string
 	for _, l := range m.logLines {

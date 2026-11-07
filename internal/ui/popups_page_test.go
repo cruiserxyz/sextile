@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"strings"
 	"testing"
 
@@ -191,10 +192,10 @@ func TestHousesPageCrossesTheRule(t *testing.T) {
 	for i, key := range []string{"pgdown", "pgdown", "pgdown", "pgup", "pgup", "end", "home", "pgdown", "pgdown"} {
 		m, _ = press(t, m, key)
 		if got := markedRows(view()); len(got) != 1 {
-			t.Fatalf("step %d (%s): cursor %d offset %d, marked rows on screen: %q", i, key, m.houseFinder.cursor, m.houseFinder.offset, got)
+			t.Fatalf("step %d (%s): cursor %d offset %d, marked rows on screen: %q", i, key, m.houseFinder.Cursor, m.houseFinder.Offset, got)
 		}
 		_, off, _, _ := o.read(m)
-		crosses := off <= len(housePinned)-1 && off+v >= len(housePinned)+1
+		crosses := off <= len(popup.HousePinned)-1 && off+v >= len(popup.HousePinned)+1
 		if campanus, rule := ruleBelowCampanus(view()); campanus && rule != crosses {
 			t.Errorf("step %d (%s): window from %d: the rule drawn = %v, want %v", i, key, off, rule, crosses)
 		} else if campanus && rule {
@@ -222,7 +223,7 @@ func TestOpenChartPagesWithUnreadableBlock(t *testing.T) {
 	}
 	for i, key := range []string{"pgdown", "pgdown", "pgdown", "pgup", "end", "pgup", "home"} {
 		m, _ = press(t, m, key)
-		want := m.picker.matches[m.picker.cursor].Name
+		want := m.picker.Matches[m.picker.Cursor].Name
 		marked := markedRows(renderChartModal(m.picker, Config{Accessible: true, Color: ColorNever}, m.width, m.height))
 		if len(marked) != 1 || !strings.HasPrefix(marked[0], want+" ") {
 			t.Fatalf("step %d (%s): Enter would pick %q, the marked rows on screen are %q", i, key, want, marked)
@@ -242,7 +243,7 @@ func TestBodiesChooserPagesOntoTheProbeStatusRow(t *testing.T) {
 	}
 	m := o.open(t)
 	for _, n := range []int{0, 5, 10, 15, 20, 25, 30, 35, 40, 79} {
-		m.bodyModal.recordProbe(n, false, []string{"se00010.se1"})
+		m.bodyModal.RecordProbe(n, false, []string{"se00010.se1"})
 	}
 	_, _, total, v := o.read(m)
 	m = o.put(m, 0, 0)
@@ -255,7 +256,7 @@ func TestBodiesChooserPagesOntoTheProbeStatusRow(t *testing.T) {
 		if c >= 0 && len(markedRows(view)) != 1 {
 			t.Fatalf("step %d (%s): cursor %d offset %d of %d (%d visible): marked rows on screen %q", i, key, c, off, total, v, markedRows(view))
 		}
-		if strings.Contains(ansi.Strip(view), "can't be drawn") {
+		if strings.Contains(ansi.Strip(view), "Astrolog gave") {
 			sawStatus = true
 		}
 		if got := o.drawn(m); got != off {

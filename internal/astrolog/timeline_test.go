@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +61,7 @@ func TestParseTimelineReadsEveryMeasuredGrammar(t *testing.T) {
 	kinds := map[string]bool{}
 	for _, tc := range timelineCorpus {
 		t.Run(tc.name, func(t *testing.T) {
-			rows, err := ParseTimeline(tc.line+"\n", utcPlusOne)
+			rows, err := ParseTimeline(tc.line+"\n", utcPlusOne, testRegistry(t))
 			if err != nil {
 				t.Fatalf("ParseTimeline refused a measured line: %v", err)
 			}
@@ -114,7 +115,7 @@ func TestParseTimelineReturnsInstantAndVerbatimLine(t *testing.T) {
 		"Transits during May 2026 (ST Zone 1E)\n" +
 		" 5/ 6/2026  9:13am trans    Moon (Cap) Con natal (Cap) Moon (Lunar Return)\n" +
 		" 5/ 7/2026  4:03am trans Mercury (Tau) Con natal (Tau) Mercury (Mercury Return)\n"
-	rows, err := ParseTimeline(out, utcPlusOne)
+	rows, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,11 +140,11 @@ func TestParseTimelineResolvesInstantsAgainstTheGivenZone(t *testing.T) {
 	// (the specification C3: the grammar is the preference's).
 	withClock(t, Clock{Hours: Hours12, Dates: MonthFirst})
 	out := "Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Uranus\n"
-	east, err := ParseTimeline(out, utcPlusOne)
+	east, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	west, err := ParseTimeline(out, time.FixedZone("UTC-2", -7200))
+	west, err := ParseTimeline(out, time.FixedZone("UTC-2", -7200), testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +172,7 @@ func TestParseTimelineRefusesAnUnreadableLine(t *testing.T) {
 	} {
 		out := "Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Uranus\n" + junk + "\n" +
 			"Fri 10/ 2/2026  8:54pm    Moon (Gem) --> Cancer\n"
-		rows, err := ParseTimeline(out, utcPlusOne)
+		rows, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 		if err == nil {
 			t.Errorf("accepted an output containing %q: %d rows", junk, len(rows))
 			continue
@@ -217,7 +218,7 @@ func TestParseTimelineRefusesADatedButUnreadableLine(t *testing.T) {
 		"10/ 2/2026  5:08am trans Jupiter <Leo) Tri natal [Sag] Neptune",
 		"Fri 10/ 2/2026  8:54pm    Moon (Gem) --> ",
 	} {
-		rows, err := ParseTimeline(line+"\n", utcPlusOne)
+		rows, err := ParseTimeline(line+"\n", utcPlusOne, testRegistry(t))
 		if err == nil {
 			t.Errorf("accepted %q as an event at %v", line, rows[0].Instant)
 		}
@@ -231,14 +232,14 @@ func TestParseTimelineAcceptsAnOutputWithNoEvents(t *testing.T) {
 	out := "Astrolog 8.00 chart for Tue May 15, 1979  9:30am (ST Zone 0W)   4:54E 52:22N\n" +
 		"\n" +
 		"Transits during Oct 2026 (ST Zone 1E)\n\n"
-	rows, err := ParseTimeline(out, utcPlusOne)
+	rows, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 	if err != nil {
 		t.Fatalf("refused an empty search: %v", err)
 	}
 	if len(rows) != 0 {
 		t.Fatalf("rows = %+v, want none", rows)
 	}
-	if rows, err := ParseTimeline("", utcPlusOne); err != nil || len(rows) != 0 {
+	if rows, err := ParseTimeline("", utcPlusOne, testRegistry(t)); err != nil || len(rows) != 0 {
 		t.Fatalf("empty -dm output: rows=%v err=%v, want none and no error", rows, err)
 	}
 }
@@ -254,7 +255,7 @@ func TestParseTimelineReadsTheNoEventsNotices(t *testing.T) {
 		"-t / -tr": "Astrolog 8.00 chart for Tue Apr 15, 1980 12:00pm (ST Zone 0W)   4:54E 52:22N\n\nTransits during Oct 2026 (ST Zone 2E)\nNo transits found.\n",
 		"-dm":      "No transit events found.\n",
 	} {
-		rows, err := ParseTimeline(out, utcPlusOne)
+		rows, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 		if err != nil || len(rows) != 0 {
 			t.Errorf("%s: rows=%v err=%v, want an empty list and no error", name, rows, err)
 		}
@@ -273,11 +274,11 @@ func TestParseTimelineDropsTheSearchHeader(t *testing.T) {
 	withHeaders := "Astrolog 8.00 chart for Tue May 15, 1979  9:30am (ST Zone 0W)   4:54E 52:22N\n" +
 		"\n" +
 		"Transits during Oct 2026 (ST Zone 1E)\n" + rowsOnly
-	a, err := ParseTimeline(withHeaders, utcPlusOne)
+	a, err := ParseTimeline(withHeaders, utcPlusOne, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := ParseTimeline(rowsOnly, utcPlusOne)
+	b, err := ParseTimeline(rowsOnly, utcPlusOne, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,10 +384,23 @@ func TestTimelineRunsEachSearchPerSegmentAndKeepsOnlyItsInstants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.argvs) != 2 || fake.argvs[0][1] != "-2" || fake.argvs[1][1] != "-1" {
-		t.Fatalf("argvs = %v, want one -z -2 run then one -z -1 run", fake.argvs)
+	// The sky runs per segment: its void-mark month search, then a day search
+	// for each local day of the segment, so the fall-back day (the 25th) runs
+	// once at each offset.
+	var spawned []string
+	for _, z := range []struct {
+		zone       string
+		first, end int
+	}{{"-2", 1, 25}, {"-1", 25, 31}} {
+		spawned = append(spawned, z.zone+" -qm 10 2026 -dm")
+		for d := z.first; d <= z.end; d++ {
+			spawned = append(spawned, fmt.Sprintf("%s -qd 10 %d 2026 -d", z.zone, d))
+		}
 	}
-	if len(commands) != 2 {
+	if got := skySpawns(fake.argvs); !slices.Equal(got, spawned) {
+		t.Fatalf("spawns = %q, want %q", got, spawned)
+	}
+	if len(commands) != len(spawned) {
 		t.Errorf("commands = %v, want one per spawn", commands)
 	}
 	want := []struct {
@@ -410,6 +424,17 @@ func TestTimelineRunsEachSearchPerSegmentAndKeepsOnlyItsInstants(t *testing.T) {
 			t.Errorf("row %d came from %q, want the -z %s invocation", i, rows[i].Command, w.zone)
 		}
 	}
+}
+
+// skySpawns is each argv's zone and its date and mode tokens, up to the sky's
+// `-d` or `-dm`: "-2 -qd 10 1 2026 -d".
+func skySpawns(argvs [][]string) []string {
+	var out []string
+	for _, a := range argvs {
+		end := slices.IndexFunc(a, func(s string) bool { return s == "-d" || s == "-dm" })
+		out = append(out, strings.Join(append([]string{a[1]}, a[2:end+1]...), " "))
+	}
+	return out
 }
 
 func dumpRows(rows []TimelineRow) string {
@@ -522,7 +547,8 @@ var liveNatal = &TimelineNatal{When: time.Date(1979, 5, 15, 9, 30, 0, 0, time.UT
 
 // C24: with a chart anchored, the three searches run for the floating month
 // and year, with the anchored chart as the natal input to -t and -tr, once
-// per search per segment — and -dm takes no natal.
+// per search per segment (the sky as its void-mark month search and a day
+// search per day) — and the sky takes no natal.
 func TestComputeTimelineTargetsTheFloatingMonthAndTheAnchoredChart(t *testing.T) {
 	// These pin Astrolog's am/pm month-first text; the held clock says so
 	// (the specification C3: the grammar is the preference's).
@@ -540,13 +566,17 @@ func TestComputeTimelineTargetsTheFloatingMonthAndTheAnchoredChart(t *testing.T)
 	want := [][]string{
 		append(append(append([]string{"-z", "-1"}, natal...), "-t", "5", "2026"), frame...),
 		append([]string{"-z", "-1", "-qm", "5", "2026", "-dm"}, frame...),
-		append(append(append([]string{"-z", "-1"}, natal...), "-tr", "5", "2026"), frame...),
 	}
+	for d := 1; d <= 31; d++ {
+		want = append(want, append([]string{"-z", "-1", "-qd", "5", strconv.Itoa(d), "2026", "-d"}, frame...))
+	}
+	want = append(want, append(append(append([]string{"-z", "-1"}, natal...), "-tr", "5", "2026"), frame...))
 	if !slices.EqualFunc(fake.argvs, want, slices.Equal) {
 		t.Fatalf("argvs =\n%v\nwant\n%v", fake.argvs, want)
 	}
 
-	// Two segments: each search twice, one per offset, and never more.
+	// Two segments: each search twice, one per offset, and never more; the
+	// sky's day searches cover each segment's days, the 25th in both.
 	fake = &fakeSearch{byZone: map[string]string{}}
 	req.Month, req.Zone = time.October, tlAmsterdam(t)
 	if _, _, err := ComputeTimeline(context.Background(), req,
@@ -556,13 +586,22 @@ func TestComputeTimelineTargetsTheFloatingMonthAndTheAnchoredChart(t *testing.T)
 	var modes []string
 	for _, a := range fake.argvs {
 		for _, tok := range a {
-			if tok == "-t" || tok == "-dm" || tok == "-tr" {
+			if tok == "-t" || tok == "-dm" || tok == "-d" || tok == "-tr" {
 				modes = append(modes, tok+" -z "+a[1])
 			}
 		}
 	}
-	if got := strings.Join(modes, ", "); got != "-t -z -2, -t -z -1, -dm -z -2, -dm -z -1, -tr -z -2, -tr -z -1" {
-		t.Errorf("spawns = %s", got)
+	wantModes := []string{"-t -z -2", "-t -z -1", "-dm -z -2"}
+	for range 25 {
+		wantModes = append(wantModes, "-d -z -2")
+	}
+	wantModes = append(wantModes, "-dm -z -1")
+	for range 7 {
+		wantModes = append(wantModes, "-d -z -1")
+	}
+	wantModes = append(wantModes, "-tr -z -2", "-tr -z -1")
+	if !slices.Equal(modes, wantModes) {
+		t.Errorf("spawns = %s", strings.Join(modes, ", "))
 	}
 }
 
@@ -652,8 +691,8 @@ func TestComputeTimelineRetainsPerRowArgv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 3 || len(rows) == 0 {
-		t.Fatalf("commands=%d rows=%d, want three spawns and some rows", len(commands), len(rows))
+	if len(commands) != 34 || len(rows) == 0 {
+		t.Fatalf("commands=%d rows=%d, want 34 spawns (-t, the sky's month and 31 days, -tr) and some rows", len(commands), len(rows))
 	}
 	// Re-run each distinct command once, independently of the capture above.
 	rerun := map[string][]string{}
@@ -672,7 +711,12 @@ func TestComputeTimelineRetainsPerRowArgv(t *testing.T) {
 		if !slices.Contains(rerun[r.Command], r.Line) {
 			t.Errorf("%q: re-running its command %q does not print it", r.Line, r.Command)
 		}
-		wantMode := map[TimelineSource]string{TimelineTransit: " -t ", TimelineSky: " -dm", TimelineReturn: " -tr "}[r.Source]
+		// A sky row is its day search's, or the month search's when it carries
+		// the Moon's void-of-course mark.
+		wantMode := map[TimelineSource]string{TimelineTransit: " -t ", TimelineSky: " -d ", TimelineReturn: " -tr "}[r.Source]
+		if r.Source == TimelineSky && strings.Contains(r.Line, "(v/c ") {
+			wantMode = " -dm "
+		}
 		if !strings.Contains(r.Command+" ", wantMode) {
 			t.Errorf("%q is a %s row carrying %q", r.Line, r.Source, r.Command)
 		}
@@ -706,7 +750,7 @@ func TestParseTimelineReadsWholeYearsOfRealOutput(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err := ParseTimeline(out, utcPlusOne)
+		rows, err := ParseTimeline(out, utcPlusOne, testRegistry(t))
 		if err != nil {
 			t.Errorf("%v: %v", argv, err)
 			continue
@@ -734,26 +778,26 @@ func TestParseTimelineCutsTheAspectAndSecondBody(t *testing.T) {
 		kind                     TimelineKind
 		body, aspectAbbr, other  string
 		sign, direction, station string
-		bodyID, otherID          aspect.Body
+		object, otherObject      aspect.Object
 		aspectID                 aspect.AspectKind
 		resolved                 bool
 	}{
-		"-t transit row":                             {kind: TimelineKindAspect, body: "Jupiter", aspectAbbr: "Tri", other: "Neptune", bodyID: aspect.Jupiter, otherID: aspect.Neptune, aspectID: aspect.Trine, resolved: true},
-		"-t row with a padded month and 12pm":        {kind: TimelineKindAspect, body: "Mercury", aspectAbbr: "Tri", other: "Mars", bodyID: aspect.Mercury, otherID: aspect.Mars, aspectID: aspect.Trine, resolved: true},
-		"-tr return row with its label":              {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Con", other: "Moon", bodyID: aspect.Moon, otherID: aspect.Moon, aspectID: aspect.Conjunction, resolved: true},
-		"-t row carrying a return label":             {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Con", other: "Sun", bodyID: aspect.Sun, otherID: aspect.Sun, aspectID: aspect.Conjunction, resolved: true},
-		"-dm aspect row with its weekday":            {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Con", other: "Uranus", bodyID: aspect.Moon, otherID: aspect.Uranus, aspectID: aspect.Conjunction, resolved: true},
-		"-dm --> ingress":                            {kind: TimelineKindIngress, body: "Moon", sign: "Cancer", direction: "-->", bodyID: aspect.Moon, resolved: true},
-		"-dm <-- retrograde ingress":                 {kind: TimelineKindIngress, body: "Venus", sign: "Libra", direction: "<--", bodyID: aspect.Venus, resolved: true},
-		"-dm S/R station in <> brackets":             {kind: TimelineKindStation, body: "Venus", station: "S/R", bodyID: aspect.Venus, resolved: true},
-		"-dm trailing phenomenon label":              {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Con", other: "Moon", bodyID: aspect.Sun, otherID: aspect.Moon, aspectID: aspect.Conjunction, resolved: true},
-		"-dm two stacked labels":                     {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Opp", other: "Moon", bodyID: aspect.Sun, otherID: aspect.Moon, aspectID: aspect.Opposition, resolved: true},
-		"-dm trailing (v/c HH:MM)":                   {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Sex", other: "Jupiter", bodyID: aspect.Moon, otherID: aspect.Jupiter, aspectID: aspect.Sextile, resolved: true},
-		"-dm 12am with a (v/c) whose clock is later": {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Sex", other: "Jupiter", bodyID: aspect.Moon, otherID: aspect.Jupiter, aspectID: aspect.Sextile, resolved: true},
-		"-dm two-word body":                          {kind: TimelineKindIngress, body: "North N", sign: "Aquarius", direction: "<--", bodyID: aspect.NorthNode, resolved: true},
-		"-dm minor aspect BQn":                       {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "BQn", other: "Mercury", bodyID: aspect.Moon, otherID: aspect.Mercury, aspectID: aspect.Biquintile, resolved: true},
-		"-dm minor aspect SSx":                       {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "SSx", other: "Venus", bodyID: aspect.Moon, otherID: aspect.Venus, aspectID: aspect.Semisextile, resolved: true},
-		"-t minor aspect SSq":                        {kind: TimelineKindAspect, body: "Mars", aspectAbbr: "SSq", other: "Neptune", bodyID: aspect.Mars, otherID: aspect.Neptune, aspectID: aspect.Semisquare, resolved: true},
+		"-t transit row":                             {kind: TimelineKindAspect, body: "Jupiter", aspectAbbr: "Tri", other: "Neptune", object: objJupiter, otherObject: objNeptune, aspectID: aspect.Trine, resolved: true},
+		"-t row with a padded month and 12pm":        {kind: TimelineKindAspect, body: "Mercury", aspectAbbr: "Tri", other: "Mars", object: objMercury, otherObject: objMars, aspectID: aspect.Trine, resolved: true},
+		"-tr return row with its label":              {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Con", other: "Moon", object: objMoon, otherObject: objMoon, aspectID: aspect.Conjunction, resolved: true},
+		"-t row carrying a return label":             {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Con", other: "Sun", object: objSun, otherObject: objSun, aspectID: aspect.Conjunction, resolved: true},
+		"-dm aspect row with its weekday":            {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Con", other: "Uranus", object: objMoon, otherObject: objUranus, aspectID: aspect.Conjunction, resolved: true},
+		"-dm --> ingress":                            {kind: TimelineKindIngress, body: "Moon", sign: "Cancer", direction: "-->", object: objMoon, resolved: true},
+		"-dm <-- retrograde ingress":                 {kind: TimelineKindIngress, body: "Venus", sign: "Libra", direction: "<--", object: objVenus, resolved: true},
+		"-dm S/R station in <> brackets":             {kind: TimelineKindStation, body: "Venus", station: "S/R", object: objVenus, resolved: true},
+		"-dm trailing phenomenon label":              {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Con", other: "Moon", object: objSun, otherObject: objMoon, aspectID: aspect.Conjunction, resolved: true},
+		"-dm two stacked labels":                     {kind: TimelineKindAspect, body: "Sun", aspectAbbr: "Opp", other: "Moon", object: objSun, otherObject: objMoon, aspectID: aspect.Opposition, resolved: true},
+		"-dm trailing (v/c HH:MM)":                   {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Sex", other: "Jupiter", object: objMoon, otherObject: objJupiter, aspectID: aspect.Sextile, resolved: true},
+		"-dm 12am with a (v/c) whose clock is later": {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "Sex", other: "Jupiter", object: objMoon, otherObject: objJupiter, aspectID: aspect.Sextile, resolved: true},
+		"-dm two-word body":                          {kind: TimelineKindIngress, body: "North N", sign: "Aquarius", direction: "<--", object: objNorthNode, resolved: true},
+		"-dm minor aspect BQn":                       {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "BQn", other: "Mercury", object: objMoon, otherObject: objMercury, aspectID: aspect.Biquintile, resolved: true},
+		"-dm minor aspect SSx":                       {kind: TimelineKindAspect, body: "Moon", aspectAbbr: "SSx", other: "Venus", object: objMoon, otherObject: objVenus, aspectID: aspect.Semisextile, resolved: true},
+		"-t minor aspect SSq":                        {kind: TimelineKindAspect, body: "Mars", aspectAbbr: "SSq", other: "Neptune", object: objMars, otherObject: objNeptune, aspectID: aspect.Semisquare, resolved: true},
 	}
 	for _, tc := range timelineCorpus {
 		w, ok := want[tc.name]
@@ -761,7 +805,7 @@ func TestParseTimelineCutsTheAspectAndSecondBody(t *testing.T) {
 			t.Errorf("corpus case %q has no expected columns: add it to this test", tc.name)
 			continue
 		}
-		rows, err := ParseTimeline(tc.line+"\n", utcPlusOne)
+		rows, err := ParseTimeline(tc.line+"\n", utcPlusOne, testRegistry(t))
 		if err != nil || len(rows) != 1 {
 			t.Fatalf("%s: ParseTimeline = %v rows, err %v", tc.name, len(rows), err)
 		}
@@ -774,19 +818,25 @@ func TestParseTimelineCutsTheAspectAndSecondBody(t *testing.T) {
 			t.Errorf("%s: columns = {kind %d body %q aspect %q other %q sign %q dir %q station %q}, want %+v", tc.name,
 				r.Kind, r.Body, r.Aspect, r.Other, r.Sign, r.Direction, r.Station, w)
 		}
-		if r.Resolved != w.resolved || r.BodyID != w.bodyID || r.OtherID != w.otherID || r.AspectID != w.aspectID {
-			t.Errorf("%s: resolved = %v body %d other %d aspect %d, want %v %d %d %d", tc.name,
-				r.Resolved, r.BodyID, r.OtherID, r.AspectID, w.resolved, w.bodyID, w.otherID, w.aspectID)
+		if r.Resolved != w.resolved || r.Object != w.object || r.OtherObject != w.otherObject || r.AspectID != w.aspectID {
+			t.Errorf("%s: resolved = %v object %v other %v aspect %d, want %v %v %v %d", tc.name,
+				r.Resolved, r.Object, r.OtherObject, r.AspectID, w.resolved, w.object, w.otherObject, w.aspectID)
 		}
 	}
-	// A name the registries cannot name leaves the row unresolved (rule 2 of
-	// the spec), and the line is still read.
-	rows, err := ParseTimeline("Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Ceres\n", utcPlusOne)
+	// A name the registry cannot resolve leaves the row unresolved (rule 2 of
+	// the spec), and the line is still read. Ceres is in the registry, so
+	// the row naming it is resolved (objects slice 0b): Resolved says the
+	// registry named every side.
+	rows, err := ParseTimeline("Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Ceres\n", utcPlusOne, testRegistry(t))
 	if err != nil || len(rows) != 1 {
-		t.Fatalf("an unnamed second body: %d rows, err %v", len(rows), err)
+		t.Fatalf("a second body with no glyph: %d rows, err %v", len(rows), err)
 	}
-	if rows[0].Other != "Ceres" || rows[0].Resolved {
-		t.Errorf("an unnamed second body: other %q resolved %v, want %q unresolved", rows[0].Other, rows[0].Resolved, "Ceres")
+	if rows[0].Other != "Ceres" || !rows[0].Resolved || rows[0].OtherObject.Name != "Ceres" {
+		t.Errorf("a second body with no glyph: other %q resolved %v object %+v, want Ceres resolved by the registry", rows[0].Other, rows[0].Resolved, rows[0].OtherObject)
+	}
+	rows, err = ParseTimeline("Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Nibiru\n", utcPlusOne, testRegistry(t))
+	if err != nil || len(rows) != 1 || rows[0].Resolved {
+		t.Errorf("a name the registry does not list: rows %v err %v, want one unresolved row", rows, err)
 	}
 }
 
@@ -975,56 +1025,92 @@ func TestOverflowLinesRefuseWhereTheyAreNotTheSkyException(t *testing.T) {
 
 // Acceptance 4: ParseTimeline itself still refuses the line.
 func TestParseTimelineStillRefusesTheSkyOverflowLine(t *testing.T) {
-	_, err := ParseTimeline(skyOverflowText+"\n", time.UTC)
+	_, err := ParseTimeline(skyOverflowText+"\n", time.UTC, testRegistry(t))
 	var lineErr *TimelineLineError
 	if !errors.As(err, &lineErr) || lineErr.Line != skyOverflowText {
 		t.Fatalf("ParseTimeline err = %v, want a refusal naming the line", err)
 	}
 }
 
-// Acceptance 6: the installed astrolog, October 2026, six default aspects
-// plus inconjunct: the warning is printed and every dated row is read.
-func TestSkyOverflowLiveOctober2026ReadsEveryRow(t *testing.T) {
+// Acceptance 6, day by day since 2026-11-06: October 2026 at six aspects is a
+// month whose month search warns (the last day's false alarm, Astrolog_8.0
+// NEXT.md BUG 8). The sky reads it a day at a time, so nothing warns, and its
+// rows are every dated row of every day search, in order, each the month
+// search's own row where that one carries the Moon's void-of-course mark.
+func TestSkyLiveOctober2026ReadsEveryDayRow(t *testing.T) {
 	withClock(t, Clock{Hours: Hours12, Dates: MonthFirst})
 	if _, err := exec.LookPath("astrolog"); err != nil {
 		t.Skip("astrolog not on PATH")
 	}
 	req := TimelineRequest{Year: 2026, Month: time.October, Zone: time.UTC,
 		Aspects: recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5, 6}}}
-	var raw string
+	type spawned struct {
+		argv []string
+		out  string
+	}
+	var spawns []spawned
 	capture := func(ctx context.Context, call BodyCall) (string, string, error) {
 		out, cmd, err := RunTimelineSearch(ctx, call)
-		raw = out
+		spawns = append(spawns, spawned{call.Argv(), out})
 		return out, cmd, err
 	}
 	res, err := ComputeTimelineCalls(context.Background(), req, TimelineSky, capture)
-	if err != nil || len(res) != 1 {
+	if err != nil || len(res) != 1 || res[0].Err != nil {
 		t.Fatalf("ComputeTimelineCalls = %v, %v", res, err)
 	}
-	if !strings.Contains(raw, "\n"+skyOverflowText) {
-		t.Fatalf("astrolog no longer prints %q for this search; the fixture proves nothing:\n...%s", skyOverflowText, raw[max(0, len(raw)-200):])
+	if len(spawns) != 32 || !slices.Contains(spawns[0].argv, "-dm") {
+		t.Fatalf("%d spawns, want the void-mark month search then 31 days", len(spawns))
 	}
-	if res[0].Err != nil {
-		t.Fatalf("the false alarm was refused: %v", res[0].Err)
+	// The fixture: the same objects searched as one month still warn.
+	whole := slices.Clone(spawns[1].argv)
+	i := slices.Index(whole, "-qd")
+	whole = slices.Replace(whole, i, i+5, "-qm", "10", "2026", "-dm")
+	if out, _, err := RunTimelineSearch(context.Background(), testCall(whole)); err != nil || !strings.Contains(out, "\n"+skyOverflowText) {
+		t.Fatalf("astrolog's month search no longer warns for this month (err %v); the fixture proves nothing", err)
+	}
+	dated := func(out string) []string {
+		var lines []string
+		for _, l := range strings.Split(out, "\n") {
+			if len(l) > 3 && strings.Contains("SunMonTueWedThuFriSat", l[:3]) && l[3] == ' ' {
+				lines = append(lines, l)
+			}
+		}
+		return lines
+	}
+	marked := map[string]string{}
+	for _, l := range dated(spawns[0].out) {
+		if bare := voidMark.ReplaceAllString(l, ""); bare != l {
+			marked[bare] = l
+		}
+	}
+	var want []string
+	for _, s := range spawns[1:] {
+		for _, l := range dated(s.out) {
+			if m, ok := marked[voidMark.ReplaceAllString(l, "")]; ok {
+				l = m
+			}
+			want = append(want, l)
+		}
+	}
+	if len(want) < 100 || len(marked) == 0 {
+		t.Fatalf("%d dated rows and %d void marks; a month at six aspects has well over 100 and some", len(want), len(marked))
 	}
 	// Row by row, in order: a lost or duplicated row cannot hide behind an
 	// equal count (review round 1, P2).
-	var dated []string
-	for _, l := range strings.Split(raw, "\n") {
-		if len(l) > 3 && strings.Contains("SunMonTueWedThuFriSat", l[:3]) && l[3] == ' ' {
-			dated = append(dated, l)
-		}
+	if len(res[0].Rows) != len(want) {
+		t.Fatalf("accepted %d rows, the day searches printed %d dated rows", len(res[0].Rows), len(want))
 	}
-	if len(dated) < 100 {
-		t.Fatalf("raw output has %d dated rows; a month at six aspects has well over 100", len(dated))
-	}
-	if len(res[0].Rows) != len(dated) {
-		t.Fatalf("accepted %d rows, raw output has %d dated rows", len(res[0].Rows), len(dated))
-	}
-	for i, l := range dated {
+	voids := 0
+	for i, l := range want {
 		if res[0].Rows[i].Line != l {
-			t.Fatalf("row %d = %q, raw dated row %d = %q", i, res[0].Rows[i].Line, i, l)
+			t.Fatalf("row %d = %q, want %q", i, res[0].Rows[i].Line, l)
 		}
+		if strings.Contains(l, "(v/c ") {
+			voids++
+		}
+	}
+	if voids != len(marked) {
+		t.Errorf("%d rows carry a void mark, the month search printed %d", voids, len(marked))
 	}
 }
 
@@ -1034,7 +1120,7 @@ func TestSkyOverflowLiveOctober2026ReadsEveryRow(t *testing.T) {
 func TestParseTimelineReadsAMinorAspectRow(t *testing.T) {
 	withClock(t, Clock{})
 	line := "Thu 10/ 1/2026  7:08    Moon (Gem) BQn (Sco) Mercury"
-	rows, err := ParseTimeline(line+"\n", utcPlusOne)
+	rows, err := ParseTimeline(line+"\n", utcPlusOne, testRegistry(t))
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("ParseTimeline = %d rows, err %v", len(rows), err)
 	}
@@ -1044,5 +1130,31 @@ func TestParseTimelineReadsAMinorAspectRow(t *testing.T) {
 	}
 	if !r.Instant.Equal(at(utcPlusOne, 2026, 10, 1, 7, 8)) {
 		t.Fatalf("instant = %v", r.Instant)
+	}
+}
+
+// A cusp point is an object like any other: Astrolog prints its registry name
+// (`11th Cusp`, a leading digit), and the grammar must admit it. The fixture is
+// the real output of a transit search over January 2026 with 11th and 12th Cusp
+// in the natal list (`astrolog -z 0 -qj 2451545.5 -zl 0 52 -t 1 2026 =Yt _Yd
+// -R0 1..10 32 33 -RT0 1..10 -RA0 1..13`, Astrolog 8.00).
+func TestTimelineRowNamesACuspPoint(t *testing.T) {
+	withClock(t, Clock{Hours: Hours24, Dates: MonthFirst})
+	rows, err := ParseTimeline(readFixture(t, "tt-cusp-point.txt"), time.UTC, testRegistry(t))
+	if err != nil {
+		t.Fatalf("the month with a cusp point does not parse: %v", err)
+	}
+	var cusp *TimelineRow
+	for i := range rows {
+		if rows[i].Other == "11th Cusp" {
+			cusp = &rows[i]
+			break
+		}
+	}
+	if cusp == nil {
+		t.Fatalf("no row names the 11th Cusp among %d rows", len(rows))
+	}
+	if !cusp.Resolved || cusp.OtherObject.Number != 32 || cusp.Object.Name != "Moon" {
+		t.Errorf("cusp row %q: resolved %v, object %+v, other %+v; want resolved, Moon, Number 32", cusp.Line, cusp.Resolved, cusp.Object, cusp.OtherObject)
 	}
 }

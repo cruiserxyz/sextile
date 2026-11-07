@@ -87,6 +87,17 @@ func ComputeRawReport(ctx context.Context, spec recipe.ChartSpec, projection rec
 	return reportText(out), command, nil
 }
 
+// ComputeChartProbe is ComputeChartPositionsOnly for the availability question:
+// the missing-ephemeris lines come back as file names instead of refusing the
+// result (RunPositionsProbing).
+func ComputeChartProbe(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
+	plan, err := Compile(spec, recipe.Positions{})
+	if err != nil {
+		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChartProbe: %w", err)
+	}
+	return RunPositionsProbing(ctx, plan.Invocations[0].Call())
+}
+
 // ComputeCrossAspects runs astrolog's -r0 relationship aspect list for a
 // Comparison spec and returns the cross-aspects between the two charts — Primary
 // from the first chart, Secondary from the second (roles preserved). Unlike
@@ -137,10 +148,11 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 			// pair's names travel in its staged files alone.
 			primary.Name, primary.Place = "", ""
 			probe := recipe.ChartSpec{
-				Source:  primary,
-				Houses:  spec.Houses,
-				Zodiac:  spec.Zodiac,
-				Objects: recipe.ObjectPolicy{Baseline: recipe.AstrologDefault},
+				Source:   primary,
+				Houses:   spec.Houses,
+				Zodiac:   spec.Zodiac,
+				Objects:  recipe.ObjectPolicy{Baseline: recipe.AstrologDefault},
+				Registry: spec.Registry,
 			}
 			probed, err := ComputeChartPositionsOnly(ctx, probe)
 			commands = append(commands, probed.Commands...)
@@ -166,7 +178,7 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 	if err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
 	}
-	cross := parseCrossAspects(out)
+	cross := parseCrossAspects(out, spec.Registry)
 	if err := checkCrossAspectSanity(out); err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w (output: %.400s)", err, out)
 	}
@@ -174,7 +186,7 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 	if err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
 	}
-	return payload.CrossAspectOutput{Aspects: cross, AspectStyles: mapCrossAspectStyles(rows), Report: reportText(out), Commands: commands}, nil
+	return payload.CrossAspectOutput{Aspects: cross, AspectStyles: mapCrossAspectStyles(rows, spec.Registry), Report: reportText(out), Commands: commands}, nil
 }
 
 // formatLon emits astrolog's "<deg>:<arcmin><E|W>" form. Atlas convention

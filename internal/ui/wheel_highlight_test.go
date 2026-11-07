@@ -17,31 +17,31 @@ import (
 // and the strongest tier only from the Bodies cursor while Bodies is focused.
 func TestWheelHighlightUsesFocusedSlotSelection(t *testing.T) {
 	m := rowSelectionModel(t)
-	m.slots.ToggleBodySelection(1, aspect.Mars)    // focused (floating) slot
-	m.slots.ToggleBodySelection(0, aspect.Jupiter) // the other slot
+	m.slots.ToggleObjectSelection(1, objMars)    // focused (floating) slot
+	m.slots.ToggleObjectSelection(0, objJupiter) // the other slot
 
 	m.cursorIdx = 1
 	m.focused = PanelBodies
 	m.bodyCursorIdx = 1 // Moon (planets keep position order: Sun, Moon, …)
 
 	hl := m.wheelHighlight()
-	if len(hl.Selected) != 1 || hl.Selected[0] != aspect.Mars {
+	if len(hl.Selected) != 1 || hl.Selected[0] != objMars.Number {
 		t.Errorf("Selected = %v, want [Mars] (focused slot only)", hl.Selected)
 	}
-	if hl.Focused != aspect.Moon {
+	if hl.Focused != objMoon {
 		t.Errorf("Focused = %v, want Moon (Bodies cursor)", hl.Focused)
 	}
 
 	// Moving the slot cursor swaps in the other slot's selection.
 	m.cursorIdx = 0
-	if hl := m.wheelHighlight(); len(hl.Selected) != 1 || hl.Selected[0] != aspect.Jupiter {
+	if hl := m.wheelHighlight(); len(hl.Selected) != 1 || hl.Selected[0] != objJupiter.Number {
 		t.Errorf("Selected after slot switch = %v, want [Jupiter]", hl.Selected)
 	}
 
 	// With Bodies unfocused the cursor body carries no strongest tier.
 	m.focused = PanelChart
-	if hl := m.wheelHighlight(); hl.Focused != aspect.BodyUnknown {
-		t.Errorf("Focused with Bodies unfocused = %v, want BodyUnknown", hl.Focused)
+	if hl := m.wheelHighlight(); hl.Focused != (aspect.Object{}) {
+		t.Errorf("Focused with Bodies unfocused = %v, want no object", hl.Focused)
 	}
 }
 
@@ -50,11 +50,11 @@ func TestWheelHighlightUsesFocusedSlotSelection(t *testing.T) {
 // the chart's own tab the wheel is the cursor's chart alone and keeps its
 // highlight (S4a A16).
 func TestComparisonWheelEmitsNoHighlight(t *testing.T) {
-	m := rowSelectionModel(t)
 	wheelCalls := stubRenderWheelImage(t)
 	overlayCalls := stubRenderOverlayWheelImage(t)
+	m := rowSelectionModel(t)
 	m.slots.SetComparisonSelected(true)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objMars)
 	m.focused = PanelBodies
 	m.previewActive = true
 
@@ -85,7 +85,7 @@ func TestBodyToggleRequestsImageRefresh(t *testing.T) {
 	m.previewActive = true
 
 	got, cmd := m.toggleFocusedSelection()
-	if !got.slots.BodySelected(got.cursorIdx, aspect.Sun) {
+	if !got.slots.ObjectSelected(got.cursorIdx, objSun.Number) {
 		t.Fatal("Space on the Sun row must select it")
 	}
 	if imageState(got).wantID != 1 || cmd == nil {
@@ -139,7 +139,7 @@ func TestBodiesFocusChangeRequestsImageRefresh(t *testing.T) {
 // F1 — no focused slot, no render: the image surface stays silent even with
 // the preview active.
 func TestNilFocusedSlotSkipsHighlightRender(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	m.previewActive = true
 	if cmd := m.buildSurfaceCmd(surfaceImage, context.Background(), 1, 1); cmd != nil {
 		t.Error("image surface must return nil with no focused slot")
@@ -152,8 +152,40 @@ func TestOutOfRangeBodyCursorHasNoStrongest(t *testing.T) {
 	m := rowSelectionModel(t)
 	m.focused = PanelBodies
 	m.bodyCursorIdx = 99
-	if hl := m.wheelHighlight(); hl.Focused != aspect.BodyUnknown {
-		t.Errorf("Focused = %v, want BodyUnknown for an out-of-range cursor", hl.Focused)
+	if hl := m.wheelHighlight(); hl.Focused != (aspect.Object{}) {
+		t.Errorf("Focused = %v, want no object for an out-of-range cursor", hl.Focused)
+	}
+}
+
+// The wheel's cursor tier is the object under the Bodies cursor, whatever
+// object it is: Fortune (no glyph names it) lights on the wheel like the
+// Moon does, and it reaches the renderer's request as Astrolog's number 19.
+// The compiler turns that number into the foreground show list
+// (astrolog TestHighlightFocusedObjectCarriesItsNumber).
+func TestWheelCursorTierForFortune(t *testing.T) {
+	m := rowSelectionModel(t)
+	m.chart.positions = append(m.chart.positions, aspect.Position{Object: fixtureObject(t, 19), Longitude: 100})
+	m.focused = PanelBodies
+	m.bodyCursorIdx = rowOfObject(t, m, 19)
+
+	if hl := m.wheelHighlight(); hl.Focused.Number != 19 || hl.Focused.Name != "Fortune" {
+		t.Fatalf("Focused = %+v, want Fortune (object 19) under the Bodies cursor", hl.Focused)
+	}
+	plan, ok := m.wheelPlan()
+	if !ok || plan.highlight.Focused.Number != 19 {
+		t.Errorf("the wheel plan's highlight = %+v, want the cursor tier on object 19", plan.highlight)
+	}
+	// The cursor tier follows the cursor off Fortune and back.
+	moved := m
+	moved.bodyCursorIdx = rowOfObject(t, m, objMoon.Number)
+	if hl := moved.wheelHighlight(); hl.Focused != objMoon {
+		t.Errorf("Focused on the Moon row = %+v, want the Moon", hl.Focused)
+	}
+	// With Bodies unfocused Fortune carries no cursor tier, as no other row does.
+	idle := m
+	idle.focused = PanelChart
+	if hl := idle.wheelHighlight(); hl.Focused != (aspect.Object{}) {
+		t.Errorf("Focused with Bodies unfocused = %+v, want no object", hl.Focused)
 	}
 }
 
@@ -163,21 +195,21 @@ func TestOutOfRangeBodyCursorHasNoStrongest(t *testing.T) {
 // the publisher unchanged.
 func TestHighlightPublishesComposite(t *testing.T) {
 	published := []byte{}
-	prev := showWheel
-	showWheel = func(b []byte) (string, error) {
-		published = append([]byte{}, b...)
-		return "/tmp/stub.png", nil
-	}
-	t.Cleanup(func() { showWheel = prev })
-	prevRender := renderWheelImage
-	renderWheelImage = func(_ context.Context, _ time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		return []byte("COMPOSITE"), nil
-	}
-	t.Cleanup(func() { renderWheelImage = prevRender })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func(b []byte) (string, error) {
+			published = append([]byte{}, b...)
+			return "/tmp/stub.png", nil
+		}
+	})
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			return []byte("COMPOSITE"), nil
+		}
+	})
 
 	m := rowSelectionModel(t)
 	m.slots.SetComparisonSelected(false) // single-wheel path, not the overlay
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objMars)
 	m.previewActive = true
 	m, _ = m.requestImageNow()
 	st := imageState(m)
@@ -202,7 +234,7 @@ func TestHighlightPublishesComposite(t *testing.T) {
 func TestLayerFailureClearsPreviewActive(t *testing.T) {
 	calls := stubShowWheel(t)
 	m := rowSelectionModel(t)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objMars)
 	m.previewActive = true
 	m, _ = m.requestImageNow()
 	st := imageState(m)
@@ -223,7 +255,7 @@ func TestLayerFailureClearsPreviewActive(t *testing.T) {
 func TestCancelBetweenLayersDropsFrame(t *testing.T) {
 	calls := stubShowWheel(t)
 	m := rowSelectionModel(t)
-	m.slots.ToggleBodySelection(1, aspect.Mars)
+	m.slots.ToggleObjectSelection(1, objMars)
 	m.previewActive = true
 	m, _ = m.requestImageNow()
 	st := imageState(m)

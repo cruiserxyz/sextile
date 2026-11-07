@@ -104,7 +104,7 @@ func TestConsoleArgvTaste(t *testing.T) {
 			for _, where := range []string{"newest", "mid"} {
 				t.Run(size.name+"-"+where+"-"+cfg.name, func(t *testing.T) {
 					m := consoleArgvModel(t, cfg.cfg, size.w, size.h)
-					m, _ = press(t, m, ",", "l")
+					m, _ = press(t, m, ",", "l", "l")
 					if where == "mid" {
 						for i := 0; i < 20; i++ {
 							m, _ = press(t, m, "up")
@@ -135,7 +135,7 @@ func consoleArgvErrorModel(t *testing.T, cfg Config) Model {
 	})
 	m = withSceneColumns(m)
 	m.bodyCursorIdx = 2
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	return m
 }
 

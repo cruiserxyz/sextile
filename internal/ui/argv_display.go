@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"regexp"
 	"strings"
 
@@ -31,13 +32,13 @@ func argvDisplay(line string, w int, cfg Config) string {
 	head := argvShortName + " "
 	if pairs := hookClearPair.FindAllStringIndex(line, -1); len(pairs) > 0 {
 		rest = strings.TrimSpace(line[pairs[len(pairs)-1][1]:])
-		head += cutMark(cfg) + " "
+		head += term.CutMark(cfg) + " "
 	}
 	whole := strings.TrimRight(head+rest, " ")
 	if w <= 0 || ansi.StringWidth(whole) <= w {
 		return whole
 	}
-	return cutRight(whole, w, cfg)
+	return term.CutRight(whole, w, cfg)
 }
 
 // firstWordEnd is where the line's first shell word ends: the binary's path,

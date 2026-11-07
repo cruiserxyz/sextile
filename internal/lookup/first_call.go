@@ -56,6 +56,16 @@ func (p *Probers) positionsOnly() ChartComputer {
 	return astrolog.ComputeChartPositionsOnly
 }
 
+// probe returns the compute a body probe uses: Probers.PositionsOnly when set
+// (a test's stub), otherwise astrolog.ComputeChartProbe, which lets the
+// missing-ephemeris lines through as file names.
+func (p *Probers) probe() ChartComputer {
+	if p != nil && p.PositionsOnly != nil {
+		return p.PositionsOnly
+	}
+	return astrolog.ComputeChartProbe
+}
+
 // probersFromComputer wraps a single ChartComputer as Probers where
 // both Full and PositionsOnly point at the same stub. Preserves
 // backward compatibility for callers that haven't migrated to

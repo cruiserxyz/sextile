@@ -16,44 +16,31 @@ import (
 // "East Po", "6th Cus", "11th Cu", "Kaus Au", "Zeta Re" -- once made the whole
 // row vanish from the Aspects panel without a word.
 
-// sides is an aspect's two sides by name: the printed label of an untyped
-// side, the enum name of a typed one.
+// sides is an aspect's two sides by name: the registry name of each side's
+// Object.
 func sides(a aspect.Aspect) [2]string {
-	name := func(b aspect.Body, label string) string {
-		if b == aspect.BodyUnknown {
-			return label
-		}
-		return b.String()
-	}
-	return [2]string{name(a.A, a.ALabel), name(a.B, a.BLabel)}
+	return [2]string{a.AObject.Name, a.BObject.Name}
 }
 
 func hasSides(a aspect.Aspect, x, y string) bool {
+	// A side's registry name may be longer than the text Astrolog printed in
+	// its seven-cell column, so the printed text is a prefix of it.
+	same := func(side, printed string) bool { return side == printed || strings.HasPrefix(side, printed) }
 	s := sides(a)
-	return (s[0] == x && s[1] == y) || (s[0] == y && s[1] == x)
+	return (same(s[0], x) && same(s[1], y)) || (same(s[0], y) && same(s[1], x))
 }
 
 // isPrinted reports whether one parsed side is the object Astrolog printed as
-// `printed` (a name, or its seven-cell cut). A typed side is checked against
-// the bodyNames table's DATA, not through resolveAspectBody, so a wrong
-// resolution cannot agree with itself.
-func isPrinted(b aspect.Body, label, printed string) bool {
-	if b == aspect.BodyUnknown {
-		return label == printed
-	}
-	for _, e := range bodyNames {
-		if e.body == b {
-			return e.name == printed || (len(e.name) > 7 && e.name[:7] == printed)
-		}
-	}
-	return false
+// `printed` (a name, or its seven-cell cut).
+func isPrinted(o aspect.Object, printed string) bool {
+	return o.Name != "" && strings.HasPrefix(o.Name, printed)
 }
 
 // pairIs: the aspect's two sides are exactly the two printed names, in either
-// order (NewLabelledAspect may swap them).
+// order (NewObjectAspect may swap them).
 func pairIs(a aspect.Aspect, x, y string) bool {
-	return (isPrinted(a.A, a.ALabel, x) && isPrinted(a.B, a.BLabel, y)) ||
-		(isPrinted(a.A, a.ALabel, y) && isPrinted(a.B, a.BLabel, x))
+	return (isPrinted(a.AObject, x) && isPrinted(a.BObject, y)) ||
+		(isPrinted(a.AObject, y) && isPrinted(a.BObject, x))
 }
 
 func TestParseAspects_KeepsEveryCutOffFirstName(t *testing.T) {
@@ -63,16 +50,16 @@ func TestParseAspects_KeepsEveryCutOffFirstName(t *testing.T) {
 		kind aspect.AspectKind
 	}{
 		{"  14: 5th Cus [Tau] Con [Tau] 6th Cusp   - orb: a0:12' - power:  4.10", "5th Cus", "6th Cusp", aspect.Conjunction},
-		{"  18: East Po (Ari) Squ (Cap) Midheaven  - orb: s0:14' - power:  6.65", "East Po", aspect.Midheaven.String(), aspect.Square},
+		{"  18: East Po (Ari) Squ (Cap) Midheaven  - orb: s0:14' - power:  6.65", "East Po", objMidheaven.Name, aspect.Square},
 		{"  11: 11th Cu (Leo) Con [Leo] Zeus       - orb: s0:39' - power:  3.00", "11th Cu", "Zeus", aspect.Conjunction},
 		{"   7: Kaus Au (Cap) Tri (Tau) Zeta Retic - orb: a1:02' - power:  1.20", "Kaus Au", "Zeta Retic", aspect.Trine},
 		{"   9: Zeta Re (Ari) Sex (Gem) Kaus Austr - orb: s0:40' - power:  1.10", "Zeta Re", "Kaus Austr", aspect.Sextile},
 		// Controls: the second-name side, and a two-word typed name, as before.
-		{"  89: Neptune [Ari] Con (Ari) East Point - orb: a0:58' - power:  3.08", aspect.Neptune.String(), "East Point", aspect.Conjunction},
-		{"   3:     Sun (Ari) Tri (Leo) North Node - orb: a2:00' - power:  5.00", aspect.Sun.String(), aspect.NorthNode.String(), aspect.Trine},
-		{"   4: North N (Leo) Opp (Aqu) Moon       - orb: s1:00' - power:  5.00", aspect.NorthNode.String(), aspect.Moon.String(), aspect.Opposition},
+		{"  89: Neptune [Ari] Con (Ari) East Point - orb: a0:58' - power:  3.08", objNeptune.Name, "East Point", aspect.Conjunction},
+		{"   3:     Sun (Ari) Tri (Leo) North Node - orb: a2:00' - power:  5.00", objSun.Name, objNorthNode.Name, aspect.Trine},
+		{"   4: North N (Leo) Opp (Aqu) Moon       - orb: s1:00' - power:  5.00", objNorthNode.Name, objMoon.Name, aspect.Opposition},
 	} {
-		got := parseAspects(tc.line)
+		got := parseAspects(tc.line, testRegistry(t))
 		if len(got) != 1 || !hasSides(got[0], tc.x, tc.y) || got[0].Kind != tc.kind {
 			var s []string
 			for _, a := range got {
@@ -91,7 +78,7 @@ func TestParseAspects_KeepsEveryCutOffFirstName(t *testing.T) {
 		"  23: Midheav (Cap) Squ <Ari> Hygiea     - orb: s1:19' - power:  5.84",
 		"  24:  Hygiea <Ari> Con <Ari> Eris       - orb: s0:00' - power: 27.50",
 	} {
-		if got := parseAspects(line); len(got) != 0 {
+		if got := parseAspects(line, testRegistry(t)); len(got) != 0 {
 			t.Errorf("%q parsed as %v, want no aspect", line, sides(got[0]))
 		}
 	}
@@ -125,7 +112,7 @@ func TestEveryAstrologObjectParsesOnEitherSide(t *testing.T) {
 			{fmt.Sprintf("  1: %s (Ari) Con (Ari) %-10s - orb: a0:20' - power:  9.51", first, partner), f},
 			{fmt.Sprintf("  1: %7s (Ari) Con (Ari) %s%s - orb: a0:20' - power:  9.51", partner, second, pad), second},
 		} {
-			got := parseAspects(tc.line)
+			got := parseAspects(tc.line, testRegistry(t))
 			if len(got) != 1 || !pairIs(got[0], tc.x, partner) || got[0].Kind != aspect.Conjunction {
 				t.Errorf("object %d %q: %q not read as %q / %q", o.Number, o.Name, tc.line, tc.x, partner)
 			}
@@ -137,9 +124,9 @@ func TestEveryAstrologObjectParsesOnEitherSide(t *testing.T) {
 			{fmt.Sprintf("  1: %s (Ari) Con with (Ari) %-10s - orb: a0:20' - power:  9.51", first, partner), f, partner},
 			{fmt.Sprintf("  1: %7s (Ari) Con with (Ari) %s%s - orb: a0:20' - power:  9.51", partner, second, pad), partner, second},
 		} {
-			got := parseCrossAspects(tc.line)
-			if len(got) != 1 || !isPrinted(got[0].Primary, got[0].PrimaryLabel, tc.first) ||
-				!isPrinted(got[0].Secondary, got[0].SecondaryLabel, tc.second) {
+			got := parseCrossAspects(tc.line, testRegistry(t))
+			if len(got) != 1 || !isPrinted(got[0].PrimaryObject, tc.first) ||
+				!isPrinted(got[0].SecondaryObject, tc.second) {
 				t.Errorf("object %d %q: comparing row %q not read as %q with %q", o.Number, o.Name, tc.line, tc.first, tc.second)
 			}
 		}
@@ -154,9 +141,12 @@ func TestEveryPrintedAspectRowIsKept(t *testing.T) {
 	if _, err := exec.LookPath("astrolog"); err != nil {
 		t.Skip("astrolog not on PATH")
 	}
+	// -R1 switches every object on, including ones whose ephemeris file this
+	// share lacks: the call collects those lines, this test reads aspect rows.
+	var files []string
 	out, _, err := spawn(context.Background(), testCall([]string{
 		"-qa", "3", "21", "1985", "14:30", "0", "0:10W", "51:30N", "-R1", "-aa",
-	}))
+	}).reportingMissing(&files).probingCall())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +173,7 @@ func TestEveryPrintedAspectRowIsKept(t *testing.T) {
 				}
 			}
 		}
-		got := parseAspects(line)
+		got := parseAspects(line, testRegistry(t))
 		if strings.ContainsAny(line, "<>") {
 			if len(got) != 0 {
 				t.Errorf("a body with no speed was kept: %q", line)

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -126,7 +128,7 @@ func TestScrollTasteAccessible(t *testing.T) {
 // still pinned.
 func TestScrollTasteNothingToScroll(t *testing.T) {
 	forceColor(t)
-	short := strings.Join(detailsReportLines(influenceReport(t))[:23], "\n")
+	short := strings.Join(panel.ReportLines(influenceReport(t))[:23], "\n")
 	for _, tc := range []struct {
 		name string
 		cfg  Config
@@ -139,7 +141,7 @@ func TestScrollTasteNothingToScroll(t *testing.T) {
 			m.details.body = short
 			view := m.View()
 			assertFrameGeometry(t, view, 144, 40)
-			for _, glyph := range []string{scrollThumbGlyph, scrollThumbASCII} {
+			for _, glyph := range []string{pane.ThumbGlyph, pane.ThumbASCII} {
 				if strings.Contains(view, glyph) {
 					t.Errorf("a frame with nothing hidden drew %q", glyph)
 				}
@@ -167,14 +169,14 @@ func TestScrollTasteContactSheet(t *testing.T) {
 	v1.WriteString("The 52-line an earlier change influence chart in the 30-row Details panel at 132x40: offsets 0, 11 and 22 (the last page).\n")
 	v1.WriteString("The thumb replaces the right border glyph and inherits the border colour, so it brightens with focus.\n\n")
 	for _, variant := range thumbs {
-		restore := scrollThumbGlyph
-		scrollThumbGlyph = variant.glyph
+		restore := pane.ThumbGlyph
+		pane.ThumbGlyph = variant.glyph
 		for _, offset := range []int{0, 11, 22} {
 			m := scrollTasteModel(t, Config{Color: ColorAlways}, 132, 40, offset, PanelChart)
 			v1.WriteString("==== Variant " + variant.name + " | offset " + strconv.Itoa(offset) + " ====\n")
 			v1.WriteString(m.View() + "\n\n")
 		}
-		scrollThumbGlyph = restore
+		pane.ThumbGlyph = restore
 	}
 	writeTasteSheet(t, "t102-v1-details-thumb.txt", v1.String())
 
@@ -188,14 +190,14 @@ func TestScrollTasteContactSheet(t *testing.T) {
 	v2.WriteString("Bodies holds 18 rows (14 planets + 4 angles). At 132x40 it has 26 inner rows and nothing clips,\n")
 	v2.WriteString("so the clipped frames are 132x24 and 80x24; the rule renders in both, the thumb only where rows are hidden.\n\n")
 	for _, variant := range rules {
-		restore := panelRuleGlyph
-		panelRuleGlyph = variant.glyph
+		restore := pane.RuleGlyph
+		pane.RuleGlyph = variant.glyph
 		for _, size := range []struct{ w, h int }{{132, 24}, {80, 24}, {132, 40}} {
 			m := scrollTasteModel(t, Config{Color: ColorAlways}, size.w, size.h, 11, PanelBodies)
 			v2.WriteString("==== Variant " + variant.name + " | " + strconv.Itoa(size.w) + "x" + strconv.Itoa(size.h) + " ====\n")
 			v2.WriteString(m.View() + "\n\n")
 		}
-		panelRuleGlyph = restore
+		pane.RuleGlyph = restore
 	}
 	writeTasteSheet(t, "t102-v2-bodies-rule.txt", v2.String())
 

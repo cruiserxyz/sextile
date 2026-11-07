@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/location"
@@ -10,7 +11,7 @@ import (
 
 // The step 1 — the characterization net for the chassis lift.
 //
-// `atlas_modal.go` is about to give up its filtered list, cursor and search
+// `atlas_modal_model.go` is about to give up its filtered list, cursor and search
 // editor to a shared fuzzy-checklist chassis that the aspect chooser and the
 // body selector will both bind (the specification C8a,
 // docs/99-archive/the specification). Before the lift, atlas was proven by exactly
@@ -47,13 +48,13 @@ func liftPlaces() []location.PlaceInfo {
 // liftState builds a state through the REAL refilter(), so the goldens
 // characterize the shipped pipeline and not a hand-assembled match list.
 func liftState(filter string, cursor int) atlasModalState {
-	// filterText is promoted from the embedded chassis, so it is assigned
+	// FilterText is promoted from the embedded chassis, so it is assigned
 	// rather than set in the literal — Go does not allow a promoted field in
 	// a composite literal.
-	st := atlasModalState{index: location.NewIndex(liftPlaces())}
-	st.filterText = filter
-	st.refilter()
-	st.cursor = cursor
+	st := atlasModalState{Atlas: popup.Atlas{Index: location.NewIndex(liftPlaces())}}
+	st.FilterText = filter
+	st.Refilter()
+	st.Cursor = cursor
 	return st
 }
 
@@ -65,7 +66,7 @@ func liftState(filter string, cursor int) atlasModalState {
 // It is gated on `state.truncated && len(lines) < height`, but the rows are
 // built from `visible := matches[:height]`, so len(lines) == height exactly
 // when the list was capped. The hint can only appear if the viewport is taller
-// than the 200-row cap. atlas_modal.go's own comment says "The truncation hint
+// than the 200-row cap. atlas_modal_model.go's own comment says "The truncation hint
 // surfaces to the user"; it does not.
 //
 // This golden therefore pins the CURRENT behaviour — a capped list fills the
@@ -82,9 +83,9 @@ func liftCappedState() atlasModalState {
 			TZ:      "UTC",
 		})
 	}
-	st := atlasModalState{index: location.NewIndex(places)}
-	st.filterText = "cityville"
-	st.refilter()
+	st := atlasModalState{Atlas: popup.Atlas{Index: location.NewIndex(places)}}
+	st.FilterText = "cityville"
+	st.Refilter()
 	return st
 }
 
@@ -137,8 +138,8 @@ func TestAtlasModalGolden(t *testing.T) {
 func TestAtlasModalGoldenEdgeStates(t *testing.T) {
 	forceColor(t)
 
-	loading := atlasModalState{index: nil}
-	loadErr := atlasModalState{index: location.NewIndex(liftPlaces()), loadErr: errors.New("atlas.as not found")}
+	loading := atlasModalState{Atlas: popup.Atlas{Index: nil}}
+	loadErr := atlasModalState{Atlas: popup.Atlas{Index: location.NewIndex(liftPlaces()), LoadErr: errors.New("atlas.as not found")}}
 
 	cases := []struct {
 		name  string

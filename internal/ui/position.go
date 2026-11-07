@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -69,16 +70,16 @@ func bottomEdgeWithCounter(width int, p listPosition, cfg Config, keyboard bool)
 		return "", false
 	}
 	left, right, dash := "╰", "╯", "─"
-	if cfg.useASCII() {
+	if cfg.UseASCII() {
 		left, right, dash = "+", "+", "-"
 	}
 	border := lipgloss.NewStyle()
 	counter := lipgloss.NewStyle()
-	if cfg.useColor() {
-		border = border.Foreground(panelBorderColor(keyboard, cfg))
-		counter = counter.Foreground(panelBorderColor(false, cfg))
+	if cfg.UseColor() {
+		border = border.Foreground(pane.BorderColour(keyboard, cfg))
+		counter = counter.Foreground(pane.BorderColour(false, cfg))
 		if keyboard {
-			counter = lipgloss.NewStyle().Foreground(focusColourFor(cfg)).Bold(true)
+			counter = lipgloss.NewStyle().Foreground(cfg.FocusColour()).Bold(true)
 		}
 	}
 	return border.Render(left+strings.Repeat(dash, width-3-tw)) +

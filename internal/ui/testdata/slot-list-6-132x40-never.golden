@@ -1,4 +1,4 @@
-╭─[1m▸[1] Chart[0m───────────────────────────────────────╮╭─[0] Chart …──────────────────────────────────────────────────────────────────╮
+╭─[1m▸[1] Chart[0m───────────────────────────────────────╮╭─[0] Synthetic Birch──────────────────────────────────────────────────────────╮
 │  ① Synthetic Aster  Wed Jan 11, 1961  1:01   WhTr││                                                                              │
 │[1m[7m▶   Synthetic Birch  Mon Feb 12, 1962  1:02   WhTr[0m││                                                                              │
 │  ② Synthetic Cedar  Wed Mar 13, 1963  1:03   WhTr││                                                                              │
@@ -37,4 +37,4 @@
 │                                                  ││                                                                              │
 │                                                  ││                                                                              │
 ╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Report: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | … | Help: ? | Quit: q   
+ Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | … | Help: ? | Quit: q              

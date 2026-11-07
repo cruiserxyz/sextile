@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -52,16 +54,16 @@ func renderTabbedBox(strip tabStrip, width, height int, focused bool, cfg Config
 
 	border := lipgloss.RoundedBorder()
 	leftCorner, rightCorner, dash := "╭", "╮", "─"
-	if cfg.useASCII() {
+	if cfg.UseASCII() {
 		border = asciiBorder
 		leftCorner, rightCorner, dash = "+", "+", "-"
 	}
 
-	borderColor := panelBorderColor(focused, cfg)
-	titleColor := titleColour
+	borderColor := pane.BorderColour(focused, cfg)
+	titleColor := term.TitleColour
 	bold := false
 	if focused {
-		titleColor = focusColourFor(cfg)
+		titleColor = cfg.FocusColour()
 		bold = true
 	}
 
@@ -71,7 +73,7 @@ func renderTabbedBox(strip tabStrip, width, height int, focused bool, cfg Config
 		Border(border, false, true, true, true).
 		Width(width - 2).
 		Height(height - 2)
-	if cfg.useColor() {
+	if cfg.UseColor() {
 		bodyStyle = bodyStyle.BorderForeground(borderColor)
 	}
 
@@ -87,7 +89,7 @@ func padBody(body string, innerWidth, innerHeight int, cfg Config) string {
 	}
 	lines := strings.Split(body, "\n")
 	for i, ln := range lines {
-		lines[i] = cutRight(ln, innerWidth, cfg)
+		lines[i] = term.CutRight(ln, innerWidth, cfg)
 	}
 	if len(lines) > innerHeight {
 		lines = lines[len(lines)-innerHeight:]
@@ -119,7 +121,7 @@ var tabChromeDim = false
 func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss.Color, bold bool, cfg Config, leftCorner, rightCorner, dash string) string {
 	borderStyle := lipgloss.NewStyle()
 	titleStyle := lipgloss.NewStyle()
-	if cfg.useColor() {
+	if cfg.UseColor() {
 		borderStyle = borderStyle.Foreground(borderColor)
 		titleStyle = titleStyle.Foreground(titleColor)
 	}
@@ -135,9 +137,9 @@ func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss
 	// With colours off the focused title is marked, because there is no green
 	// to say where the keyboard is (the specification C2).
 	mark := ""
-	if bold && !cfg.useColor() && maxCells > 0 {
+	if bold && !cfg.UseColor() && maxCells > 0 {
 		mark = focusMarkUnicode
-		if cfg.useASCII() {
+		if cfg.UseASCII() {
 			mark = focusMarkASCII
 		}
 		maxCells--
@@ -149,7 +151,7 @@ func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss
 		if len(strip.tabs) == 1 {
 			title += strip.tabs[0].Title
 		}
-		title = cutRight(title, maxCells, cfg)
+		title = term.CutRight(title, maxCells, cfg)
 		segment = titleStyle.Render(mark + title)
 	} else {
 		segment = renderTabStrip(strip, maxCells, titleStyle, bold, cfg)
@@ -160,7 +162,7 @@ func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss
 	// A title that ends with a glyph a terminal may draw wide is given its space
 	// before the dashes ("② in ① ─"), or the glyph would spill onto the border.
 	// The cell is a real one: trailing, below, is what is left of the width.
-	if endsWithRoomyGlyph(segment) {
+	if term.EndsWithRoomyGlyph(segment) {
 		segment += " "
 	}
 	segW := lipgloss.Width(segment)
@@ -182,7 +184,7 @@ func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss
 // color the active title is green (bold only while focused), inactive titles
 // stay title gray, and the chrome follows tabChromeDim.
 func renderTabStrip(strip tabStrip, maxCells int, titleStyle lipgloss.Style, bold bool, cfg Config) string {
-	useColor := cfg.useColor()
+	useColor := cfg.UseColor()
 	runs := layoutTabStrip(strip.prefix, strip.tabs, strip.active, !useColor, maxCells, cfg)
 	if !useColor {
 		var sb strings.Builder
@@ -198,11 +200,11 @@ func renderTabStrip(strip tabStrip, maxCells int, titleStyle lipgloss.Style, bol
 	chromeStyle := titleStyle.Bold(false)
 	prefixStyle := titleStyle
 	if tabChromeDim {
-		dim := lipgloss.NewStyle().Foreground(dimTabChromeColor)
+		dim := lipgloss.NewStyle().Foreground(term.DimTabChromeColor)
 		chromeStyle, prefixStyle = dim, dim
 	}
-	activeStyle := lipgloss.NewStyle().Foreground(focusColourFor(cfg)).Bold(bold)
-	inactiveStyle := lipgloss.NewStyle().Foreground(inactiveTabColor)
+	activeStyle := lipgloss.NewStyle().Foreground(cfg.FocusColour()).Bold(bold)
+	inactiveStyle := lipgloss.NewStyle().Foreground(term.InactiveTabColor)
 	var sb strings.Builder
 	for i, r := range runs {
 		switch {

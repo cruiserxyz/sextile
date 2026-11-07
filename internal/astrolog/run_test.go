@@ -46,14 +46,14 @@ func TestRunAgainstLiveAstrolog(t *testing.T) {
 	if got := len(out.AspectStyles); got < 10 {
 		t.Errorf("Run returned %d aspect styles, want >= 10", got)
 	}
-	conStyle := out.AspectStyles[astrologstyle.AspectIdentity{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Conjunction}]
+	conStyle := out.AspectStyles[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Conjunction}]
 	if conStyle.First == "" || conStyle.Kind == "" || conStyle.Second == "" {
 		t.Errorf("Sun-Moon conjunction styles incomplete: %#v", conStyle)
 	}
 
 	// The fixture chart is cast at the vernal equinox — the Sun sits close
 	// to 0° Aries (longitude < 2° in tropical coordinates).
-	sun := findPosition(t, out.Positions, aspect.Sun)
+	sun := findPosition(t, out.Positions, objSun)
 	if sun.Longitude > 2.0 {
 		t.Errorf("Sun at vernal equinox expected near 0° Aries, got %v", sun.Longitude)
 	}
@@ -91,7 +91,7 @@ func TestRunPositionsOnlyAgainstLiveAstrolog(t *testing.T) {
 	if got := len(out.Aspects); got != 0 {
 		t.Errorf("RunPositionsOnly returned %d aspects, want 0 (the -a spawn must be skipped)", got)
 	}
-	sun := findPosition(t, out.Positions, aspect.Sun)
+	sun := findPosition(t, out.Positions, objSun)
 	if sun.Longitude > 2.0 {
 		t.Errorf("Sun at vernal equinox expected near 0° Aries, got %v", sun.Longitude)
 	}
@@ -113,6 +113,7 @@ func TestComputeCrossAspectsAgainstLiveAstrologCarriesStyles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("comparison spec: %v", err)
 	}
+	spec.Registry = testRegistry(t)
 	out, err := ComputeCrossAspects(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("ComputeCrossAspects: %v", err)
@@ -121,7 +122,7 @@ func TestComputeCrossAspectsAgainstLiveAstrologCarriesStyles(t *testing.T) {
 		t.Fatalf("cross output missing aspects/styles: aspects=%d styles=%d", len(out.Aspects), len(out.AspectStyles))
 	}
 	first := out.Aspects[0]
-	style := out.AspectStyles[astrologstyle.AspectIdentity{First: first.Primary, Second: first.Secondary, Kind: first.Kind}]
+	style := out.AspectStyles[astrologstyle.AspectIdentity{First: first.PrimaryObject, Second: first.SecondaryObject, Kind: first.Kind}]
 	if style.First == "" || style.Kind == "" || style.Second == "" {
 		t.Fatalf("first cross aspect styles incomplete: aspect=%+v style=%#v", first, style)
 	}
@@ -145,7 +146,7 @@ func TestComputeChart_RestrictionSurfacesFullBodySet(t *testing.T) {
 	if got := len(out.Positions); got != 18 {
 		t.Errorf("ComputeChart returned %d positions, want 18", got)
 	}
-	for _, b := range []aspect.Body{aspect.Chiron, aspect.SouthNode, aspect.Lilith, aspect.Descendant, aspect.ImumCoeli} {
+	for _, b := range []aspect.Object{objChiron, objSouthNode, objLilith, objDescendant, objNadir} {
 		findPosition(t, out.Positions, b) // fatals if the restriction didn't surface it
 	}
 }
@@ -188,7 +189,7 @@ func TestMapAspectStylesCanonicalizesBodyOrderWithSpans(t *testing.T) {
 		FirstName: "Moon", KindName: "Squ", SecondName: "Sun",
 		Style: astrologstyle.AspectStyle{First: "moon", Kind: "square", Second: "sun"},
 	}}
-	got := mapAspectStyles(rows)[astrologstyle.AspectIdentity{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Square}]
+	got := mapAspectStyles(rows, testRegistry(t))[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Square}]
 	if got != (astrologstyle.AspectStyle{First: "sun", Kind: "square", Second: "moon"}) {
 		t.Fatalf("canonical style = %#v", got)
 	}
@@ -199,7 +200,7 @@ func TestMapCrossAspectStylesPreservesPrimarySecondaryRoles(t *testing.T) {
 		FirstName: "Ascenda", KindName: "Sex", SecondName: "Moon",
 		Style: astrologstyle.AspectStyle{First: "primary", Kind: "sextile", Second: "secondary"},
 	}}
-	got := mapCrossAspectStyles(rows)[astrologstyle.AspectIdentity{First: aspect.Ascendant, Second: aspect.Moon, Kind: aspect.Sextile}]
+	got := mapCrossAspectStyles(rows, testRegistry(t))[astrologstyle.AspectIdentity{First: objAscendant, Second: objMoon, Kind: aspect.Sextile}]
 	if got != (astrologstyle.AspectStyle{First: "primary", Kind: "sextile", Second: "secondary"}) {
 		t.Fatalf("cross style = %#v", got)
 	}

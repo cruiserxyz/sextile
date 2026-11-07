@@ -112,31 +112,39 @@ func TestSlots_SelectionIsStoreOwnedAndPerSlot(t *testing.T) {
 		t.Error("SetComparisonSelected(true) did not restore the selected pair")
 	}
 
-	if selected, ok := slots.ToggleBodySelection(0, aspect.Mars); !ok || !selected {
+	if selected, ok := slots.ToggleObjectSelection(0, objMars); !ok || !selected {
 		t.Fatalf("toggle natal Mars = (%v, %v), want (true, true)", selected, ok)
 	}
-	if !slots.HasBodySelections(0) {
+	if !slots.HasMarks(0) {
 		t.Error("natal slot did not report its body selection")
 	}
-	if slots.HasBodySelections(1) {
+	if slots.HasMarks(1) {
 		t.Error("body-selection presence leaked into the floating slot")
 	}
-	if !slots.BodySelected(0, aspect.Mars) {
+	if !slots.ObjectSelected(0, objMars.Number) {
 		t.Error("natal Mars selection was not retained")
 	}
-	if slots.BodySelected(1, aspect.Mars) {
+	if slots.ObjectSelected(1, objMars.Number) {
 		t.Error("natal Mars selection leaked into the floating slot")
 	}
-	if _, ok := slots.ToggleBodySelection(99, aspect.Mars); ok {
+	if _, ok := slots.ToggleObjectSelection(99, objMars); ok {
 		t.Error("invalid slot index was accepted")
 	}
-	if _, ok := slots.ToggleBodySelection(0, aspect.BodyUnknown); ok {
-		t.Error("unknown body was accepted")
+	if _, ok := slots.ToggleObjectSelection(0, aspect.Object{}); ok {
+		t.Error("the zero object was accepted")
 	}
-	if selected, ok := slots.ToggleBodySelection(0, aspect.Mars); !ok || selected || slots.HasBodySelections(0) {
-		t.Fatalf("clearing last natal body selection = (%v, %v, has=%v), want (false, true, false)", selected, ok, slots.HasBodySelections(0))
+	if selected, ok := slots.ToggleObjectSelection(0, objMars); !ok || selected || slots.HasMarks(0) {
+		t.Fatalf("clearing last natal body selection = (%v, %v, has=%v), want (false, true, false)", selected, ok, slots.HasMarks(0))
 	}
 }
+
+// Astrolog's own numbers and names for the objects these tests mark.
+var (
+	objSun     = aspect.Object{Number: 1, Name: "Sun"}
+	objMoon    = aspect.Object{Number: 2, Name: "Moon"}
+	objMars    = aspect.Object{Number: 5, Name: "Mars"}
+	objFortune = aspect.Object{Number: 19, Name: "Fortune"}
+)
 
 func TestSlots_CopySelectionsFromPreservesWorkspaceRoles(t *testing.T) {
 	place := location.PlaceInfo{Name: "Berlin", Country: "DE", TZ: "Europe/Berlin"}
@@ -151,8 +159,8 @@ func TestSlots_CopySelectionsFromPreservesWorkspaceRoles(t *testing.T) {
 	previous.ToggleSlotSelection(0) // adding selects nothing; select the pair explicitly
 	previous.ToggleSlotSelection(1)
 	previous.ToggleSlotSelection(1) // floating off; anchor remains on
-	previous.ToggleBodySelection(0, aspect.Sun)
-	previous.ToggleBodySelection(1, aspect.Moon)
+	previous.ToggleObjectSelection(0, objSun)
+	previous.ToggleObjectSelection(1, objMoon)
 
 	next, err := NewSlots(time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC), place)
 	if err != nil {
@@ -167,7 +175,7 @@ func TestSlots_CopySelectionsFromPreservesWorkspaceRoles(t *testing.T) {
 		t.Errorf("slot selections not copied by role: anchor=%v floating=%v comparison=%v",
 			next.SlotSelected(0), next.SlotSelected(1), next.ComparisonSelected())
 	}
-	if !next.BodySelected(0, aspect.Sun) || !next.BodySelected(1, aspect.Moon) {
+	if !next.ObjectSelected(0, objSun.Number) || !next.ObjectSelected(1, objMoon.Number) {
 		t.Error("per-slot body selections were not copied")
 	}
 }
@@ -388,7 +396,7 @@ func TestOnlyFloatingTimeMoves(t *testing.T) {
 	for name, step := range steps {
 		t.Run(name, func(t *testing.T) {
 			slots := listSlots(t, 7)
-			slots.ToggleBodySelection(2, aspect.Mars)
+			slots.ToggleObjectSelection(2, objMars)
 			beforeAnchored := make([]Slot, 0, 7)
 			for _, s := range slots.All()[:7] {
 				beforeAnchored = append(beforeAnchored, *s)

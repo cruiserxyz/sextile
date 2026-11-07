@@ -15,6 +15,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -48,37 +49,35 @@ func transitLongitude(when time.Time) float64    { return float64(when.Year()%36
 func stubColumnLookups(t *testing.T, failNatal func(store.AnchorChart) bool) *columnCalls {
 	t.Helper()
 	calls := &columnCalls{}
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
-	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		calls.mu.Lock()
-		calls.natal = append(calls.natal, c)
-		calls.mu.Unlock()
-		if failNatal != nil && failNatal(c) {
-			return lookup.Result{Commands: []string{"astrolog failing natal"}}, errors.New("astrolog: exit status 1")
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			calls.mu.Lock()
+			calls.natal = append(calls.natal, c)
+			calls.mu.Unlock()
+			if failNatal != nil && failNatal(c) {
+				return lookup.Result{Commands: []string{"astrolog failing natal"}}, errors.New("astrolog: exit status 1")
+			}
+			return lookup.Result{
+				Positions: []aspect.Position{{Object: objSun, Longitude: natalLongitude(c)}},
+				Commands:  []string{"astrolog natal"},
+			}, nil
 		}
-		return lookup.Result{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: natalLongitude(c)}},
-			Commands:  []string{"astrolog natal"},
-		}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		calls.mu.Lock()
-		calls.transit = append(calls.transit, when)
-		calls.mu.Unlock()
-		return lookup.Result{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: transitLongitude(when)}},
-			Commands:  []string{"astrolog transit"},
-		}, nil
-	}
-	overlayCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-		return lookup.OverlayAspects{Report: "transit cross"}, nil
-	}
-	synastryCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel) (lookup.OverlayAspects, error) {
-		return lookup.OverlayAspects{Report: "synastry cross"}, nil
-	}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			calls.mu.Lock()
+			calls.transit = append(calls.transit, when)
+			calls.mu.Unlock()
+			return lookup.Result{
+				Positions: []aspect.Position{{Object: objSun, Longitude: transitLongitude(when)}},
+				Commands:  []string{"astrolog transit"},
+			}, nil
+		}
+		s.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
+			return lookup.OverlayAspects{Report: "transit cross"}, nil
+		}
+		s.cast.synastry = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel) (lookup.OverlayAspects, error) {
+			return lookup.OverlayAspects{Report: "synastry cross"}, nil
+		}
+	})
 	return calls
 }
 
@@ -112,12 +111,12 @@ func TestBodiesColumnEqualsThatChartAlone(t *testing.T) {
 	for i, slot := range shown {
 		var alone FirstFrameReadyMsg
 		if slot.Floating {
-			alone = computeChartCmd(context.Background(), 1, 1, nil, m.targetFloatingTime, m.place, m.lens)().(FirstFrameReadyMsg)
+			alone = computeChartCmd(context.Background(), 1, 1, testCast(t), nil, m.targetFloatingTime, m.place, m.lens)().(FirstFrameReadyMsg)
 		} else {
-			alone = computeNatalSingleCmd(context.Background(), 1, 1, nil, anchorOf(slot), m.lens)().(FirstFrameReadyMsg)
+			alone = computeNatalSingleCmd(context.Background(), 1, 1, testCast(t), nil, anchorOf(slot), m.lens)().(FirstFrameReadyMsg)
 		}
-		if len(alone.Positions) == 0 || len(cols[i].positions) != len(alone.Positions) || cols[i].positions[0] != alone.Positions[0] {
-			t.Errorf("column %d (%s): %v, want the alone frame's %v", i+1, cols[i].label, cols[i].positions, alone.Positions)
+		if len(alone.Positions) == 0 || len(cols[i].Positions) != len(alone.Positions) || cols[i].Positions[0] != alone.Positions[0] {
+			t.Errorf("column %d (%s): %v, want the alone frame's %v", i+1, cols[i].Label, cols[i].Positions, alone.Positions)
 		}
 		seen[alone.Positions[0].Longitude] = true
 	}
@@ -172,7 +171,7 @@ func TestColumnsRecomputeOnlyWhatMoved(t *testing.T) {
 		t.Errorf("time step: %d natal and %d transit lookups, want 0 and 1", n, tr)
 	}
 	cols, ok := m.bodyColumnsForScene()
-	if !ok || len(cols) != 4 || cols[3].positions[0].Longitude != transitLongitude(m.slots.Floating().Time) {
+	if !ok || len(cols) != 4 || cols[3].Positions[0].Longitude != transitLongitude(m.slots.Floating().Time) {
 		t.Errorf("after the step the floating column is %v (ok=%v), want the new moment's", cols, ok)
 	}
 	// The cache holds only the charts on screen.
@@ -202,13 +201,13 @@ func TestOneFailedChartLeavesItsColumnBlank(t *testing.T) {
 	}
 	for i, c := range cols {
 		if i == 2 {
-			if c.err == nil || len(c.positions) != 0 {
-				t.Errorf("failed column ③: err %v positions %v, want an error and no positions", c.err, c.positions)
+			if c.Err == nil || len(c.Positions) != 0 {
+				t.Errorf("failed column ③: err %v positions %v, want an error and no positions", c.Err, c.Positions)
 			}
 			continue
 		}
-		if c.err != nil || len(c.positions) == 0 {
-			t.Errorf("column %d: err %v positions %v, want its positions", i+1, c.err, c.positions)
+		if c.Err != nil || len(c.Positions) == 0 {
+			t.Errorf("column %d: err %v positions %v, want its positions", i+1, c.Err, c.Positions)
 		}
 	}
 	// Render half (C8): ③'s twelve cells are blank on every row, ① ② ④ show.
@@ -220,12 +219,12 @@ func TestOneFailedChartLeavesItsColumnBlank(t *testing.T) {
 		if !strings.Contains(line, "Sun") {
 			continue
 		}
-		if cell := ansi.Strip(ansi.Cut(line, 11+2*bodiesColumnWidth, 11+3*bodiesColumnWidth)); strings.Trim(cell, " []") != "" {
+		if cell := ansi.Strip(ansi.Cut(line, 11+2*panel.BodiesColumnWidth, 11+3*panel.BodiesColumnWidth)); strings.Trim(cell, " []") != "" {
 			t.Errorf("failed column ③ is not blank on the Sun row: %q in %q", cell, ansi.Strip(line))
 		}
 		for _, want := range []float64{natalLongitude(anchorOf(m.slots.All()[0])), natalLongitude(anchorOf(m.slots.All()[1])), transitLongitude(m.slots.Floating().Time)} {
-			signIdx, deg, min := splitLongitude(want)
-			if cell := fmt.Sprintf("%s %2d°%02d'", signAbbrevString(signIdx), deg, min); !strings.Contains(line, cell) {
+			signIdx, deg, min := panel.SplitLongitude(want)
+			if cell := fmt.Sprintf("%s %2d°%02d'", panel.SignAbbrevString(signIdx), deg, min); !strings.Contains(line, cell) {
 				t.Errorf("Sun row lacks %q of a chart that did cast: %q", cell, line)
 			}
 		}
@@ -299,7 +298,7 @@ func withSceneColumns(m Model) Model {
 		return m
 	}
 	shown := m.shownColumns(sc, m.slots.Floating().Time)
-	cols := make([]bodyColumn, 0, len(shown))
+	cols := make([]panel.BodyColumn, 0, len(shown))
 	for i, id := range shown {
 		ps := m.chart.positions
 		cusps := m.chart.cusps
@@ -317,7 +316,7 @@ func withSceneColumns(m Model) Model {
 				}
 			}
 		}
-		cols = append(cols, bodyColumn{key: id.key, label: id.label, positions: ps, cusps: cusps})
+		cols = append(cols, panel.BodyColumn{Label: id.label, Positions: ps, Cusps: cusps})
 	}
 	m.chart.columns, m.chart.columnsFor = cols, shown
 	return m

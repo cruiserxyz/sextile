@@ -21,7 +21,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/payload"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // spawnRecord is one logged Astrolog process: its argv and the staged chart
@@ -57,7 +56,7 @@ func slotRecordingAstrolog(t *testing.T) func() []spawnRecord {
 		"  *\" -Xo \"*) exit 0 ;;\n" +
 		"  *\" -rt \"*|*\" -r0 \"*) exec /bin/cat " + strconv.Quote(filepath.Join(fix, "cross-k.txt")) + " ;;\n" +
 		"  *\" -aa \"*) exec /bin/cat " + strconv.Quote(filepath.Join(fix, "aspects-k.txt")) + " ;;\n" +
-		"  *) exec /bin/cat " + strconv.Quote(filepath.Join(fix, "positions-k.txt")) + " ;;\n" +
+		"  *) exec /usr/bin/python3 -I " + strconv.Quote(filepath.Join(fix, "replay-positions.py")) + " " + strconv.Quote(filepath.Join(fix, "positions-k.txt")) + " \"$@\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(filepath.Join(dir, "astrolog"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -159,11 +158,11 @@ func TestSlotInstantIsOneWholeSecond(t *testing.T) {
 				probe          bool
 			}{
 				{"CrossBodyRawReport", func() error {
-					_, _, err := CrossBodyRawReport(ctx, Hellenistic, natal, c.s, place, aspect.Sun)
+					_, _, err := CrossBodyRawReport(ctx, Hellenistic, natal, c.s, place, objSun)
 					return err
 				}, ps, ss, false},
 				{"SynastryCrossBodyRawReport", func() error {
-					_, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, c.s, place, store.ReportLabel{}, aspect.Sun)
+					_, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, c.s, place, store.ReportLabel{}, objSun)
 					return err
 				}, ps, ss, false},
 				{"OverlayCrossAspects", func() error {

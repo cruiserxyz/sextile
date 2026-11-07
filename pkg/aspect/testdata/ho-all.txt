@@ -1,0 +1,138 @@
+Astrolog planets and objects:
+Num. Name       Rule     Detriment Exalt Fall Esoteric Hierarchical Ray
+
+  0 Earth       Sag      Gem       Tau   Sco  Sag      Gem          3
+  1 Sun         Leo      Aqu       Ari   Lib  Leo      Leo          2
+  2 Moon        Can      Cap       Tau   Sco  Vir      Aqu          4
+  3 Mercury     Gem Vir  Sag Pis   Vir   Pis  Ari      Sco          4
+  4 Venus       Lib Tau  Ari Sco   Pis   Vir  Gem      Cap          5
+  5 Mars        Ari Sco  Lib Tau   Cap   Can  Sco      Sag          6
+  6 Jupiter     Sag Pis  Gem Vir   Can   Cap  Aqu      Vir          2
+  7 Saturn      Cap Aqu  Can Leo   Lib   Ari  Cap      Lib          3
+  8 Uranus      Aqu      Leo       Sco   Tau  Lib      Ari Leo      7
+  9 Neptune     Pis      Vir       Can   Cap  Can Leo  Can          6
+ 10 Pluto       Sco      Tau       Aqu   Leo  Pis      Pis          1
+ 11 Chiron      Sag      Gem       Pis   Vir                  
+ 12 Ceres       Vir      Pis       Tau   Sco                  
+ 13 Pallas      Aqu      Leo       Cap   Can                  
+ 14 Juno        Lib      Ari       Leo   Aqu                  
+ 15 Vesta       Sco      Tau       Vir   Pis                  
+ 16 North Node  Aqu      Leo       Gem   Sag                  
+ 17 South Node  Leo      Aqu       Sag   Gem                  
+ 18 Lilith      Sco      Tau       Pis   Vir                  
+ 19 Fortune     Pis      Vir       Sag   Gem                  
+ 20 Vertex      Lib      Ari       Pis   Vir                  
+ 21 East Point  Ari      Lib       Cap   Can                  
+ 22 Ascendant   Ari      Lib       Cap   Can  Ari      Ari          1
+ 23 2nd Cusp    Tau      Sco       Pis   Vir  Tau      Tau          4
+ 24 3rd Cusp    Gem      Sag       Vir   Pis  Gem      Gem          2
+ 25 Nadir       Can      Cap       Tau   Sco  Can      Can          3
+ 26 5th Cusp    Leo      Aqu       Ari   Lib  Leo      Leo          1
+ 27 6th Cusp    Vir      Pis       Vir   Pis  Vir      Vir          2
+ 28 Descendant  Lib      Ari       Pis   Vir  Lib      Lib          3
+ 29 8th Cusp    Sco      Tau       Aqu   Leo  Sco      Sco          4
+ 30 9th Cusp    Sag      Gem       Can   Cap  Sag      Sag          5
+ 31 Midheaven   Cap      Can       Lib   Ari  Cap      Cap          7
+ 32 11th Cusp   Aqu      Leo       Sco   Tau  Aqu      Aqu          5
+ 33 12th Cusp   Pis      Vir       Can   Cap  Pis      Pis          6
+ 34 Vulcan      Vir      Pis       Cap   Can  Tau Vir  Tau Aqu      1
+ 35 Cupido      Lib      Ari       Gem   Sag                  
+ 36 Hades       Sco      Tau       Vir   Pis                  
+ 37 Zeus        Leo      Aqu       Ari   Lib                  
+ 38 Kronos      Cap      Can       Sag   Gem                  
+ 39 Apollon     Sag      Gem       Aqu   Leo                  
+ 40 Admetos     Vir      Pis       Sco   Tau                  
+ 41 Vulkanus    Ari      Lib       Leo   Aqu                  
+ 42 Poseidon    Sag      Gem       Pis   Vir                  
+ 43 Hygiea      Vir      Pis       Lib   Ari                  
+ 44 Pholus      Gem      Sag       Ari   Lib                  
+ 45 Eris        Lib      Ari       Gem   Sag                        3
+ 46 Haumea      Can      Cap       Vir   Pis                        2
+ 47 Makemake    Leo      Aqu       Cap   Can                        1
+ 48 Gonggong    Ari      Lib       Sco   Tau                        4
+ 49 Quaoar      Tau      Sco       Lib   Ari                        7
+ 50 Sedna       Gem      Sag       Pis   Vir                        6
+ 51 Orcus       Cap      Can       Aqu   Leo                        5
+ 52 Phobos                                                    
+ 53 Deimos                                                    
+ 54 Ganymede                                                  
+ 55 Callisto                                                  
+ 56 Io                                                        
+ 57 Europa                                                    
+ 58 Titan                                                     
+ 59 Rhea                                                   SwissEph file 'se00010s.se1' not found in PATH '.;:;:ephem;:font;:source;:/usr/local/share/astrolog/'
+   
+ 60 Iapetus                                                   
+ 61 Dione                                                     
+ 62 Tethys                                                    
+ 63 Enceladus                                                 
+ 64 Mimas                                                     
+ 65 Hyperion                                                  
+ 66 Titania                                                   
+ 67 Oberon                                                    
+ 68 Umbriel                                                   
+ 69 Ariel                                                     
+ 70 Miranda                                                   
+ 71 Triton                                                    
+ 72 Proteus                                                   
+ 73 Nereid                                                    
+ 74 Charon                                                    
+ 75 Hydra                                                     
+ 76 Nix                                                       
+ 77 Kerberos                                                  
+ 78 Styx                                                      
+ 79 JupCOB                                                    
+ 80 SatCOB                                                    
+ 81 UraCOB                                                    
+ 82 NepCOB                                                    
+ 83 PluCOB                                                    
+ 84 Sirius      Star # 1  13Can42   -39:35' -1.46
+ 85 Canopus     Star # 2  14Can35   -75:49' -0.74
+ 86 Rigil Kent. Star # 3  29Sco07   -42:35' -0.10
+ 87 Arcturus    Star # 4  23Lib50   +30:45' -0.05
+ 88 Vega        Star # 5  14Cap55   +61:44'  0.03
+ 89 Capella     Star # 6  21Gem28   +22:51'  0.08
+ 90 Rigel       Star # 7  16Gem26   -31:07'  0.13
+ 91 Procyon     Star # 8  25Can24   -16:00'  0.37
+ 92 Betelgeuse  Star # 9  28Gem22   -16:01'  0.42
+ 93 Achernar    Star #10  14Pis55   -59:22'  0.46
+ 94 Agena       Star #11  23Sco23   -44:08'  0.60
+ 95 Altair      Star #12   1Aqu22   +29:18'  0.76
+ 96 Acrux       Star #13  11Sco28   -52:52'  0.81
+ 97 Aldebaran   Star #14   9Gem24   - 5:28'  0.86
+ 98 Antares     Star #15   9Sag22   - 4:33'  0.91
+ 99 Spica       Star #16  23Lib26   - 2:03'  0.97
+100 Pollux      Star #17  22Can50   + 6:40'  1.14
+101 Fomalhaut   Star #18   3Pis28   -21:08'  1.16
+102 Deneb       Star #19   4Pis56   +59:54'  1.25
+103 Becrux      Star #20  11Sco15   -48:38'  1.25
+104 Regulus     Star #21  29Leo26   + 0:27'  1.40
+105 Adara       Star #22  20Can22   -51:21'  1.50
+106 Castor      Star #23  19Can51   +10:05'  1.58
+107 Shaula      Star #24  24Sag11   -13:47'  1.62
+108 Bellatrix   Star #25  20Gem33   -16:49'  1.64
+109 Gacrux      Star #26   6Sco20   -47:49'  1.64
+110 Alnath      Star #27  22Gem11   + 5:22'  1.65
+111 Alnilam     Star #28  23Gem04   -24:30'  1.69
+112 Miaplacidus Star #29   1Sco34   -72:13'  1.69
+113 Alnair      Star #30  15Aqu30   -32:54'  1.71
+114 Alioth      Star #31   8Vir32   +54:18'  1.77
+115 Dubhe       Star #32  14Leo48   +49:40'  1.79
+116 Wezen       Star #33  23Can00   -48:27'  1.84
+117 Kaus Austr. Star #34   4Cap41   -11:02'  1.85
+118 Alkaid      Star #35  26Vir32   +54:23'  1.86
+119 Sargas      Star #36  25Sag12   -19:38'  1.86
+120 Menkalinan  Star #37  29Gem31   +21:30'  1.90
+121 Peacock     Star #38  23Cap25   -36:15'  1.92
+122 Alhena      Star #39   8Can43   - 6:44'  1.92
+123 Avior       Star #40  22Vir44   -72:40'  1.95
+124 Murzim      Star #41   6Can48   -41:15'  1.97
+125 Alphard     Star #42  26Leo53   -22:22'  1.97
+126 Polaris     Star #43  28Gem11   +66:05'  2.02
+127 Algol       Star #44  25Tau47   +22:25'  2.12
+128 Suhail      Star #45  10Vir48   -55:52'  2.21
+129 Alcyone     Star #46  29Tau36   + 4:02'  2.87
+130 Andromeda   Star #47  27Ari28   +33:20'  3.44
+131 Zeta Retic. Star #48  23Pis28   -72:28'  5.54
+132 Galactic C. Star #49  26Sag27   - 5:36' 999.99
+133 Great Attr. Star #50  13Sag33   -38:54' 999.99

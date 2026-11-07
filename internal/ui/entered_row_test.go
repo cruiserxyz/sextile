@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -75,11 +77,11 @@ func skyIngressRow(t *testing.T, rows []lookup.TimelineRow) int {
 func journeyRow(t *testing.T) int { return firstChartRow(t, weekRows(t)) }
 
 func downKeys(n int) []tea.KeyMsg {
-	keys := make([]tea.KeyMsg, n)
-	for i := range keys {
-		keys[i] = runes("j")
+	kmap := make([]tea.KeyMsg, n)
+	for i := range kmap {
+		kmap[i] = runes("j")
 	}
-	return keys
+	return kmap
 }
 
 // enteredFixture is a 132x40 workspace of anchored charts ① ② [...] and the
@@ -89,6 +91,7 @@ func downKeys(n int) []tea.KeyMsg {
 // any other, so a pair that is not ②'s cannot show the row's aspect.
 func enteredFixture(t *testing.T, anchors int, floatingSelected bool, cfg Config) (Model, *[]textCall) {
 	t.Helper()
+	freshModels(t)
 	return enteredFixtureNamed(t, anchors, floatingSelected, cfg)
 }
 
@@ -102,6 +105,7 @@ func enteredFixtureNamed(t *testing.T, anchors int, floatingSelected bool, cfg C
 // enteredFixtureRows is enteredFixtureNamed over a caller's timeline rows.
 func enteredFixtureRows(t *testing.T, rows []lookup.TimelineRow, anchors int, floatingSelected bool, cfg Config, names ...string) (Model, *[]textCall) {
 	t.Helper()
+	freshModels(t)
 	return enteredFixtureAt(t, rows, anchors, floatingSelected, false, cfg, names...)
 }
 
@@ -125,14 +129,17 @@ func enteredFixtureUnselectedNow(t *testing.T, anchors int, cfg Config) (Model, 
 // default) or on the floating slot.
 func enteredFixtureAt(t *testing.T, rows []lookup.TimelineRow, anchors int, floatingSelected, cursorOnFloating bool, cfg Config, names ...string) (Model, *[]textCall) {
 	t.Helper()
+	freshModels(t)
 	text := stubTextCompute(t)
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		*text = append(*text, textCall{kind: "aspects", when: when})
-		if natal.When.Equal(enteredSecondNatal) {
-			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{Transit: aspect.Sun, Natal: aspect.Venus, Kind: aspect.Opposition, Orb: 0}}}, nil
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			*text = append(*text, textCall{kind: "aspects", when: when})
+			if natal.When.Equal(enteredSecondNatal) {
+				return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0}}}, nil
+			}
+			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objMars, NatalObject: objMoon, Kind: aspect.Square, Orb: 3}}}, nil
 		}
-		return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{Transit: aspect.Mars, Natal: aspect.Moon, Kind: aspect.Square, Orb: 3}}}, nil
-	}
+	})
 	stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
 		return lookup.TimelineResult{Rows: rows, Commands: []string{"astrolog -dm"}}, nil
 	})
@@ -218,7 +225,7 @@ func TestEnterOnAChartRowPicksItsPair(t *testing.T) {
 		}
 		found := false
 		for _, a := range m.chart.crossAspects {
-			if a.Transit == aspect.Sun && a.Natal == aspect.Venus && a.Kind == aspect.Opposition && a.Orb <= 1.0/60 {
+			if a.TransitObject == objSun && a.NatalObject == objVenus && a.Kind == aspect.Opposition && a.Orb <= 1.0/60 {
 				found = true
 			}
 		}
@@ -234,8 +241,8 @@ func TestEnterOnAChartRowPicksItsPair(t *testing.T) {
 				t.Errorf("floating selected=%v: the bold fixture's cursor is %d, want now's line", floatingSelected, bm.cursorIdx)
 			}
 			_, aspects := leftPanels(t, bm.View())
-			if got := boldSpanTexts(aspects); len(got) != 1 || !strings.HasPrefix(got[0], bodyGlyph(aspect.Venus)+" "+aspectGlyph(aspect.Opposition)+" "+bodyGlyph(aspect.Sun)+" ") {
-				t.Errorf("floating selected=%v: bold cells = %q, want the natal-Venus-opposite-Sun cell", floatingSelected, got)
+			if got := boldSpanTexts(aspects); len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus)+" ") {
+				t.Errorf("floating selected=%v: bold cells = %q, want the transiting-Sun-opposite-natal-Venus cell", floatingSelected, got)
 			}
 		}
 		// Rule 3: a `]` after Enter is a deliberate choice and wins over what Enter stored.
@@ -336,20 +343,20 @@ func TestSixSelectedHaveNoTimelineTab(t *testing.T) {
 func reportSpawns(t *testing.T) func() int {
 	t.Helper()
 	n := 0
-	oldRaw, oldCross, oldSyn := computeRawReport, computeCrossBodyReport, computeSynastryBodyReport
-	t.Cleanup(func() { computeRawReport, computeCrossBodyReport, computeSynastryBodyReport = oldRaw, oldCross, oldSyn })
-	computeRawReport = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
-		n++
-		return "raw", "", nil
-	}
-	computeCrossBodyReport = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, aspect.Body) (string, string, error) {
-		n++
-		return "cross", "", nil
-	}
-	computeSynastryBodyReport = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel, aspect.Body) (string, string, error) {
-		n++
-		return "syn", "", nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
+			n++
+			return "raw", "", nil
+		}
+		s.reports.cross = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, aspect.Object) (string, string, error) {
+			n++
+			return "cross", "", nil
+		}
+		s.reports.synastry = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel, aspect.Object) (string, string, error) {
+			n++
+			return "syn", "", nil
+		}
+	})
 	return func() int { return n }
 }
 
@@ -414,9 +421,11 @@ func TestDetailsIsQuietWhileTheReportTabIsHidden(t *testing.T) {
 			t.Fatal("fixture: the step key left no pending mark")
 		}
 		m, _ = tpress(t, m, keyEnter)
-		firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-			return lookup.Result{}, errors.New("astrolog failed")
-		}
+		m = withSpawns(m, func(sp *rowSpawns) {
+			sp.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{}, errors.New("astrolog failed")
+			}
+		})
 		m = pump(t, m, cmd)
 		if !m.details.pending {
 			t.Fatal("a text frame that failed with the report hidden cleared the pending mark")
@@ -424,7 +433,7 @@ func TestDetailsIsQuietWhileTheReportTabIsHidden(t *testing.T) {
 	}
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	base := spawns()
-	title, body := stripOfDetails(m), m.details.body
+	title, body := m.details.title, m.details.body
 	i := chartRowOf(t, m.timeline.rows, 2)
 	m = enter(t, m, i)
 	for _, k := range []string{"d", "h", "m", "n"} {
@@ -438,7 +447,7 @@ func TestDetailsIsQuietWhileTheReportTabIsHidden(t *testing.T) {
 			t.Fatalf("after %q on the timeline tab: the report is marked pending", k)
 		}
 	}
-	if got := stripOfDetails(m); got != title || m.details.body != body {
+	if got := m.details.title; got != title || m.details.body != body {
 		t.Errorf("the report changed while hidden: title %q -> %q", title, got)
 	}
 	if !m.details.attached {
@@ -463,6 +472,9 @@ func TestReportRefreshesWhileAttached(t *testing.T) {
 	// fires while attached, and the report starts.
 	{
 		m := attachedOnBodies(t)
+		// A repeat inside a run of keys rests for the debounce; the first key of
+		// a run starts the report at once (C14), so the run is already going.
+		m.keyRun = detailsRunState{key: "2", keys: 1, last: m.clock.Now()}
 		m, cmd := tpress(t, m, runes("2"))
 		if !m.details.timerArmed {
 			t.Fatal("fixture: the focus change armed no report timer")
@@ -564,8 +576,8 @@ func TestDigitsDetachAndFocus(t *testing.T) {
 		want PanelID
 	}{{"1", PanelChart}, {"2", PanelBodies}, {"3", PanelAspects}} {
 		m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
-		if !strings.Contains(keyBarLine(200, m.keyBarEntries(), m.cfg), "Focus: 1/2/3") {
-			t.Fatalf("the attached key bar does not offer Focus: 1/2/3: %q", keyBarLine(200, m.keyBarEntries(), m.cfg))
+		if !strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1/2/3") {
+			t.Fatalf("the attached key bar does not offer Focus: 1/2/3: %q", keys.BarLine(m.keysContext(), 200))
 		}
 		m, cmd := tpress(t, m, runes(tc.key))
 		m = pump(t, m, cmd)
@@ -575,8 +587,8 @@ func TestDigitsDetachAndFocus(t *testing.T) {
 	}
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	m, _ = tpress(t, m, runes("/"))
-	if strings.Contains(keyBarLine(200, m.keyBarEntries(), m.cfg), "Focus: 1/2/3") {
-		t.Errorf("the search line's key bar offers Focus: 1/2/3, where digits are text: %q", keyBarLine(200, m.keyBarEntries(), m.cfg))
+	if strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1/2/3") {
+		t.Errorf("the search line's key bar offers Focus: 1/2/3, where digits are text: %q", keys.BarLine(m.keysContext(), 200))
 	}
 	m, _ = tpress(t, m, runes("2"))
 	if !m.details.attached || m.focused != PanelChart || m.timeline.query != "2" {
@@ -653,10 +665,10 @@ func TestEnterRowPicksItsPairFrame(t *testing.T) {
 	checkGolden(t, fmt.Sprintf("enter-row-picks-its-pair-%dx40-never", w), view)
 }
 
-// Gate 5 for Enter (the specification through rules 1 and 4): the
-// key-press frame keeps the old Bodies and Aspects, the result swaps them in
-// one View, and no View between shows the new pair's title over the old
-// pair's rows.
+// Gate 5 for Enter (the specification through rules 1 and 4): the key-press
+// frame owes both panels the same replacement (the old frame faint, or `…`),
+// the result swaps them in one View, and no View between shows the new pair's
+// title over the old pair's rows.
 func TestEnterSwapsAspectsTogether(t *testing.T) {
 	// Only with now selected: from a group without it there is no Timeline tab.
 	for _, floatingSelected := range []bool{true} {
@@ -670,8 +682,12 @@ func TestEnterSwapsAspectsTogether(t *testing.T) {
 		_, before := leftColumn(t, m.View())
 		m.details.cursor = chartRowOf(t, m.timeline.rows, 2)
 		m1, cmd := tpress(t, m, keyEnter)
-		if _, mid := leftColumn(t, m1.View()); mid != before {
-			t.Fatalf("floating selected=%v: Bodies and Aspects changed in the key-press frame:\n--- before\n%s\n--- key-press frame\n%s", floatingSelected, before, mid)
+		_, mid := leftColumn(t, m1.View())
+		if b, a := m1.textPaneState(PanelBodies), m1.textPaneState(PanelAspects); b != a || b == paneCurrent {
+			t.Fatalf("floating selected=%v: in the key-press frame Bodies is %v and Aspects %v, want both owed the same replacement", floatingSelected, b, a)
+		}
+		if m1.textPaneState(PanelBodies) == paneEmpty && strings.Count(mid, emptyPaneLine) < 2 {
+			t.Fatalf("floating selected=%v: another subject is owed and the panels do not read `…`:\n%s", floatingSelected, mid)
 		}
 		m2, views := pumpViews(t, m1, cmd)
 		_, after := leftColumn(t, m2.View())
@@ -679,7 +695,7 @@ func TestEnterSwapsAspectsTogether(t *testing.T) {
 			t.Fatalf("floating selected=%v: the entered row never reached Bodies and Aspects:\n%s", floatingSelected, after)
 		}
 		for i, v := range views {
-			if _, got := leftColumn(t, v); got != before && got != after {
+			if _, got := leftColumn(t, v); got != before && got != mid && got != after {
 				t.Fatalf("floating selected=%v: view %d of %d mixes the two scenes:\n--- before\n%s\n--- after\n%s\n--- got\n%s", floatingSelected, i+1, len(views), before, after, got)
 			}
 		}

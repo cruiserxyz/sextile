@@ -37,7 +37,7 @@
 │☉ □ ☽ (5°31'S) ♆ ☌ D (1°18'A) ♀ △ M (2°48'A) ♀ ⚹ ⚸ (0°21'S)               ││                                                                              │
 │☉ ⚹ ♃ (2°21'A) ♇ △ A (1°58'A) ♆ ⚹ ♇ (0°39'S) ♅ △ ♇ (2°02'A)               ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Remove: del | Focus: 1/2/3 | … | Help: ? | Quit: q             
+ Switch panel: ←→ | Timeline: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Remove: del | Focus panel: 1/2/3 | … | Help: ? | Quit: q 
 ╭─[1m▸[1] Chart[0m───────────────────────────────────────────────────────────────╮╭─[0] Chart - [Timeline]───────────────────────────────────────────────────────╮
 │[1m[7m▶ ①        Tue May 15, 1979 11:30 CEST Amsterdam, NL                  WhTr[0m││Wed 10/14/2026   13:18          Moon (Sag) Opp [Gem] Uranus                   │
 │  ②        Sun Oct 18, 2026  6:00 CEST Amsterdam, NL                  WhTr││Wed 10/14/2026   21:51          Moon (Sag) Tri (Leo) Mars                     │
@@ -77,4 +77,4 @@
 │⚷ □ A (1°03'A) ☉ ☍ ♅ (5°11'S) ☽ △ ⚷ (3°50'S) ♄ △ ⚷ (3°13'S)               ││                                                                              │
 │☽ △ ☿ (1°26'S) ☿ △ ♄ (0°50'S) ♂ □ ♃ (3°16'S) ♆ ⚹ ♇ (2°53'S)               ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart down: ⌃j | Remove: del | Focus: 1/2/3 | … | Help: ? | Quit: q           
+ Switch panel: ←→ | Timeline: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move down: ⌃j | Remove: del | … | Help: ? | Quit: q                    

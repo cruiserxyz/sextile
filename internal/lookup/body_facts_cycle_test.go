@@ -10,7 +10,6 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/location"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // C1: the phase and its sense from the unrounded elongation.
@@ -48,8 +47,8 @@ func TestElongationTrend(t *testing.T) {
 func researchFacts(t *testing.T, when time.Time, zone *time.Location) map[string]BodyFact {
 	t.Helper()
 	pair := SunPairResult{
-		Sun:  astrolog.PrecisePosition{Body: aspect.Sun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600, Speed: 0.9907618, Sign: "Lib", Magnitude: -26.87, LitPercent: 100},
-		Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600, Speed: -0.4292777, Sign: "Sco", Retrograde: true, Magnitude: -4.32, LitPercent: 4.03},
+		Sun:  astrolog.PrecisePosition{Object: objSun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600, Speed: 0.9907618, Sign: "Lib", Magnitude: -26.87, LitPercent: 100, HasBrightness: true},
+		Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600, Speed: -0.4292777, Sign: "Sco", Retrograde: true, Magnitude: -4.32, LitPercent: 4.03, HasBrightness: true},
 	}
 	facts, err := NowFacts(pair, CycleResult{Span: CycleSpanFor(when, zone), Events: cycleFixture(t)}, when, zone)
 	if err != nil {
@@ -72,7 +71,7 @@ func TestLastAndNextStation(t *testing.T) {
 		t.Errorf("motion %+v", f["motion.direction"])
 	}
 	// A blank R column is direct motion.
-	pair := SunPairResult{Sun: astrolog.PrecisePosition{Body: aspect.Sun, Sign: "Lib"}, Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 216, Sign: "Sco", Speed: 1.2}}
+	pair := SunPairResult{Sun: astrolog.PrecisePosition{Object: objSun, Sign: "Lib"}, Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 216, Sign: "Sco", Speed: 1.2}}
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	direct, err := NowFacts(pair, CycleResult{Span: CycleSpanFor(when, time.UTC), Events: cycleFixture(t)}, when, time.UTC)
 	if err != nil || direct["motion.direction"].Term != "direct" {
@@ -119,7 +118,7 @@ func TestLastAndNextConjunction(t *testing.T) {
 		}
 	}
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	if _, err := NowFacts(SunPairResult{Sun: astrolog.PrecisePosition{Body: aspect.Sun}, Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 10}},
+	if _, err := NowFacts(SunPairResult{Sun: astrolog.PrecisePosition{Object: objSun}, Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 10}},
 		CycleResult{Span: CycleSpanFor(when, time.UTC), Events: cut}, when, time.UTC); err == nil {
 		t.Error("a cycle list without a next outer conjunction gave facts")
 	}
@@ -161,7 +160,7 @@ func TestEightYearDrift(t *testing.T) {
 		}
 	}
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	_, err := NowFacts(SunPairResult{Sun: astrolog.PrecisePosition{Body: aspect.Sun}, Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 10}},
+	_, err := NowFacts(SunPairResult{Sun: astrolog.PrecisePosition{Object: objSun}, Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 10}},
 		CycleResult{Span: CycleSpanFor(when, time.UTC), Events: late}, when, time.UTC)
 	var missing *MissingEventError
 	if !errors.As(err, &missing) {
@@ -177,7 +176,7 @@ func TestEightYearDrift(t *testing.T) {
 // astrolog on PATH this FAILS: the spawn returns an error.
 func TestCycleAgainstHorizons2026(t *testing.T) {
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	res, err := bodyNowFactsWith(context.Background(), BodyFactsRequest{Body: aspect.Venus, When: when,
+	res, err := bodyNowFactsWith(context.Background(), BodyFactsRequest{Object: objVenus, When: when,
 		Place: location.PlaceInfo{Lat: 51, Lon: 0, TZ: "UTC"}, Lens: Hellenistic}, astrolog.RunTimelineSearch)
 	if err != nil {
 		t.Fatal(err)

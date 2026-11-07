@@ -22,7 +22,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/internal/testenv"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 type clockCase struct {
@@ -64,7 +63,7 @@ func coldStart(t *testing.T) Model {
 	if !ok {
 		t.Fatal("the startup read did not answer with its message")
 	}
-	m, _ := applyStartupPerimeter(NewModel(Config{}), msg)
+	m, _ := applyStartupPerimeter(newTestModel(t, Config{}, RealClock{}), msg)
 	return m
 }
 
@@ -174,9 +173,6 @@ func needLiveAstrolog(t *testing.T) {
 // C12, N6, N24.
 func TestClockPreferenceReachesFirstFrame(t *testing.T) {
 	needLiveAstrolog(t)
-	old := computeTimeline
-	computeTimeline = lookup.Timeline
-	t.Cleanup(func() { computeTimeline = old })
 
 	for _, c := range clockCases {
 		t.Run(c.String(), func(t *testing.T) {
@@ -297,7 +293,7 @@ func TestAspectsDetailsAddsNoSpawn(t *testing.T) {
 // chart in New York, Aspects focused with the transit pair tab active.
 func pairClockModel(t *testing.T) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	tokyo := testPlaceTokyo()
 	slots, err := store.NewSlots(time.Date(2026, 4, 25, 20, 30, 0, 0, time.UTC), tokyo)
 	if err != nil {
@@ -387,7 +383,7 @@ func TestPairReportsReadEachChartsClock(t *testing.T) {
 			utReport, utAspects, err := testenv.UTTransitCross(context.Background(),
 				anchored.Time, testenv.Place{Lon: anchored.Location.Lon, Lat: anchored.Location.Lat},
 				floating.Time, testenv.Place{Lon: floating.Location.Lon, Lat: floating.Location.Lat},
-				lens.Houses, lens.Zodiac, lens.Objects, lens.Aspects)
+				lens.Houses, lens.Zodiac, lens.Objects, lens.Aspects, lens.Registry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -399,7 +395,7 @@ func TestPairReportsReadEachChartsClock(t *testing.T) {
 			}
 			for i, a := range msg.CrossAspects {
 				u := utAspects[i]
-				if a.Transit != u.Secondary || a.Natal != u.Primary || a.Kind != u.Kind || a.Orb != u.Orb || a.Power != u.Power || a.Applying != u.Applying {
+				if a.TransitObject != u.SecondaryObject || a.NatalObject != u.PrimaryObject || a.Kind != u.Kind || a.Orb != u.Orb || a.Power != u.Power || a.Applying != u.Applying {
 					t.Errorf("cross aspect %d differs from the UT run: %+v vs %+v", i, a, u)
 				}
 			}
@@ -449,7 +445,7 @@ func TestEveryReportPrintsDegreeOrbs(t *testing.T) {
 	}{
 		{"chart", lookup.RawReportRequest{Kind: lookup.RawReportChart}, false},
 		{"aspects", lookup.RawReportRequest{Kind: lookup.RawReportAspects}, true},
-		{"body", lookup.RawReportRequest{Kind: lookup.RawReportBody, Body: aspect.Sun}, true},
+		{"body", lookup.RawReportRequest{Kind: lookup.RawReportBody, Object: objSun}, true},
 	} {
 		text, command, err := lookup.ComputeRawReport(context.Background(), when, place, lens, k.req)
 		if err != nil {
@@ -458,12 +454,12 @@ func TestEveryReportPrintsDegreeOrbs(t *testing.T) {
 		reports = append(reports, report{name: k.name, text: text, command: command, orbs: k.orbs})
 	}
 	local := func(w time.Time, p location.PlaceInfo) stagedChart { return stagedChart{w, p} }
-	text, command, err := lookup.CrossBodyRawReport(context.Background(), lens, natal, when, place, aspect.Sun)
+	text, command, err := lookup.CrossBodyRawReport(context.Background(), lens, natal, when, place, objSun)
 	if err != nil {
 		t.Fatalf("transit: %v", err)
 	}
 	reports = append(reports, report{"transit cross body", text, command, []stagedChart{local(natal.When, newYork), local(when, place)}, true})
-	text, command, err = lookup.SynastryCrossBodyRawReport(context.Background(), lens, natal, other, place, store.ReportLabel{}, aspect.Sun)
+	text, command, err = lookup.SynastryCrossBodyRawReport(context.Background(), lens, natal, other, place, store.ReportLabel{}, objSun)
 	if err != nil {
 		t.Fatalf("synastry: %v", err)
 	}

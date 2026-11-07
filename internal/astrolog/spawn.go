@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // This file is the only place Sextile starts the astrolog binary. The process
@@ -71,6 +73,20 @@ type BodyCall struct {
 	// missing-ephemeris stderr lines of the spawn (reportingMissing). It is
 	// not part of the call's identity: derive and with do not carry it.
 	missing *[]string
+	// saying, when set, receives the first line the spawn wrote on stderr
+	// (firstSaidLine). Like missing it is not part of the call's identity.
+	saying *string
+	// probing marks a call that asks about an object to learn whether it can be
+	// drawn: every stderr line is evidence for it, none a refusal. Only the
+	// probes set it (RunPositionsProbing, probeCast); reportingMissing alone
+	// keeps refusing every line that is not a missing-ephemeris line.
+	probing bool
+	// Registry is the binary's object list and Objects the numbers the argv
+	// draws, ascending: what the parsers need to give each printed row
+	// Astrolog's own object. Neither is part of the argv or the band; a
+	// call built without them parses its rows without identity.
+	Registry aspect.Registry
+	Objects  []int
 }
 
 func (BodyCall) spawnable() {}
@@ -84,6 +100,19 @@ func newBodyCall(argv []string, band Band) BodyCall {
 // file names its spawn sees (the specification C2).
 func (c BodyCall) reportingMissing(into *[]string) BodyCall {
 	c.missing = into
+	return c
+}
+
+// sayingFirst returns the call with a collector for the first line its spawn
+// wrote on stderr, which only a probing call keeps.
+func (c BodyCall) sayingFirst(into *string) BodyCall {
+	c.saying = into
+	return c
+}
+
+// probingCall returns the call marked as a probe: no stderr line refuses it.
+func (c BodyCall) probingCall() BodyCall {
+	c.probing = true
 	return c
 }
 
@@ -103,7 +132,7 @@ func (c BodyCall) with(extra ...string) (BodyCall, error) {
 			return BodyCall{}, fmt.Errorf("%w: %q", ErrSmuggledRestriction, tok)
 		}
 	}
-	return BodyCall{argv: append(append([]string(nil), c.argv...), extra...), band: c.band}, nil
+	return BodyCall{argv: append(append([]string(nil), c.argv...), extra...), band: c.band, Registry: c.Registry, Objects: c.Objects}, nil
 }
 
 // derive applies a pure argv derivation (colour, an `-aa` list mode) and keeps
@@ -127,7 +156,7 @@ func (c BodyCall) substitute(i int, value string) (BodyCall, error) {
 	}
 	argv := append([]string(nil), c.argv...)
 	argv[i] = value
-	return BodyCall{argv: argv, band: c.band}, nil
+	return BodyCall{argv: argv, band: c.band, Registry: c.Registry, Objects: c.Objects}, nil
 }
 
 // ExemptCall is a spawn that shows no bodies: it reads a metadata list or a
@@ -250,6 +279,11 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 	if err != nil {
 		err = invokeError(ctx, err)
 	}
+	if errors.Is(err, ErrAstrologCrashed) {
+		// A process that died on a signal printed an unfinished chart at best:
+		// none of its stdout is returned or parsed.
+		return "", command, err
+	}
 	if exempt {
 		return out, command, err
 	}
@@ -257,7 +291,17 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 		// A cancelled call is a superseded one, whatever it wrote first.
 		return "", command, err
 	}
-	if len(warningLines(stderr.String())) > 0 {
+	collecting, probing := false, false
+	if bc, ok := c.(BodyCall); ok {
+		collecting, probing = bc.missing != nil, bc.probing
+	}
+	warnings := warningLinesFor(stderr.String(), collecting)
+	if probing {
+		// A probing call takes every stderr line as evidence: the object asked
+		// for is absent, with a file name only where a line carries one.
+		warnings = nil
+	}
+	if len(warnings) > 0 {
 		// The refusal carries stderr and the command, never the chart: the
 		// stdout of a call Astrolog warned on is not parsed and not returned.
 		warned := &WarnedError{Stderr: stderr.String()}
@@ -271,6 +315,9 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 	// probe reads them from the result, the specification C2).
 	if bc, ok := c.(BodyCall); ok && bc.missing != nil {
 		*bc.missing = missingEphemerisFiles(stderr.String())
+	}
+	if bc, ok := c.(BodyCall); ok && bc.saying != nil {
+		*bc.saying = firstSaidLine(stderr.String())
 	}
 	return out, command, err
 }

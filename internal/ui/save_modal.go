@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"path/filepath"
 	"strings"
 
@@ -29,24 +32,26 @@ import (
 // out of scope: an anchored chart came FROM the library, so writing it back is
 // a copy under a second name, and the one thing this feature was authorised to
 // do is create a chart that did not exist.
+//
+// The typed field, the refusal (non-empty: the last attempt was refused and the
+// prompt stays open) and the save in flight (Enter is inert until it lands) are
+// popup.Form's.
 type saveModalState struct {
-	form    form   // one field, "Save as: "; its value is what the operator has typed
-	dest    string // the charts directory this would write into, shown beneath
-	refusal string // non-empty: the last attempt was refused and the prompt stays open
-	saving  bool   // a save is in flight; Enter is inert until it lands
-	prior   startupState
+	popup.Form
+	dest  string // the charts directory this would write into, shown beneath
+	prior startupState
 }
 
 // newSaveForm is the prompt's one field. Always empty, and with no
 // placeholder: a prompt that suggested a name would invite
 // Enter-without-reading, and every save creates a NEW file.
-func newSaveForm() form {
-	return newForm(formField{label: "Save as: "})
+func newSaveForm() dialog.Form {
+	return dialog.NewForm(dialog.Field{Label: "Save as: "})
 }
 
 // typedName is what the operator has typed so far.
 func (s saveModalState) typedName() string {
-	return s.form.value(0)
+	return s.Fields.Value(0)
 }
 
 // openSavePrompt is ⌃s and the leader's `s`, from main mode.
@@ -56,22 +61,19 @@ func (s saveModalState) typedName() string {
 // leader — and a leader sequence that merely synthesised a key press would
 // depend on the very key that is being swallowed.
 func (m Model) openSavePrompt() (tea.Model, tea.Cmd) {
-	// Before the workspace resolves there is no floating slot to save, the
-	// same pre-resolution gate ⌃o carries.
-	if m.slots == nil {
-		return m, nil
-	}
-	all := m.slots.All()
-	if m.cursorIdx < 0 || m.cursorIdx >= len(all) {
-		return m, nil
-	}
-	if !all[m.cursorIdx].Floating {
+	switch m.blocked(keys.BindingSaveChart) {
+	case "":
+	case whyOnlyNow:
 		// Saving acts on the floating slot only. On the anchored slot the key
 		// does nothing and the key bar says why.
 		return m.showNotice(noticeOnlyNow)
+	default:
+		// Before the workspace resolves there is no floating slot to save, the
+		// same pre-resolution gate ⌃o carries.
+		return m, nil
 	}
 	m.save = saveModalState{
-		form: newSaveForm(),
+		Form: popup.Form{Fields: newSaveForm()},
 		dest: store.ChartsDir(),
 		// Captured BEFORE the state moves, so Esc restores the view the
 		// prompt was opened from.
@@ -81,24 +83,29 @@ func (m Model) openSavePrompt() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// saveChartBindings is the Save chart popup's table.
+func saveChartBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{confirm("Save").ShownWhen(func(c keys.Context) bool { return c.Save.HasName }), closeOn("Cancel")})
+}
+
 // updateSaveModalKey handles one keystroke for the save prompt. The caller in
 // model.go has already gated on m.startup == startupSaveOpen.
 func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch matchBinding(msg, saveChartBindings()) {
-	case BindingConfirm:
-		if m.save.saving || strings.TrimSpace(m.save.typedName()) == "" {
+	switch keys.MatchBinding(msg, saveChartBindings()) {
+	case keys.BindingConfirm:
+		if m.save.Saving || strings.TrimSpace(m.save.typedName()) == "" {
 			return m, nil
 		}
 		// A name Astrolog could not read back is refused here, before any
 		// spawn, with the typed text left in the field (the specification
 		// C1, C3).
 		if err := lookup.CheckLabelLength("name", m.save.typedName()); err != nil {
-			m.save.refusal = err.Error()
+			m.save.Refusal = err.Error()
 			return m, nil
 		}
 		slot := m.slots.Floating()
-		m.save.saving = true
-		m.save.refusal = ""
+		m.save.Saving = true
+		m.save.Refusal = ""
 		// The directory captured when the prompt opened is the one the
 		// operator was SHOWN, and it is what the save uses -- resolving again
 		// here could pick a different one (store.ChartsDir()'s second tier
@@ -106,7 +113,7 @@ func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// somewhere nobody displayed or checked.
 		m.saveGen++
 		return m, saveChartCmd(m.saveGen, m.save.dest, m.save.typedName(), slot)
-	case BindingClose:
+	case keys.BindingClose:
 		// Bumping the generation is what makes Esc actually cancel. The
 		// astrolog spawn is already running and is not interruptible, so a
 		// save backed out of still COMPLETES -- and without this, its message
@@ -114,7 +121,7 @@ func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// moved on to, restoring a `prior` this line has already zeroed.
 		// A save already handed to Astrolog is remembered, so its result is
 		// still logged when it lands (A8).
-		if m.save.saving {
+		if m.save.Saving {
 			m.abandonedSaves = abandon(m.abandonedSaves, m.saveGen)
 		}
 		m.saveGen++
@@ -124,10 +131,10 @@ func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Typing is the form's. Nothing is typed while a save is in flight: the
 	// name on screen must stay the name being saved.
-	if m.save.saving {
+	if m.save.Saving {
 		return m, nil
 	}
-	m.save.form, _ = m.save.form.updateKey(msg)
+	m.save.Apply(popup.Type, msg)
 	return m, nil
 }
 
@@ -188,18 +195,18 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 		}
 		return m.logSaved(msg.Saved), nil
 	}
-	m.save.saving = false
+	m.save.Saving = false
 	if msg.Err != nil {
 		var taken *lookup.ErrSlugTaken
 		switch {
 		case errors.As(msg.Err, &taken):
-			m.save.refusal = fmt.Sprintf("%q is taken — try another name", taken.Slug)
+			m.save.Refusal = fmt.Sprintf("%q is taken — try another name", taken.Slug)
 		case errors.Is(msg.Err, lookup.ErrEmptySlug):
-			m.save.refusal = "That name has no letters or digits to save under."
+			m.save.Refusal = "That name has no letters or digits to save under."
 		default:
 			// Not a refusal of what was typed: the save failed. The form
 			// keeps the cause under its field, and the Log says it, red.
-			m.save.refusal = firstLine(msg.Err.Error())
+			m.save.Refusal = firstLine(msg.Err.Error())
 			return m.noteEphemeris(msg.Err).logError("Couldn't save %q. %s", msg.Name, m.failureReason(msg.Err, firstLine(msg.Err.Error()))), nil
 		}
 		return m, nil
@@ -264,7 +271,7 @@ const placeBound = lookup.MaxLabelBytes
 // exactly like the real one from inside this prompt.
 func destLine(state saveModalState, cfg Config) string {
 	lead := "…/"
-	if cfg.useASCII() {
+	if cfg.UseASCII() {
 		lead = ".../"
 	}
 	dir := lead + filepath.Base(state.dest)
@@ -286,9 +293,8 @@ func firstLine(s string) string {
 // renderSaveModal draws the prompt through the form: the name field, the
 // destination beneath it, and a refusal when there is one.
 func renderSaveModal(state saveModalState, cfg Config, termW, termH int) string {
-	return renderForm(state.form, formView{
-		Title:   popupTitleSaveChart,
-		Info:    []string{destLine(state, cfg)},
-		Refusal: state.refusal,
-	}, cfg, termW, termH)
+	return state.Render(dialog.FormView{
+		Title: dialog.TitleSaveChart,
+		Info:  []string{destLine(state, cfg)},
+	}, cfg, termW, termH, popupChrome(cfg))
 }

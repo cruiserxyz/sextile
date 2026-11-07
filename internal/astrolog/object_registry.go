@@ -103,8 +103,7 @@ func ParseObjectRegistry(out string) ([]aspect.RegistryObject, error) {
 			rest = line[objRestCol:]
 		}
 		reg = append(reg, aspect.RegistryObject{
-			Number: num,
-			Name:   name,
+			Object: aspect.Object{Number: num, Name: name},
 			// The star rows are the ones whose remainder opens with the
 			// catalogue marker. Derived from the SHAPE, not from a number
 			// range, so a differently ordered registry still classifies.

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"strings"
 	"testing"
@@ -35,7 +36,7 @@ func TestGenScrollFixtures(t *testing.T) {
 	if err := os.WriteFile("testdata/influence-chart.report", []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("testdata/influence-chart.report: %d lines", len(detailsReportLines(raw)))
+	t.Logf("testdata/influence-chart.report: %d lines", len(panel.ReportLines(raw)))
 
 	out, err := lookup.FirstCallTransits(context.Background(), nil, when, place, lookup.Hellenistic)
 	if err != nil {
@@ -43,7 +44,7 @@ func TestGenScrollFixtures(t *testing.T) {
 	}
 	var sb strings.Builder
 	for _, p := range out.Positions {
-		sb.WriteString(fmt.Sprintf("\t\t{Body: aspect.%v, Longitude: %.4f, Speed: %.4f, House: %d},\n", p.Body, p.Longitude, p.Speed, p.House))
+		sb.WriteString(fmt.Sprintf("\t\t{Object: aspect.Object{Number: %d, Name: %q}, Longitude: %.4f, Speed: %.4f, House: %d},\n", p.Object.Number, p.Object.Name, p.Longitude, p.Speed, p.House))
 	}
 	t.Logf("fullChartPositions() — %d rows:\n%s", len(out.Positions), sb.String())
 }

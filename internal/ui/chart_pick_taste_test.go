@@ -55,7 +55,7 @@ func chartPickTasteModel(t *testing.T, cfg Config, w, h int, failed bool) Model 
 	m.picker.refilter()
 	m.startup = startupChartOpen
 
-	m, _ = applyChartPicked(m, ChartPickedMsg{Chart: m.picker.matches[0]})
+	m, _ = applyChartPicked(m, ChartPickedMsg{Chart: m.picker.Matches[0]})
 	if failed {
 		m, _ = applyChartResolved(m, ChartResolvedMsg{
 			Chart: m.picker.pending,

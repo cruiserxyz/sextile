@@ -13,6 +13,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -21,16 +22,16 @@ import (
 
 // cuspText is "Sgn DD°MM'" for a longitude, written from the spec's format.
 func cuspText(lon float64) string {
-	signIdx, deg, min := splitLongitude(lon)
-	return fmt.Sprintf("%s %2d°%02d'", signAbbrevString(signIdx), deg, min)
+	signIdx, deg, min := panel.SplitLongitude(lon)
+	return fmt.Sprintf("%s %2d°%02d'", panel.SignAbbrevString(signIdx), deg, min)
 }
 
 // Sentences 1 and 2: the cell right after the minute is ℞ or a space, in both
 // layouts; the bar follows and keeps its three cells.
 func TestRetrogradeSitsAfterTheMinute(t *testing.T) {
-	retro := aspect.Position{Body: aspect.Saturn, Longitude: 130.2733, Speed: -1.5, House: 3}
-	direct := aspect.Position{Body: aspect.Mars, Longitude: 5.9667, Speed: 1.2, House: 6}
-	angle := aspect.Position{Body: aspect.Ascendant, Longitude: 210.8667, Speed: 0.7, House: 1}
+	retro := aspect.Position{Object: objSaturn, Longitude: 130.2733, Speed: -1.5, House: 3}
+	direct := aspect.Position{Object: objMars, Longitude: 5.9667, Speed: 1.2, House: 6}
+	angle := aspect.Position{Object: objAscendant, Longitude: 210.8667, Speed: 0.7, House: 1}
 
 	for _, tc := range []struct {
 		name string
@@ -50,8 +51,8 @@ func TestRetrogradeSitsAfterTheMinute(t *testing.T) {
 			t.Errorf("%s: %d ℞ glyphs in %q, want %d", tc.name, strings.Count(row, "℞"), row, strings.Count(tc.rx, "℞"))
 		}
 		// bar: 3 cells after the space, unchanged length.
-		if !isAngle(tc.p.Body) {
-			bar := dropFirstCell(velocityBar(tc.p.Speed, false, false))
+		if !panel.IsAngle(tc.p.Object) {
+			bar := panel.DropFirstCell(panel.VelocityBar(tc.p.Speed, false, false))
 			if !strings.Contains(row, tc.rx+" "+bar) {
 				t.Errorf("%s: the 3-cell bar %q does not follow the ℞ cell in %q", tc.name, bar, row)
 			}
@@ -59,20 +60,20 @@ func TestRetrogradeSitsAfterTheMinute(t *testing.T) {
 	}
 
 	// Comparing: the same cell inside the column, before the next separator.
-	cols := []bodyColumn{
-		{positions: []aspect.Position{retro}},
-		{positions: []aspect.Position{{Body: aspect.Saturn, Longitude: 200.6833, Speed: 0.4}}},
+	cols := []panel.BodyColumn{
+		{Positions: []aspect.Position{retro}},
+		{Positions: []aspect.Position{{Object: objSaturn, Longitude: 200.6833, Speed: 0.4}}},
 	}
 	cfg := Config{Color: ColorNever}
-	row := formatColumnRow(retro, astrologStyleZero, cols, 0, wholeWindow(len(cols)), cfg, houseOverlay{})
+	row := panel.FormatColumnRow(retro, astrologStyleZero, cols, 0, panel.WholeWindow(len(cols)), cfg, panel.HouseOverlay{})
 	if !strings.Contains(row, "["+cuspText(retro.Longitude)+"℞]") {
 		t.Errorf("retrograde column should read [%s℞], row %q", cuspText(retro.Longitude), row)
 	}
 	if !strings.Contains(row, cuspText(200.6833)+" ") || strings.Contains(strings.SplitN(row, "]", 2)[1], "℞") {
 		t.Errorf("direct column should end in a space, no ℞ beyond the first column: %q", row)
 	}
-	if w := ansi.StringWidth(columnCell(cols[0], aspect.Saturn, 0, 0, "", cfg)); w != bodiesColumnWidth {
-		t.Errorf("column is %d cells wide, want %d (the ℞ cell moved, it was not added)", w, bodiesColumnWidth)
+	if w := ansi.StringWidth(panel.ColumnCell(cols[0], aspect.Position{Object: objSaturn}, 0, 0, "", cfg)); w != panel.BodiesColumnWidth {
+		t.Errorf("column is %d cells wide, want %d (the ℞ cell moved, it was not added)", w, panel.BodiesColumnWidth)
 	}
 }
 
@@ -92,17 +93,21 @@ func underRule(t *testing.T, body string, ruleRow int) []string {
 	return rows[ruleRow+1:]
 }
 
-// plainCuspLabels is what Astrolog prints for the eight plain-cusp objects
-// (23-33 minus the angle houses), keyed by house.
-var plainCuspLabels = map[int]string{2: "2nd", 3: "3rd", 5: "5th", 6: "6th", 8: "8th", 9: "9th", 11: "11th", 12: "12th"}
+// plainCuspObjects is the Astrolog object number of the eight plain-cusp
+// objects (23-33 minus the angle houses), keyed by house.
+var plainCuspObjects = map[int]int{2: 23, 3: 24, 5: 26, 6: 27, 8: 29, 9: 30, 11: 32, 12: 33}
 
 // withTicked appends the cusp object rows Astrolog prints for the given houses
 // (their longitudes are the frame's), as the parser delivers them: no typed
-// body, the printed label.
+// body, their Astrolog object.
 func withTicked(ps []aspect.Position, cusps aspect.Cusps, houses ...int) []aspect.Position {
 	out := append([]aspect.Position{}, ps...)
 	for _, h := range houses {
-		out = append(out, aspect.Position{Label: plainCuspLabels[h], Longitude: cusps[h-1], House: aspect.House(h)})
+		o, err := fixtureObjectNumbered(plainCuspObjects[h])
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, aspect.Position{Object: o, Longitude: cusps[h-1], House: aspect.House(h)})
 	}
 	return out
 }
@@ -155,13 +160,13 @@ func TestBodiesListsTwelveCuspsInHouseOrder(t *testing.T) {
 	// second chart's angles move with its frame.
 	otherPositions := fullChartPositions()
 	for i, p := range otherPositions {
-		if h := angleHouse(p.Body); h > 0 {
+		if h := panel.AngleHouse(p.Object); h > 0 {
 			otherPositions[i].Longitude = other[h-1]
 		}
 	}
-	cols := []bodyColumn{
-		{positions: withTicked(fullChartPositions(), cusps, allPlainCusps...), cusps: cusps},
-		{positions: withTicked(otherPositions, other, allPlainCusps...), cusps: other},
+	cols := []panel.BodyColumn{
+		{Positions: withTicked(fullChartPositions(), cusps, allPlainCusps...), Cusps: cusps},
+		{Positions: withTicked(otherPositions, other, allPlainCusps...), Cusps: other},
 	}
 	view := bodiesView{shown: 2, comparing: true, ok: true, cols: cols, focus: 0}
 	cbody, crule, _ := renderBodiesFor(view, state, nil, 0, 0, 100, 40, false, cfg)
@@ -191,12 +196,14 @@ func TestFocusedChartCuspsReachTheBodiesState(t *testing.T) {
 		}
 		return c
 	}
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
+		}
+	})
 	m := settledComparing(t, 1)
 	cols, _ := m.bodyColumnsForScene()
 	shown := m.deriveScene().shown
@@ -207,22 +214,22 @@ func TestFocusedChartCuspsReachTheBodiesState(t *testing.T) {
 		} else {
 			shift = shiftOf(anchorOf(slot).When)
 		}
-		if want := cuspsFor(shift); cols[i].cusps != want {
-			t.Errorf("column %d carries cusps %v, want its own chart's %v", i+1, cols[i].cusps, want)
+		if want := cuspsFor(shift); cols[i].Cusps != want {
+			t.Errorf("column %d carries cusps %v, want its own chart's %v", i+1, cols[i].Cusps, want)
 		}
 	}
 	if !m.chart.cusps.Valid() {
 		t.Fatalf("the focused chart's cusps did not reach the panel state: %v", m.chart.cusps)
 	}
-	if m.chart.cusps != cols[1].cusps {
-		t.Errorf("focused (cursor on ②) cusps = %v, want ②'s %v", m.chart.cusps, cols[1].cusps)
+	if m.chart.cusps != cols[1].Cusps {
+		t.Errorf("focused (cursor on ②) cusps = %v, want ②'s %v", m.chart.cusps, cols[1].Cusps)
 	}
 	// Single frames too: the natal and transit single computes carry them.
-	nat := computeNatalSingleCmd(context.Background(), 1, 1, nil, anchorOf(shown[0]), m.lens)().(FirstFrameReadyMsg)
+	nat := computeNatalSingleCmd(context.Background(), 1, 1, testCast(t), nil, anchorOf(shown[0]), m.lens)().(FirstFrameReadyMsg)
 	if !nat.Cusps.Valid() {
 		t.Errorf("natal single frame carries no cusps")
 	}
-	tr := computeChartCmd(context.Background(), 1, 1, nil, m.targetFloatingTime, m.place, m.lens)().(FirstFrameReadyMsg)
+	tr := computeChartCmd(context.Background(), 1, 1, testCast(t), nil, m.targetFloatingTime, m.place, m.lens)().(FirstFrameReadyMsg)
 	if !tr.Cusps.Valid() {
 		t.Errorf("transit single frame carries no cusps")
 	}
@@ -235,7 +242,7 @@ func TestCuspRowsScrollWithTheList(t *testing.T) {
 	m.chart.cusps = fullChartCusps()
 	m.chart.positions = withTicked(m.chart.positions, m.chart.cusps, allPlainCusps...)
 	m.focused = PanelBodies
-	total := bodyRowCount(m.chart.positions, m.chart.cusps)
+	total := panel.BodyRowCount(m.chart.positions, m.chart.cusps)
 	if total != 8+12 {
 		t.Fatalf("fixture: %d rows, want 8 planets + 12 cusps", total)
 	}
@@ -253,10 +260,10 @@ func TestCuspRowsScrollWithTheList(t *testing.T) {
 	if !strings.Contains(rows[len(rows)-1], "12") || !strings.Contains(rows[len(rows)-1], cuspText(m.chart.cusps[11])) {
 		t.Errorf("window scrolled to the last row should end on cusp 12, got %q", rows[len(rows)-1])
 	}
-	if scroll.Total != total || !scroll.overflows() {
+	if scroll.Total != total || !scroll.Overflows() {
 		t.Errorf("viewport = %+v, want Total %d and overflow", scroll, total)
 	}
-	if pos := (listPosition{Cursor: m.bodyCursorIdx, Total: bodyRowCount(m.chart.positions, m.chart.cusps)}).text(); pos != fmt.Sprintf("%d of %d", total, total) {
+	if pos := (listPosition{Cursor: m.bodyCursorIdx, Total: panel.BodyRowCount(m.chart.positions, m.chart.cusps)}).text(); pos != fmt.Sprintf("%d of %d", total, total) {
 		t.Errorf("counter reads %q", pos)
 	}
 	// Per-chart cursor memory: leave the slot and come back.
@@ -265,12 +272,14 @@ func TestCuspRowsScrollWithTheList(t *testing.T) {
 	if got := m.bodyRows[m.focusedSlot()]; got != 15 {
 		t.Errorf("remembered row = %d, want 15 (a cusp row)", got)
 	}
-	// A plain cusp row is no body: Space and Details have nothing to select.
-	if _, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, 9); ok {
-		t.Errorf("cursor on cusp row 2 resolved to a body")
+	// A cusp row is no body: the cursor on it stands for the cusp point itself
+	// (house 2's), so Space and Details act on that object and on nothing else.
+	o, ok := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, 9)
+	if h, _ := aspect.CuspHouse(o); !ok || h != 2 {
+		t.Errorf("cursor on cusp row 2 resolved to (%v, %v), want the 2nd cusp's own object", o, ok)
 	}
-	if b, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, 8); !ok || b != aspect.Ascendant {
-		t.Errorf("first row under the rule = (%v, %v), want the Ascendant", b, ok)
+	if o, ok := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, 8); !ok || o != objAscendant {
+		t.Errorf("first row under the rule = (%v, %v), want the Ascendant", o, ok)
 	}
 }
 
@@ -280,8 +289,8 @@ func TestCuspCursorClampsWhenTheFrameShrinks(t *testing.T) {
 	m.chart.cusps = fullChartCusps()
 	m.bodyCursorIdx = 19
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: m.chart.positions[:4]})
-	if m.bodyCursorIdx != bodyRowCount(m.chart.positions, m.chart.cusps)-1 {
-		t.Errorf("cursor = %d after a smaller frame, want the last row %d", m.bodyCursorIdx, bodyRowCount(m.chart.positions, m.chart.cusps)-1)
+	if m.bodyCursorIdx != panel.BodyRowCount(m.chart.positions, m.chart.cusps)-1 {
+		t.Errorf("cursor = %d after a smaller frame, want the last row %d", m.bodyCursorIdx, panel.BodyRowCount(m.chart.positions, m.chart.cusps)-1)
 	}
 }
 
@@ -305,9 +314,10 @@ func TestBodiesRxAndCuspsFrames(t *testing.T) {
 	writeDesignFrame(t, "bodies-rx-cusps-one-132x40-never", m.View())
 
 	m = one(80, 24)
-	m.bodyCursorIdx = bodyRowCount(m.chart.positions, m.chart.cusps) - 1
+	m.bodyCursorIdx = panel.BodyRowCount(m.chart.positions, m.chart.cusps) - 1
 	writeDesignFrame(t, "bodies-rx-cusps-one-80x24-never", m.View())
 
+	freshModels(t)
 	stubColumnLookups(t, nil)
 	cuspsFor := func(shift float64) aspect.Cusps {
 		c := fullChartCusps()
@@ -316,12 +326,14 @@ func TestBodiesRxAndCuspsFrames(t *testing.T) {
 		}
 		return c
 	}
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
+		}
+	})
 	pair := settledComparing(t, 1)
 	pair.cfg = Config{Color: ColorNever}
 	pair.width, pair.height = 132, 40
@@ -348,14 +360,14 @@ func TestPlainCuspsOffByDefault(t *testing.T) {
 		}
 	}
 	total := fullChartPlanets + fullChartAngles
-	if got := bodyRowCount(ps, cusps); got != total || scroll.Total != total {
+	if got := panel.BodyRowCount(ps, cusps); got != total || scroll.Total != total {
 		t.Errorf("bodyRowCount = %d, viewport total = %d, want %d", got, scroll.Total, total)
 	}
-	if b, ok := bodyAtCursor(ps, cusps, total-1); !ok || b != aspect.Midheaven {
-		t.Errorf("last row = (%v, %v), want the Midheaven", b, ok)
+	if o, ok := panel.ObjectAtCursor(ps, cusps, total-1); !ok || o != objMidheaven {
+		t.Errorf("last row = (%v, %v), want the Midheaven", o, ok)
 	}
-	if _, ok := bodyAtCursor(ps, cusps, total); ok {
-		t.Errorf("a cursor past the last row resolved to a body: a hidden cusp row is reachable")
+	if _, ok := panel.ObjectAtCursor(ps, cusps, total); ok {
+		t.Errorf("a cursor past the last row resolved to an object: a hidden cusp row is reachable")
 	}
 }
 
@@ -389,12 +401,14 @@ func TestTickedCuspShowsUnderTheRuleOnce(t *testing.T) {
 			t.Errorf("a ticked cusp's object row is drawn above the rule: %q", row)
 		}
 	}
-	if got, want := bodyRowCount(ticked, cusps), fullChartPlanets+6; got != want {
+	if got, want := panel.BodyRowCount(ticked, cusps), fullChartPlanets+6; got != want {
 		t.Errorf("bodyRowCount = %d, want %d", got, want)
 	}
-	// The cursor lands on the cusp row and it is no body.
-	if _, ok := bodyAtCursor(ticked, cusps, fullChartPlanets+1); ok {
-		t.Errorf("the plain cusp row resolved to a body")
+	// The cursor lands on the cusp row: it stands for the ticked cusp point
+	// itself, house 2's.
+	o, ok := panel.ObjectAtCursor(ticked, cusps, fullChartPlanets+1)
+	if h, _ := aspect.CuspHouse(o); !ok || h != 2 {
+		t.Errorf("the cusp row resolved to (%v, %v), want the 2nd cusp's own object", o, ok)
 	}
 
 	// Unticking 2nd: the popup's next frame no longer holds its object row.
@@ -415,14 +429,14 @@ func TestTickedCuspInComparing(t *testing.T) {
 	}
 	otherPositions := fullChartPositions()
 	for i, p := range otherPositions {
-		if h := angleHouse(p.Body); h > 0 {
+		if h := panel.AngleHouse(p.Object); h > 0 {
 			otherPositions[i].Longitude = other[h-1]
 		}
 	}
 	state := chartViewState{positions: withTicked(fullChartPositions(), cusps, 2, 11), cusps: cusps}
-	cols := []bodyColumn{
-		{positions: state.positions, cusps: cusps},
-		{positions: withTicked(otherPositions, other, 2, 11), cusps: other},
+	cols := []panel.BodyColumn{
+		{Positions: state.positions, Cusps: cusps},
+		{Positions: withTicked(otherPositions, other, 2, 11), Cusps: other},
 	}
 	view := bodiesView{shown: 2, comparing: true, ok: true, cols: cols, focus: 0}
 	body, rule, _ := renderBodiesFor(view, state, nil, 0, 0, 100, 40, false, Config{Accessible: true})
@@ -450,7 +464,7 @@ func TestTickedCuspInComparing(t *testing.T) {
 			t.Errorf("a ticked cusp's object row is drawn as a body row in comparing: %q", row)
 		}
 	}
-	if got, want := bodyRowCount(state.positions, cusps), fullChartPlanets+6; got != want {
+	if got, want := panel.BodyRowCount(state.positions, cusps), fullChartPlanets+6; got != want {
 		t.Errorf("bodyRowCount = %d, want %d", got, want)
 	}
 }
@@ -479,14 +493,16 @@ func TestCuspsTickedPairFrame(t *testing.T) {
 		}
 		return c
 	}
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		cu := cuspsFor(shiftOf(c.When))
-		return lookup.Result{Positions: withTicked(shiftedChart(shiftOf(c.When)), cu, 2), Cusps: cu}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		cu := cuspsFor(shiftOf(when) + 11)
-		return lookup.Result{Positions: withTicked(shiftedChart(shiftOf(when)+11), cu, 2), Cusps: cu}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			cu := cuspsFor(shiftOf(c.When))
+			return lookup.Result{Positions: withTicked(shiftedChart(shiftOf(c.When)), cu, 2), Cusps: cu}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			cu := cuspsFor(shiftOf(when) + 11)
+			return lookup.Result{Positions: withTicked(shiftedChart(shiftOf(when)+11), cu, 2), Cusps: cu}, nil
+		}
+	})
 	pair := settledComparing(t, 1)
 	pair.cfg = Config{Color: ColorNever}
 	pair.width, pair.height = 132, 40

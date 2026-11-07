@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"reflect"
 	"strings"
 	"testing"
@@ -86,7 +87,7 @@ func keyMsgFor(t *testing.T, k string) tea.KeyMsg {
 }
 
 func TestEveryBindingIsDeclaredWell(t *testing.T) {
-	for _, e := range defaultKeys().mainBindings() {
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		name := fmt.Sprintf("binding-%d", int(e.ID))
 		if len(e.Binding.Keys()) == 0 {
 			t.Errorf("%s declares no keys", name)
@@ -104,8 +105,8 @@ func TestEveryBindingIsDeclaredWell(t *testing.T) {
 }
 
 func TestNoTwoBindingsClaimTheSameKey(t *testing.T) {
-	owner := map[string]BindingID{}
-	for _, e := range defaultKeys().mainBindings() {
+	owner := map[string]keys.BindingID{}
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		for _, k := range e.Binding.Keys() {
 			if prev, taken := owner[k]; taken && prev != e.ID {
 				t.Errorf("key %q is claimed by both binding %d and binding %d", k, int(prev), int(e.ID))
@@ -196,7 +197,7 @@ func hotkeyStates(t *testing.T) []Model {
 // candidate state and requires an effect somewhere: a changed frame or a
 // returned command.
 func TestEveryMainScopeKeyDoesSomething(t *testing.T) {
-	for _, e := range defaultKeys().mainBindings() {
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		for _, k := range e.Binding.Keys() {
 			k := k
 			id := int(e.ID)

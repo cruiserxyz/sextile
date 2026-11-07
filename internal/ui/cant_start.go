@@ -16,6 +16,9 @@ import (
 // (the specification). Three signals feed it — the startup
 // probe (binary), a compute that came back with every body at 0° Aries
 // (ephemeris), and a failed atlas read (atlas) — and each only ever turns on.
+// Two more come from the startup reads, each in the error's own words: the
+// object list (objectList) and the check of the ephemeris files
+// (ephemerisProbe, which has a deadline).
 // A fix needs a restart, so nothing turns them off.
 //
 // A fourth reason, a launch the instance lock refused (the specification:
@@ -29,6 +32,17 @@ import (
 type cantStartState struct {
 	binary, ephemeris, atlas bool
 
+	// objectList is the reason Astrolog's object list could not be read, in
+	// the error's own words; empty while it can.
+	objectList string
+
+	// ephemerisProbe is the reason the startup check of Astrolog's ephemeris
+	// files failed or ran out of time, in the error's own words; empty while
+	// it has not. It is not the ephemeris reason above, which says every body
+	// came back at 0° Aries: that is a different fact about a different
+	// failure, and this one says nothing about the files being unreadable.
+	ephemerisProbe string
+
 	// lockReason and lockRemedy are set together, and only, by
 	// NewLockRefusedModel. Non-empty means this launch was refused by the
 	// instance lock and nothing else about it is true: nothing was read.
@@ -36,7 +50,7 @@ type cantStartState struct {
 }
 
 func (s cantStartState) any() bool {
-	return s.binary || s.ephemeris || s.atlas || s.locked()
+	return s.binary || s.ephemeris || s.atlas || s.objectList != "" || s.ephemerisProbe != "" || s.locked()
 }
 
 // locked reports a launch the instance lock refused.
@@ -118,6 +132,12 @@ func (s cantStartState) reasons() []string {
 	}
 	if s.atlas {
 		out = append(out, cantStartAtlas)
+	}
+	if s.objectList != "" && !s.binary {
+		out = append(out, "Astrolog's object list could not be read: "+s.objectList)
+	}
+	if s.ephemerisProbe != "" && !s.binary {
+		out = append(out, "Astrolog's ephemeris files could not be checked: "+s.ephemerisProbe)
 	}
 	return out
 }

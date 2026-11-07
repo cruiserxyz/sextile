@@ -31,14 +31,14 @@ func TestOverlayFrame_ExecBudget(t *testing.T) {
 	full := ChartComputer(func(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
 		fullCalls++
 		return payload.RawOutput{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: moment(t, spec).JD}},
+			Positions: []aspect.Position{{Object: objSun, Longitude: moment(t, spec).JD}},
 			Aspects:   []aspect.Aspect{},
 		}, nil
 	})
 	positionsOnly := ChartComputer(func(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
 		positionsOnlyCalls++
 		return payload.RawOutput{
-			Positions: []aspect.Position{{Body: aspect.Moon, Longitude: moment(t, spec).JD}},
+			Positions: []aspect.Position{{Object: objMoon, Longitude: moment(t, spec).JD}},
 		}, nil
 	})
 	probers := &Probers{Full: full, PositionsOnly: positionsOnly}
@@ -57,7 +57,7 @@ func TestOverlayFrame_ExecBudget(t *testing.T) {
 	}
 	transitTime := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 
-	// This is the call sequence computeOverlayCmd executes in ui/startup.go
+	// This is the call sequence computeOverlayCmd executes in ui/startup_compute.go
 	// through the Probers seam (the -rt cross-aspect spawn is outside it).
 	ctx := context.Background()
 	if _, err := FirstCallNatalPositions(ctx, probers, natalChart, Hellenistic); err != nil {

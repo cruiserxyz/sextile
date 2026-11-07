@@ -27,36 +27,36 @@ func (w *liveWheel) url() string { return "http://" + w.l.Addr().String() + "/" 
 func installLiveWheel(t *testing.T) *liveWheel {
 	t.Helper()
 	w := &liveWheel{t: t}
-	prevShow, prevClose := showWheel, closeWheelServer
-	showWheel = func([]byte) (string, error) {
-		if w.l == nil {
-			// Like the real server, a reopened wheel takes its old address.
-			addr := "127.0.0.1:0"
-			if w.lastAddr != "" {
-				addr = w.lastAddr
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func([]byte) (string, error) {
+			if w.l == nil {
+				// Like the real server, a reopened wheel takes its old address.
+				addr := "127.0.0.1:0"
+				if w.lastAddr != "" {
+					addr = w.lastAddr
+				}
+				l, err := net.Listen("tcp", addr)
+				if err != nil {
+					return "", err
+				}
+				w.l = l
+				go func() { _ = http.Serve(l, http.NotFoundHandler()) }()
 			}
-			l, err := net.Listen("tcp", addr)
-			if err != nil {
-				return "", err
+			return w.url(), nil
+		}
+		s.wheel.closeServer = func() error {
+			w.closed++
+			if w.l != nil {
+				err := w.l.Close()
+				addr := w.l.Addr().String()
+				w.l = nil
+				w.lastAddr = addr
+				return err
 			}
-			w.l = l
-			go func() { _ = http.Serve(l, http.NotFoundHandler()) }()
+			return nil
 		}
-		return w.url(), nil
-	}
-	closeWheelServer = func() error {
-		w.closed++
-		if w.l != nil {
-			err := w.l.Close()
-			addr := w.l.Addr().String()
-			w.l = nil
-			w.lastAddr = addr
-			return err
-		}
-		return nil
-	}
+	})
 	t.Cleanup(func() {
-		showWheel, closeWheelServer = prevShow, prevClose
 		if w.l != nil {
 			w.l.Close()
 		}

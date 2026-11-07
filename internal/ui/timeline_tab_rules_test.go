@@ -142,7 +142,7 @@ func TestAbsentTimelineTabIsSkippedAndFallsBack(t *testing.T) {
 	if got := m.activeTabID(PanelDetails); got != TabDetailsReport {
 		t.Fatalf("a remembered Timeline on a chart without one shows %s, want the report", got)
 	}
-	if got := m.attachLabel(); got != "Report" {
+	if got := m.attachTitle(); got != "Report" {
 		t.Errorf("the Enter label is %q on a chart without a Timeline, want Report", got)
 	}
 	m, cmd := tpress(t, m, keyEnter)

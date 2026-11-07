@@ -1,7 +1,10 @@
 package astrolog
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -9,64 +12,21 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// bodyAbbrev4 maps astrolog's 3- or 4-letter body abbreviation (the row label
-// in the default chart) to the pkg/aspect Body enum. The default chart emits
-// Sun–Pluto, Nort, Asce and Midh; the remaining angles + Chiron/SouthNode/
-// Lilith appear only once the body-restriction switches enable them (Slice B2),
-// so those keys are harmless until then. astrolog 7.80 spells Imum Coeli "Nadi".
-var bodyAbbrev4 = map[string]aspect.Body{
-	"Sun":  aspect.Sun,
-	"Moon": aspect.Moon,
-	"Merc": aspect.Mercury,
-	"Venu": aspect.Venus,
-	"Mars": aspect.Mars,
-	"Jupi": aspect.Jupiter,
-	"Satu": aspect.Saturn,
-	"Uran": aspect.Uranus,
-	"Nept": aspect.Neptune,
-	"Plut": aspect.Pluto,
-	"Nort": aspect.NorthNode,
-	"Sout": aspect.SouthNode,
-	"Chir": aspect.Chiron,
-	"Lili": aspect.Lilith,
-	"Asce": aspect.Ascendant,
-	"Midh": aspect.Midheaven,
-	"Desc": aspect.Descendant,
-	"Nadi": aspect.ImumCoeli,
-}
+// The two column widths Astrolog cuts an object's name to in an aspect list:
+// the left name is printed right-aligned in seven cells (charts2.cpp:750,
+// "%7.7s") and the right name in a ten-cell field. Both are resolved through
+// the registry's ByCut, never through a table of Sextile's own.
+const (
+	leftNameWidth  = 7
+	rightNameWidth = 10
+)
 
-// bodyNames is the one table of the names Astrolog prints for the bodies the
-// aspect.Body enum can name, in the long form the aspect lists use (astrolog
-// 8 spells Imum Coeli "Nadir"). bodyFullName is derived from it, and both
-// aspect parsers resolve through that map.
-var bodyNames = []struct {
-	name string
-	body aspect.Body
-}{
-	{"Sun", aspect.Sun}, {"Moon", aspect.Moon}, {"Mercury", aspect.Mercury},
-	{"Venus", aspect.Venus}, {"Mars", aspect.Mars}, {"Jupiter", aspect.Jupiter},
-	{"Saturn", aspect.Saturn}, {"Uranus", aspect.Uranus}, {"Neptune", aspect.Neptune},
-	{"Pluto", aspect.Pluto}, {"North Node", aspect.NorthNode}, {"South Node", aspect.SouthNode},
-	{"Chiron", aspect.Chiron}, {"Lilith", aspect.Lilith}, {"Ascendant", aspect.Ascendant},
-	{"Midheaven", aspect.Midheaven}, {"Descendant", aspect.Descendant}, {"Nadir", aspect.ImumCoeli},
+// resolveSide resolves one printed object name of an aspect line through the
+// registry: the Object, zero when the registry cannot resolve it.
+func resolveSide(reg aspect.Registry, tok string, width int) aspect.Object {
+	obj, _ := reg.ByCut(strings.TrimSpace(tok), width)
+	return obj
 }
-
-// bodyFullName maps a body name as printed in an aspect list to the pkg/aspect
-// Body enum: every long name in bodyNames, plus its first seven characters when
-// it is longer, because the left column of a list is seven cells wide
-// ("Ascenda", "Midheav", "Descend", "North N", "South N"). No two names share a
-// seven-character prefix, so the lookup is unambiguous. A name absent from the
-// map is a body the enum cannot name; the parsers keep it by its printed name.
-var bodyFullName = func() map[string]aspect.Body {
-	m := make(map[string]aspect.Body, 2*len(bodyNames))
-	for _, e := range bodyNames {
-		m[e.name] = e.body
-		if len(e.name) > 7 {
-			m[e.name[:7]] = e.body
-		}
-	}
-	return m
-}()
 
 // signAbbrev maps astrolog's 3-letter sign abbreviation to the pkg/aspect
 // Sign enum.
@@ -180,38 +140,14 @@ var crossAspectLinePat = regexp.MustCompile(
 	`(?m)^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:\s+([+-as])\s*(\d+)[^0-9](\d+)'\s+-\s+power:\s+([0-9.]+)`,
 )
 
-// resolveCrossBody maps an astrolog -r0 body token to a Body. The right-side
-// token is the full name; the left-side token is truncated to 7 chars
-// ("Ascenda"→Ascendant, "North N"→North Node). An exact match, or a token that
-// is the 7-char prefix of a longer canonical name, resolves unambiguously — no
-// two canonical names share a 7-char prefix. It reads bodyFullName, the table
-// parseAspects uses too.
-func resolveCrossBody(tok string) (aspect.Body, bool) {
-	body, ok := bodyFullName[strings.TrimSpace(tok)]
-	return body, ok
-}
-
-// resolveAspectBody resolves a body token of an aspect line. A body the enum
-// cannot name comes back as BodyUnknown with the printed name (trimmed; the left
-// column may be a seven-character truncation) as its label; a typed body has no
-// label.
-func resolveAspectBody(tok string) (aspect.Body, string) {
-	tok = strings.TrimSpace(tok)
-	if body, ok := bodyFullName[tok]; ok {
-		return body, ""
-	}
-	return aspect.BodyUnknown, tok
-}
-
 // parseCrossAspects extracts cross-aspects from astrolog's -r0/-rt -aa output.
 // Roles are preserved (Primary = left/first chart, Secondary = right/second
 // chart) — NOT canonicalized like parseAspects. Lines that don't match, or
-// whose aspect kind isn't in the system enum, are silently skipped. A body the
-// Body enum cannot name is KEPT as BodyUnknown carrying the printed name in
-// PrimaryLabel/SecondaryLabel.
+// whose aspect kind isn't in the system enum, are silently skipped. Every
+// side is KEPT, told apart by its Object in PrimaryObject/SecondaryObject.
 // Applying is Astrolog's own `a`/`s` marker; its semantics follow the
 // relation switch the list ran under (see aspect.CrossAspect).
-func parseCrossAspects(stdout string) []aspect.CrossAspect {
+func parseCrossAspects(stdout string, reg aspect.Registry) []aspect.CrossAspect {
 	var out []aspect.CrossAspect
 	stdout = astrologstyle.StripSGR(stdout)
 	for _, line := range strings.Split(stdout, "\n") {
@@ -219,9 +155,9 @@ func parseCrossAspects(stdout string) []aspect.CrossAspect {
 		if m == nil {
 			continue
 		}
-		primary, primaryLabel := resolveAspectBody(m[1])
+		primaryObj := resolveSide(reg, m[1], leftNameWidth)
 		kind, okK := aspectAbbrev[m[2]]
-		secondary, secondaryLabel := resolveAspectBody(m[3])
+		secondaryObj := resolveSide(reg, m[3], rightNameWidth)
 		if !okK {
 			continue
 		}
@@ -229,14 +165,12 @@ func parseCrossAspects(stdout string) []aspect.CrossAspect {
 		orbMin, _ := strconv.Atoi(m[6])
 		power, _ := strconv.ParseFloat(m[7], 64)
 		out = append(out, aspect.CrossAspect{
-			Primary:        primary,
-			PrimaryLabel:   primaryLabel,
-			Secondary:      secondary,
-			SecondaryLabel: secondaryLabel,
-			Kind:           kind,
-			Orb:            aspect.Orb(float64(orbDeg) + float64(orbMin)/60.0),
-			Power:          power,
-			Applying:       m[4] == applyingMarker,
+			PrimaryObject:   primaryObj,
+			SecondaryObject: secondaryObj,
+			Kind:            kind,
+			Orb:             aspect.Orb(float64(orbDeg) + float64(orbMin)/60.0),
+			Power:           power,
+			Applying:        m[4] == applyingMarker,
 		})
 	}
 	return out
@@ -279,35 +213,46 @@ func unavailableObjects(stdout string) []string {
 
 // parsePositions extracts body positions from astrolog's default chart output.
 //
+// Astrolog prints one row per object asked for, in ascending object number,
+// and the row's own label is only four characters (Titan and Titania both
+// print `Tita`), so a row takes its identity from its place: the printed rows
+// are zipped with asked, sorted ascending and without repeats, BEFORE the
+// no-data rows are dropped (an absent object still prints one). A count that
+// differs is an error naming what was asked, never a guessed identity.
+//
 // Two kinds of row do NOT become a position, and they are different:
 //
-//   - A row whose body is not in bodyAbbrev4 is KEPT, carrying Astrolog's own
-//     label and BodyUnknown. It has a real position and no typed identity.
-//     (This used to be skipped, which is what made a selected Ceres compute and
-//     then never appear.)
-//   - A row at the no-data sentinel is DROPPED. It has a typed identity or a
-//     label but no position, because this Astrolog has no ephemeris file for
-//     it. unavailableObjects names those so the perimeter can say so.
+//   - A row at the no-data sentinel is DROPPED. It has an identity but no
+//     position, because this Astrolog has no ephemeris file for it.
+//     unavailableObjects names those so the perimeter can say so.
 //
 // A line that does not match the body-position pattern at all is not a body row
 // and is skipped.
-func parsePositions(stdout string) []aspect.Position {
-	var positions []aspect.Position
+func parsePositions(stdout string, asked []int, reg aspect.Registry) ([]aspect.Position, error) {
 	stdout = astrologstyle.StripSGR(stdout)
+	nums := askedNumbers(asked)
+	var rows [][]string
 	for _, line := range strings.Split(stdout, "\n") {
-		m := bodyPositionPat.FindStringSubmatch(line)
-		if m == nil {
-			continue
+		if m := bodyPositionPat.FindStringSubmatch(line); m != nil {
+			rows = append(rows, m)
 		}
-		// An abbreviation the enum does not name is KEPT, carrying Astrolog's
-		// own label instead of a typed identity. Dropping it is what made the
-		// body selector able to add Ceres to a chart that then did not show
-		// it. Only the sign is still required — a row whose position cannot
-		// be read is not a position.
-		body := bodyAbbrev4[m[1]]
-		label := ""
-		if body == aspect.BodyUnknown {
-			label = m[1]
+	}
+	if len(rows) != len(nums) {
+		return nil, fmt.Errorf("astrolog: positions: %d rows printed for %d objects asked (%s)", len(rows), len(nums), joinNumbers(nums))
+	}
+	var positions []aspect.Position
+	for i, m := range rows {
+		object, ok := reg.ByNumber(nums[i])
+		if !ok {
+			return nil, fmt.Errorf("astrolog: positions: object %d is not in Astrolog's object list", nums[i])
+		}
+		// The place names the row; its own label must not disagree. A host
+		// astrolog.as with a -U star sort prints the star rows in another order,
+		// and a label that resolves to a different object means the rows are not
+		// in the order asked. A label that resolves to nothing (Titan and
+		// Titania both print `Tita`) stays governed by place.
+		if printed, ok := reg.ByCut(m[1], 4); ok && printed.Number != object.Number {
+			return nil, fmt.Errorf("astrolog: positions: row %d reads %s, asked %s (the host sorts its objects, and Sextile reads rows by their order)", i+1, printed.Name, object.Name)
 		}
 		sign, ok := signAbbrev[m[3]]
 		if !ok {
@@ -344,15 +289,30 @@ func parsePositions(stdout string) []aspect.Position {
 			continue
 		}
 		positions = append(positions, aspect.Position{
-			Body:      body,
-			Label:     label,
+			Object:    object,
 			Longitude: longitude,
 			Latitude:  latitude,
 			Speed:     veloc,
 			House:     house,
 		})
 	}
-	return positions
+	return positions, nil
+}
+
+// askedNumbers is the object numbers a call asked for, ascending and without
+// repeats: the order Astrolog prints its rows in.
+func askedNumbers(asked []int) []int {
+	nums := append([]int(nil), asked...)
+	sort.Ints(nums)
+	return slices.Compact(nums)
+}
+
+func joinNumbers(nums []int) string {
+	parts := make([]string, len(nums))
+	for i, n := range nums {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, " ")
 }
 
 // houseCuspPat matches one house-cusp field from Astrolog's default chart.
@@ -421,12 +381,11 @@ func parseCusps(stdout string) aspect.Cusps {
 
 // parseAspects extracts aspects from astrolog's -aa output. Lines that do
 // not match, or whose aspect kind is not in the system enum, are silently
-// skipped. A body the Body enum cannot name is kept as BodyUnknown with its
-// printed name in ALabel/BLabel. Each aspect is canonicalised through
-// aspect.NewAspect so that (Mars, Venus, Con) and (Venus, Mars, Con)
+// skipped. Each side is kept with its Object. Each aspect is canonicalised through
+// aspect.NewObjectAspect so that (Mars, Venus, Con) and (Venus, Mars, Con)
 // collapse to a single record. Applying is Astrolog's `a` marker;
 // a plain -a list (+/- orbs) parses with Applying false throughout.
-func parseAspects(stdout string) []aspect.Aspect {
+func parseAspects(stdout string, reg aspect.Registry) []aspect.Aspect {
 	var aspects []aspect.Aspect
 	stdout = astrologstyle.StripSGR(stdout)
 	for _, line := range strings.Split(stdout, "\n") {
@@ -434,8 +393,8 @@ func parseAspects(stdout string) []aspect.Aspect {
 		if m == nil {
 			continue
 		}
-		bodyA, labelA := resolveAspectBody(m[1])
-		bodyB, labelB := resolveAspectBody(m[5])
+		objA := resolveSide(reg, m[1], leftNameWidth)
+		objB := resolveSide(reg, m[5], rightNameWidth)
 		kind, okK := aspectAbbrev[m[3]]
 		if !okK {
 			continue
@@ -444,7 +403,7 @@ func parseAspects(stdout string) []aspect.Aspect {
 		orbMin, _ := strconv.Atoi(m[8])
 		orb := aspect.Orb(float64(orbDeg) + float64(orbMin)/60.0)
 		power, _ := strconv.ParseFloat(m[9], 64)
-		a := aspect.NewLabelledAspect(bodyA, labelA, bodyB, labelB, kind, orb)
+		a := aspect.NewObjectAspect(objA, objB, kind, orb)
 		a.Power = power
 		a.Applying = m[6] == applyingMarker
 		aspects = append(aspects, a)

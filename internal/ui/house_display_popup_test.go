@@ -2,6 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"regexp"
 	"strings"
 	"testing"
@@ -138,15 +142,15 @@ func TestHouseDisplayPopup(t *testing.T) {
 		if mk := marks(t, rows); strings.Join(mk, "") != "•   " {
 			t.Errorf("radio marks = %q, want only the first chosen", mk)
 		}
-		if m.houseDisplayPopup.list.cursor != 0 {
-			t.Errorf("the cursor opens on row %d, want the chosen form's row 0", m.houseDisplayPopup.list.cursor)
+		if m.houseDisplayPopup.List.Cursor != 0 {
+			t.Errorf("the cursor opens on row %d, want the chosen form's row 0", m.houseDisplayPopup.List.Cursor)
 		}
 
 		// Opened again with another form in force, the cursor starts on it.
-		m.houseDisplay = houseMarked
+		m.houseDisplay = panel.HouseMarked
 		m, _ = escSend(t, m, escKey(tea.KeyEsc), escRunes(","), escRunes("a"))
-		if m.houseDisplayPopup.list.cursor != 3 || m.houseDisplayPopup.list.selected != 3 {
-			t.Errorf("reopened with marked in force: cursor %d selected %d, want 3 and 3", m.houseDisplayPopup.list.cursor, m.houseDisplayPopup.list.selected)
+		if m.houseDisplayPopup.List.Cursor != 3 || m.houseDisplayPopup.List.Selected != 3 {
+			t.Errorf("reopened with marked in force: cursor %d selected %d, want 3 and 3", m.houseDisplayPopup.List.Cursor, m.houseDisplayPopup.List.Selected)
 		}
 	})
 
@@ -193,7 +197,7 @@ func TestHouseDisplayPopup(t *testing.T) {
 		m := displayOpen(t, cfg, 132, 40)
 		for i, info := range houseForms {
 			area := squash(strings.Join(popupBody(t, m)[6:], " "))
-			for _, want := range []string{squash(info.description), squash(houseComparingNote), squash(ansi.Strip(houseExampleRow(info.form, cfg)))} {
+			for _, want := range []string{squash(info.description), squash(houseComparingNote), squash(ansi.Strip(popup.HouseExampleRow(info.form, cfg)))} {
 				if !strings.Contains(area, want) {
 					t.Errorf("focus on %q: the area lacks %q:\n%s", info.title, want, area)
 				}
@@ -217,11 +221,11 @@ func TestHouseDisplayPopup(t *testing.T) {
 		}
 
 		m, _ = escSend(t, m, escKey(tea.KeyDown), escKey(tea.KeyDown))
-		if m.houseDisplay != houseAngularity {
+		if m.houseDisplay != panel.HouseAngularity {
 			t.Fatal("moving the focus changed the form")
 		}
 		m, _ = escSend(t, m, escKey(tea.KeySpace))
-		if m.houseDisplay != houseNumber {
+		if m.houseDisplay != panel.HouseNumber {
 			t.Fatalf("Space on Plain number left the form at %v", m.houseDisplay)
 		}
 		if m.currentOwner() != ownerDisplay {
@@ -246,7 +250,7 @@ func TestHouseDisplayPopup(t *testing.T) {
 
 		// And on to True quadrants: a frame again, one cell to the left.
 		m, _ = escSend(t, m, escKey(tea.KeyUp), escKey(tea.KeySpace))
-		if m.houseDisplay != houseQuadrants {
+		if m.houseDisplay != panel.HouseQuadrants {
 			t.Fatalf("Space on True quadrants left the form at %v", m.houseDisplay)
 		}
 		quad := underneath(m)
@@ -271,14 +275,14 @@ func TestHouseDisplayPopup(t *testing.T) {
 		for _, closer := range []tea.KeyType{tea.KeyEnter, tea.KeyEsc} {
 			m := displayOpen(t, cfg, 132, 40)
 			m, _ = escSend(t, m, escKey(tea.KeyDown), escKey(tea.KeyDown), escKey(tea.KeyDown), escKey(tea.KeySpace))
-			if m.houseDisplay != houseMarked {
+			if m.houseDisplay != panel.HouseMarked {
 				t.Fatalf("Space on Number + angularity left the form at %v", m.houseDisplay)
 			}
 			m, _ = escSend(t, m, escKey(closer))
 			if m.currentOwner() != ownerMain || m.startup != startupReady {
 				t.Errorf("%v left the keyboard with owner %d in %q", closer, m.currentOwner(), m.startup)
 			}
-			if m.houseDisplay != houseMarked {
+			if m.houseDisplay != panel.HouseMarked {
 				t.Errorf("%v did not keep the choice: %v", closer, m.houseDisplay)
 			}
 			if strings.Contains(ansi.Strip(m.View()), popupTitleDisplay) {
@@ -290,14 +294,14 @@ func TestHouseDisplayPopup(t *testing.T) {
 	t.Run("a focus move without Space is not a choice", func(t *testing.T) {
 		m := displayOpen(t, cfg, 132, 40)
 		m, _ = escSend(t, m, escKey(tea.KeyDown), escKey(tea.KeyEnter))
-		if m.houseDisplay != houseAngularity {
+		if m.houseDisplay != panel.HouseAngularity {
 			t.Errorf("closing after a move only changed the form to %v", m.houseDisplay)
 		}
 	})
 
 	t.Run("j k and the paging keys move the focus", func(t *testing.T) {
 		m := displayOpen(t, cfg, 132, 40)
-		at := func(m Model) int { return m.houseDisplayPopup.list.cursor }
+		at := func(m Model) int { return m.houseDisplayPopup.List.Cursor }
 		for _, c := range []struct {
 			name string
 			keys []tea.Msg
@@ -318,7 +322,7 @@ func TestHouseDisplayPopup(t *testing.T) {
 			if at(got) != c.want {
 				t.Errorf("%s: cursor %d, want %d", c.name, at(got), c.want)
 			}
-			if got.houseDisplay != houseAngularity || got.houseDisplayPopup.list.selected != 0 {
+			if got.houseDisplay != panel.HouseAngularity || got.houseDisplayPopup.List.Selected != 0 {
 				t.Errorf("%s moved the choice", c.name)
 			}
 		}
@@ -347,7 +351,7 @@ func TestHouseDisplayPopup(t *testing.T) {
 		for _, info := range houseForms {
 			rows := popupBody(t, m)
 			joined := strings.Join(rows, "\n")
-			if !strings.Contains(joined, squash(ansi.Strip(houseExampleRow(info.form, cfg)))) && !strings.Contains(squash(joined), squash(ansi.Strip(houseExampleRow(info.form, cfg)))) {
+			if !strings.Contains(joined, squash(ansi.Strip(popup.HouseExampleRow(info.form, cfg)))) && !strings.Contains(squash(joined), squash(ansi.Strip(popup.HouseExampleRow(info.form, cfg)))) {
 				t.Errorf("80x24, %s: the example is missing:\n%s", info.title, joined)
 			}
 			for _, other := range houseForms {
@@ -370,7 +374,7 @@ func TestHouseDisplayPopup(t *testing.T) {
 // lists it, the key bar of the popup is its table, and the owner's entries act.
 func TestHouseDisplayKeys(t *testing.T) {
 	t.Run("the shipped leader map resolves a", func(t *testing.T) {
-		if got, id := mustDefaultLeaderMap().resolve([]string{"a"}); got != resolveAction || id != BindingHouseDisplay {
+		if got, id := mustDefaultLeaderMap().Resolve([]string{"a"}); got != keys.ResolveAction || id != keys.BindingHouseDisplay {
 			t.Errorf("`a` resolves to (%v, %v)", got, id)
 		}
 	})
@@ -380,25 +384,29 @@ func TestHouseDisplayKeys(t *testing.T) {
 		m.cfg = Config{Color: ColorNever}
 		found := false
 		for _, l := range m.helpLines() {
-			if l.binding && squash(l.text) == "House display ,a" {
+			if l.Binding && squash(l.Text) == "House display ,a" {
 				found = true
 			}
 		}
 		if !found {
 			var lines []string
 			for _, l := range m.helpLines() {
-				lines = append(lines, l.text)
+				lines = append(lines, l.Text)
 			}
 			t.Errorf("the Keys popup has no `House display ,a` row:\n%s", strings.Join(lines, "\n"))
 		}
-		count := 0
+		rows, headings := 0, 0
 		for _, l := range m.helpLines() {
-			if strings.Contains(l.text, "House display") {
-				count++
+			if strings.Contains(l.Text, "House display") {
+				if l.Binding {
+					rows++
+				} else {
+					headings++
+				}
 			}
 		}
-		if count != 1 {
-			t.Errorf("the Keys popup names House display %d times, want once (the leader section)", count)
+		if rows != 1 || headings != 1 {
+			t.Errorf("the Keys popup names House display in %d rows and %d headings, want the leader row once and the popup's own section once", rows, headings)
 		}
 	})
 
@@ -458,9 +466,9 @@ func TestHouseDisplayPopupHeightIsFixed(t *testing.T) {
 	for _, size := range [][2]int{{132, 40}, {80, 24}} {
 		heights, widths := map[int]bool{}, map[int]bool{}
 		for i := range houseForms {
-			list := newRadioList(len(houseForms), 0)
-			list.cursor = i
-			frame := renderHouseDisplay(houseDisplayState{list: list}, Config{}, size[0], size[1])
+			list := menu.NewRadioList(len(houseForms), 0)
+			list.Cursor = i
+			frame := renderHouseDisplay(withList(list), Config{}, size[0], size[1])
 			lines := strings.Split(frame, "\n")
 			heights[len(lines)], widths[ansi.StringWidth(lines[0])] = true, true
 		}
@@ -470,11 +478,19 @@ func TestHouseDisplayPopupHeightIsFixed(t *testing.T) {
 	}
 	// At 132x40 nothing limits it but its content: the box is the content
 	// (four forms, dotted line, fullest description) plus its own chrome.
-	fit := houseDisplayFit(Config{})
-	list := newRadioList(len(houseForms), 0)
-	frame := renderHouseDisplay(houseDisplayState{list: list}, Config{}, 132, 40)
+	fit := (popup.HouseDisplay{Forms: displayForms(), Note: houseComparingNote}).Fit(Config{})
+	list := menu.NewRadioList(len(houseForms), 0)
+	frame := renderHouseDisplay(withList(list), Config{}, 132, 40)
 	want := fit.Rows + 1 + 2 + 1 // top edge, padding, bottom edge
 	if got := len(strings.Split(frame, "\n")); got != want {
 		t.Errorf("132x40: the popup is %d lines, want %d (its content and chrome)", got, want)
 	}
+}
+
+// withList is the popup holding the four forms with this list as its cursor
+// and mark.
+func withList(list menu.RadioList) houseDisplayState {
+	st := newHouseDisplay(panel.HouseAngularity)
+	st.List = list
+	return st
 }

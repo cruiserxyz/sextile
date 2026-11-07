@@ -39,7 +39,9 @@ func escBase(t *testing.T) Model {
 	m.objectRegistry = testObjectRegistry()
 	m.focused = PanelBodies
 	m.bodyCursorIdx = 3
-	return m
+	// The fixture changed the registries after the frame was stamped, and with
+	// them the key the screen asks for: the frame on screen is the one asked for.
+	return m.restampFrame()
 }
 
 // escSnapshot is what C7 names: focus, the slot cursor, the Bodies cursor,
@@ -64,7 +66,7 @@ func snapshotForEsc(m Model) escSnapshot {
 			// what a rename changes); the slots string is moment, place and marks.
 			c := *s
 			c.Chart = store.SessionChart{}
-			slots += fmt.Sprintf("%d %+v %v|", i, c, m.slots.SelectedBodies(i))
+			slots += fmt.Sprintf("%d %+v %v|", i, c, markedObjects(m.slots, i))
 		}
 		slots += fmt.Sprintf("cmp=%v", m.slots.ComparisonSelected())
 	}
@@ -188,7 +190,7 @@ func TestEscRestoresTheScreen(t *testing.T) {
 			},
 			use: func(t *testing.T, m Model) Model {
 				m, _ = escSend(t, m, escRunes("x"), escKey(tea.KeyEnter))
-				if !m.save.saving {
+				if !m.save.Saving {
 					t.Fatal("Enter did not start the save")
 				}
 				return m

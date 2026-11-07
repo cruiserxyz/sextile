@@ -3,6 +3,8 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +65,7 @@ func pickerNames(cs []store.NamedChart) []string {
 // `place`, so the anchor-set paths have slots to attach to.
 func readyModelWithSlots(t *testing.T, place location.PlaceInfo) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
 	m.startup = startupReady
 	m.place = place
 	slots, err := store.NewSlots(m.clock.Now(), place)
@@ -162,7 +164,7 @@ func TestApplyChartsLoaded_PopulatesAndFilters(t *testing.T) {
 	m := readyModelWithSlots(t, berlinP)
 	m.startup = startupChartOpen
 	m.picker = chartPickerState{prior: startupReady}
-	m.picker.filterText = "one"
+	m.picker.FilterText = "one"
 	charts := []store.NamedChart{
 		testNamedChart("Constructed One", fixtureOneP),
 		testNamedChart("Example Three", berlinP),
@@ -175,8 +177,8 @@ func TestApplyChartsLoaded_PopulatesAndFilters(t *testing.T) {
 	if len(got.picker.charts) != 2 {
 		t.Errorf("charts = %d, want 2", len(got.picker.charts))
 	}
-	if len(got.picker.matches) != 1 || got.picker.matches[0].Name != "Constructed One" {
-		t.Errorf("matches for %q = %v, want [Constructed One]", "one", pickerNames(got.picker.matches))
+	if len(got.picker.Matches) != 1 || got.picker.Matches[0].Name != "Constructed One" {
+		t.Errorf("matches for %q = %v, want [Constructed One]", "one", pickerNames(got.picker.Matches))
 	}
 }
 
@@ -196,7 +198,7 @@ func TestApplyChartsLoaded_Error(t *testing.T) {
 // no-op — the chart picker anchors a transit-over-natal overlay and needs a
 // transit place first (the reviewer an earlier change HIGH).
 func TestChartPicker_CtrlO_NoopBeforeWorkspace(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupBootstrapping // location not resolved; m.slots nil, m.place zero
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	got := updated.(Model)
@@ -244,13 +246,13 @@ func TestChartPicker_Refilter_BrowseThenFilter(t *testing.T) {
 		testNamedChart("Constructed Two", fixtureOneP),
 	}}
 	p.refilter() // empty filter → browse all
-	if len(p.matches) != 3 {
-		t.Errorf("empty filter should browse all 3, got %d", len(p.matches))
+	if len(p.Matches) != 3 {
+		t.Errorf("empty filter should browse all 3, got %d", len(p.Matches))
 	}
-	p.filterText = "example"
+	p.FilterText = "example"
 	p.refilter()
-	if len(p.matches) != 2 {
-		t.Errorf("filter 'example' → 2, got %d: %v", len(p.matches), pickerNames(p.matches))
+	if len(p.Matches) != 2 {
+		t.Errorf("filter 'example' → 2, got %d: %v", len(p.Matches), pickerNames(p.Matches))
 	}
 }
 
@@ -262,7 +264,7 @@ func TestUpdateChartModalKey_EnterPicksFocused(t *testing.T) {
 		testNamedChart("Constructed One", fixtureOneP),
 	}}
 	m.picker.refilter() // browse; cursor 0
-	m.picker.cursor = 1 // focus the constructed chart
+	m.picker.Cursor = 1 // focus the constructed chart
 
 	updated, cmd := updateChartModalKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	got := updated.(Model)
@@ -318,11 +320,11 @@ func TestUpdateChartModalKey_TypingFilters(t *testing.T) {
 		updated, _ := updateChartModalKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = updated.(Model)
 	}
-	if m.picker.filterText != "two" {
-		t.Errorf("filterText = %q, want two", m.picker.filterText)
+	if m.picker.FilterText != "two" {
+		t.Errorf("filterText = %q, want two", m.picker.FilterText)
 	}
-	if len(m.picker.matches) != 1 || m.picker.matches[0].Name != "Constructed Two" {
-		t.Errorf("matches = %v, want [Constructed Two]", pickerNames(m.picker.matches))
+	if len(m.picker.Matches) != 1 || m.picker.Matches[0].Name != "Constructed Two" {
+		t.Errorf("matches = %v, want [Constructed Two]", pickerNames(m.picker.Matches))
 	}
 }
 
@@ -349,8 +351,8 @@ func TestChartPicker_EndToEnd_RealDir(t *testing.T) {
 		t.Fatal("Ctrl+O dispatched no load cmd")
 	}
 	m, _ = runCmd(t, m, cmd)
-	if len(m.picker.matches) != 1 || m.picker.matches[0].Name != "Dat Client" {
-		t.Fatalf("picker did not load the authored chart: %v", pickerNames(m.picker.matches))
+	if len(m.picker.Matches) != 1 || m.picker.Matches[0].Name != "Dat Client" {
+		t.Fatalf("picker did not load the authored chart: %v", pickerNames(m.picker.Matches))
 	}
 
 	// Enter resolves it; the resolve landing sets the natal anchor.
@@ -538,14 +540,14 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	colour := Config{Color: ColorAlways}
 
 	t.Run("colours off is plain", func(t *testing.T) {
-		got := listRow(chartRow(c, false, today), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, today), plainCfg, 60)
 		if !strings.HasPrefix(got, "  Good Fella (46) ") {
 			t.Errorf("row = %q, want `Good Fella (46)` after the cursor column", got)
 		}
 	})
 	t.Run("colours on fades only the age", func(t *testing.T) {
-		got := listRow(chartRow(c, false, today), colour, 60)
-		if !strings.Contains(got, "Good Fella"+sgrFaint+" (46)"+sgrReset) {
+		got := menu.Row(chartRow(c, false, today), colour, 60)
+		if !strings.Contains(got, "Good Fella"+term.SGRFaint+" (46)"+term.SGRReset) {
 			t.Errorf("row = %q, want the age faint straight after the name", got)
 		}
 		if w := ansi.StringWidth(got); w != 60 {
@@ -558,13 +560,13 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	t.Run("a long name shortens, the age stays whole", func(t *testing.T) {
 		long := c
 		long.Name = strings.Repeat("Longname ", 8)
-		got := ansi.Strip(listRow(chartRow(long, false, today), colour, 40))
+		got := ansi.Strip(menu.Row(chartRow(long, false, today), colour, 40))
 		if !strings.Contains(got, " (46)") || ansi.StringWidth(got) != 40 {
 			t.Errorf("row = %q (%d cells), want the age kept at width 40", got, ansi.StringWidth(got))
 		}
 	})
 	t.Run("the day before the birthday is a year less", func(t *testing.T) {
-		got := listRow(chartRow(c, false, today.AddDate(0, 0, -1)), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, today.AddDate(0, 0, -1)), plainCfg, 60)
 		if !strings.Contains(got, "Good Fella (45)") {
 			t.Errorf("row = %q, want (45) the day before the birthday", got)
 		}
@@ -572,7 +574,7 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	t.Run("under a year is zero", func(t *testing.T) {
 		b := c
 		b.Year, b.Month, b.Day = 2026, 1, 1
-		if got := listRow(chartRow(b, false, today), plainCfg, 60); !strings.Contains(got, "Good Fella (0)") {
+		if got := menu.Row(chartRow(b, false, today), plainCfg, 60); !strings.Contains(got, "Good Fella (0)") {
 			t.Errorf("row = %q, want (0)", got)
 		}
 	})
@@ -582,9 +584,9 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 		fut := c
 		fut.Year = 2030
 		for name, got := range map[string]string{
-			"no date":   listRow(chartRow(nd, false, today), plainCfg, 60),
-			"future":    listRow(chartRow(fut, false, today), plainCfg, 60),
-			"zero time": listRow(chartRow(c, false, time.Time{}), plainCfg, 60),
+			"no date":   menu.Row(chartRow(nd, false, today), plainCfg, 60),
+			"future":    menu.Row(chartRow(fut, false, today), plainCfg, 60),
+			"zero time": menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60),
 		} {
 			if strings.Contains(got, "(") {
 				t.Errorf("%s: row = %q, want no parentheses", name, got)

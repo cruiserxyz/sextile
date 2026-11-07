@@ -300,7 +300,7 @@ func TestFailedKeepReportedBeforeTheCityIsChosen(t *testing.T) {
 		},
 		SessionKeep: store.SessionKeep{Problem: "it is a symlink"},
 	}
-	var tm tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	tm, _ = tm.Update(p)
 	m := tm.(Model)

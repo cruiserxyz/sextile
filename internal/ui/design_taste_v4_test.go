@@ -50,7 +50,7 @@ func designDemoModel(t *testing.T, cfg Config, w, h int) Model {
 		Lat: demoPlace.Lat, Lon: demoPlace.Lon, TZ: demoPlace.TZ,
 		LatPresent: true, LonPresent: true,
 	}
-	var tm tea.Model = NewModelWithClock(cfg, FrozenClock(demoTransit))
+	var tm tea.Model = newTestModel(t, cfg, FrozenClock(demoTransit))
 	step := func(msg tea.Msg) { tm, _ = tm.Update(msg) }
 	step(tea.WindowSizeMsg{Width: w, Height: h})
 	step(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{demoPlace})})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"math"
 	"slices"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -25,40 +27,42 @@ import (
 // S/D instead of an empty bar, computed live from Astrolog for the focused
 // chart.
 
-type stationMarksFunc = func(context.Context, *lookup.Probers, []aspect.Position, time.Time, location.PlaceInfo, lookup.Lens) (map[aspect.Body]lookup.Station, []string, error)
+type stationMarksFunc = func(context.Context, *lookup.Probers, []aspect.Position, time.Time, location.PlaceInfo, lookup.Lens) (map[int]lookup.Station, []string, error)
 
 // installStationMarks replaces the station seam for one test; the package
 // default (main_test.go) makes no mark and no spawn.
 func installStationMarks(t *testing.T, fn stationMarksFunc) {
 	t.Helper()
-	old := stationMarks
-	t.Cleanup(func() { stationMarks = old })
-	stationMarks = fn
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.stations = fn
+	})
 }
 
 // mercurySlow is the position the floating chart's stub returns while Mercury
 // is slow and direct; the natal stub's Mercury is fast.
-var mercurySlow = aspect.Position{Body: aspect.Mercury, Longitude: 65.8667, Speed: 0.02, House: 8}
+var mercurySlow = aspect.Position{Object: objMercury, Longitude: 65.8667, Speed: 0.02, House: 8}
 
 func stationLookups(t *testing.T) {
 	t.Helper()
 	stubColumnLookups(t, nil)
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 84.2167, Speed: 0.97, House: 8}, mercurySlow}, Commands: []string{"astrolog transit"}}, nil
-	}
-	firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 10, Speed: 0.97}, {Body: aspect.Mercury, Longitude: 20, Speed: 0.5}}, Commands: []string{"astrolog natal"}}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 84.2167, Speed: 0.97, House: 8}, mercurySlow}, Commands: []string{"astrolog transit"}}, nil
+		}
+		s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 10, Speed: 0.97}, {Object: objMercury, Longitude: 20, Speed: 0.5}}, Commands: []string{"astrolog natal"}}, nil
+		}
+	})
 }
 
 // markMercury is a probe stub: Mercury at +0.020 gets S/R, anything else
 // nothing; it counts its runs and carries its own command.
 func markMercury(runs *int) stationMarksFunc {
-	return func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[aspect.Body]lookup.Station, []string, error) {
+	return func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[int]lookup.Station, []string, error) {
 		for _, p := range ps {
-			if p.Body == aspect.Mercury && p.Speed == mercurySlow.Speed {
+			if p.Object == objMercury && p.Speed == mercurySlow.Speed {
 				*runs++
-				return map[aspect.Body]lookup.Station{aspect.Mercury: lookup.StationRetro}, []string{"astrolog station probe"}, nil
+				return map[int]lookup.Station{objMercury.Number: lookup.StationRetro}, []string{"astrolog station probe"}, nil
 			}
 		}
 		return nil, nil, nil
@@ -72,14 +76,14 @@ func TestStationMarkLandsWithItsPositions(t *testing.T) {
 	installStationMarks(t, markMercury(&runs))
 
 	// One message carries both.
-	msg := computeChartCmd(context.Background(), 1, 1, nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
-	if len(msg.Positions) == 0 || msg.Stations[aspect.Mercury] != lookup.StationRetro {
+	msg := computeChartCmd(context.Background(), 1, 1, testCast(t), nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
+	if len(msg.Positions) == 0 || msg.Stations[objMercury.Number] != lookup.StationRetro {
 		t.Fatalf("the compute's message carries positions %v and marks %v; want both", msg.Positions, msg.Stations)
 	}
 
 	// Through the coordinator: no frame shows the Mercury row without its mark.
 	m := settledComparing(t, 3) // the floating slot
-	if m.chart.stations[aspect.Mercury] != lookup.StationRetro {
+	if m.chart.stations[objMercury.Number] != lookup.StationRetro {
 		t.Fatalf("the committed frame lacks the mark: %v", m.chart.stations)
 	}
 	m, cmd := tpress(t, m, runes("d"))
@@ -120,10 +124,10 @@ func TestStationMarkLandsWithItsPositions(t *testing.T) {
 	if len(m.chart.stations) != 0 {
 		t.Errorf("the focus move left the previous chart's marks %v on the live frame", m.chart.stations)
 	}
-	// Until the new frame lands the held frame (holdShown) paints the previous
-	// chart's rows with the previous chart's marks, as one scene: the exact row.
-	if held := mercuryRow(m.View()); held != markedRow {
-		t.Errorf("the pending frame's Mercury row is %q, want the previous chart's %q", held, markedRow)
+	// Until the new frame lands Bodies reads `…` (C5): not the previous
+	// chart's rows, so not its marks either.
+	if held := mercuryRow(m.View()); held != "" {
+		t.Errorf("the pending frame's Mercury row is %q, want none: another chart's row stays off the screen", held)
 	}
 	m, _ = pumpViews(t, m, cmd)
 	if len(m.chart.stations) != 0 {
@@ -137,16 +141,17 @@ func TestStationMarkLandsWithItsPositions(t *testing.T) {
 	}
 }
 
-// C5: a failing probe costs the marks only; one note per failed run.
+// C5: a failing probe costs the marks only; one large-log line per failed run,
+// none in the Log panel.
 func TestStationProbeFailureKeepsThePositions(t *testing.T) {
 	stationLookups(t)
-	installStationMarks(t, func(context.Context, *lookup.Probers, []aspect.Position, time.Time, location.PlaceInfo, lookup.Lens) (map[aspect.Body]lookup.Station, []string, error) {
+	installStationMarks(t, func(context.Context, *lookup.Probers, []aspect.Position, time.Time, location.PlaceInfo, lookup.Lens) (map[int]lookup.Station, []string, error) {
 		return nil, []string{"astrolog station probe"}, errors.New("boom")
 	})
 	notes := func(m Model) int {
 		n := 0
 		for _, l := range m.logLines {
-			if l.lane == laneNote && strings.Contains(l.text, "station marks unavailable") {
+			if l.lane == laneTrace && strings.Contains(l.text, "station marks unavailable") {
 				n++
 			}
 		}
@@ -199,16 +204,16 @@ func TestStationProbeArgvIsLogged(t *testing.T) {
 
 func stationRows() []aspect.Position {
 	return []aspect.Position{
-		{Body: aspect.Sun, Longitude: 84.2167, Speed: 0.97, House: 8},
-		{Body: aspect.Mercury, Longitude: 65.8667, Speed: 0.02, House: 8},
-		{Body: aspect.Moon, Longitude: 346.75, Speed: 1.016, House: 5},
-		{Body: aspect.Venus, Longitude: 48.9, Speed: 0.0, House: 7},
-		{Body: aspect.Mars, Longitude: 11.1, Speed: 1.371, House: 6},
-		{Body: aspect.Ascendant, Longitude: 210.8667, Speed: 0.689, House: 1},
+		{Object: objSun, Longitude: 84.2167, Speed: 0.97, House: 8},
+		{Object: objMercury, Longitude: 65.8667, Speed: 0.02, House: 8},
+		{Object: objMoon, Longitude: 346.75, Speed: 1.016, House: 5},
+		{Object: objVenus, Longitude: 48.9, Speed: 0.0, House: 7},
+		{Object: objMars, Longitude: 11.1, Speed: 1.371, House: 6},
+		{Object: objAscendant, Longitude: 210.8667, Speed: 0.689, House: 1},
 	}
 }
 
-var stationMarksTwo = map[aspect.Body]lookup.Station{aspect.Mercury: lookup.StationRetro, aspect.Venus: lookup.StationDirect}
+var stationMarksTwo = map[int]lookup.Station{objMercury.Number: lookup.StationRetro, objVenus.Number: lookup.StationDirect}
 
 // C7: S/R and S/D take the speed lane of every marked row, in both layouts,
 // whatever row the cursor is on.
@@ -245,13 +250,13 @@ func TestBodiesPrintsTheStationMark(t *testing.T) {
 	}
 
 	// An angle never carries one, even if a mark names it.
-	angled := chartViewState{positions: stationRows(), stations: map[aspect.Body]lookup.Station{aspect.Ascendant: lookup.StationRetro}}
+	angled := chartViewState{positions: stationRows(), stations: map[int]lookup.Station{objAscendant.Number: lookup.StationRetro}}
 	if b, _, _ := renderBodiesBody(angled, nil, 0, 0, 80, 20, false, cfg); strings.Contains(b, "S/") {
 		t.Errorf("an angle row carries a mark:\n%s", b)
 	}
 
 	// Comparing: two charts' columns, the speed lane is the focused chart's.
-	cols := []bodyColumn{{positions: stationRows()}, {positions: stationRows()}}
+	cols := []panel.BodyColumn{{Positions: stationRows()}, {Positions: stationRows()}}
 	cstate := chartViewState{positions: stationRows(), stations: stationMarksTwo}
 	view := bodiesView{comparing: true, ok: true, cols: cols, focus: 1}
 	cbody, _, _ := renderBodiesFor(view, cstate, nil, 0, 2, 100, 20, false, cfg)
@@ -264,13 +269,13 @@ func TestBodiesPrintsTheStationMark(t *testing.T) {
 		// Only the speed lane carries it: cut the columns' cells away.
 		cells := 0
 		for _, c := range cols {
-			cells += strings.Count(ansi.Strip(columnCell(c, aspect.Mercury, 0, 0, "", cfg)), "S/")
+			cells += strings.Count(ansi.Strip(panel.ColumnCell(c, aspect.Position{Object: objMercury}, 0, 0, "", cfg)), "S/")
 		}
 		if cells != 0 {
 			t.Errorf("columns: a chart column cell carries %q", want)
 		}
-		if i := strings.Index(line, want); i < 11+len(cols)*bodiesColumnWidth {
-			t.Errorf("columns: %s mark at %d is inside the columns (%d..%d)", name, i, 11, 11+len(cols)*bodiesColumnWidth)
+		if i := strings.Index(line, want); i < 11+len(cols)*panel.BodiesColumnWidth {
+			t.Errorf("columns: %s mark at %d is inside the columns (%d..%d)", name, i, 11, 11+len(cols)*panel.BodiesColumnWidth)
 		}
 	}
 	if strings.Count(ansi.Strip(cbody), "S/") != 2 {
@@ -287,25 +292,25 @@ func TestBodiesPrintsTheStationMark(t *testing.T) {
 func TestStationMarkColour(t *testing.T) {
 	forceColor(t)
 	paint := func(stop int) string {
-		return lipgloss.NewStyle().Foreground(speedGradientColour(stop)).Render("S/R")
+		return lipgloss.NewStyle().Foreground(term.SpeedGradientColour(stop)).Render("S/R")
 	}
 	for _, c := range []struct {
 		speed float64
 		stop  int
 	}{{0.000, 124}, {0.025, 203}, {0.049, 255}} {
-		if got, want := stationMarkCells(lookup.StationRetro, c.speed, true), paint(c.stop); got != want {
+		if got, want := panel.StationMarkCells(lookup.StationRetro, c.speed, true), paint(c.stop); got != want {
 			t.Errorf("speed %.3f: %q, want stop %d: %q", c.speed, got, c.stop, want)
 		}
 	}
-	if !strings.Contains(stationMarkCells(lookup.StationDirect, 0, true), "124") {
-		t.Errorf("S/D at zero is not the deepest red: %q", stationMarkCells(lookup.StationDirect, 0, true))
+	if !strings.Contains(panel.StationMarkCells(lookup.StationDirect, 0, true), "124") {
+		t.Errorf("S/D at zero is not the deepest red: %q", panel.StationMarkCells(lookup.StationDirect, 0, true))
 	}
-	if got := stationMarkCells(lookup.StationDirect, 0.02, false); got != "S/D" || strings.Contains(got, "\x1b") {
+	if got := panel.StationMarkCells(lookup.StationDirect, 0.02, false); got != "S/D" || strings.Contains(got, "\x1b") {
 		t.Errorf("colours off: %q, want plain S/D", got)
 	}
 	// Every row in a colour frame uses it too.
-	row := formatPositionRowStyled(aspect.Position{Body: aspect.Venus, Longitude: 48.9, Speed: 0}, astrologstyle.BodyRow{}, true, houseOverlay{stations: stationMarksTwo})
-	if !strings.Contains(row, stationMarkCells(lookup.StationDirect, 0, true)) {
+	row := panel.FormatPositionRowStyled(aspect.Position{Object: objVenus, Longitude: 48.9, Speed: 0}, astrologstyle.BodyRow{}, colourOf(true), panel.HouseOverlay{Stations: stationMarksTwo})
+	if !strings.Contains(row, panel.StationMarkCells(lookup.StationDirect, 0, true)) {
 		t.Errorf("a Venus row at 0.000 is not S/D at the deepest red: %q", row)
 	}
 }
@@ -313,14 +318,14 @@ func TestStationMarkColour(t *testing.T) {
 // C12 / C11 at the bar: a row at -0.000 shows ℞, +0.000 does not.
 func TestSpeedBarFollowsAstrologsSign(t *testing.T) {
 	negZero := math.Copysign(0, -1)
-	if got := velocityBar(negZero, false, false); !strings.HasPrefix(got, "℞") {
+	if got := panel.VelocityBar(negZero, false, false); !strings.HasPrefix(got, "℞") {
 		t.Errorf("velocityBar(-0.000) = %q, want it to open with ℞", got)
 	}
-	if got := velocityBar(0, false, false); strings.HasPrefix(got, "℞") {
+	if got := panel.VelocityBar(0, false, false); strings.HasPrefix(got, "℞") {
 		t.Errorf("velocityBar(+0.000) = %q, want no ℞", got)
 	}
 	row := func(speed float64) string {
-		return formatPositionRow(aspect.Position{Body: aspect.Saturn, Longitude: 294.0167, Speed: speed, House: 3}, false)
+		return formatPositionRow(aspect.Position{Object: objSaturn, Longitude: 294.0167, Speed: speed, House: 3}, false)
 	}
 	if !strings.Contains(row(negZero), "℞") {
 		t.Errorf("a Saturn row at -0.000 has no ℞: %q", row(negZero))
@@ -342,22 +347,23 @@ func TestBodiesStationMarkFrames(t *testing.T) {
 		m.slots.ToggleSlotSelection(1)
 		m.chart.columns, m.chart.columnsFor = nil, nil
 		m.chart.positions = stationFramePositions()
-		m.chart.stations = map[aspect.Body]lookup.Station{aspect.Mercury: lookup.StationRetro, aspect.Venus: lookup.StationDirect}
+		m.chart.stations = map[int]lookup.Station{objMercury.Number: lookup.StationRetro, objVenus.Number: lookup.StationDirect}
 		m.focused = PanelBodies
+		m = m.restampFrame() // the frame is the speed lane, not the view rule
 		writeDesignFrame(t, fmt.Sprintf("bodies-station-mark-132x40-%s", mode.name), m.View())
 	}
 }
 
 func stationFramePositions() []aspect.Position {
 	return []aspect.Position{
-		{Body: aspect.Sun, Longitude: 84.2167, Speed: 0.9690, House: 8},
-		{Body: aspect.Moon, Longitude: 346.7500, Speed: 1.0160, House: 5},
-		{Body: aspect.Mercury, Longitude: 65.8667, Speed: 0.0310, House: 8},
-		{Body: aspect.Venus, Longitude: 48.9000, Speed: 0.0000, House: 7},
-		{Body: aspect.Mars, Longitude: 11.1000, Speed: 1.3710, House: 6},
-		{Body: aspect.Jupiter, Longitude: 105.9000, Speed: 0.0420, House: 9},
-		{Body: aspect.Saturn, Longitude: 294.0167, Speed: -0.4550, House: 3},
-		{Body: aspect.Ascendant, Longitude: 210.8667, Speed: 0.6890, House: 1},
+		{Object: objSun, Longitude: 84.2167, Speed: 0.9690, House: 8},
+		{Object: objMoon, Longitude: 346.7500, Speed: 1.0160, House: 5},
+		{Object: objMercury, Longitude: 65.8667, Speed: 0.0310, House: 8},
+		{Object: objVenus, Longitude: 48.9000, Speed: 0.0000, House: 7},
+		{Object: objMars, Longitude: 11.1000, Speed: 1.3710, House: 6},
+		{Object: objJupiter, Longitude: 105.9000, Speed: 0.0420, House: 9},
+		{Object: objSaturn, Longitude: 294.0167, Speed: -0.4550, House: 3},
+		{Object: objAscendant, Longitude: 210.8667, Speed: 0.6890, House: 1},
 	}
 }
 
@@ -369,15 +375,15 @@ func TestEnterOnAStationRowShowsItsMark(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		frag  string // the timeline row entered
-		body  aspect.Body
+		body  aspect.Object
 		label string
 		speed float64
 		mark  string // text expected in the body's row
 		not   string
 		rule  lookup.Station // what the 5% rule says at the landed instant
 	}{
-		{"S/D row reads +0.000", "Pluto <Aqu> S/D", aspect.Pluto, "Pluto", 0, "S/D", "℞", lookup.StationDirect},
-		{"S/R row reads +0.002, still direct", "Venus <Sco> S/R", aspect.Venus, "Venus", 0.002, "S/R", "℞", lookup.StationRetro},
+		{"S/D row reads +0.000", "Pluto <Aqu> S/D", objPluto, "Pluto", 0, "S/D", "℞", lookup.StationDirect},
+		{"S/R row reads +0.002, still direct", "Venus <Sco> S/R", objVenus, "Venus", 0.002, "S/R", "℞", lookup.StationRetro},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			forceColor(t)
@@ -385,23 +391,27 @@ func TestEnterOnAStationRowShowsItsMark(t *testing.T) {
 			rows = append(rows, rowsFromSearch(t, tlFloatingTime, "Sat 10/17/2026  3:15am   Venus <Sco> S/R\n", "")...)
 			sort.SliceStable(rows, func(a, b int) bool { return rows[a].Instant.Before(rows[b].Instant) })
 			m, _ := enteredFixtureRows(t, rows, 2, true, Config{Color: ColorAlways})
-			body := aspect.Position{Body: tc.body, Longitude: 301, Speed: tc.speed, House: 3}
-			firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-				return lookup.Result{Positions: []aspect.Position{body}}, nil
-			}
-			firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-				return lookup.Result{Positions: []aspect.Position{body}}, nil
-			}
-			// The rule itself is proven in internal/lookup; this stub answers what
-			// the 5% rule says for the case (tc.rule).
-			installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[aspect.Body]lookup.Station, []string, error) {
-				marks := map[aspect.Body]lookup.Station{}
-				for _, p := range ps {
-					if !math.Signbit(p.Speed) && p.Speed < 0.05 {
-						marks[p.Body] = tc.rule
+			body := aspect.Position{Object: tc.body, Longitude: 301, Speed: tc.speed, House: 3}
+			m = withNewStubs(t, m, func() {
+				stubSpawns(t, func(sp *rowSpawns) {
+					sp.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+						return lookup.Result{Positions: []aspect.Position{body}}, nil
 					}
-				}
-				return marks, nil, nil
+					sp.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+						return lookup.Result{Positions: []aspect.Position{body}}, nil
+					}
+				})
+				// The rule itself is proven in internal/lookup; this stub answers what
+				// the 5% rule says for the case (tc.rule).
+				installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[int]lookup.Station, []string, error) {
+					marks := map[int]lookup.Station{}
+					for _, p := range ps {
+						if !math.Signbit(p.Speed) && p.Speed < 0.05 {
+							marks[p.Object.Number] = tc.rule
+						}
+					}
+					return marks, nil, nil
+				})
 			})
 			i := timelineRowWith(t, m.timeline.rows, tc.frag)
 			row := m.timeline.rows[i]
@@ -438,18 +448,20 @@ func TestEnterOnAStationRowShowsItsMark(t *testing.T) {
 // same message as the positions, probed at the chart's own moment and place.
 func TestNatalSingleComputeCarriesItsStationMarks(t *testing.T) {
 	stationLookups(t)
-	firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog natal"}}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog natal"}}, nil
+		}
+	})
 	var at time.Time
 	var where location.PlaceInfo
-	installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, when time.Time, place location.PlaceInfo, _ lookup.Lens) (map[aspect.Body]lookup.Station, []string, error) {
+	installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, when time.Time, place location.PlaceInfo, _ lookup.Lens) (map[int]lookup.Station, []string, error) {
 		at, where = when, place
-		return map[aspect.Body]lookup.Station{aspect.Mercury: lookup.StationDirect}, []string{"astrolog station probe"}, nil
+		return map[int]lookup.Station{objMercury.Number: lookup.StationDirect}, []string{"astrolog station probe"}, nil
 	})
 	chart := commandsTestChart()
-	msg := computeNatalSingleCmd(context.Background(), 1, 1, nil, chart, lookup.Hellenistic)().(FirstFrameReadyMsg)
-	if len(msg.Positions) != 1 || msg.Stations[aspect.Mercury] != lookup.StationDirect {
+	msg := computeNatalSingleCmd(context.Background(), 1, 1, testCast(t), nil, chart, lookup.Hellenistic)().(FirstFrameReadyMsg)
+	if len(msg.Positions) != 1 || msg.Stations[objMercury.Number] != lookup.StationDirect {
 		t.Fatalf("natal message: positions %v marks %v; want both", msg.Positions, msg.Stations)
 	}
 	if !at.Equal(chart.When) || where != chart.Place {
@@ -468,22 +480,24 @@ func TestStationMarkSurvivesACrossAspectError(t *testing.T) {
 	run := func(t *testing.T, focusedNatal bool, transitErr, crossErr error) FirstFrameReadyMsg {
 		t.Helper()
 		stationLookups(t)
-		firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-			return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog natal"}}, nil
-		}
-		firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-			return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog transit"}}, transitErr
-		}
-		overlayCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-			return lookup.OverlayAspects{Commands: []string{"astrolog cross"}}, crossErr
-		}
+		stubSpawns(t, func(sp *rowSpawns) {
+			sp.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog natal"}}, nil
+			}
+			sp.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: []aspect.Position{mercurySlow}, Commands: []string{"astrolog transit"}}, transitErr
+			}
+			sp.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
+				return lookup.OverlayAspects{Commands: []string{"astrolog cross"}}, crossErr
+			}
+		})
 		runs := 0
 		installStationMarks(t, markMercury(&runs))
-		return computeOverlayCmd(context.Background(), 1, 1, nil, chart, store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), focusedNatal, lookup.Hellenistic)().(FirstFrameReadyMsg)
+		return computeOverlayCmd(context.Background(), 1, 1, testCast(t), nil, chart, store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), focusedNatal, lookup.Hellenistic)().(FirstFrameReadyMsg)
 	}
 	t.Run("cross fails", func(t *testing.T) {
 		msg := run(t, false, nil, boom)
-		if !errors.Is(msg.Err, boom) || msg.Stations[aspect.Mercury] != lookup.StationRetro {
+		if !errors.Is(msg.Err, boom) || msg.Stations[objMercury.Number] != lookup.StationRetro {
 			t.Errorf("Err=%v marks=%v; want the error and the mark", msg.Err, msg.Stations)
 		}
 		if n := len(msg.Commands); n == 0 || msg.Commands[n-1] != "astrolog station probe" {
@@ -492,7 +506,7 @@ func TestStationMarkSurvivesACrossAspectError(t *testing.T) {
 	})
 	t.Run("transit fails with the natal chart focused", func(t *testing.T) {
 		msg := run(t, true, boom, nil)
-		if !errors.Is(msg.Err, boom) || msg.Stations[aspect.Mercury] != lookup.StationRetro {
+		if !errors.Is(msg.Err, boom) || msg.Stations[objMercury.Number] != lookup.StationRetro {
 			t.Errorf("Err=%v marks=%v; want the error and the mark", msg.Err, msg.Stations)
 		}
 		if n := len(msg.Commands); n == 0 || msg.Commands[n-1] != "astrolog station probe" {
@@ -565,17 +579,19 @@ func bodiesLine(t *testing.T, view, label string) string {
 	return ""
 }
 
-func stationBodiesLookups() {
-	row := func(b aspect.Body, speed float64) aspect.Position {
-		return aspect.Position{Body: b, Longitude: 100 + float64(b), Speed: speed, House: 3}
+func stationBodiesLookups(t *testing.T) {
+	row := func(b aspect.Object, speed float64) aspect.Position {
+		return aspect.Position{Object: b, Longitude: 100 + float64(b.Number), Speed: speed, House: 3}
 	}
-	all := []aspect.Position{row(aspect.Sun, 0.97), row(aspect.Venus, 0.02), row(aspect.Pluto, 0.0), row(aspect.NorthNode, 3.0), row(aspect.SouthNode, 3.0), row(aspect.Lilith, 3.0)}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: all}, nil
-	}
-	firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: all}, nil
-	}
+	all := []aspect.Position{row(objSun, 0.97), row(objVenus, 0.02), row(objPluto, 0.0), row(objNorthNode, 3.0), row(objSouthNode, 3.0), row(objLilith, 3.0)}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: all}, nil
+		}
+		s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: all}, nil
+		}
+	})
 }
 
 // C15: while an entered station row holds, its body shows the row's word at
@@ -594,14 +610,14 @@ func TestEnteredStationRowShowsItsWord(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.frag, func(t *testing.T) {
 			m, _ := enteredFixtureRows(t, stationRowsFixture(t), 2, true, Config{Color: ColorAlways})
-			stationBodiesLookups() // the rule (default seam) marks nothing here
+			m = withNewStubs(t, m, func() { stationBodiesLookups(t) }) // the rule (default seam) marks nothing here
 			m = enter(t, m, timelineRowWith(t, m.timeline.rows, tc.frag))
 			line := bodiesLine(t, m.View(), tc.label)
 			plain := ansi.Strip(line)
 			if !strings.Contains(plain, tc.word) || strings.Contains(plain, tc.not) {
 				t.Errorf("%s row %q: want %q and not %q", tc.label, plain, tc.word, tc.not)
 			}
-			if !strings.Contains(line, stationMarkCells(map[string]lookup.Station{"S/R": lookup.StationRetro, "S/D": lookup.StationDirect}[tc.word], 0, true)) {
+			if !strings.Contains(line, panel.StationMarkCells(map[string]lookup.Station{"S/R": lookup.StationRetro, "S/D": lookup.StationDirect}[tc.word], 0, true)) {
 				t.Errorf("%s row is not at the deepest red: %q", tc.label, line)
 			}
 			// A time step ends the entered row: the rule alone decides again.
@@ -615,6 +631,40 @@ func TestEnteredStationRowShowsItsWord(t *testing.T) {
 				t.Errorf("after the row ended, the rule (no mark) must decide, got %q", after)
 			}
 		})
+	}
+}
+
+// A station row of an object with no glyph: entering it puts the
+// word on that object's Bodies row, keyed on the object's number.
+func TestEnteredStationForCeres(t *testing.T) {
+	forceColor(t)
+	ceres := fixtureObject(t, 12)
+	rows := append([]lookup.TimelineRow(nil), stationRowsFixture(t)...)
+	rows = append(rows, rowsFromSearch(t, tlFloatingTime, "Sat 10/17/2026  7:15am   Ceres <Leo> S/R\n", "")...)
+	sort.SliceStable(rows, func(a, b int) bool { return rows[a].Instant.Before(rows[b].Instant) })
+	m, _ := enteredFixtureRows(t, rows, 2, true, Config{Color: ColorAlways})
+	m = withNewStubs(t, m, func() {
+		pos := []aspect.Position{
+			{Object: objSun, Longitude: 100, Speed: 0.97, House: 3},
+			{Object: ceres, Longitude: 130, Speed: 0.2, House: 4},
+		}
+		stubSpawns(t, func(s *rowSpawns) {
+			s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: pos}, nil
+			}
+			s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: pos}, nil
+			}
+		})
+	})
+	i := timelineRowWith(t, m.timeline.rows, "Ceres <Leo> S/R")
+	if got := m.timeline.rows[i].Object.Number; got != 12 {
+		t.Fatalf("fixture: the Ceres row carries object %d, want 12", got)
+	}
+	m = enter(t, m, i)
+	line := bodiesLine(t, m.View(), "Cere")
+	if !strings.Contains(ansi.Strip(line), "S/R") || !strings.Contains(line, panel.StationMarkCells(lookup.StationRetro, 0, true)) {
+		t.Errorf("the Ceres row (Bodies label Cere) %q does not carry the entered S/R at the deepest red", line)
 	}
 }
 
@@ -632,7 +682,7 @@ func TestEnteredStationWordAgreesWithTheRule(t *testing.T) {
 	} {
 		t.Run(tc.frag, func(t *testing.T) {
 			m, _ := enteredFixtureRows(t, stationRowsFixture(t), 2, true, Config{Color: ColorNever})
-			id := map[string]aspect.Body{"Venus": aspect.Venus, "Pluto": aspect.Pluto}[tc.label]
+			id := map[string]aspect.Object{"Venus": objVenus, "Pluto": objPluto}[tc.label]
 			// Astrolog's reading: direct on the station's own side of the minute,
 			// retrograde (-0.000) on the other.
 			at := func(when time.Time) aspect.Position {
@@ -640,20 +690,27 @@ func TestEnteredStationWordAgreesWithTheRule(t *testing.T) {
 				if when.Second() == tc.second {
 					speed = tc.at
 				}
-				return aspect.Position{Body: id, Longitude: 100, Speed: speed, House: 3}
+				return aspect.Position{Object: id, Longitude: 100, Speed: speed, House: 3}
 			}
-			var last aspect.Position
-			firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-				last = at(when)
-				return lookup.Result{Positions: []aspect.Position{last}}, nil
-			}
-			body := at(time.Time{}.Add(time.Duration(tc.second) * time.Second))
-			firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-				return lookup.Result{Positions: []aspect.Position{body}}, nil
-			}
-			dayLater := []aspect.Position{{Body: body.Body, Speed: tc.later}}
-			installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[aspect.Body]lookup.Station, []string, error) {
-				return lookup.StationMarksBetween(ps, dayLater), nil, nil
+			var last, body aspect.Position
+			dayLater := []aspect.Position{{Speed: tc.later}}
+			m = withNewStubs(t, m, func() {
+				stubSpawns(t, func(sp *rowSpawns) {
+					sp.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+						last = at(when)
+						return lookup.Result{Positions: []aspect.Position{last}}, nil
+					}
+				})
+				body = at(time.Time{}.Add(time.Duration(tc.second) * time.Second))
+				stubSpawns(t, func(sp *rowSpawns) {
+					sp.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+						return lookup.Result{Positions: []aspect.Position{body}}, nil
+					}
+				})
+				dayLater[0].Object = body.Object
+				installStationMarks(t, func(_ context.Context, _ *lookup.Probers, ps []aspect.Position, _ time.Time, _ location.PlaceInfo, _ lookup.Lens) (map[int]lookup.Station, []string, error) {
+					return lookup.StationMarksBetween(ps, dayLater), nil, nil
+				})
 			})
 			i := timelineRowWith(t, m.timeline.rows, tc.frag)
 			rowWord := m.timeline.rows[i].Station
@@ -661,7 +718,7 @@ func TestEnteredStationWordAgreesWithTheRule(t *testing.T) {
 			if rowWord != tc.word {
 				t.Fatalf("fixture: the row says %q, want %q", rowWord, tc.word)
 			}
-			if rule := lookup.StationMarksBetween([]aspect.Position{last}, dayLater)[id].String(); rule != rowWord {
+			if rule := lookup.StationMarksBetween([]aspect.Position{last}, dayLater)[last.Object.Number].String(); rule != rowWord {
 				t.Errorf("the rule says %q for %s at the landed instant (speed %v), the row %q", rule, tc.label, last.Speed, rowWord)
 			}
 			plain := ansi.Strip(bodiesLine(t, m.View(), tc.label))

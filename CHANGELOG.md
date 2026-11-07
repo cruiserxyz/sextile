@@ -5,6 +5,70 @@ rest one outcome per bullet, then what still limits use and what an upgrade
 changes for you. Astrolog computes every astrological value Sextile shows.
 The format follows Keep a Changelog; versions are semantic, tagged vX.Y.Z.
 
+## [0.1.3] - 2026-11-07
+
+This release is about trust. What the screen shows is what you asked for, and
+nothing you saved changes behind your back. Every body your Astrolog can compute
+gets the full treatment, the Sun or a small asteroid alike. Mark it, read its
+report, follow it in the Timeline.
+
+- The right result, always. Details, Bodies and Aspects never show one chart's
+  or body's results under another's name. While a new result is on its way, the
+  old one stays faint, or the panel waits and reads `loading`. Stepping through
+  time no longer flickers. What you saw before comes back at once. The
+  neighbours of what you see are ready before you get there. Sextile keeps up to
+  64 results per panel in memory and writes none to disk.
+- Every body alike. `Space` on the Bodies panel marks any object it shows,
+  Fortune, a fixed star or a cusp point included. Details reports on it under
+  Astrolog's name. The Timeline searches every body you tick, on your chart and
+  as a transiting body. Any body with its own orbit carries the station mark.
+  With two or more charts open, such bodies showed the first one's degree and
+  house. Each now keeps its own, and marks are saved under Astrolog's own names.
+- Honest about what cannot be drawn. A body without its ephemeris file is
+  never drawn. Earlier versions put it at 0° Aries without a word. Now the
+  chooser marks it with a red `!`, and the Log says once which file is absent. A
+  chart Astrolog cannot compute with your files is refused, in Astrolog's own
+  words. The planetary moons draw once you run `sextile --moons` (about 240 MB,
+  remembered), or `scripts/build-astrolog --moons` for a native Astrolog. With
+  the moons ticked, a Timeline month takes about ten seconds.
+- The bodies chooser (`Ctrl+B`) tells the truth. Its ticks show exactly the
+  bodies the chart is asked for, and a tick changes one body. Group rows show
+  their counts, and typing a group's name lists its bodies. `Ctrl+D` ticks the
+  default bodies again. Your choice is remembered at the next start, and a named
+  session keeps its own.
+- Sessions you can trust. Starting Sextile in another charts folder no longer
+  overwrites the session saved there. 0.1.2 replaced it when you quit or chose a
+  house system. Now that file stays as it was. The Log says the run is kept
+  only under a name (`,` `o`).
+
+  `,` `n` starts a new, unnamed session: every chart closes, and houses, zodiac
+  and bodies go back to your defaults. With charts open it asks for a second
+  press. A named session is left as you last saved it.
+
+  Going back to 0.1.2: it refuses every session file this version wrote. It
+  keeps the unnamed one aside as `session.yaml.refused-<time>` and starts
+  empty. Put the file back under its name when you return.
+- Finding your way. `Ctrl+P` opens Actions: every command with its key in one
+  searchable list, the ones you ran last first. A command that cannot run right
+  now is greyed, with the reason. `?` lists every key, popup by popup, in the
+  wording the key bar uses. `,` `l` gives the keyboard to the Log panel, and
+  `,` `l` `l` opens the log console. `,` `y` copies whatever has the keyboard,
+  a whole panel included.
+- Reading a pair. On a pair tab such as `② in ①`, every aspect names the cursor
+  chart's body first, and a body's Details keep only the rows where that body
+  is the cursor chart's. `[` and `]` pick the base chart from the Bodies panel
+  too. Enter on a Timeline row puts the Bodies cursor on the row's body.
+- A quiet front. The Log panel speaks only about your charts and what you asked
+  for. How Sextile works around Astrolog goes to the large log (`,l l`), where
+  a failed command carries a red `!`. One such workaround: Astrolog 8.00's
+  influence chart miscounts fixed stars, so the Chart report leaves them out.
+  Every other view keeps them. If Astrolog dies on a call, the Log says
+  `Astrolog crashed`. When Astrolog's object list cannot be read within 30
+  seconds, Sextile refuses to start and says why.
+- For Go importers: the public package `pkg/aspect` no longer has the `Body`
+  enum and `ParseBody`. Every reader takes an `Object` (Astrolog's number and
+  name) from a `Registry`.
+
 ## [0.1.2] - 2026-10-27
 
 Your charts folder now holds only your charts. Sextile 0.1.1 kept the session,

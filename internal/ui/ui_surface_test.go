@@ -51,7 +51,7 @@ func TestUISurfaceGolden(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var m tea.Model = NewModel(Config{Accessible: tc.accessible})
+			var m tea.Model = newTestModel(t, Config{Accessible: tc.accessible}, RealClock{})
 			m, _ = m.Update(tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
 			if tc.helpOpen {
 				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
@@ -84,7 +84,7 @@ func logLines(t *testing.T, m tea.Model) []logLine {
 // TestFocusCycleSkipsPassivePanels verifies Tab / Shift+Tab never land on
 // details or log — they are passive.
 func TestFocusCycleSkipsPassivePanels(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
 
 	if got := focused(t, m); got != PanelChart {
@@ -109,7 +109,7 @@ func TestFocusCycleSkipsPassivePanels(t *testing.T) {
 // TestQuitOnlyInMainState verifies `q` quits from main UI but is a no-op
 // while a modal is open it closes help as Esc does and never quits.
 func TestQuitOnlyInMainState(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -140,7 +140,7 @@ func TestQuitOnlyInMainState(t *testing.T) {
 // `l` is unbound. Panel cycling lives on tab/shift+tab only. This
 // guards against accidental re-introduction of the collision.
 func TestPanelNavKeysNotShadowedByTimeStepBindings(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	initial := focused(t, m)
 
@@ -161,7 +161,7 @@ func TestPanelNavKeysNotShadowedByTimeStepBindings(t *testing.T) {
 
 // TestNumericDirectJumps verifies `1`/`2`/`3` focus chart/bodies/aspects.
 func TestNumericDirectJumps(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, c := range []struct {
@@ -182,7 +182,7 @@ func TestNumericDirectJumps(t *testing.T) {
 // TestMouseClickFocusesFocusablePanel verifies left-click inside a
 // focusable panel's rectangle moves focus; click elsewhere is a no-op.
 func TestMouseClickFocusesFocusablePanel(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 
 	click := tea.MouseMsg{X: 10, Y: 13, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
@@ -206,7 +206,7 @@ func TestMouseClickFocusesFocusablePanel(t *testing.T) {
 
 // TestResizeAcrossBreakpoint verifies focus survives crossing 132.
 func TestResizeAcrossBreakpoint(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if got := focused(t, m); got != PanelChart {
 		t.Errorf("initial focus: got %q, want chart", got)
@@ -231,7 +231,7 @@ func TestResizeAcrossBreakpoint(t *testing.T) {
 
 // TestResizeWithHelpOpen verifies modal survives resize.
 func TestResizeWithHelpOpen(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if !m.(Model).helpOpen {
@@ -249,7 +249,7 @@ func TestResizeWithHelpOpen(t *testing.T) {
 
 // TestTerminalTooSmall verifies the friendly fallback names required size.
 func TestTerminalTooSmall(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
 	out := m.View()
 	if out == "" {
@@ -267,7 +267,7 @@ func TestTerminalTooSmall(t *testing.T) {
 // a modal is open and still correct after the modal closes. The UI's
 // visual suppression while modal-open is captured by the help-open goldens.
 func TestModalPreservesStoredFocus(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 
 	// Move focus off the default.
@@ -292,7 +292,7 @@ func TestModalPreservesStoredFocus(t *testing.T) {
 // TestRoutineInteractionsDoNotPolluteLog keeps the Log panel for actionable
 // failures, warnings, and hints rather than resize/focus/modal key chatter.
 func TestRoutineInteractionsDoNotPolluteLog(t *testing.T) {
-	var m tea.Model = NewModel(Config{})
+	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})

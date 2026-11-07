@@ -1114,3 +1114,49 @@ func TestProgressOnTerminal(t *testing.T) {
 		t.Fatalf("progress lines are for a terminal, not a pipe: %q", res.stderr)
 	}
 }
+
+// The two files are each other's strangers: --moons leaves launcher.conf's
+// bytes alone (an older launcher refuses a second line in it), and choosing a
+// charts folder leaves launcher-moons.conf alone.
+func TestMoonsFileIsItsOwn(t *testing.T) {
+	r := newRig(t)
+	charts := r.mkdir("charts")
+	r.writeConf("charts-dir=" + charts + "\n")
+	before, err := os.ReadFile(r.confPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.setenv("FAKE_DOCKER_IMAGE", "absent")
+	r.mustSucceed(r.run("--moons"))
+	after, err := os.ReadFile(r.confPath())
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("--moons must not touch launcher.conf: %q then %q (%v)", before, after, err)
+	}
+	if _, err := os.Stat(r.moonsPath()); err != nil {
+		t.Fatalf("--moons writes its own file: %v", err)
+	}
+
+	r2 := newRig(t)
+	r2.setenv("FAKE_DOCKER_IMAGE", "absent")
+	prepareHome(t, r2, true)
+	r2.writeMoons(moonsHeader + "moons=1\n")
+	moonsBefore, err := os.ReadFile(r2.moonsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosen := filepath.Join(r2.root, "picked")
+	out, code := r2.answer(nil, [2]string{choose, "3\n"}, [2]string{"Folder: ", chosen + "\n"})
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	if _, err := os.Stat(r2.confPath()); err != nil {
+		t.Fatalf("the prompt writes launcher.conf: %v", err)
+	}
+	moonsAfter, err := os.ReadFile(r2.moonsPath())
+	if err != nil || string(moonsAfter) != string(moonsBefore) {
+		t.Fatalf("choosing a charts folder must not touch launcher-moons.conf: %q then %q (%v)", moonsBefore, moonsAfter, err)
+	}
+	if buildMoons(t, r2) != "true" {
+		t.Fatalf("the remembered moons reach the build: %q", r2.find("build"))
+	}
+}

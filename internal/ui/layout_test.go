@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"strings"
 	"testing"
 
@@ -173,11 +174,11 @@ func TestChartPanelShowsWindowFromChartTop(t *testing.T) {
 	frame := strings.Split(ansi.Strip(m.View()), "\n")
 	var thumb []int
 	for y := 0; y < m.geometry()[PanelChart].h; y++ {
-		if l := strings.TrimRight(frame[y], " "); strings.HasSuffix(l, scrollThumbGlyph) || strings.HasSuffix(l, scrollThumbASCII) {
+		if l := strings.TrimRight(frame[y], " "); strings.HasSuffix(l, pane.ThumbGlyph) || strings.HasSuffix(l, pane.ThumbASCII) {
 			thumb = append(thumb, y)
 		}
 	}
-	top, size := viewport{Total: 8, Visible: 5, Offset: m.chartTop}.thumb()
+	top, size := pane.Viewport{Total: 8, Visible: 5, Offset: m.chartTop}.Thumb()
 	if len(thumb) != size || len(thumb) == 0 || thumb[0] != 1+top {
 		t.Errorf("scroll thumb rows %v, want %d rows from row %d (offset %d)", thumb, size, 1+top, m.chartTop)
 	}

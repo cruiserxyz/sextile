@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,15 +30,15 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 		if got.startup != startupAtlasOpen {
 			t.Fatalf("^H left the atlas: startup = %q", got.startup)
 		}
-		if got.atlas.filterText != "be" {
-			t.Errorf("filter = %q after ^H, want %q", got.atlas.filterText, "be")
+		if got.atlas.FilterText != "be" {
+			t.Errorf("filter = %q after ^H, want %q", got.atlas.FilterText, "be")
 		}
 		for range 3 {
 			tm, _ = tm.Update(keyCtrlH)
 		}
 		got = tm.(Model)
-		if got.startup != startupAtlasOpen || got.atlas.filterText != "" {
-			t.Errorf("^H on an empty atlas search: startup %q, filter %q; want the picker open and empty", got.startup, got.atlas.filterText)
+		if got.startup != startupAtlasOpen || got.atlas.FilterText != "" {
+			t.Errorf("^H on an empty atlas search: startup %q, filter %q; want the picker open and empty", got.startup, got.atlas.FilterText)
 		}
 	})
 	t.Run("chart", func(t *testing.T) {
@@ -50,15 +51,15 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 		if got.startup != open {
 			t.Fatalf("^H left the chart picker: startup %q, want %q", got.startup, open)
 		}
-		if got.picker.filterText != "fe" {
-			t.Errorf("filter = %q after ^H, want %q", got.picker.filterText, "fe")
+		if got.picker.FilterText != "fe" {
+			t.Errorf("filter = %q after ^H, want %q", got.picker.FilterText, "fe")
 		}
 		for range 3 {
 			tm, _ = tm.Update(keyCtrlH)
 		}
 		got = tm.(Model)
-		if got.startup != open || got.picker.filterText != "" {
-			t.Errorf("^H on an empty chart search: startup %q, filter %q; want the picker open and empty", got.startup, got.picker.filterText)
+		if got.startup != open || got.picker.FilterText != "" {
+			t.Errorf("^H on an empty chart search: startup %q, filter %q; want the picker open and empty", got.startup, got.picker.FilterText)
 		}
 	})
 	t.Run("aspect", func(t *testing.T) {
@@ -68,8 +69,8 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 		if out.Confirmed || out.Cancelled {
 			t.Fatal("^H ended the aspect picker")
 		}
-		if st.filterText != "sq" {
-			t.Errorf("filter = %q after ^H, want %q", st.filterText, "sq")
+		if st.FilterText != "sq" {
+			t.Errorf("filter = %q after ^H, want %q", st.FilterText, "sq")
 		}
 		for range 3 {
 			st, out = updateAspectModalKey(st, keyCtrlH, testListHeight)
@@ -77,8 +78,8 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 				t.Fatal("^H on an empty search ended the aspect picker")
 			}
 		}
-		if st.filterText != "" {
-			t.Errorf("filter = %q, want empty", st.filterText)
+		if st.FilterText != "" {
+			t.Errorf("filter = %q, want empty", st.FilterText)
 		}
 	})
 	t.Run("body", func(t *testing.T) {
@@ -88,8 +89,8 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 		if out.Confirmed || out.Cancelled {
 			t.Fatal("^H ended the body picker")
 		}
-		if st.filterText != "ma" {
-			t.Errorf("filter = %q after ^H, want %q", st.filterText, "ma")
+		if st.FilterText != "ma" {
+			t.Errorf("filter = %q after ^H, want %q", st.FilterText, "ma")
 		}
 		for range 3 {
 			st, out = updateBodyModalKey(st, keyCtrlH, testListHeight)
@@ -97,8 +98,8 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 				t.Fatal("^H on an empty search ended the body picker")
 			}
 		}
-		if st.filterText != "" {
-			t.Errorf("filter = %q, want empty", st.filterText)
+		if st.FilterText != "" {
+			t.Errorf("filter = %q, want empty", st.FilterText)
 		}
 	})
 }
@@ -106,19 +107,19 @@ func TestCtrlHDeletesInEveryPicker(t *testing.T) {
 // Acceptance 2: every text field built on form.go deletes on ^H as on
 // Backspace, and ^H on an empty field leaves it empty.
 func TestCtrlHDeletesInFormFields(t *testing.T) {
-	f := newForm(formField{label: "Title"})
-	f, _ = f.updateKey(typed("Jane"))
-	f, handled := f.updateKey(keyCtrlH)
+	f := dialog.NewForm(dialog.Field{Label: "Title"})
+	f, _ = f.UpdateKey(typed("Jane"))
+	f, handled := f.UpdateKey(keyCtrlH)
 	if !handled {
 		t.Fatal("the form did not handle ^H")
 	}
-	if got := f.fields[0].value; got != "Jan" {
+	if got := f.Fields[0].Value; got != "Jan" {
 		t.Errorf("value = %q after ^H, want %q", got, "Jan")
 	}
 	for range 4 {
-		f, _ = f.updateKey(keyCtrlH)
+		f, _ = f.UpdateKey(keyCtrlH)
 	}
-	if got := f.fields[0].value; got != "" {
+	if got := f.Fields[0].Value; got != "" {
 		t.Errorf("value = %q, want empty", got)
 	}
 }

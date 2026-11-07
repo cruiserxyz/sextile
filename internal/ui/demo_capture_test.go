@@ -126,7 +126,7 @@ func (m demoMoment) overlayFrame() FirstFrameReadyMsg {
 // natalFrame is the single-chart frame with the ANCHORED slot focused: the
 // client's own bodies and their intra-natal aspects, no comparison. No natal
 // house frame rides along — with the anchored slot focused a body's own house
-// already is its natal house (startup.go, computeOverlayCmd).
+// already is its natal house (startup_compute.go, computeOverlayCmd).
 func (m demoMoment) natalFrame() FirstFrameReadyMsg {
 	return FirstFrameReadyMsg{
 		Positions:     m.natal.Positions,
@@ -159,7 +159,7 @@ func captureFirstTransitCheck(t *testing.T) []demoFrame {
 		Lat: demoPlace.Lat, Lon: demoPlace.Lon, TZ: demoPlace.TZ,
 		LatPresent: true, LonPresent: true,
 	}
-	var tm tea.Model = NewModelWithClock(Config{Color: ColorAlways}, FrozenClock(demoTransit))
+	var tm tea.Model = newTestModel(t, Config{Color: ColorAlways}, FrozenClock(demoTransit))
 	step := func(msg tea.Msg) { tm, _ = tm.Update(msg) }
 	commit := func(frame FirstFrameReadyMsg) {
 		m := tm.(Model)

@@ -26,6 +26,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -207,7 +208,7 @@ func TestDetailsReportsNameTheirCharts(t *testing.T) {
 		m = namesSettle(t, m)
 		n := 0
 		for i := 0; ; i++ {
-			if _, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, i); !ok {
+			if _, ok := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, i); !ok {
 				break
 			}
 			m.bodyCursorIdx = i
@@ -429,42 +430,48 @@ func (s *labelSpy) snapshot() []string {
 func spyOnLabels(t *testing.T) *labelSpy {
 	t.Helper()
 	spy := &labelSpy{}
-	oN, oT, oO, oS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	oR, oC, oY := computeRawReport, computeCrossBodyReport, computeSynastryBodyReport
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oN, oT, oO, oS
-		computeRawReport, computeCrossBodyReport, computeSynastryBodyReport = oR, oC, oY
+	stubSpawns(t, func(s *rowSpawns) {
+		oN, oT, oO, oS := s.cast.natal, s.cast.transit, s.cast.overlay, s.cast.synastry
+		if oN == nil {
+			return
+		}
+		s.cast.natal = func(ctx context.Context, p *lookup.Probers, c store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
+			spy.note("natal", c.Label)
+			return oN(ctx, p, c, l)
+		}
+		s.cast.transit = func(ctx context.Context, p *lookup.Probers, w time.Time, pl location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
+			spy.note("transit", store.ReportLabel{})
+			return oT(ctx, p, w, pl, l)
+		}
+		s.cast.overlay = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo) (lookup.OverlayAspects, error) {
+			spy.note("overlay", c.Label)
+			return oO(ctx, l, c, w, pl)
+		}
+		s.cast.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel) (lookup.OverlayAspects, error) {
+			spy.note("synastry", c.Label)
+			spy.note("synastry-other", ol)
+			return oS(ctx, l, c, w, pl, ol)
+		}
 	})
-	firstCallNatalPositions = func(ctx context.Context, p *lookup.Probers, c store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
-		spy.note("natal", c.Label)
-		return oN(ctx, p, c, l)
-	}
-	firstCallTransits = func(ctx context.Context, p *lookup.Probers, w time.Time, pl location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
-		spy.note("transit", store.ReportLabel{})
-		return oT(ctx, p, w, pl, l)
-	}
-	overlayCrossAspects = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo) (lookup.OverlayAspects, error) {
-		spy.note("overlay", c.Label)
-		return oO(ctx, l, c, w, pl)
-	}
-	synastryCrossAspects = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel) (lookup.OverlayAspects, error) {
-		spy.note("synastry", c.Label)
-		spy.note("synastry-other", ol)
-		return oS(ctx, l, c, w, pl, ol)
-	}
-	computeRawReport = func(ctx context.Context, w time.Time, pl location.PlaceInfo, l lookup.Lens, r lookup.RawReportRequest) (string, string, error) {
-		spy.note("report", r.Label)
-		return oR(ctx, w, pl, l, r)
-	}
-	computeCrossBodyReport = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, b aspect.Body) (string, string, error) {
-		spy.note("cross-body", c.Label)
-		return oC(ctx, l, c, w, pl, b)
-	}
-	computeSynastryBodyReport = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel, b aspect.Body) (string, string, error) {
-		spy.note("synastry-body", c.Label)
-		spy.note("synastry-body-other", ol)
-		return oY(ctx, l, c, w, pl, ol, b)
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		oR, oC, oY := s.reports.raw, s.reports.cross, s.reports.synastry
+		if oR == nil {
+			return
+		}
+		s.reports.raw = func(ctx context.Context, w time.Time, pl location.PlaceInfo, l lookup.Lens, r lookup.RawReportRequest) (string, string, error) {
+			spy.note("report", r.Label)
+			return oR(ctx, w, pl, l, r)
+		}
+		s.reports.cross = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, b aspect.Object) (string, string, error) {
+			spy.note("cross-body", c.Label)
+			return oC(ctx, l, c, w, pl, b)
+		}
+		s.reports.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel, b aspect.Object) (string, string, error) {
+			spy.note("synastry-body", c.Label)
+			spy.note("synastry-body-other", ol)
+			return oY(ctx, l, c, w, pl, ol, b)
+		}
+	})
 	return spy
 }
 
@@ -514,8 +521,8 @@ func TestUntitledChartSendsNoNameAfterPickAndRestore(t *testing.T) {
 	files := map[string]string{"Untitled.as": untitledChart, "Aster.as": asterChart}
 
 	t.Run("after a pick", func(t *testing.T) {
-		m := namesLive(t, files)
 		spy := spyOnLabels(t)
+		m := namesLive(t, files)
 		m = pickLive(t, m, "Untitled.as")
 		slot := slotOf(t, m, "Untitled.as")
 		if slot.Chart.Name != "Untitled" {
@@ -547,7 +554,7 @@ func TestUntitledChartSendsNoNameAfterPickAndRestore(t *testing.T) {
 			t.Fatal(err)
 		}
 		spy := spyOnLabels(t)
-		var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))
+		var tm tea.Model = newTestModel(t, Config{Color: ColorNever}, FrozenClock(sessionFrozen))
 		tm, _ = tm.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, rec.Place})})
 		p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))
@@ -609,7 +616,7 @@ func TestMissingRestoredSourceNeverEmitsSnapshotName(t *testing.T) {
 		t.Fatal(err)
 	}
 	spy := spyOnLabels(t)
-	var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Color: ColorNever}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, place})})
 	p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))
@@ -648,7 +655,7 @@ func TestPickReadsNameAndMomentTogether(t *testing.T) {
 		u, load := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 		m = u.(Model)
 		m, _ = runCmd(t, m, load)
-		row := m.picker.matches[0]
+		row := m.picker.Matches[0]
 		if row.Name != "Synthetic Aster" || row.Place.Display() != asterList {
 			t.Fatalf("fixture: the list shows %q at %q", row.Name, row.Place.Display())
 		}
@@ -839,7 +846,8 @@ func TestRapidRefocusKeepsCurrentReportName(t *testing.T) {
 
 	for _, order := range []string{"stale second", "stale first"} {
 		t.Run(order, func(t *testing.T) {
-			mm := m
+			// The race is between two runs: nothing may be remembered for either.
+			mm := m.forgetMemory()
 			mm.cursorIdx = idx("Aster.as")
 			mm, cmdA := mm.startDetailsNow()
 			msgA := cmdA()
@@ -888,8 +896,8 @@ func TestRenamedChartRefreshesItsReport(t *testing.T) {
 	m, _ = escSend(t, m, escRunes("Renamed Aster"))
 	m, cmd := escSend(t, m, escKey(tea.KeyEnter))
 	m, cmd = runCmd(t, m, cmd)
-	if m.title.refusal != "" || cmd == nil {
-		t.Fatalf("the rename did not finish: %q", m.title.refusal)
+	if m.title.Refusal != "" || cmd == nil {
+		t.Fatalf("the rename did not finish: %q", m.title.Refusal)
 	}
 	batch, ok := cmd().(tea.BatchMsg)
 	if !ok {
@@ -948,8 +956,8 @@ func TestNamedCommandCopyRoundTripsArgv(t *testing.T) {
 		m := namesSettle(t, base)
 		var captured string
 		old := yankLine
-		yankLine = func(text string) error { captured = text; return nil }
 		t.Cleanup(func() { yankLine = old })
+		yankLine = func(text string) error { captured = text; return nil }
 		// Open the console on the newest chart report and copy it with Enter.
 		u, _ := m.openConsole()
 		m = u.(Model)
@@ -1006,11 +1014,11 @@ func TestNamedCommandCopyRoundTripsArgv(t *testing.T) {
 func TestFailedNamedReportKeepsAstrologOutputOutOfTheLog(t *testing.T) {
 	m := detailsTestModel(t)
 	m.slots.All()[0].Chart.Label = store.ReportLabel{Name: "Synthetic Aster", Place: asterList}
-	old := computeRawReport
-	t.Cleanup(func() { computeRawReport = old })
-	computeRawReport = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
-		return "", "astrolog -zi 'Synthetic Aster' 'Amsterdam, NL'", errors.New("astrolog: ComputeRawReport: exit status 1 (output: Astrolog 8.00 chart for Synthetic Aster)")
-	}
+	m = withSpawns(m, func(s *rowSpawns) {
+		s.reports.raw = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
+			return "", "astrolog -zi 'Synthetic Aster' 'Amsterdam, NL'", errors.New("astrolog: ComputeRawReport: exit status 1 (output: Astrolog 8.00 chart for Synthetic Aster)")
+		}
+	})
 	m.focused = PanelChart
 	m, cmd := m.requestDetails()
 	m = pump(t, m, cmd)
@@ -1108,7 +1116,7 @@ func TestRestoredChartNamesItselfAfterTheRecheck(t *testing.T) {
 	if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 		t.Fatal(err)
 	}
-	var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Color: ColorNever}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, place})})
 	p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))
@@ -1203,7 +1211,7 @@ func TestRestoreRecheckReadsNameAndMomentTogether(t *testing.T) {
 		if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}})); err != nil {
 			t.Fatal(err)
 		}
-		var tm tea.Model = NewModelWithClock(Config{Color: ColorNever}, FrozenClock(sessionFrozen))
+		var tm tea.Model = newTestModel(t, Config{Color: ColorNever}, FrozenClock(sessionFrozen))
 		tm, _ = tm.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, row.Place})})
 		p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))

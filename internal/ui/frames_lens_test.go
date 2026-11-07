@@ -15,6 +15,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -93,9 +94,9 @@ func TestEachChartKeepsItsOwnSystem(t *testing.T) {
 	if !ok || len(cols) != 3 {
 		t.Fatalf("no comparing columns: ok=%v n=%d", ok, len(cols))
 	}
-	sun := func(c bodyColumn) float64 {
-		for _, p := range c.positions {
-			if p.Body == aspect.Sun {
+	sun := func(c panel.BodyColumn) float64 {
+		for _, p := range c.Positions {
+			if p.Object == objSun {
 				return p.Longitude
 			}
 		}
@@ -269,6 +270,7 @@ func TestTimelineFollowsTheCursorsLens(t *testing.T) {
 	}
 	asked(n, false, recipe.Koch, "on now")
 	n = len(searches())
+	m = m.forgetMemory() // the test reads the search a move asks for: a list seen before is answered from memory
 	m = moveTo(m, 0)
 	asked(n, true, recipe.Placidus, "back on ①")
 	// A pair tab moves the comparison's frame, not the cursor: nothing is asked.
@@ -327,12 +329,12 @@ func recordShowWheel(t *testing.T) *[]string {
 	stubRenderWheelImage(t)
 	stubRenderOverlayWheelImage(t)
 	var shown []string
-	prev := showWheel
-	showWheel = func(b []byte) (string, error) {
-		shown = append(shown, string(b))
-		return "/tmp/stub.png", nil
-	}
-	t.Cleanup(func() { showWheel = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func(b []byte) (string, error) {
+			shown = append(shown, string(b))
+			return "/tmp/stub.png", nil
+		}
+	})
 	return &shown
 }
 
@@ -440,6 +442,7 @@ func TestHeldStepStillAnimates(t *testing.T) {
 // tab is active (operator, 2026-10-24: "only the focused chart should have it").
 func TestFinderTitlesNameTheFocusedChart(t *testing.T) {
 	setup := func(t *testing.T) Model {
+		freshModels(t)
 		sessionSandbox(t)
 		stubHouseLookups(t)
 		m := framesFixture(t, 2, 2) // on now, three charts: Anna ①, Ben ②, now ③
@@ -555,7 +558,7 @@ func TestTimelineRefusesUnresolvedCursorHouses(t *testing.T) {
 // file could not be read there is no lens, and nothing is cast.
 func TestTemplateTabRefusesUnresolvedFrame(t *testing.T) {
 	m := framesFixture(t, 2, 1) // Ben frames
-	m.chart.positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}, {Body: aspect.Venus}}
+	m.chart.positions = []aspect.Position{{Object: objSun}, {Object: objMoon}, {Object: objVenus}}
 	m.focused = PanelBodies
 	m.bodyCursorIdx = 2
 	m = activeOnTemplate(m)

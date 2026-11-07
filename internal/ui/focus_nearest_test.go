@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 	"time"
@@ -23,10 +25,10 @@ func detailsLines(m Model) []string {
 // reverseRows those drawn in reverse video.
 func boldRows(m Model) (bold, reverse []int) {
 	for i, l := range detailsLines(m) {
-		if strings.Contains(l, sgrBold) {
+		if strings.Contains(l, term.SGRBold) {
 			bold = append(bold, i)
 		}
-		if strings.Contains(l, sgrReverse) {
+		if strings.Contains(l, term.SGRReverse) {
 			reverse = append(reverse, i)
 		}
 	}
@@ -81,7 +83,7 @@ func TestDetachedTimelineCentresAndBoldsTheNearestEvent(t *testing.T) {
 		marker := false
 		for _, l := range detailsLines(m) {
 			plain := strings.TrimPrefix(strings.TrimPrefix(ansi.Strip(l), "│"), " ")
-			marker = marker || strings.HasPrefix(plain, rowCursorUnicode) || strings.HasPrefix(plain, rowCursorASCII)
+			marker = marker || strings.HasPrefix(plain, menu.RowCursorUnicode) || strings.HasPrefix(plain, menu.RowCursorASCII)
 		}
 		if len(reverse) != 0 || marker {
 			t.Errorf("%v: an unattached timeline drew reverse video or a cursor marker", cfg.Color)
@@ -196,13 +198,13 @@ func TestAttachedTimelineDrawsCursorAndNearestApart(t *testing.T) {
 		lines := detailsLines(m)
 		cur, near := lines[m.details.cursor-m.details.rowOffset], lines[n-m.details.rowOffset]
 		if cfg.Color == ColorNever {
-			if !strings.Contains(cur, cursorRowOff) || strings.Contains(near, sgrReverse) || !strings.Contains(near, sgrBold) {
+			if !strings.Contains(cur, term.CursorRowOff) || strings.Contains(near, term.SGRReverse) || !strings.Contains(near, term.SGRBold) {
 				t.Errorf("colours off: cursor %q nearest %q", cur, near)
 			}
-			if !strings.Contains(ansi.Strip(cur), rowCursorUnicode) && !strings.Contains(ansi.Strip(cur), rowCursorASCII) {
+			if !strings.Contains(ansi.Strip(cur), menu.RowCursorUnicode) && !strings.Contains(ansi.Strip(cur), menu.RowCursorASCII) {
 				t.Errorf("colours off: cursor row lost its marker: %q", ansi.Strip(cur))
 			}
-		} else if !strings.Contains(cur, cursorBandStart(cfg)) || strings.Contains(near, cursorBandStart(cfg)) || !strings.Contains(near, sgrBold) {
+		} else if !strings.Contains(cur, term.CursorBandStart(cfg)) || strings.Contains(near, term.CursorBandStart(cfg)) || !strings.Contains(near, term.SGRBold) {
 			t.Errorf("colours on: cursor %q nearest %q", cur, near)
 		}
 	}
@@ -217,7 +219,7 @@ func TestUnfocusedPanelsKeepTheirCursorRowBold(t *testing.T) {
 	m, _ = tpress(t, m, runes("0")) // Details shown; Chart still focused
 	m, _ = tpress(t, m, keyEnter)   // Details attached: no ring panel has the keyboard
 	slots := chartSlotsBody(m.slots, m.cursorIdx, false, testFrozenTime(), m.place, m.lens, 60, cfg)
-	if lines := strings.Split(slots, "\n"); !strings.HasPrefix(lines[m.cursorIdx], sgrBold) || strings.Contains(slots, cursorBandStart(cfg)) {
+	if lines := strings.Split(slots, "\n"); !strings.HasPrefix(lines[m.cursorIdx], term.SGRBold) || strings.Contains(slots, term.CursorBandStart(cfg)) {
 		t.Fatalf("an unfocused Chart must bold its cursor row and draw no band: %q", slots)
 	}
 }
@@ -228,20 +230,20 @@ func TestScrollToShowKeepsTheMarginEverywhere(t *testing.T) {
 	// context below the cursor until the end.
 	off := 0
 	for line := 0; line < 40; line++ {
-		off = scrollToShow(off, line, 40, 12)
-		if line-off > 12-1-listScrollMargin && off+12 < 40 {
-			t.Fatalf("line %d at window row %d: less than %d rows of context below", line, line-off, listScrollMargin)
+		off = menu.ScrollToShow(off, line, 40, 12)
+		if line-off > 12-1-menu.ScrollMargin && off+12 < 40 {
+			t.Fatalf("line %d at window row %d: less than %d rows of context below", line, line-off, menu.ScrollMargin)
 		}
 	}
 	// Walking back up keeps three above.
 	for line := 39; line >= 0; line-- {
-		off = scrollToShow(off, line, 40, 12)
-		if line-off < listScrollMargin && off > 0 {
-			t.Fatalf("line %d at window row %d: less than %d rows of context above", line, line-off, listScrollMargin)
+		off = menu.ScrollToShow(off, line, 40, 12)
+		if line-off < menu.ScrollMargin && off > 0 {
+			t.Fatalf("line %d at window row %d: less than %d rows of context above", line, line-off, menu.ScrollMargin)
 		}
 	}
 	// A window too short for both margins centres.
-	if got := scrollToShow(0, 20, 40, 4); got != 18 {
+	if got := menu.ScrollToShow(0, 20, 40, 4); got != 18 {
 		t.Fatalf("short window offset = %d, want 18 (centred)", got)
 	}
 }

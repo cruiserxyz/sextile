@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +31,7 @@ func TestChartSlotsBody_NilSlots_FallsBackToSingleLine(t *testing.T) {
 	if strings.Count(got, "\n") != 0 {
 		t.Errorf("nil slots: expected exactly one line, got %d (\\n count)", strings.Count(got, "\n"))
 	}
-	if !strings.HasPrefix(got, cursorRowOff+rowPrefix(true, true, false, false, cfg)) {
+	if !strings.HasPrefix(got, term.CursorRowOff+menu.RowPrefix(true, true, false, false, cfg)) {
 		t.Errorf("nil-slots fallback should carry the focused cursor prefix; got %q", got[:6])
 	}
 }
@@ -55,10 +57,10 @@ func TestChartSlotsBody_TwoSlots_CursorMarksFocused(t *testing.T) {
 	if len(linesF) != 2 {
 		t.Fatalf("expected 2 lines for anchored+floating workspace, got %d", len(linesF))
 	}
-	if !strings.HasPrefix(linesF[0], chartRowPrefix(true, false, 1, true, cfg)) {
+	if !strings.HasPrefix(linesF[0], menu.ChartRowPrefix(true, false, numeralMark(1, cfg), true, cfg)) {
 		t.Errorf("anchored line should carry blank prefix when cursor is on floating; got %q", linesF[0][:4])
 	}
-	if !strings.HasPrefix(linesF[1], cursorRowOff+chartRowPrefix(true, true, 2, true, cfg)) {
+	if !strings.HasPrefix(linesF[1], term.CursorRowOff+menu.ChartRowPrefix(true, true, numeralMark(2, cfg), true, cfg)) {
 		t.Errorf("floating line should carry ▶ prefix when cursor is on it; got %q", linesF[1][:8])
 	}
 
@@ -68,10 +70,10 @@ func TestChartSlotsBody_TwoSlots_CursorMarksFocused(t *testing.T) {
 	if len(linesA) != 2 {
 		t.Fatalf("expected 2 lines after cursor move, got %d", len(linesA))
 	}
-	if !strings.HasPrefix(linesA[0], cursorRowOff+chartRowPrefix(true, true, 1, true, cfg)) {
+	if !strings.HasPrefix(linesA[0], term.CursorRowOff+menu.ChartRowPrefix(true, true, numeralMark(1, cfg), true, cfg)) {
 		t.Errorf("anchored line should carry ▶ when cursor moves to it; got %q", linesA[0][:8])
 	}
-	if !strings.HasPrefix(linesA[1], chartRowPrefix(true, false, 2, true, cfg)) {
+	if !strings.HasPrefix(linesA[1], menu.ChartRowPrefix(true, false, numeralMark(2, cfg), true, cfg)) {
 		t.Errorf("floating line should carry blank prefix when cursor leaves it; got %q", linesA[1][:4])
 	}
 }
@@ -84,16 +86,16 @@ func TestChartSlotsBody_DefaultFocusIsFlushFullWidthBand(t *testing.T) {
 
 	const width = 64
 	body := chartSlotsBody(slots, 0, true, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, width, Config{})
-	if !strings.HasPrefix(body, cursorBandStart(Config{})+"Sat") {
+	if !strings.HasPrefix(body, term.CursorBandStart(Config{})+"Sat") {
 		t.Fatalf("default active row did not start flush inside focus band: %q", body)
 	}
-	if strings.Contains(body, rowCursorUnicode) || strings.Contains(body, rowCursorASCII) {
+	if strings.Contains(body, menu.RowCursorUnicode) || strings.Contains(body, menu.RowCursorASCII) {
 		t.Fatalf("default active row retained an indicator glyph: %q", body)
 	}
 	if got := ansi.StringWidth(body); got != width {
 		t.Errorf("focused row width = %d, want %d", got, width)
 	}
-	if !strings.Contains(body, "WhTr"+sgrReset) {
+	if !strings.Contains(body, "WhTr"+term.SGRReset) {
 		t.Fatalf("right-pinned lens tag moved out of the focus band: %q", body)
 	}
 }
@@ -115,7 +117,7 @@ func TestChartSlotsBody_SelectionColumnAppearsForWholePanel(t *testing.T) {
 	if got := astrologstyle.StripSGR(lines[0]); !strings.HasPrefix(got, "1 Mon") {
 		t.Fatalf("selected row lacks marker column: %q", got)
 	}
-	if got := astrologstyle.StripSGR(lines[1]); !strings.HasPrefix(got, rowMarkerBlank+"Sat") {
+	if got := astrologstyle.StripSGR(lines[1]); !strings.HasPrefix(got, menu.RowMarkerBlank+"Sat") {
 		t.Fatalf("unselected row did not share marker column: %q", got)
 	}
 
@@ -163,7 +165,7 @@ func TestChartSlotsBody_HidesCursorWithoutPanelFocusButKeepsBoldSelection(t *tes
 	body := chartSlotsBody(slots, 1, false, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, width, Config{Accessible: true})
 	for i, line := range strings.Split(body, "\n") {
 		plain := astrologstyle.StripSGR(line)
-		if strings.HasPrefix(plain, rowCursorUnicode) || strings.HasPrefix(plain, rowCursorASCII) {
+		if strings.HasPrefix(plain, menu.RowCursorUnicode) || strings.HasPrefix(plain, menu.RowCursorASCII) {
 			t.Errorf("line %d retained a cursor while Chart was unfocused: %q", i, line)
 		}
 		if !strings.HasPrefix(plain, fmt.Sprintf("%d ", i+1)) {
@@ -171,10 +173,10 @@ func TestChartSlotsBody_HidesCursorWithoutPanelFocusButKeepsBoldSelection(t *tes
 		}
 		// the specification rule 1: the cursor row (slot 1)
 		// stays bold without the keyboard, and only it; no reverse video.
-		if bold := strings.HasPrefix(line, sgrBold); bold != (i == 1) {
+		if bold := strings.HasPrefix(line, term.SGRBold); bold != (i == 1) {
 			t.Errorf("line %d bold = %v while Chart was unfocused: %q", i, bold, line)
 		}
-		if strings.Contains(line, sgrReverse) {
+		if strings.Contains(line, term.SGRReverse) {
 			t.Errorf("line %d is in reverse video while Chart was unfocused: %q", i, line)
 		}
 		if got := ansi.StringWidth(line); got != width {

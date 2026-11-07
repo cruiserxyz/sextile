@@ -14,12 +14,12 @@ import (
 // Regenerate ONLY on a deliberate restyle: `go test ./internal/ui -update`.
 
 func houseFinderFrame(name, filter string, current recipe.HouseSystem) houseFinderState {
-	st := houseFinderState{name: name, current: current, slotIdx: 0}
-	st.filterText = filter
-	st.refilter()
-	for i, h := range st.matches {
+	st := newHouseFinder(name, current, 0)
+	st.FilterText = filter
+	st.Refilter()
+	for i, h := range st.Matches {
 		if h == current {
-			st.cursor = i
+			st.Cursor = i
 		}
 	}
 	return st

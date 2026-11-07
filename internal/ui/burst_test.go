@@ -36,8 +36,8 @@ func TestABurstMovesTheAttachedTimelineCursorKeyByKey(t *testing.T) {
 func TestAPasteIsNotReplayedAsKeys(t *testing.T) {
 	var copied int
 	old := yankLine
-	yankLine = func(string) error { copied++; return nil }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(string) error { copied++; return nil }
 	m := onTimeline(t, Config{Accessible: true})
 	for _, s := range []string{"jjj", ",y"} {
 		m, _ = tpress(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s), Paste: true})

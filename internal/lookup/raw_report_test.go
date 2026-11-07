@@ -18,9 +18,9 @@ func TestComputeRawReportRejectsInvalidRequestBeforeSpawn(t *testing.T) {
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
 	for _, request := range []RawReportRequest{
 		{},
-		{Kind: RawReportBody, Body: aspect.BodyUnknown},
-		{Kind: RawReportChart, Body: aspect.Moon},
-		{Kind: RawReportAspects, Body: aspect.Moon},
+		{Kind: RawReportBody, Object: aspect.Object{}},
+		{Kind: RawReportChart, Object: objMoon},
+		{Kind: RawReportAspects, Object: objMoon},
 	} {
 		if _, _, err := ComputeRawReport(context.Background(), when, place, Hellenistic, request); err == nil {
 			t.Errorf("invalid request %+v was accepted", request)
@@ -46,7 +46,7 @@ func TestComputeRawReportsAgainstLiveAstrolog(t *testing.T) {
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
 	cases := []RawReportRequest{
 		{Kind: RawReportChart},
-		{Kind: RawReportBody, Body: aspect.Moon},
+		{Kind: RawReportBody, Object: objMoon},
 		{Kind: RawReportAspects},
 	}
 	for _, request := range cases {
@@ -102,7 +102,7 @@ func TestCrossBodyRawReportAgainstLiveAstrolog(t *testing.T) {
 	natal := store.AnchorChart{When: time.Date(1990, 5, 15, 12, 0, 0, 0, time.UTC), Place: place}
 	transitWhen := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 
-	raw, _, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, transitWhen, place, aspect.Moon)
+	raw, _, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, transitWhen, place, objMoon)
 	if err != nil {
 		t.Fatalf("CrossBodyRawReport: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestCrossBodyRawReportAgainstLiveAstrolog(t *testing.T) {
 
 func TestCrossBodyRawReportRejectsUntimedPlace(t *testing.T) {
 	natal := store.AnchorChart{When: time.Now(), Place: location.PlaceInfo{Name: "Nowhere"}}
-	if _, _, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, time.Now(), location.PlaceInfo{Name: "Nowhere"}, aspect.Moon); err == nil {
+	if _, _, err := CrossBodyRawReport(context.Background(), Hellenistic, natal, time.Now(), location.PlaceInfo{Name: "Nowhere"}, objMoon); err == nil {
 		t.Fatal("cross body report must reject a place without an IANA timezone")
 	}
 }

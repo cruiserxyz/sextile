@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"math"
 	"os"
 	"path/filepath"
@@ -144,8 +145,8 @@ func TestAnEditedChartFileChartWinsOnRelaunch(t *testing.T) {
 // the capture/restore in reanchorEditedChart and this fails by name.
 func TestAnEditedChartFileChartKeepsTheMarksTheOperatorMade(t *testing.T) {
 	m := chartFileModel(t)
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Moon} {
-		if _, ok := m.slots.ToggleBodySelection(0, b); !ok {
+	for _, b := range []aspect.Object{objSun, objMoon} {
+		if _, ok := m.slots.ToggleObjectSelection(0, b); !ok {
 			t.Fatalf("could not mark %v on the anchored slot", b)
 		}
 	}
@@ -157,7 +158,7 @@ func TestAnEditedChartFileChartKeepsTheMarksTheOperatorMade(t *testing.T) {
 		Row: chartFileRow("Rosa Lang", chartFileSnapshot()), Found: true, When: datEditedWhen,
 	})
 
-	got := m.slots.SelectedBodies(0)
+	got := markedObjects(m.slots, 0)
 	if len(got) != 2 {
 		t.Fatalf("marked bodies after the re-anchor = %v, want sun and moon", got)
 	}
@@ -401,7 +402,7 @@ func TestSessionRecheckLinesFitTheLog(t *testing.T) {
 			if !strings.Contains(line, wantIdent) {
 				t.Errorf("the line names no chart or file: %q", line)
 			}
-			if !strings.Contains(line, cutMark(m.cfg)) {
+			if !strings.Contains(line, term.CutMark(m.cfg)) {
 				t.Errorf("an identifier past the budget was not marked as cut: %q", line)
 			}
 		}
@@ -548,12 +549,12 @@ func TestLegacySextileIDReconcilesOnRecheck(t *testing.T) {
 // the same refresh a focus change uses.
 func TestRecheckCorrectionRefreshesAnOpenWheel(t *testing.T) {
 	var whens []time.Time
-	prev := renderWheelImage
-	renderWheelImage = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		whens = append(whens, when)
-		return []byte("BM-wheel"), nil
-	}
-	t.Cleanup(func() { renderWheelImage = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			whens = append(whens, when)
+			return []byte("BM-wheel"), nil
+		}
+	})
 
 	stubTextCompute(t)
 	stubShowWheel(t)

@@ -42,6 +42,11 @@ type Lens struct {
 	// (the specification). The day a lens
 	// registry exists, a default can move here without the chooser changing.
 	Aspects recipe.AspectPolicy
+
+	// Registry is the binary's object list, set by the Model once it has read
+	// it. Every call built from the lens carries it, so the parsers name each
+	// printed row by Astrolog's own object.
+	Registry aspect.Registry
 }
 
 // Hellenistic is the cp2 default: Whole Sign houses, tropical zodiac, true
@@ -56,10 +61,9 @@ var Hellenistic = Lens{
 	Zodiac: recipe.Tropical,
 	Objects: recipe.ObjectPolicy{
 		Baseline: recipe.AstrologDefault,
-		Add: recipe.NewBodySet(
-			aspect.Chiron, aspect.SouthNode, aspect.Lilith,
-			aspect.ImumCoeli, aspect.Descendant,
-		),
+		// Chiron (11), the South Node (17), Lilith (18), the Nadir (25) and the
+		// Descendant (28): Astrolog's own numbers for the five the lens adds.
+		Add:          recipe.NewObjectSet(11, 17, 18, 25, 28),
 		TrueNodeMode: true,
 	},
 }
@@ -78,6 +82,7 @@ func (l Lens) specAt(jd float64, place location.PlaceInfo) (recipe.ChartSpec, er
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -97,6 +102,7 @@ func (l Lens) chartSpecAt(jd float64, place location.PlaceInfo, label store.Repo
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -113,6 +119,7 @@ func (l Lens) localSpecAt(jd float64, place location.PlaceInfo, label store.Repo
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -132,6 +139,7 @@ func (l Lens) localComparisonSpecAt(jdNatal float64, natalPlace location.PlaceIn
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -157,6 +165,7 @@ func (l Lens) comparisonSpecAt(jdNatal float64, natalPlace location.PlaceInfo, j
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -180,6 +189,7 @@ func (l Lens) synastrySpecAt(jd1 float64, place1 location.PlaceInfo, jd2 float64
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -198,6 +208,7 @@ func (l Lens) localSynastrySpecAt(jd1 float64, place1 location.PlaceInfo, label1
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -214,6 +225,7 @@ func (l Lens) multiWheelSpecAt(jds []float64, places []location.PlaceInfo) (reci
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
+	spec.Registry = l.Registry
 	return spec, spec.Validate()
 }
 
@@ -293,16 +305,29 @@ func ZodiacCode(z recipe.Zodiac) string {
 // forms the slot line's right tag, e.g. "WhTr".
 func (l Lens) ZodiacAbbrev() string { return ZodiacCode(l.Zodiac) }
 
-// VisibleObjectNumbers is the lens's drawn set as Astrolog object numbers.
+// VisibleObjectNumbers is the lens's drawn set as Astrolog object numbers: the
+// objects the call really draws on this host (astrolog.ArgvObjectNumbers, the
+// one rule for it), the ones with no glyph that the host enables included and an object
+// without its ephemeris file left out. It fails while the host's default
+// object set is not known.
 //
 // It exists for the body selector, which must seed its checklist from what the
 // chart is drawing NOW rather than from every object the binary carries: the
 // registry holds 134 objects and the shipped lens draws eighteen, so a
 // checklist that opened with everything ticked would turn the operator's first
-// keystroke into a 116-body chart. The body→number map lives in
-// internal/astrolog, which internal/ui may not import, so the seam is here.
-func (l Lens) VisibleObjectNumbers() []int {
-	return astrolog.DrawnObjectNumbers(l.Objects)
+// keystroke into a 116-body chart. A tick shows what is drawn, so the first
+// change of a tick changes one object and no other. The host's availability
+// lives in internal/astrolog, which internal/ui may not import, so the seam is
+// here.
+func (l Lens) VisibleObjectNumbers() ([]int, error) {
+	return astrolog.ArgvObjectNumbers(l.Objects)
+}
+
+// DrainedObjects is every object of the lens's Only narrowing, when none of
+// them is drawn (no ephemeris file, or not in the chart's set): the chart then
+// draws the lens's baseline instead (see astrolog.DrainedObjects).
+func (l Lens) DrainedObjects() ([]int, error) {
+	return astrolog.DrainedObjects(l.Objects)
 }
 
 // ZodiacOffsetText is the finder's account of an ayanamsa: its offset from

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cruiserxyz/sextile/internal/astrolog"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
@@ -57,7 +59,7 @@ type numeralSearch struct {
 func (n *numeralSearch) run(_ context.Context, call BodyCall) (string, string, error) {
 	argv := call.Argv()
 	m := "-dm"
-	for _, c := range []string{"-tr", "-t"} {
+	for _, c := range []string{"-tr", "-t", "-d"} {
 		if slices.Contains(argv, c) {
 			m = c
 		}
@@ -74,6 +76,9 @@ func (n *numeralSearch) run(_ context.Context, call BodyCall) (string, string, e
 	key := m + "|" + natal
 	n.calls = append(n.calls, key)
 	command := "astrolog " + strings.Join(argv, " ")
+	if key == kDay {
+		key = kSky // a sky day search reads the sky's month output
+	}
 	if err := n.fail[key]; err != nil {
 		return "", command, err
 	}
@@ -84,6 +89,7 @@ const (
 	k1t, k2t   = "-t|5 15 1979", "-t|2 3 1985"
 	k1r, k2r   = "-tr|5 15 1979", "-tr|2 3 1985"
 	kSky       = "-dm|"
+	kDay       = "-d|"
 	headerOnly = mayTransitHeader
 )
 
@@ -137,10 +143,16 @@ func TestTimelineNatalsMergeInOrderWithNumerals(t *testing.T) {
 	}
 	// One sky search, and per natal its -t and -tr, in today's source order
 	// across the set: every -t, the sky, every -tr.
-	if wantCalls := []string{k1t, k2t, kSky, k1r, k2r}; !slices.Equal(c.calls, wantCalls) {
+	// The sky is its void-mark month search, then a day search for each of
+	// May's 31 days.
+	wantCalls := []string{k1t, k2t, kSky}
+	for range 31 {
+		wantCalls = append(wantCalls, kDay)
+	}
+	if wantCalls = append(wantCalls, k1r, k2r); !slices.Equal(c.calls, wantCalls) {
 		t.Errorf("spawn order = %v, want %v", c.calls, wantCalls)
 	}
-	if len(res.Commands) != 5 || len(res.Failures) != 0 {
+	if len(res.Commands) != 36 || len(res.Failures) != 0 {
 		t.Errorf("commands = %d, failures = %v", len(res.Commands), res.Failures)
 	}
 	// Each row keeps the command of the search that emitted it: slot 2's
@@ -178,13 +190,13 @@ func TestTimelineNatalsOneFailedSearchKeepsTheOthers(t *testing.T) {
 		}
 	}
 	// The failed spawn's command is still listed.
-	if len(res.Commands) != 5 {
-		t.Errorf("commands = %d, want all five started spawns", len(res.Commands))
+	if len(res.Commands) != 36 {
+		t.Errorf("commands = %d, want all 36 started spawns", len(res.Commands))
 	}
 }
 
-// The sky failing keeps the transit and return rows, one Failure naming -dm
-// with numeral 0 (C17a).
+// The sky failing keeps the transit and return rows, one Failure naming its
+// search (-d) with numeral 0 (C17a).
 func TestTimelineNatalsFailedSkyKeepsTheTransits(t *testing.T) {
 	amPmMonthFirst(t)
 	c := comparingSearch()
@@ -193,8 +205,8 @@ func TestTimelineNatalsFailedSkyKeepsTheTransits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a failed sky search failed the timeline: %v", err)
 	}
-	if len(res.Failures) != 1 || res.Failures[0].Numeral != 0 || res.Failures[0].Search != "-dm" {
-		t.Fatalf("failures = %+v, want one {0 -dm}", res.Failures)
+	if len(res.Failures) != 1 || res.Failures[0].Numeral != 0 || res.Failures[0].Search != "-d" {
+		t.Fatalf("failures = %+v, want one {0 -d}", res.Failures)
 	}
 	if len(res.Rows) == 0 {
 		t.Fatal("no transit rows survived the sky failure")
@@ -334,8 +346,8 @@ func TestTimelineNatalsDSTSegmentFailureKeepsTheOtherSegment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("one failed call of several failed the timeline: %v", err)
 	}
-	if len(calls) != 6 {
-		t.Fatalf("%d spawns, want six (three searches, two segments): %v", len(calls), calls)
+	if len(calls) != 38 {
+		t.Fatalf("%d spawns, want 38 (three searches, two segments, the sky a month search and its days, 25 and 7): %v", len(calls), calls)
 	}
 	got := lines(res.Rows)
 	if len(got) != 2 || !strings.Contains(got[0], "Moon (Gem)") || !strings.Contains(got[1], "Jupiter (Leo)") {
@@ -344,7 +356,82 @@ func TestTimelineNatalsDSTSegmentFailureKeepsTheOtherSegment(t *testing.T) {
 	if len(res.Failures) != 1 || res.Failures[0].Numeral != 1 || res.Failures[0].Search != "-t" {
 		t.Errorf("failures = %+v, want exactly one, numeral 1, search -t", res.Failures)
 	}
-	if len(res.Commands) != 6 {
-		t.Errorf("commands = %d, want all six spawns", len(res.Commands))
+	if len(res.Commands) != 38 {
+		t.Errorf("commands = %d, want all 38 spawns", len(res.Commands))
+	}
+}
+
+// A missing-ephemeris refusal (ErrAstrologWarned) on any search of a comparing
+// timeline refuses the whole result: the others' rows would be a list that
+// silently lacks that slot's events. Other failures keep the partial list (above).
+func TestTimelineNatalsAMissingEphemerisRefusalRefusesTheWholeResult(t *testing.T) {
+	amPmMonthFirst(t)
+	c := comparingSearch()
+	c.fail = map[string]error{k1t: &astrolog.WarnedError{Stderr: "SwissEph file 'seas_12.se1' not found in PATH '/x'"}}
+	res, err := TimelineWith(context.Background(), comparingRequest(), c.run, stubDefaults)
+	if !errors.Is(err, ErrAstrologWarned) {
+		t.Fatalf("err = %v, want a refusal (ErrAstrologWarned) though the other searches succeeded", err)
+	}
+	if len(res.Rows) != 0 {
+		t.Errorf("%d rows came back with the refusal", len(res.Rows))
+	}
+	if len(res.Failures) != 1 || len(res.Commands) == 0 {
+		t.Errorf("failures = %d, commands = %d, want the failure and the commands kept for the Log", len(res.Failures), len(res.Commands))
+	}
+}
+
+// F14: each natal of a comparing timeline carries its own marks into its own
+// -t and -tr searches, and the sky search takes the lens's.
+func TestEachNatalCarriesItsOwnMarks(t *testing.T) {
+	amPmMonthFirst(t)
+	var argvs [][]string
+	search := func(_ context.Context, call BodyCall) (string, string, error) {
+		argvs = append(argvs, call.Argv())
+		return mayTransitHeader, "astrolog", nil
+	}
+	req := comparingRequest()
+	explicit := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 31, 12}}
+	mark := func(n int) recipe.ObjectPolicy {
+		o := explicit
+		o.Only = recipe.NewObjectSet(n)
+		return o
+	}
+	req.Natals[0].Objects, req.Natals[1].Objects = mark(1), mark(2)
+	req.Lens.Objects = explicit
+	if _, err := TimelineWith(context.Background(), req, search, stubDefaults); err != nil {
+		t.Fatal(err)
+	}
+	if len(argvs) != 36 {
+		t.Fatalf("%d searches, want 36 (two -t, the sky's month search and 31 days, two -tr)", len(argvs))
+	}
+	natalMark := func(argv []string) string {
+		i := slices.Index(argv, "-R0")
+		if i < 0 {
+			return ""
+		}
+		j := i + 1
+		for j < len(argv) && !strings.HasPrefix(argv[j], "-") {
+			j++
+		}
+		return strings.Join(argv[i+1:j], " ")
+	}
+	want := map[string]string{"5 15 1979": "1", "2 3 1985": "2"}
+	for _, argv := range argvs {
+		if !slices.Contains(argv, "-dm") && !slices.Contains(argv, "-d") {
+			jd, _ := strconv.ParseFloat(argv[slices.Index(argv, "-qj")+1], 64)
+			u := time.Unix(int64(math.Round((jd-2440587.5)*86400)), 0).UTC()
+			key := fmt.Sprintf("%d %d %d", int(u.Month()), u.Day(), u.Year())
+			if got := natalMark(argv); got != want[key] {
+				t.Errorf("natal %s: -R0 %q, want %q (%v)", key, got, want[key], argv)
+			}
+			continue
+		}
+		want := "1 2 3 4 5 6 7 8 9 10 12 16 22 31"
+		if slices.Contains(argv, "-dm") {
+			want = "1 2 3 4 5 6 7 8 9 10" // the void marks' search: the planets alone
+		}
+		if got := natalMark(argv); got != want {
+			t.Errorf("sky search: -R0 %q, want the unnarrowed ticked list %q", got, want)
+		}
 	}
 }

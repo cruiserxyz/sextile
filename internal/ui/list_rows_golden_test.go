@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/location"
@@ -42,21 +43,21 @@ func listRowsCharts() []store.NamedChart {
 func listRowsChartState() chartPickerState {
 	st := chartPickerState{loaded: true, prior: startupReady, charts: listRowsCharts()}
 	st.refilter()
-	st.cursor = 2
+	st.Cursor = 2
 	return st
 }
 
-func listRowsAspectState(filter string) aspectModalState {
+func listRowsAspectState(filter string) popup.Aspects {
 	st := openTest(recipe.AspectPolicy{Explicit: true, Indices: []int{1, 3, 5}})
-	st.filterText = filter
-	st.refilter()
-	st.cursor = familyRows() + 1
+	st.FilterText = filter
+	st.Refilter()
+	st.Cursor = popup.FamilyRows() + 1
 	return st
 }
 
-func listRowsBodyState() bodyModalState {
+func listRowsBodyState() popup.Body {
 	st := openBodyTest(recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3}}, nil)
-	st.cursor = groupRows() + 1 // the Sun, one row into the list past the group rows
+	st.Cursor = popup.GroupRows() + 1 // the Sun, one row into the list past the group rows
 	return st
 }
 

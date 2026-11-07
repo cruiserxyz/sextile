@@ -2,6 +2,7 @@ package recipe
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -49,10 +50,10 @@ const (
 
 // RawReport asks Astrolog for stdout exactly as it formats it. Construction is
 // closed behind the functions below so only the three supported report shapes
-// are representable; Body is meaningful only for RawReportBody.
+// are representable; Object is meaningful only for RawReportBody.
 type RawReport struct {
-	kind RawReportKind
-	body aspect.Body
+	kind   RawReportKind
+	object aspect.Object
 }
 
 func (RawReport) isProjection() {}
@@ -64,24 +65,25 @@ func (RawReport) isProjection() {}
 // panel already shows.
 func ChartRawReport() RawReport { return RawReport{kind: RawReportChart} }
 
-// BodyRawReport returns Astrolog's uncolored aspect report restricted to body
-// b (`-a -RO <body>`). Validate rejects an unknown body at compile time.
-func BodyRawReport(b aspect.Body) RawReport {
-	return RawReport{kind: RawReportBody, body: b}
+// BodyRawReport returns Astrolog's uncolored aspect report restricted to one
+// object (`-a -RO <number>`): any object Astrolog's registry names, not only the
+// ones Sextile has glyphs for. Validate rejects the zero Object.
+func BodyRawReport(o aspect.Object) RawReport {
+	return RawReport{kind: RawReportBody, object: o}
 }
 
 // AspectsRawReport returns Astrolog's uncolored aspect listing (`-a`).
 func AspectsRawReport() RawReport { return RawReport{kind: RawReportAspects} }
 
-func (r RawReport) Kind() RawReportKind { return r.kind }
-func (r RawReport) Body() aspect.Body   { return r.body }
+func (r RawReport) Kind() RawReportKind   { return r.kind }
+func (r RawReport) Object() aspect.Object { return r.object }
 
 func (r RawReport) Label() string {
 	switch r.kind {
 	case RawReportChart:
 		return "raw-chart"
 	case RawReportBody:
-		return "raw-body-" + r.body.String()
+		return "raw-body-" + strconv.Itoa(r.object.Number)
 	case RawReportAspects:
 		return "raw-aspects"
 	default:
@@ -92,13 +94,13 @@ func (r RawReport) Label() string {
 func (r RawReport) Validate() error {
 	switch r.kind {
 	case RawReportChart, RawReportAspects:
-		if r.body != aspect.BodyUnknown {
-			return fmt.Errorf("recipe: RawReport: body is only valid for a body report")
+		if r.object != (aspect.Object{}) {
+			return fmt.Errorf("recipe: RawReport: an object is only valid for a body report")
 		}
 		return nil
 	case RawReportBody:
-		if !knownBody(r.body) {
-			return fmt.Errorf("recipe: RawReport: %v is not a known body", r.body)
+		if r.object == (aspect.Object{}) {
+			return fmt.Errorf("recipe: RawReport: a body report needs an object")
 		}
 		return nil
 	default:
@@ -148,33 +150,40 @@ const (
 	ImagePNG
 )
 
-// HighlightSpec names the wheel's highlight members: the selected bodies plus the focused
-// cursor body. The compiler lowers an active highlight into the three-layer
+// HighlightSpec names the wheel's highlight members: the selected objects plus the focused
+// cursor object. The compiler lowers an active highlight into the three-layer
 // composite plan — a plain base wheel, a show-list foreground of exactly
 // these members, and a furniture layer — and internal/compose dims the base
 // uniformly as vector groups. Every member renders at Astrolog's own
 // colors; the operator dropped a special cursor tint (2026-08-23), so the
 // spec carries membership and nothing else.
 type HighlightSpec struct {
-	Selected BodySet     // bodies rendered at full color over the dimmed base
-	Focused  aspect.Body // cursor body; BodyUnknown = no focused body
+	Selected ObjectSet // object numbers rendered at full color over the dimmed base
+
+	// FocusedObject is the cursor object's number, meaningful only while
+	// HasFocus is set. A flag rather than a sentinel number, because object 0
+	// is Earth: no number stands for "no focus".
+	FocusedObject int
+	HasFocus      bool
 }
 
 // Active reports whether any highlight is requested at all. An inactive spec
 // must compile to a wheel identical to one with no highlight fields.
 func (h HighlightSpec) Active() bool {
-	return len(h.Selected) > 0 || h.Focused != aspect.BodyUnknown
+	return len(h.Selected) > 0 || h.HasFocus
 }
 
 // NewHighlight builds the shipped highlight for a selected set and a focused
-// body. Pass BodyUnknown for no focused body. Membership is deliberately not
-// validated: bodies the chart does not draw (or that Astrolog cannot number)
-// are silently omitted by the compiler, per the failure contract.
-func NewHighlight(selected []aspect.Body, focused aspect.Body) HighlightSpec {
-	return HighlightSpec{
-		Selected: NewBodySet(selected...),
-		Focused:  focused,
+// object. Pass the zero Object for no focused object. Membership is deliberately
+// not validated: objects the chart does not draw are silently omitted by the
+// compiler, per the failure contract (a highlight narrows what is drawn and
+// never adds an object).
+func NewHighlight(selected []int, focused aspect.Object) HighlightSpec {
+	h := HighlightSpec{Selected: NewObjectSet(selected...)}
+	if focused != (aspect.Object{}) {
+		h.FocusedObject, h.HasFocus = focused.Number, true
 	}
+	return h
 }
 
 // validate rejects a degenerate render. A wheel needs a positive width — the

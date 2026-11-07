@@ -1,6 +1,45 @@
 # Sextile in a container: Astrolog 8.00 compiled from a checksum-pinned
 # archive, the Go binary, and nothing else. Build and run: README, Install and run.
 
+# --- Planetary moons' files (off by default) ---------------------------------
+# The 32 files Astrolog asks for to draw the planets' moons and centres of body:
+# about 240 MB, so a build opts in with --build-arg SEXTILE_MOONS=true (the
+# launcher sets it from SEXTILE_MOONS=1). A stage of its own, so Docker's layer
+# cache keeps the download through later Sextile or Astrolog rebuilds. /moons is
+# empty when off.
+FROM debian:bookworm-slim AS moons
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+# The names and sha256 of the files: the one list scripts/build-astrolog reads
+# too. Upstream publishes no checksums; the sums are ours (see the file).
+COPY scripts/ephemeris-moons.sha256 /ephemeris-moons.sha256
+ARG SEXTILE_MOONS=false
+ARG SWISSEPH_MOONS_COMMIT=94621aba9f3ff9c32cb721eac0380c30dbb153fe
+# Every file is verified before any is installed.
+RUN set -eu \
+ && install -d /moons \
+ && case "${SEXTILE_MOONS}" in \
+      false) exit 0 ;; \
+      true) ;; \
+      *) echo "SEXTILE_MOONS must be true or false, not '${SEXTILE_MOONS}'" >&2; exit 1 ;; \
+    esac \
+ && grep -v '^#' /ephemeris-moons.sha256 > /tmp/moon-sums \
+ && install -d /tmp/moon-dl \
+ && cd /tmp/moon-dl \
+ && while read -r sum f; do \
+      curl -fsSL -o "${f}" \
+        "https://raw.githubusercontent.com/aloistr/swisseph/${SWISSEPH_MOONS_COMMIT}/ephe/sat/${f}" \
+      || exit 1; \
+    done < /tmp/moon-sums \
+ && sha256sum -c /tmp/moon-sums \
+ && while read -r sum f; do \
+      install -m 0644 "${f}" /moons/ && rm "${f}" || exit 1; \
+    done < /tmp/moon-sums \
+ && cd / \
+ && rmdir /tmp/moon-dl \
+ && rm /tmp/moon-sums
+
 # --- Astrolog -----------------------------------------------------------------
 FROM debian:bookworm-slim AS astrolog
 ARG ASTROLOG_VERSION=8.00
@@ -51,6 +90,11 @@ RUN set -eux \
       && install -m 0644 "/tmp/${n}" /usr/local/share/astrolog/ \
       && rm "/tmp/${n}"; \
     done
+# The planetary moons' files from the stage above: nothing unless SEXTILE_MOONS
+# is true. After the compile and the downloads, so neither is redone when the
+# other changes.
+COPY --from=moons /moons/ /usr/local/share/astrolog/
+ARG SEXTILE_MOONS=false
 # The build fails unless this really is Astrolog 8.00 and Swiss Ephemeris
 # loaded: a silently broken ephemeris path puts every planet at 0Ari00. Do NOT
 # pass -b here; it is a toggle and would undo the =b the init file applies.
@@ -65,6 +109,12 @@ RUN set -eux \
  && ! grep -q "not found" /tmp/old.txt \
  && astrolog -qa 6 15 1990 14:30 5:00 122W 37N -R0 43 > /tmp/hygiea.txt \
  && ! grep -q "not found" /tmp/hygiea.txt \
+ && if [ "${SEXTILE_MOONS}" = true ]; then \
+      astrolog -qa 6 15 1990 14:30 5:00 122W 37N -R0 58 > /tmp/titan.txt \
+      && ! grep -q "not found" /tmp/titan.txt \
+      && ! grep -q "^Tita:  0Ari00" /tmp/titan.txt \
+      && rm /tmp/titan.txt; \
+    fi \
  && rm /tmp/chart.txt /tmp/astrolog-version.txt /tmp/old.txt /tmp/hygiea.txt
 
 # --- Sextile ------------------------------------------------------------------

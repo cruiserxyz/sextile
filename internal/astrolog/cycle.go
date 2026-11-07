@@ -22,9 +22,10 @@ import (
 type CycleRequest struct {
 	StartYear int
 	Years     int
-	Other     aspect.Body
+	Other     aspect.Object
 	Houses    recipe.HouseSystem
 	Zodiac    recipe.Zodiac
+	Registry  aspect.Registry
 }
 
 // cycleFirstYear is the first year the search may start in: Astrolog prints
@@ -56,8 +57,15 @@ func CycleCall(req CycleRequest) (BodyCall, error) {
 	if err != nil {
 		return BodyCall{}, err
 	}
-	return newBodyCall(append(argv, band.tokens...), band), nil
+	call := newBodyCall(append(argv, band.tokens...), band)
+	call.Registry, call.Objects = req.Registry, []int{sunObjectNumber, req.Other.Number}
+	return call, nil
 }
+
+// sunObjectNumber is the Sun's number in Astrolog's object registry: object 1
+// in every binary this reads. The Sun is the one object the cycle search and
+// the Sun pair name by number, because it is what both are measured against.
+const sunObjectNumber = 1
 
 // CycleKind is what a cycle line is.
 type CycleKind int
@@ -82,11 +90,13 @@ type CycleEvent struct {
 	Instant time.Time // UT, to Astrolog's printed second
 	Line    string
 	Kind    CycleKind
-	Body    aspect.Body
-	At      CyclePoint
+	// Object and OtherObject are Astrolog's objects for the two names, from
+	// the registry the search carried.
+	Object      aspect.Object
+	OtherObject aspect.Object
+	At          CyclePoint
 	// A conjunction's second body and its position; a station's word
 	// ("S/R" or "S/D"); an ingress's sign.
-	Other   aspect.Body
 	OtherAt CyclePoint
 	Station string
 	Ingress string
@@ -102,14 +112,14 @@ var (
 
 // ParseCycleEvents reads every line of a cycle search or refuses the whole
 // result: an unknown line is an error naming it, never a skipped row.
-func ParseCycleEvents(out string) ([]CycleEvent, error) {
+func ParseCycleEvents(out string, reg aspect.Registry) ([]CycleEvent, error) {
 	var events []CycleEvent
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimRight(line, " \r")
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		ev, err := parseCycleLine(line)
+		ev, err := parseCycleLine(line, reg)
 		if err != nil {
 			return nil, fmt.Errorf("astrolog: ParseCycleEvents: %q: %w", line, err)
 		}
@@ -121,7 +131,7 @@ func ParseCycleEvents(out string) ([]CycleEvent, error) {
 	return events, nil
 }
 
-func parseCycleLine(line string) (CycleEvent, error) {
+func parseCycleLine(line string, reg aspect.Registry) (CycleEvent, error) {
 	m := cycleLineRE.FindStringSubmatch(line)
 	if m == nil {
 		return CycleEvent{}, fmt.Errorf("not a dated event line")
@@ -141,7 +151,7 @@ func parseCycleLine(line string) (CycleEvent, error) {
 	}
 	ev := CycleEvent{Instant: when, Line: line}
 	var ok bool
-	if ev.Body, ok = bodyFullName[m[7]]; !ok {
+	if ev.Object, ok = reg.ByCut(m[7], leftNameWidth); !ok {
 		return CycleEvent{}, fmt.Errorf("unknown body %q", m[7])
 	}
 	if ev.At, ok = cyclePoint(m[8], m[9], m[10], m[11], m[12]); !ok {
@@ -155,7 +165,7 @@ func parseCycleLine(line string) (CycleEvent, error) {
 		if ev.OtherAt, ok = cyclePoint(c[1], c[2], c[3], c[4], c[5]); !ok {
 			return CycleEvent{}, fmt.Errorf("an unreadable position")
 		}
-		if ev.Other, ok = bodyFullName[c[6]]; !ok {
+		if ev.OtherObject, ok = reg.ByCut(c[6], rightNameWidth); !ok {
 			return CycleEvent{}, fmt.Errorf("unknown body %q", c[6])
 		}
 	case cycleStaRE.MatchString(rest):
@@ -186,9 +196,10 @@ func cyclePoint(open, deg, sign, min, close string) (CyclePoint, bool) {
 type SunPairRequest struct {
 	When     time.Time
 	Lon, Lat float64
-	Other    aspect.Body
+	Other    aspect.Object
 	Houses   recipe.HouseSystem
 	Zodiac   recipe.Zodiac
+	Registry aspect.Registry
 }
 
 // SunPairCall is the request as a body call: the moment as its Julian Day
@@ -214,20 +225,25 @@ func SunPairCall(req SunPairRequest) (BodyCall, error) {
 	if err != nil {
 		return BodyCall{}, err
 	}
-	return newBodyCall(append(argv, band.tokens...), band), nil
+	call := newBodyCall(append(argv, band.tokens...), band)
+	call.Registry, call.Objects = req.Registry, []int{sunObjectNumber, req.Other.Number}
+	return call, nil
 }
 
 // PrecisePosition is a body's longitude to the second of arc, its velocity,
 // its sign and retrograde column, and its brightness, as `-b0 -v -Z` printed
 // them.
 type PrecisePosition struct {
-	Body       aspect.Body
-	Longitude  float64 // degrees, 0 to 360
-	Speed      float64 // degrees per day, as printed
-	Sign       string  // Astrolog's three letters
-	Retrograde bool    // Astrolog's R column
-	Magnitude  float64 // -Z Magn.
-	LitPercent float64 // -Z Full (Area), the illuminated fraction
+	Object     aspect.Object // Astrolog's object, by order from the numbers asked
+	Longitude  float64       // degrees, 0 to 360
+	Speed      float64       // degrees per day, as printed
+	Sign       string        // Astrolog's three letters
+	Retrograde bool          // Astrolog's R column
+	Magnitude  float64       // -Z Magn.
+	LitPercent float64       // -Z Full (Area), the illuminated fraction
+	// HasBrightness is whether -Z printed the two columns above; an object
+	// without them (Fortune, a cusp point) has no magnitude, never a zero one.
+	HasBrightness bool
 }
 
 var (
@@ -237,15 +253,22 @@ var (
 	pairRowRE   = regexp.MustCompile(`^([A-Z][a-z]{2,3}) ?: +(\d{1,2})([A-Z][a-z]{2})(\d{2})'(\d{2})" (R| ) +[-+] ?\d{1,2}:\d{2}'\d{2}" +\(.\) +\[[ \d]\d[a-z]{2} house\] +\[.\] +([-+]\d+\.\d+) +[-+]\d+\.\d+$`)
 	// The altitude's sign is followed by a space below ten degrees, as the
 	// latitude's is: `- 3:03'28"`, `+18:02'22"`.
-	pairZRowRE = regexp.MustCompile(`^([A-Z][a-z]{2,3}) ?: +[-+] ?\d{1,2}:\d{2}'\d{2}" +\d{1,3}:\d{2}'\d{2}" +\(\d\.\d{3}[ns] \d\.\d{3}[ew]\) +([-+]?\d+\.\d+) +(\d{1,3}\.\d{2})% +\d{1,3}\.\d{2}% +\d+:\d{2}'\d{2}\.\d{3}"$`)
+	pairZRowRE = regexp.MustCompile(`^([A-Z][a-z]{2,3}) ?: +[-+] ?\d{1,2}:\d{2}'\d{2}" +\d{1,3}:\d{2}'\d{2}" +\(\d\.\d{3}[ns] \d\.\d{3}[ew]\)(?: +([-+]?\d+\.\d+) +(\d{1,3}\.\d{2})% +\d{1,3}\.\d{2}% +\d+:\d{2}'\d{2}\.\d{3}")?$`)
 )
 
 // ParseSunPair reads the Sun's and the other body's rows of a SunPairCall
 // output, positions then the horizon table; any line it does not know, a
-// missing row or a second one refuses the result.
-func ParseSunPair(out string, other aspect.Body) (sun, body PrecisePosition, err error) {
-	got := map[aspect.Body]PrecisePosition{}
-	bright := map[aspect.Body]bool{}
+// missing row or a second one refuses the result. The rows print in ascending
+// object number and their four-character label is not unique, so each takes
+// its object by order from the numbers asked (the Sun first, the other body
+// second), never from the label.
+func ParseSunPair(out string, asked []int, reg aspect.Registry) (sun, body PrecisePosition, err error) {
+	nums := askedNumbers(asked)
+	if len(nums) != 2 {
+		return sun, body, fmt.Errorf("astrolog: ParseSunPair: %d objects asked, want the Sun and one other", len(nums))
+	}
+	var got []PrecisePosition
+	horizon := 0
 	inZ := false
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimRight(line, " \r")
@@ -261,26 +284,26 @@ func ParseSunPair(out string, other aspect.Body) (sun, body PrecisePosition, err
 			if z == nil {
 				return sun, body, fmt.Errorf("astrolog: ParseSunPair: %q is not a horizon row", line)
 			}
-			b, ok := bodyAbbrev4[z[1]]
-			p, seen := got[b]
-			if !ok || !seen || bright[b] {
+			if horizon >= len(got) {
 				return sun, body, fmt.Errorf("astrolog: ParseSunPair: horizon row %q matches no position row once", z[1])
 			}
-			p.Magnitude, _ = strconv.ParseFloat(z[2], 64)
-			p.LitPercent, _ = strconv.ParseFloat(z[3], 64)
-			got[b], bright[b] = p, true
+			// Astrolog prints the brightness columns for the bodies that have
+			// them (planets, the Moon, the Sun); a Fortune or a cusp point has
+			// a horizon position and no magnitude, which is not a magnitude of 0.
+			if z[2] != "" {
+				got[horizon].Magnitude, _ = strconv.ParseFloat(z[2], 64)
+				got[horizon].LitPercent, _ = strconv.ParseFloat(z[3], 64)
+				got[horizon].HasBrightness = true
+			}
+			horizon++
 			continue
 		}
 		m := pairRowRE.FindStringSubmatch(line)
 		if m == nil {
 			return sun, body, fmt.Errorf("astrolog: ParseSunPair: %q is not a position row", line)
 		}
-		b, ok := bodyAbbrev4[m[1]]
-		if !ok || (b != aspect.Sun && b != other) {
-			return sun, body, fmt.Errorf("astrolog: ParseSunPair: %q is not the Sun or %s", m[1], other)
-		}
-		if _, dup := got[b]; dup {
-			return sun, body, fmt.Errorf("astrolog: ParseSunPair: %s twice", b)
+		if len(got) == len(nums) {
+			return sun, body, fmt.Errorf("astrolog: ParseSunPair: %q is a row beyond the %d asked", m[1], len(nums))
 		}
 		sign, ok := signAbbrev[m[3]]
 		deg, _ := strconv.Atoi(m[2])
@@ -290,14 +313,12 @@ func ParseSunPair(out string, other aspect.Body) (sun, body PrecisePosition, err
 			return sun, body, fmt.Errorf("astrolog: ParseSunPair: %q: an unreadable position", line)
 		}
 		speed, _ := strconv.ParseFloat(m[7], 64)
-		got[b] = PrecisePosition{Body: b, Longitude: float64(int(sign-1))*30 + float64(deg) + float64(mi)/60 + float64(sec)/3600, Speed: speed,
-			Sign: m[3], Retrograde: m[6] == "R"}
+		object, _ := reg.ByNumber(nums[len(got)])
+		got = append(got, PrecisePosition{Object: object, Longitude: float64(int(sign-1))*30 + float64(deg) + float64(mi)/60 + float64(sec)/3600, Speed: speed,
+			Sign: m[3], Retrograde: m[6] == "R"})
 	}
-	var okSun, okBody bool
-	sun, okSun = got[aspect.Sun]
-	body, okBody = got[other]
-	if !okSun || !okBody || !bright[aspect.Sun] || !bright[other] {
-		return sun, body, fmt.Errorf("astrolog: ParseSunPair: the output lacks the Sun's or %s's position or horizon row", other)
+	if len(got) != len(nums) || horizon != len(nums) {
+		return sun, body, fmt.Errorf("astrolog: ParseSunPair: %d position rows and %d horizon rows for the %d objects asked", len(got), horizon, len(nums))
 	}
-	return sun, body, nil
+	return got[0], got[1], nil
 }

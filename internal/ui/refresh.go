@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/preview"
 )
 
@@ -39,15 +38,127 @@ const (
 	detailsDebounce = 150 * time.Millisecond
 )
 
-func debounceFor(s surface) time.Duration {
-	switch s {
-	case surfaceImage:
-		return imageDebounce
-	case surfaceDetails:
-		return detailsDebounce
-	default:
-		return textDebounce
+func (m Model) debounceFor(s surface) time.Duration {
+	if r, ok := m.rowFor(s); ok {
+		return r.debounce
 	}
+	return textDebounce
+}
+
+// surfaceRow is one surface's refresh policy as a value: what the coordinator
+// knows about it, asked for by rowFor instead of branched on. All five
+// surfaces have one. Rendering is not part of a row.
+type surfaceRow struct {
+	// inputs is the compute key: what a run is asked for (Details:
+	// detailsKeyFor, Timeline: timelineKeyFor, Template: templateKeyFor).
+	inputs func(Model) (refreshKey, bool)
+	// trigger and supersede name how the surface starts and replaces runs.
+	trigger   rowTrigger
+	supersede rowSupersede
+	// debounce is the rest window before a run starts; the one rest timer
+	// decides only when a run starts.
+	debounce time.Duration
+	// rest is the surface's own timer state, read by onRestTick; the zero
+	// value is a surface with no rest timer, whose tick takes the plain
+	// ensureRunningLatest path.
+	rest restTimer
+	// build makes the cancelable run; nil when there is nothing to ask.
+	build func(Model, context.Context, uint64, uint64) tea.Cmd
+	// accept is the result gate beyond the shared run id and commit floor:
+	// the exact want and the question the screen asks now.
+	accept func(Model, refreshResultMsg) bool
+	// commit lands an accepted result.
+	commit func(Model, refreshResultMsg) (Model, tea.Cmd)
+	// suspend clears the state the row owns when the surface is fenced off;
+	// nil when nothing calls suspendSurface for the surface (Text: identity
+	// changes fence it through bumpIdentity).
+	suspend func(Model) Model
+	// remembered lands the result the surface remembers for the key a want was
+	// registered for, in this frame and instead of a run (memory.go); nil when
+	// the surface adopts from memory at its own entry point or keeps none.
+	remembered func(Model) (Model, tea.Cmd, bool)
+	// asked runs when a want is registered (noteWant, bumpIdentity): the key
+	// the want is for, which the reconciler reads. Nil when nothing reads it.
+	asked func(Model) Model
+	// started runs in startRun after a build that returned a command: the
+	// state a run stamps when it starts (Image: the key of the wheel it was
+	// asked for). Nil when a run stamps nothing.
+	started func(Model) Model
+	// spawn holds the outside calls this row's build and commit make, so a
+	// test stands in for them on its own Model (row_spawns.go).
+	spawn rowSpawns
+}
+
+type rowTrigger int
+
+const (
+	// triggerEvent: started by entry points in response to an event, never
+	// by a post-Update observer.
+	triggerEvent rowTrigger = iota
+	// triggerIdentity: started by a change of workspace identity (bumpIdentity),
+	// immediately and fenced; the only timer is a defensive retry tick.
+	triggerIdentity
+	// triggerEventLeading: started by entry points, never an observer, in two
+	// halves: noteWant (a leading edge starts an idle run at once, a burst
+	// trails a debounce tick) and bumpIdentity (hard, fenced).
+	triggerEventLeading
+)
+
+// refreshKey is what a row's inputs answer: the comparable question a run was
+// asked, which the row's commit gate compares with the question asked now.
+type refreshKey interface{ isRefreshKey() }
+
+func (detailsKey) isRefreshKey()  {}
+func (timelineKey) isRefreshKey() {}
+func (templateKey) isRefreshKey() {}
+
+type rowSupersede int
+
+const (
+	// supersedeHard: a newer want cancels the run in flight.
+	supersedeHard rowSupersede = iota
+	// supersedePolite: a newer want lets the run in flight finish and commit
+	// as the burst's leading frame; the debounce tick re-arms to check back.
+	// Identity bumps still hard-cancel.
+	supersedePolite
+	// supersedeLiveSerial: one render at a time. A newer want never cancels
+	// the run in flight, a finished intermediate result may still land, and
+	// the tick re-arms; a result the row refuses is followed by a run for
+	// the newest want.
+	supersedeLiveSerial
+)
+
+// restTimer is the row's single checkpoint timer during a held burst.
+type restTimer struct {
+	armed  func(Model) bool
+	hidden func(Model) bool // the surface asks for nothing now
+	park   func(Model) Model
+	disarm func(Model) Model
+}
+
+// onRestTick handles a row surface's checkpoint tick: ignore a tick another
+// input re-armed, park when the surface asks for nothing, move the checkpoint
+// to the latest want while input is still arriving, else start the run.
+func (m Model) onRestTick(r surfaceRow, msg refreshTickMsg) (Model, tea.Cmd) {
+	s := msg.surface
+	if !r.rest.armed(m) || msg.timerID != m.refresh[s].timerID {
+		return m, nil
+	}
+	if r.rest.hidden(m) {
+		return r.rest.park(m), nil
+	}
+	if m.refresh[s].timerID != m.refresh[s].wantID {
+		m.refresh[s].timerID = m.refresh[s].wantID
+		return m, m.armRefresh(s, m.refresh[s].timerID)
+	}
+	m = r.rest.disarm(m)
+	return m.ensureRunningLatest(s)
+}
+
+// acceptExactWant is the result gate every strict latest-only row shares: the
+// result is for the want the surface holds now.
+func acceptExactWant(m Model, msg refreshResultMsg) bool {
+	return msg.wantID == m.refresh[msg.surface].wantID
 }
 
 // refreshState is the per-surface coordinator state: a latest-wins single-flight
@@ -98,7 +209,7 @@ type refreshResultMsg struct {
 type refreshPayload interface{ isRefreshPayload() }
 
 // imagePayload is surfaceImage's result: the rendered wheel SVG bytes. The
-// bytes are handed to showWheel only at the commit point (latest run only), so
+// bytes are handed to the Image row's show spawn only at the commit point (latest run only), so
 // two renders can never race the stable browser URL (the reviewer F).
 type imagePayload struct {
 	bytes []byte
@@ -129,27 +240,23 @@ type detailsPayload struct {
 	title    string
 	body     string
 	commands []string
+	// note is the Log's note-lane line when a rule was applied after Astrolog
+	// (the cross body report keeps the cursor chart's rows); empty otherwise.
+	note string
+	// influence marks the chart report (Astrolog's influence chart), and
+	// starsLeft the fixed stars it left out (lookup.Lens.InfluenceLeavesOut).
+	influence bool
+	starsLeft []int
+	// key is the question the report answered, captured at dispatch; the
+	// commit gate compares it with the question the screen asks now.
+	key detailsKey
 }
 
 func (detailsPayload) isRefreshPayload() {}
 
-// showWheel publishes a rendered wheel SVG to the browser preview. Indirected
-// through a package var (same idiom as astrolog.binary) so tests can substitute
-// a stub — the real preview.Show starts an HTTP server and may launch the
-// Windows browser, side effects a unit test must not trigger.
-var showWheel = preview.Show
-
-// closeWheelServer stops the wheel server (a second Ctrl+X). Indirected like
-// showWheel.
-var closeWheelServer = preview.Close
-
-// requestViewerOpen tells the preview the operator asked to see the wheel
-// (Ctrl+X), so the next publish may open a viewer. Indirected like showWheel.
-var requestViewerOpen = preview.RequestOpen
-
 // armRefresh schedules a trailing debounce tick for surface s carrying timerID.
-func armRefresh(s surface, timerID uint64) tea.Cmd {
-	return tea.Tick(debounceFor(s), func(time.Time) tea.Msg {
+func (m Model) armRefresh(s surface, timerID uint64) tea.Cmd {
+	return tea.Tick(m.debounceFor(s), func(time.Time) tea.Msg {
 		return refreshTickMsg{surface: s, timerID: timerID}
 	})
 }
@@ -160,9 +267,15 @@ func armRefresh(s surface, timerID uint64) tea.Cmd {
 // immediately so the first frame of a burst is instant. Ctrl+X uses
 // requestImageNow instead to preserve repeat-key coalescing.
 func (m Model) noteWant(s surface, leading bool) (Model, tea.Cmd) {
+	m = m.noteAsked(s)
 	m.refresh[s].wantID++
 	m.refresh[s].timerID = m.refresh[s].wantID
-	cmds := []tea.Cmd{armRefresh(s, m.refresh[s].timerID)}
+	// A frame already computed for the key asked for is drawn now, from memory:
+	// no tick, no process (memory.go).
+	if nm, cmd, ok := m.fromMemory(s); ok {
+		return nm, cmd
+	}
+	cmds := []tea.Cmd{m.armRefresh(s, m.refresh[s].timerID)}
 	if leading && m.refresh[s].cancel == nil && m.refresh[s].runningWantID != m.refresh[s].wantID {
 		var c tea.Cmd
 		m, c = m.startRun(s)
@@ -171,6 +284,25 @@ func (m Model) noteWant(s surface, leading bool) (Model, tea.Cmd) {
 		}
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// fromMemory asks the surface's row for the result it remembers for the key a
+// want was just registered for.
+func (m Model) fromMemory(s surface) (Model, tea.Cmd, bool) {
+	if r, ok := m.rowFor(s); ok && r.remembered != nil {
+		return r.remembered(m)
+	}
+	return m, nil, false
+}
+
+// noteAsked lets a row record what a want was registered for (the row's
+// asked): the reconciler compares it with what the screen wants now
+// (reconcile.go). The caller has already changed the state the want is for.
+func (m Model) noteAsked(s surface) Model {
+	if r, ok := m.rowFor(s); ok && r.asked != nil {
+		m = r.asked(m)
+	}
+	return m
 }
 
 // startRun launches surface s's compute for the current wantID: assigns a fresh
@@ -193,8 +325,8 @@ func (m Model) startRun(s surface) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.refresh[s].cancel = cancel
-	if s == surfaceImage {
-		m.wheelRunKey, _ = m.wheelStillKey()
+	if r, ok := m.rowFor(s); ok && r.started != nil {
+		m = r.started(m)
 	}
 	return m, cmd
 }
@@ -217,6 +349,7 @@ func (m Model) wheelStillKey() (string, bool) {
 // is a single deliberate act, not a burst). A tick is still armed as a
 // defensive retry in case the immediate start had nothing to run.
 func (m Model) bumpIdentity(s surface) (Model, tea.Cmd) {
+	m = m.noteAsked(s)
 	if c := m.refresh[s].cancel; c != nil {
 		c()
 		m.refresh[s].cancel = nil
@@ -224,7 +357,13 @@ func (m Model) bumpIdentity(s surface) (Model, tea.Cmd) {
 	m.refresh[s].wantID++
 	m.refresh[s].commitFloor = m.refresh[s].wantID
 	m.refresh[s].timerID = m.refresh[s].wantID
-	cmds := []tea.Cmd{armRefresh(s, m.refresh[s].timerID)}
+	// The identity change fenced everything above; a frame remembered for the
+	// key it asks for is still that frame (suspendDetails forgot the memory of
+	// any workspace that was left).
+	if nm, cmd, ok := m.fromMemory(s); ok {
+		return nm, cmd
+	}
+	cmds := []tea.Cmd{m.armRefresh(s, m.refresh[s].timerID)}
 	var c tea.Cmd
 	m, c = m.startRun(s)
 	if c != nil {
@@ -247,8 +386,8 @@ func (m Model) suspendSurface(s surface) Model {
 	m.refresh[s].runningWantID = m.refresh[s].wantID
 	m.refresh[s].commitFloor = m.refresh[s].wantID
 	m.refresh[s].lastCommitWantID = m.refresh[s].wantID
-	if s == surfaceDetails {
-		m.details.timerArmed = false
+	if r, ok := m.rowFor(s); ok && r.suspend != nil {
+		m = r.suspend(m)
 	}
 	return m
 }
@@ -256,49 +395,8 @@ func (m Model) suspendSurface(s surface) Model {
 // buildSurfaceCmd constructs the cancelable Cmd that computes surface s and
 // returns a refreshResultMsg tagged with runID/wantID.
 func (m Model) buildSurfaceCmd(s surface, ctx context.Context, runID, wantID uint64) tea.Cmd {
-	switch s {
-	case surfaceImage:
-		// Gate the render-START on previewActive (not just the request
-		// triggers): this makes it impossible for a queued debounce tick or a
-		// stale-want follow-up to revive rendering after a render error cleared
-		// previewActive (the review). previewActive is set true by
-		// Ctrl+X (dispatchRenderWheel) before its immediate request, and stays
-		// true across auto-refreshes until a render error turns it off.
-		if !m.previewActive {
-			return nil
-		}
-		plan, ok := m.wheelPlan()
-		if !ok {
-			return nil
-		}
-		if m.unresolvedFor(m.focusedSlot()) != nil {
-			return nil
-		}
-		lens := m.wheelLens(plan)
-		switch plan.mode {
-		case wheelPair:
-			// The active tab's bi-wheel: the pair's left chart, the base,
-			// passed first, which Astrolog draws on the outer ring with its
-			// houses; the cursor's chart inside (the floating slot at the
-			// operator's target, or an anchored slot at its own moment).
-			return renderOverlayWheelCmd(ctx, runID, wantID, plan.inner, plan.rings[1].When, plan.rings[1].Place, lens, plan.labels)
-		case wheelRings:
-			return renderMultiWheelCmd(ctx, runID, wantID, plan.rings, plan.labels, lens)
-		}
-		return renderWheelCmd(ctx, runID, wantID, plan.when, plan.place, lens, plan.highlight)
-	case surfaceText:
-		// FREEZE-SAFETY (the design review): the text surface must
-		// ALWAYS be runnable — a nil Cmd here with no live tick would strand
-		// an unmet want forever. buildTextCmd never returns nil: with no
-		// workspace it falls back to a wall-clock transit compute, exactly as
-		// the pre-coordinator cold-start path did.
-		return buildTextCmd(m, ctx, runID, wantID)
-	case surfaceDetails:
-		return buildDetailsCmd(m, ctx, runID, wantID)
-	case surfaceTimeline:
-		return buildTimelineCmd(m, ctx, runID, wantID)
-	case surfaceTemplate:
-		return buildTemplateCmd(m, ctx, runID, wantID)
+	if r, ok := m.rowFor(s); ok {
+		return r.build(m, ctx, runID, wantID)
 	}
 	return nil
 }
@@ -352,32 +450,16 @@ func (m Model) ensureRunningLatest(s surface) (Model, tea.Cmd) {
 //     render for the newest want.
 func (m Model) onRefreshTick(msg refreshTickMsg) (Model, tea.Cmd) {
 	s := msg.surface
-	if s == surfaceDetails {
-		if !m.details.timerArmed || msg.timerID != m.refresh[s].timerID {
-			return m, nil
-		}
-		// A timer armed for the report starts nothing once the report tab is
-		// hidden; the catch-up asks when it is chosen.
-		if m.reportTabHidden() {
-			m.details.timerArmed = false
-			m.details.stale = true
-			return m, nil
-		}
-		// Only one Details timer exists during a held-key burst. If input
-		// changed since it was armed, move the checkpoint to the latest want and
-		// check again after one full idle window; do not start work yet.
-		if m.refresh[s].timerID != m.refresh[s].wantID {
-			m.refresh[s].timerID = m.refresh[s].wantID
-			return m, armRefresh(s, m.refresh[s].timerID)
-		}
-		m.details.timerArmed = false
-		return m.ensureRunningLatest(s)
+	if r, ok := m.rowFor(s); ok && r.rest.armed != nil {
+		return m.onRestTick(r, msg)
 	}
 	if msg.timerID != m.refresh[s].timerID {
 		return m, nil
 	}
-	if (s == surfaceText || s == surfaceImage) && m.refresh[s].cancel != nil && m.refresh[s].runningWantID != m.refresh[s].wantID {
-		return m, armRefresh(s, m.refresh[s].timerID)
+	r, hasRow := m.rowFor(s)
+	polite := hasRow && r.supersede != supersedeHard
+	if polite && m.refresh[s].cancel != nil && m.refresh[s].runningWantID != m.refresh[s].wantID {
+		return m, m.armRefresh(s, m.refresh[s].timerID)
 	}
 	return m.ensureRunningLatest(s)
 }
@@ -421,43 +503,20 @@ func (m Model) onRefreshResult(msg refreshResultMsg) (Model, tea.Cmd) {
 	if msg.wantID < m.refresh[s].commitFloor {
 		return m, nil
 	}
-	// Details is strict latest-only. Its requests currently hard-cancel and bump
-	// runID, so this is a defensive second gate against any future polite/debounced
-	// request path committing a report for an abandoned focus context.
-	if (s == surfaceDetails || s == surfaceTimeline || s == surfaceTemplate) && msg.wantID != m.refresh[s].wantID {
-		return m, nil
-	}
-	staleImage := s == surfaceImage && msg.wantID != m.refresh[s].wantID
-	if staleImage && msg.err != nil {
-		return m.startRun(s)
-	}
-	// A stale picture publishes only as a frame of a held time step: when the
-	// newest want differs from the run's plan in the floating time alone. A
-	// picture of another chart, tab or lens is the cursor's scan leaving
-	// pictures behind; it is dropped, the held picture stays, and the render
-	// for the newest want still follows (S4b B4, B5).
-	if staleImage {
-		if now, ok := m.wheelStillKey(); !ok || now != m.wheelRunKey {
+	// A surface with a row decides for itself what lands (Details: the exact
+	// want and the question the screen asks now; Timeline and Template: the
+	// exact want, a defensive gate against a polite request path committing
+	// for an abandoned context).
+	if r, ok := m.rowFor(s); ok && !r.accept(m, msg) {
+		// A live-serial row (Image) refuses a stale result and the run for
+		// the newest want follows; the others simply drop it.
+		if r.supersede == supersedeLiveSerial {
 			return m.startRun(s)
 		}
-	}
-	// A STALE text ERROR is dropped whole (the review): committing it
-	// would blank/downgrade a good chart mid-burst for nothing — it isn't even
-	// logged — and the still-pending debounce tick recomputes the settled
-	// frame regardless (the same pending-tick guarantee the no-chain rule
-	// rests on; lastCommitWantID stays behind, so the tick's idle check
-	// fires). Stale SUCCESSES still commit: that's the leading frame.
-	if s == surfaceText && msg.err != nil && msg.wantID != m.refresh[s].wantID {
 		return m, nil
 	}
 	m.refresh[s].lastCommitWantID = msg.wantID
-	m, commitCmd := m.commitRefresh(s, msg)
-	if staleImage && m.previewActive {
-		var followCmd tea.Cmd
-		m, followCmd = m.startRun(s)
-		return m, tea.Batch(commitCmd, followCmd)
-	}
-	return m, commitCmd
+	return m.commitRefresh(s, msg)
 }
 
 // commitRefresh applies a latest, non-superseded result's surface-specific side
@@ -465,78 +524,8 @@ func (m Model) onRefreshResult(msg refreshResultMsg) (Model, tea.Cmd) {
 // preview.Show. A render error clears previewActive so a failed render stops
 // the auto-refresh.
 func (m Model) commitRefresh(s surface, msg refreshResultMsg) (Model, tea.Cmd) {
-	switch s {
-	case surfaceImage:
-		// Route on surface (always set), not payload type: an error result may
-		// carry a nil payload, and the error handling must not depend on it.
-		if p, ok := msg.payload.(imagePayload); ok {
-			m = m.logCommandsFor(surfaceImage, msg.wantID, p.commands)
-		}
-		if msg.err != nil {
-			m.previewActive = false
-			m.wheelPublishPending = nil
-			// Error lane: the render the operator asked for failed.
-			m = m.noteEphemeris(msg.err)
-			reason := m.failureReason(msg.err, wheelRenderFallback)
-			if ring, staged := lookup.StagedRing(msg.err); staged {
-				// A ring's chart file could not be written: nothing was drawn,
-				// the picture on screen is still the last one, and the line
-				// names the slot (C16).
-				if p, _ := msg.payload.(imagePayload); ring >= 1 && ring <= len(p.rings) {
-					reason = "The chart file for " + p.rings[ring-1] + " could not be written."
-				}
-			}
-			return m.logError("Couldn't draw the wheel. %s", reason).logWarnings(msg.err), nil
-		}
-		// Symmetric to the buildSurfaceCmd render-start gate: drop a SUCCESSFUL
-		// render that was already in flight when the preview was disabled (a
-		// render or publish error cleared previewActive). Without this, an
-		// in-flight render committing after a publish failure would queue a new
-		// publish and revive the broken preview (the reviewer an earlier change high).
-		if !m.previewActive {
-			return m, nil
-		}
-		// Hand the bytes to the serialized off-thread publisher rather than
-		// calling preview.Show synchronously in Update (the reviewer an earlier change): keeps the
-		// HTTP publish + browser launch off the render loop while
-		// preserving order (one publish at a time) and latest-wins.
-		img, _ := msg.payload.(imagePayload)
-		m.wheelPublishPending, m.wheelPublishKey = img.bytes, m.wheelRunKey
-		return m.kickWheelPublish()
-	case surfaceText:
-		p, _ := msg.payload.(textPayload)
-		return applyTextCommit(m, p.msg)
-	case surfaceDetails:
-		p, _ := msg.payload.(detailsPayload)
-		// The report's command becomes an argv line HERE, at the commit gate,
-		// on the success and the accepted-error branch alike — a
-		// result the coordinator dropped never reaches this switch, so a
-		// spawn that never painted is never logged (C3).
-		m = m.logCommandsFor(surfaceDetails, msg.wantID, p.commands)
-		if msg.err != nil {
-			// A failed replacement is not a frame. Preserve the last complete
-			// report exactly as rendered and surface the failure only in Log —
-			// on the error lane, beside the command that failed.
-			m.details.pending = false
-			m.details.waitForText = false
-			m.details.timerArmed = false
-			m = m.noteEphemeris(msg.err).logError("Couldn't read the full report. %s", m.failureReason(msg.err, m.consolePointer(len(p.commands) > 0))).logWarnings(msg.err)
-			m.errorKeptView = true
-			return m, nil
-		}
-		// Title and report land together. Navigation leaves the last successful
-		// frame in place until this atomic replacement, so there is no visible
-		// pending, blank, partial, or error frame. The scroll offset follows
-		// the context, not the struct: same title keeps the reader's place.
-		m = m.adoptDetailsReport(p.title, p.body)
-		m.details.pending = false
-		m.details.waitForText = false
-		m.details.timerArmed = false
-		return m, nil
-	case surfaceTimeline:
-		return m.commitTimeline(msg)
-	case surfaceTemplate:
-		return m.commitTemplate(msg)
+	if r, ok := m.rowFor(s); ok {
+		return r.commit(m, msg)
 	}
 	return m, nil
 }
@@ -566,14 +555,14 @@ func (m Model) kickWheelPublish() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.wheelPublishing = true
-	return m, publishWheelCmd(bytes, m.wheelOpenSeq)
+	return m, publishWheelCmd(m.rows[surfaceImage].spawn.wheel.show, bytes, m.wheelOpenSeq)
 }
 
 // publishWheelCmd publishes the bytes to the browser preview off the Update
-// loop (preview.Show via the stubbable showWheel).
-func publishWheelCmd(img []byte, openSeq uint64) tea.Cmd {
+// loop (preview.Show, held as the Image row's show spawn).
+func publishWheelCmd(show func([]byte) (string, error), img []byte, openSeq uint64) tea.Cmd {
 	return func() tea.Msg {
-		path, err := showWheel(img)
+		path, err := show(img)
 		return wheelPublishedMsg{path: path, err: err, openSeq: openSeq}
 	}
 }

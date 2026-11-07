@@ -355,3 +355,64 @@ func TestFrameIgnoresAFutureSchema(t *testing.T) {
 		t.Errorf("a current file was ignored: %+v", got)
 	}
 }
+
+// frame-writer-in-place T1 (F1): only the value token moves; the key's own
+// spelling and spacing, what follows the value and the line ending stay.
+func TestSetFrameKeepsTheKeysSpelling(t *testing.T) {
+	path := prefPath(t)
+	seedPreferences(t, path, "# defaults\r\nframe:\r\n  houses :\tKoch   # mine\r\n  zodiac:  tropical\r\nclock:\r\n  hours: 24")
+	if err := SetFrame("Placidus", "sidereal Lahiri"); err != nil {
+		t.Fatal(err)
+	}
+	want := "# defaults\r\nframe:\r\n  houses :\tPlacidus   # mine\r\n  zodiac:  sidereal Lahiri\r\nclock:\r\n  hours: 24"
+	if got := readPreferences(t, path); got != want {
+		t.Errorf("a byte outside the values moved:%s", diffText(got, want))
+	}
+	if got := Frame(); got.Houses != "Placidus" || got.Zodiac != "sidereal Lahiri" {
+		t.Errorf("read back %+v", got)
+	}
+}
+
+// frame-writer-in-place T2 (F1): YAML's value token, so a comment after an
+// escaped quote survives, and an unspaced value reads back after the write.
+func TestSetFrameKeepsACommentAfterAnEscapedQuote(t *testing.T) {
+	path := prefPath(t)
+	for _, c := range []struct{ seed, want, houses, zodiac string }{
+		{"frame:\n  houses: Koch\n  zodiac: \"a\\\"b\" # mine\n", "frame:\n  houses: Koch\n  zodiac: tropical # mine\n", "Koch", "tropical"},
+		{"frame:\n  houses: 'it''s' # n\n  zodiac: tropical\n", "frame:\n  houses: Placidus # n\n  zodiac: tropical\n", "Placidus", "tropical"},
+		{"frame:\n  houses:Koch\n  zodiac: tropical\n", "frame:\n  houses: Placidus\n  zodiac: tropical\n", "Placidus", "tropical"},
+	} {
+		seedPreferences(t, path, c.seed)
+		if err := SetFrame(c.houses, c.zodiac); err != nil {
+			t.Fatal(err)
+		}
+		if got := readPreferences(t, path); got != c.want {
+			t.Errorf("seed %q:%s", c.seed, diffText(got, c.want))
+		}
+		if got := Frame(); got.Houses != c.houses || got.Zodiac != c.zodiac {
+			t.Errorf("seed %q: read back %+v", c.seed, got)
+		}
+	}
+}
+
+// frame-writer-in-place T3 (F2): a block YAML would not read as one is
+// refused, nothing written.
+func TestSetFrameRefusesAStrayLine(t *testing.T) {
+	path := prefPath(t)
+	for _, c := range []struct{ body, quoted string }{
+		{"frame:\ngarbage\n  houses: Koch\n", "'garbage'"},
+		{"frame:\n  houses: Koch\ngarbage\n", "'garbage'"},
+		// A YAML list in column zero (found in review): its entries carry a
+		// colon, but they are the block's value, not the next top-level key.
+		{"frame:\n- houses: Koch\n- zodiac: tropical\nclock:\n  hours: 24\n", "'- houses: Koch'"},
+	} {
+		body := c.body
+		mtime := seedAged(t, path, body)
+		renames := countRenames(t)
+		err := SetFrame("Placidus", "tropical")
+		if err == nil || !strings.Contains(err.Error(), c.quoted) || !strings.Contains(err.Error(), "The frame was not saved") {
+			t.Errorf("body %q: err = %v, want the line quoted and the frame not saved", body, err)
+		}
+		requireUntouched(t, path, body, mtime, renames)
+	}
+}

@@ -2,6 +2,9 @@ package ui
 
 import (
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"reflect"
 	"strconv"
@@ -72,7 +75,7 @@ func detailsBodyLines(t *testing.T, m Model) []string {
 // C9 — the panel renders from its scroll offset down, at most height-2 lines.
 func TestDetailsRendersFromOffset(t *testing.T) {
 	report := influenceReport(t)
-	lines := detailsReportLines(report)
+	lines := panel.ReportLines(report)
 	if len(lines) != 52 {
 		t.Fatalf("fixture is %d lines, the spec's worked examples assume 52", len(lines))
 	}
@@ -200,7 +203,7 @@ func TestWheelElsewhereIsInert(t *testing.T) {
 			if cmd != nil {
 				t.Errorf("%s wheel returned a Cmd", pos.name)
 			}
-			if !reflect.DeepEqual(m, base) {
+			if !sameModel(m, base) {
 				t.Errorf("%s wheel changed the model (offset %d -> %d)", pos.name, base.details.scrollOffset, m.details.scrollOffset)
 			}
 		}
@@ -211,20 +214,21 @@ func TestWheelElsewhereIsInert(t *testing.T) {
 // refreshed: the operator keeps their place, re-clamped to the new text.
 func TestOffsetSurvivesSameContextRefresh(t *testing.T) {
 	m := scrollModel(t, 18)
+	m.details.key, m.details.keyed = m.detailsWanted().key, true // a report a commit stamped
 	report := influenceReport(t)
 	m, _ = m.commitRefresh(surfaceDetails, refreshResultMsg{
 		surface: surfaceDetails,
-		payload: detailsPayload{title: "[0] Chart", body: report},
+		payload: detailsPayload{title: "[0] Chart", body: report, key: m.detailsWanted().key.raw},
 	})
 	if m.details.scrollOffset != 18 {
 		t.Errorf("offset = %d, want the reader's place 18", m.details.scrollOffset)
 	}
 	// A shorter report under the same title re-clamps instead of hanging off
 	// the end: 34 lines in a 30-row panel can only be scrolled by 4.
-	short := strings.Join(detailsReportLines(report)[:34], "\n")
+	short := strings.Join(panel.ReportLines(report)[:34], "\n")
 	m, _ = m.commitRefresh(surfaceDetails, refreshResultMsg{
 		surface: surfaceDetails,
-		payload: detailsPayload{title: "[0] Chart", body: short},
+		payload: detailsPayload{title: "[0] Chart", body: short, key: m.detailsWanted().key.raw},
 	})
 	if m.details.scrollOffset != 4 {
 		t.Errorf("offset after a shorter report = %d, want the re-clamped 4", m.details.scrollOffset)
@@ -246,7 +250,7 @@ func TestOffsetResetsOnNewContext(t *testing.T) {
 // C18 — a resize re-clamps the rendered offset with no keypress.
 func TestOffsetReclampsOnResize(t *testing.T) {
 	m := scrollModel(t, 22)
-	lines := detailsReportLines(m.details.body)
+	lines := panel.ReportLines(m.details.body)
 
 	// Grow the panel past the report: the window can only start at the top.
 	tall := renderDetailsPanel(66, len(lines)+8, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details))
@@ -285,7 +289,7 @@ func TestResizeClampsStoredOffset(t *testing.T) {
 		if cmd != nil {
 			t.Errorf("%v returned a Cmd on a report that fits", k)
 		}
-		if !reflect.DeepEqual(next, base) {
+		if !sameModel(next, base) {
 			t.Errorf("%v changed the model on a report that fits", k)
 		}
 	}
@@ -297,7 +301,7 @@ func TestResizeClampsStoredOffset(t *testing.T) {
 		t.Errorf("offset after shrinking = %d, want a legal offset in [0,22]", got)
 	}
 	// And the drawn window agrees with the stored offset in both directions.
-	lines := detailsReportLines(m.details.body)
+	lines := panel.ReportLines(m.details.body)
 	first := detailsBodyLines(t, m)[0]
 	if !strings.HasPrefix(strings.TrimRight(lines[m.details.scrollOffset], " "), uncut(first)) {
 		t.Errorf("drawn first row %q does not match stored offset %d (%q)", first, m.details.scrollOffset, lines[m.details.scrollOffset])
@@ -331,42 +335,43 @@ func TestScrollKeysStartNoCompute(t *testing.T) {
 // C20 — both bindings are registered in main scope, reach the help modal, and
 // the footer carries their single entry wherever Details is on screen.
 func TestScrollBindingsPresent(t *testing.T) {
-	keys := defaultKeys()
-	found := map[BindingID]BindingEntry{}
-	for _, e := range keys.mainBindings() {
+	kmap := keys.DefaultKeys()
+	found := map[keys.BindingID]keys.BindingEntry{}
+	for _, e := range mainBindings(kmap) {
 		found[e.ID] = e
 	}
-	for _, id := range []BindingID{BindingScrollUp, BindingScrollDown} {
+	for _, id := range []keys.BindingID{keys.BindingScrollUp, keys.BindingScrollDown} {
 		e, ok := found[id]
 		if !ok {
-			t.Fatalf("binding %v missing from keyMap.mainBindings()", id)
+			t.Fatalf("binding %v missing from mainBindings(keys.KeyMap)", id)
 		}
-		if !e.Help {
-			t.Errorf("binding %v is not in the help modal", id)
+		// The pair is one Help row, carried by its first entry.
+		if e.Help == (id == keys.BindingScrollDown) || e.Folded != (id == keys.BindingScrollDown) {
+			t.Errorf("binding %v: help=%v folded=%v, want the pair's row on ScrollUp only", id, e.Help, e.Folded)
 		}
 	}
-	if got := keys.ScrollUp.Keys(); len(got) != 1 || got[0] != "ctrl+pgup" {
+	if got := kmap.ScrollUp.Keys(); len(got) != 1 || got[0] != "ctrl+pgup" {
 		t.Errorf("ScrollUp keys = %v, want [ctrl+pgup]", got)
 	}
-	if got := keys.ScrollDown.Keys(); len(got) != 1 || got[0] != "ctrl+pgdown" {
+	if got := kmap.ScrollDown.Keys(); len(got) != 1 || got[0] != "ctrl+pgdown" {
 		t.Errorf("ScrollDown keys = %v, want [ctrl+pgdown]", got)
 	}
 	// Both bindings carry the condition under which they act: a key that cannot
 	// scroll must not match (it used to be only ScrollUp).
-	for _, id := range []BindingID{BindingScrollUp, BindingScrollDown} {
+	for _, id := range []keys.BindingID{keys.BindingScrollUp, keys.BindingScrollDown} {
 		if found[id].When == nil {
 			t.Errorf("binding %v has no When: it would match with nothing to scroll", id)
 		}
 	}
-	help := helpListText(keys, defaultLeaderKey, defaultLeaderMap())
-	for _, want := range []string{keys.ScrollUp.Help().Desc, keys.ScrollDown.Help().Desc} {
+	help := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
+	for _, want := range []string{"Scroll Details", "⌃⇞/⌃⇟"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help modal missing %q", want)
 		}
 	}
 	// The bar names the pair wherever Details is on screen, and a layout
 	// without the panel does not advertise a key that does nothing.
-	const scrollPair = "Scroll details: ⌃⇞⌃⇟"
+	const scrollPair = "Scroll Details: ⌃⇞⌃⇟"
 	m := scrollModel(t, 0)
 	if !strings.Contains(m.View(), scrollPair) {
 		t.Errorf("the 132x40 frame's key bar is missing %q", scrollPair)
@@ -382,7 +387,7 @@ func TestScrollEmptyReport(t *testing.T) {
 	m := detailsTestModel(t)
 	m.details = detailsViewState{title: "[0] Details"}
 	box := renderDetailsPanel(66, 32, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details))
-	if strings.Contains(box, scrollThumbASCII) {
+	if strings.Contains(box, pane.ThumbASCII) {
 		t.Errorf("empty report drew an indicator:\n%s", box)
 	}
 	for _, k := range []tea.KeyType{tea.KeyCtrlPgDown, tea.KeyCtrlPgUp} {
@@ -397,38 +402,39 @@ func TestScrollEmptyReport(t *testing.T) {
 // both keys leave the model alone.
 func TestScrollShortReport(t *testing.T) {
 	m := detailsTestModel(t)
-	m.details = detailsViewState{title: "[0] Chart", body: strings.Join(detailsReportLines(influenceReport(t))[:23], "\n")}
+	m.details = detailsViewState{title: "[0] Chart", body: strings.Join(panel.ReportLines(influenceReport(t))[:23], "\n")}
 	base := m
 	for _, k := range []tea.KeyType{tea.KeyCtrlPgDown, tea.KeyCtrlPgUp} {
 		next, cmd := pressScroll(t, m, k)
 		if cmd != nil {
 			t.Errorf("%v returned a Cmd", k)
 		}
-		if !reflect.DeepEqual(next, base) {
+		if !sameModel(next, base) {
 			t.Errorf("%v changed the model on a report that fits (offset %d)", k, next.details.scrollOffset)
 		}
 	}
 	box := renderDetailsPanel(66, 32, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details))
-	if strings.Contains(box, scrollThumbASCII) {
+	if strings.Contains(box, pane.ThumbASCII) {
 		t.Errorf("a report that fits drew an indicator:\n%s", box)
 	}
 }
 
-// Failure mode — a failed run leaves the retained frame AND its offset alone;
-// the failure reaches only the Log.
+// Failure mode — a failed run for the wanted key leaves no older report under
+// the caption (C6): the offset goes with the report, the pane reads its one
+// failure line, and the failure reaches the Log.
 func TestScrollOffsetSurvivesErrorFrame(t *testing.T) {
 	m := scrollModel(t, 16)
-	before := renderDetailsPanel(66, 32, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details))
 	logLines := len(m.logLines)
 	m, _ = m.commitRefresh(surfaceDetails, refreshResultMsg{
 		surface: surfaceDetails,
+		payload: detailsPayload{key: m.detailsWanted().key.raw},
 		err:     errors.New("astrolog exploded"),
 	})
-	if m.details.scrollOffset != 16 {
-		t.Errorf("offset = %d, want the untouched 16", m.details.scrollOffset)
+	if m.details.scrollOffset != 0 || m.details.body != "" {
+		t.Errorf("offset = %d, body %d bytes: a failed run left the old report", m.details.scrollOffset, len(m.details.body))
 	}
-	if got := renderDetailsPanel(66, 32, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details)); got != before {
-		t.Error("an error frame repainted the Details panel")
+	if got := renderDetailsPanel(66, 32, (m.detailsFrame()).state.attached, Config{Accessible: true}, m.detailsFrame()); !strings.Contains(got, "Couldn't read Now's report.") {
+		t.Errorf("a failed report did not read its line:\n%s", got)
 	}
 	if len(m.logLines) != logLines+1 {
 		t.Errorf("the failure did not reach the Log: %v", m.logLines)
@@ -446,7 +452,7 @@ func TestScrollKeysInertWithoutDetailsPanel(t *testing.T) {
 		if cmd != nil {
 			t.Errorf("%v returned a Cmd with no Details panel", k)
 		}
-		if !reflect.DeepEqual(next, base) {
+		if !sameModel(next, base) {
 			t.Errorf("%v changed the model with no Details panel", k)
 		}
 	}
@@ -471,7 +477,7 @@ func TestScrollKeysIgnoredInModal(t *testing.T) {
 		}
 		for _, button := range []tea.MouseButton{tea.MouseButtonWheelUp, tea.MouseButtonWheelDown} {
 			next, cmd := wheel(t, base, button, 100, 10)
-			if cmd != nil || !reflect.DeepEqual(next, base) {
+			if cmd != nil || !sameModel(next, base) {
 				t.Errorf("%s modal: wheel changed the model", tc.name)
 			}
 		}

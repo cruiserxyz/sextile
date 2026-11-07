@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func oneChartRows(slots *store.Slots, name string, width int, oneChart bool) []s
 // zone and place follow only while they fit whole.
 func TestOneChartRowKeepsItsTime(t *testing.T) {
 	defaultClock(t)
-	prefixW := ansi.StringWidth(rowPrefix(false, false, true, true, Config{Accessible: true}))
+	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
 	birth := time.Date(2001, 7, 3, 4, 5, 0, 0, time.UTC)
 	slots := twoSlots(t, birth, nameColLongPlace)
 	const tagW = len("WhTr")
@@ -88,7 +89,7 @@ func TestOneChartRowKeepsItsTime(t *testing.T) {
 // cut with the existing mark.
 func TestComparingRowUnchanged(t *testing.T) {
 	defaultClock(t)
-	prefixW := ansi.StringWidth(rowPrefix(false, false, true, true, Config{Accessible: true}))
+	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
 	slots := twoSlots(t, time.Date(2001, 7, 3, 4, 5, 0, 0, time.UTC), nameColLongPlace)
 	rows := oneChartRows(slots, "Fixture-Constructed-Longname", 64, false) // N = 20
 	for _, row := range rows {

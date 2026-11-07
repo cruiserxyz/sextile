@@ -12,8 +12,8 @@ import (
 // Fields:
 //
 //   - Positions holds every body astrolog reported on.
-//   - Aspects holds every body-pair aspect astrolog reported, after NewAspect
-//     canonicalisation.
+//   - Aspects holds every body-pair aspect astrolog reported, after
+//     NewObjectAspect canonicalisation (sides in Astrolog's number order).
 //   - Raw holds the unparsed astrolog stdout for diagnostics. It is never
 //     matched against, parsed again, or interpreted downstream.
 //
@@ -60,6 +60,9 @@ type RawOutput struct {
 	// order, positions invocation first, each name once; empty when none were
 	// reported (the specification C2).
 	MissingEphemeris []string
+	// Said is the first line the positions invocation wrote on stderr
+	// (control bytes removed), kept only by a probing call; "" otherwise.
+	Said string
 }
 
 // CrossAspectOutput is the role-preserving comparison aspect payload. Styles

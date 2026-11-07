@@ -39,6 +39,11 @@ func ProbeAstrolog() error { return astrolog.Available() }
 // (with the path) when it answers without a version.
 func AstrologVersion() (version, path string, err error) { return astrolog.Version() }
 
+// ErrAstrologCrashed is the cause a call returns when the astrolog process was
+// ended by a signal the call did not send (it died). Nothing it printed is
+// returned. Match it with errors.Is.
+var ErrAstrologCrashed = astrolog.ErrAstrologCrashed
+
 // ErrAstrologWarned is the cause a chart call returns when Astrolog wrote a
 // warning to stderr (the specification C7): the chart is refused
 // rather than shown with the warning hidden behind it. Match it with

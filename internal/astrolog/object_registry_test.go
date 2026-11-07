@@ -4,9 +4,12 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -32,17 +35,6 @@ func TestParseObjectRegistry_FullCapture(t *testing.T) {
 		t.Errorf("got %d objects, want 134", len(reg))
 	}
 
-	// The registry must exceed what aspect.Body can name, or a selector bounded
-	// by the enum would lose nothing and this whole read would be pointless.
-	// Seventeen named bodies against 134 rows is the margin C5 depends on.
-	named := 0
-	for b := aspect.Sun; b.String() != aspect.BodyUnknown.String(); b++ {
-		named++
-	}
-	if len(reg) <= named {
-		t.Errorf("registry has %d objects and the enum names %d; the read must carry more, or a bare -HO has been substituted for -R1 -HO", len(reg), named)
-	}
-
 	idx := byNumber(reg)
 	for _, want := range []struct {
 		num  int
@@ -51,8 +43,8 @@ func TestParseObjectRegistry_FullCapture(t *testing.T) {
 	}{
 		{0, "Earth", false},        // 0-BASED: row zero exists and is not the Sun
 		{1, "Sun", false},          //
-		{11, "Chiron", false},      // a dignity row the enum does name
-		{12, "Ceres", false},       // ...and one it does not
+		{11, "Chiron", false},      // a dignity row
+		{12, "Ceres", false},       // ...and another
 		{16, "North Node", false},  // a name with a space in it
 		{84, "Sirius", true},       // the first star row
 		{131, "Zeta Retic.", true}, // a star name followed by a SINGLE space
@@ -272,4 +264,76 @@ func TestObjectRegistryCommandCarriesR1(t *testing.T) {
 	if !strings.Contains(string(src), `"-R1", "-HO"))`) {
 		t.Error(`ObjectRegistry must invoke "-R1", "-HO"; a bare -HO returns only what is currently unrestricted (C5a)`)
 	}
+}
+
+// testRegistry is the object list of the Astrolog the fixtures were captured
+// from (testdata/ho-all.txt), read through ParseObjectRegistry: what every
+// parse test hands the parser. The path is fixed when the package loads, so a
+// test that changes directory still finds it.
+func testRegistry(t *testing.T) aspect.Registry {
+	t.Helper()
+	reg, err := loadTestRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reg
+}
+
+func loadTestRegistry() (aspect.Registry, error) {
+	testRegistryOnce.Do(func() {
+		// go test runs with the package folder as the working directory. A
+		// path from runtime.Caller is the module path under -trimpath, which
+		// the release check sets, and the file was not found there.
+		b, err := os.ReadFile(filepath.Join("testdata", "ho-all.txt"))
+		if err == nil {
+			testRegistryList, err = ParseObjectRegistry(string(b))
+		}
+		testRegistryErr = err
+	})
+	return testRegistryList, testRegistryErr
+}
+
+var (
+	testRegistryOnce sync.Once
+	testRegistryList []aspect.RegistryObject
+	testRegistryErr  error
+)
+
+// defaultSet is the thirteen objects Astrolog draws without a restriction:
+// the ten planets, the North Node, the Ascendant and the Midheaven.
+var defaultSet = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 31}
+
+// mustPositions parses a positions listing that was asked for the given
+// objects, through the test registry.
+func mustPositions(t *testing.T, out string, asked ...int) []aspect.Position {
+	t.Helper()
+	ps, err := parsePositions(out, asked, testRegistry(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ps
+}
+
+// printedPositions parses whatever rows a listing printed, naming them by the
+// order of the default set: for a test that compares two listings of the same
+// call and so needs the rows read, not the objects named.
+func printedPositions(t *testing.T, out string) []aspect.Position {
+	t.Helper()
+	// The asked numbers are what the printed labels say, not a guessed prefix of
+	// replaySet: a host that prints no Chiron would give every later row the
+	// wrong identity (the parser now refuses that).
+	reg := testRegistry(t)
+	var asked []int
+	for _, line := range strings.Split(astrologstyle.StripSGR(out), "\n") {
+		m := bodyPositionPat.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		o, ok := reg.ByCut(m[1], 4)
+		if !ok {
+			t.Fatalf("row label %q does not name one object", m[1])
+		}
+		asked = append(asked, o.Number)
+	}
+	return mustPositions(t, out, asked...)
 }

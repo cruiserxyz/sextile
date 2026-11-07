@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"testing"
 )
 
@@ -17,7 +19,7 @@ func TestHouseDisplayGoldens(t *testing.T) {
 	forceColor(t)
 
 	for _, info := range houseForms {
-		if info.form == houseAngularity {
+		if info.form == panel.HouseAngularity {
 			continue
 		}
 		name := fmt.Sprintf("house-display-column-%s-132x40-color", info.value)
@@ -47,9 +49,9 @@ func TestHouseDisplayGoldens(t *testing.T) {
 	for _, p := range popups {
 		name := "house-display-popup-" + p.name
 		t.Run(name, func(t *testing.T) {
-			list := newRadioList(len(houseForms), p.chosen)
-			list.cursor = p.cursor
-			checkGolden(t, name, renderHouseDisplay(houseDisplayState{list: list}, p.cfg, p.w, p.h))
+			list := menu.NewRadioList(len(houseForms), p.chosen)
+			list.Cursor = p.cursor
+			checkGolden(t, name, renderHouseDisplay(withList(list), p.cfg, p.w, p.h))
 		})
 	}
 }

@@ -3,6 +3,7 @@ ok    docker: found at $FAKEBIN/docker
 ok    daemon: version 29.7.2 (needs 28+)
 ok    endpoint: unix:///var/run/docker.sock
 ok    image: localhost/sextile:v0.1.0-rc.1 is built
+ok    moons: off. sextile --moons puts the planetary moons' files (about 240 MB) in the image and remembers it
 ok    port: 5307 is free
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam
@@ -21,6 +22,7 @@ ok    docker: found at $FAKEBIN/docker
 ok    daemon: version 29.7.2 (needs 28+)
 ok    endpoint: unix:///var/run/docker.sock
 ok    image: localhost/sextile:v0.1.0-rc.1 is built
+ok    moons: off. sextile --moons puts the planetary moons' files (about 240 MB) in the image and remembers it
 FAIL  port: 5307 in use — sextile --port 5308
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam
@@ -39,6 +41,7 @@ FAIL  docker: Docker was not found on PATH. Install it from https://docs.docker.
 note  daemon: not checked (no docker)
 note  endpoint: not checked (no docker)
 note  image: localhost/sextile:v0.1.0-rc.1 not checked (no working docker)
+ok    moons: off. sextile --moons puts the planetary moons' files (about 240 MB) in the image and remembers it
 ok    port: 5307 is free
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam

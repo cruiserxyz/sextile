@@ -103,7 +103,7 @@ func TestLockRefusedModelStartsNothing(t *testing.T) {
 		t.Errorf("Init returned a command: it would start work for a launch that was refused")
 	}
 	// ...and the normal model still does, so the assertion above is not vacuous.
-	if NewModel(Config{}).Init() == nil {
+	if newTestModel(t, Config{}, RealClock{}).Init() == nil {
 		t.Fatal("the normal model's Init returns no command; the control is meaningless")
 	}
 }
@@ -163,18 +163,22 @@ func TestLockRefusedOnlyQuits(t *testing.T) {
 // C6: where flock is not supported the app runs, and the Log says so once, on
 // the note lane.
 func TestUnsupportedLockLogsOnce(t *testing.T) {
-	notes := func(m Model) (out []string) {
+	lane := func(m Model, want logLane) (out []string) {
 		for _, l := range m.logLines {
-			if l.lane == laneNote {
+			if l.lane == want {
 				out = append(out, l.text)
 			}
 		}
 		return
 	}
-	m := NewModel(Config{InstanceLockUnsupported: true})
-	got := notes(m)
+	m := newTestModel(t, Config{InstanceLockUnsupported: true}, RealClock{})
+	// Sextile's own working: the large log only.
+	got := lane(m, laneTrace)
 	if len(got) != 1 || !strings.Contains(got[0], lockUnsupportedN) {
-		t.Fatalf("note lane = %q, want exactly one line holding %q", got, lockUnsupportedN)
+		t.Fatalf("trace lane = %q, want exactly one line holding %q", got, lockUnsupportedN)
+	}
+	if n := lane(m, laneNote); len(n) != 0 {
+		t.Errorf("the lock line reached the Log panel's note lane: %q", n)
 	}
 	if strings.HasSuffix(got[0], ".") {
 		t.Errorf("a note ends without a full stop (A3): %q", got[0])
@@ -182,14 +186,14 @@ func TestUnsupportedLockLogsOnce(t *testing.T) {
 	// Later startup messages do not write it again.
 	var tm tea.Model = m
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
-	if n := notes(tm.(Model)); len(n) != 1 {
-		t.Errorf("after a resize the note lane holds %d lines, want 1: %q", len(n), n)
+	if n := lane(tm.(Model), laneTrace); len(n) != 1 {
+		t.Errorf("after a resize the trace lane holds %d lines, want 1: %q", len(n), n)
 	}
-	if n := notes(NewModel(Config{})); len(n) != 0 {
-		t.Errorf("a normal launch wrote notes: %q", n)
+	if n := lane(newTestModel(t, Config{}, RealClock{}), laneTrace); len(n) != 0 {
+		t.Errorf("a normal launch wrote trace lines: %q", n)
 	}
-	if !strings.Contains(csText(tm.(Model).View()), lockUnsupportedN) {
-		t.Errorf("the 6-row Log does not show the note at 132x40:\n%s", tm.(Model).View())
+	if strings.Contains(csText(tm.(Model).View()), lockUnsupportedN) {
+		t.Errorf("the Log panel shows the lock line at 132x40:\n%s", tm.(Model).View())
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -17,7 +18,7 @@ func TestSplitLongitudeReproducesAstrologsArcminute(t *testing.T) {
 	const virgo = 5 // sign index: Aries 0 … Virgo 5
 	lon := float64(virgo*30) + 3 + 12.0/60.0
 
-	sign, deg, min := splitLongitude(lon)
+	sign, deg, min := panel.SplitLongitude(lon)
 	if sign != virgo || deg != 3 || min != 12 {
 		t.Errorf("splitLongitude(%.17g) = (%d, %d, %d), want Virgo 3°12' as Astrolog printed it", lon, sign, deg, min)
 	}
@@ -32,7 +33,7 @@ func TestEveryArcminuteRoundTrips(t *testing.T) {
 			for min := 0; min < 60; min++ {
 				// The assembly internal/astrolog.parsePositions performs.
 				lon := float64(sign*30) + float64(deg) + float64(min)/60.0
-				gotSign, gotDeg, gotMin := splitLongitude(lon)
+				gotSign, gotDeg, gotMin := panel.SplitLongitude(lon)
 				if gotSign != sign || gotDeg != deg || gotMin != min {
 					t.Fatalf("%d°%02d' of sign %d came back as %d°%02d' of sign %d",
 						deg, min, sign, gotDeg, gotMin, gotSign)
@@ -62,7 +63,7 @@ func TestSplitLongitudeCarries(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			sign, deg, min := splitLongitude(tc.lon)
+			sign, deg, min := panel.SplitLongitude(tc.lon)
 			if sign != tc.sign || deg != tc.deg || min != tc.min {
 				t.Errorf("splitLongitude(%.17g) = (%d, %d, %d), want (%d, %d, %d)",
 					tc.lon, sign, deg, min, tc.sign, tc.deg, tc.min)
@@ -85,14 +86,14 @@ func TestSplitLongitudeCarries(t *testing.T) {
 func TestBodyRowShowsTheRoundedArcminute(t *testing.T) {
 	const virgo = 5
 	positions := []aspect.Position{
-		{Body: aspect.Sun, Longitude: float64(virgo*30) + 3 + 12.0/60.0},
+		{Object: objSun, Longitude: float64(virgo*30) + 3 + 12.0/60.0},
 	}
-	planets, _ := bodyRows(positions, nil, false, houseOverlay{})
+	planets, _ := panel.BodyRows(positions, nil, plainColour, panel.HouseOverlay{})
 	if len(planets) != 1 {
 		t.Fatalf("bodyRows returned %d rows, want one", len(planets))
 	}
-	if want := fmt.Sprintf("%s %2d°%02d'", "Vir", 3, 12); !contains(planets[0].text, want) {
-		t.Errorf("the Sun row reads %q, want it to carry %q", planets[0].text, want)
+	if want := fmt.Sprintf("%s %2d°%02d'", "Vir", 3, 12); !contains(planets[0].Text, want) {
+		t.Errorf("the Sun row reads %q, want it to carry %q", planets[0].Text, want)
 	}
 }
 

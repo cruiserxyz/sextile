@@ -1,22 +1,21 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/store"
-
-	"github.com/charmbracelet/bubbles/key"
 )
 
 // helpListText is everything the help list says, one line each: what it
 // lists, independent of which window of it is on screen.
-func helpListText(keys keyMap, leader string, leaderBindings []leaderBinding) string {
+func helpListText(kmap keys.KeyMap, leader string, leaderBindings []keys.LeaderBinding) string {
 	// A bare key table has no workspace, so this is the popup of a fresh one.
-	lines := Model{keys: keys, leaderKey: leader, leaderBindings: leaderBindings}.helpLines()
+	lines := Model{keys: kmap, leaderKey: leader, leaderBindings: leaderBindings}.helpLines()
 	out := make([]string, len(lines))
 	for i, l := range lines {
-		out[i] = l.text
+		out[i] = l.Text
 	}
 	return strings.Join(out, "\n")
 }
@@ -44,11 +43,11 @@ func helpFixtureOneChart(t *testing.T, w, h int) Model {
 }
 
 // helpBindingTexts are the binding rows of the list, in order.
-func helpBindingTexts(lines []helpLine) []string {
+func helpBindingTexts(lines []keys.HelpLine) []string {
 	var out []string
 	for _, l := range lines {
-		if l.binding {
-			out = append(out, l.text)
+		if l.Binding {
+			out = append(out, l.Text)
 		}
 	}
 	return out
@@ -58,21 +57,25 @@ func helpBindingTexts(lines []helpLine) []string {
 // open, inspect, go back, quit" first (help order).
 func TestHelpListFollowsTheStartHereOrder(t *testing.T) {
 	m := helpFixture(t, 144, 40)
-	k := m.keys
-	order := []key.Binding{
-		k.NextView, k.SlotCycleUp, k.SlotCycleDown, k.Attach, k.OpenCharts, k.OpenAtlas, k.ForceQuit,
-		k.PrevView, k.FocusChart, k.FocusBodies, k.FocusAspects, k.Select, k.SlotMoveUp, k.SlotMoveDown, k.SlotDelete, k.PageUp, k.PageDown, k.CursorHome, k.CursorEnd,
-		k.TimeStepYear, k.TimeStepMonth, k.TimeStepWeek, k.TimeStepDay, k.TimeStepHour,
-		k.TimeStepMinute, k.JumpNow, k.ToggleBack,
-		k.DetailsTab, k.TabPrev, k.TabNext, k.ScrollUp, k.ScrollDown, k.Bodies, k.Aspects, k.Houses, k.Zodiac,
-		k.SaveChart, k.RenderWheel,
+	// One row per pair: the first key of each carries it, the others are folded.
+	order := []keys.BindingID{
+		keys.BindingNextView, keys.BindingSlotCycleUp, keys.BindingAttach, keys.BindingOpenCharts, keys.BindingOpenAtlas, keys.BindingActions, keys.BindingForceQuit,
+		keys.BindingFocusChart, keys.BindingSelect, keys.BindingSlotMoveUp, keys.BindingSlotMoveDown, keys.BindingSlotDelete, keys.BindingPageUp, keys.BindingPageHome, keys.BindingPageEnd,
+		keys.BindingTimeStepYear, keys.BindingTimeStepMonth, keys.BindingTimeStepWeek, keys.BindingTimeStepDay, keys.BindingTimeStepHour,
+		keys.BindingTimeStepMinute, keys.BindingJumpNow, keys.BindingToggleBack,
+		keys.BindingDetailsTab, keys.BindingTabPrev, keys.BindingScrollUp, keys.BindingBodies, keys.BindingAspects, keys.BindingHouses, keys.BindingZodiac,
+		keys.BindingSaveChart, keys.BindingRenderWheel,
+	}
+	byID := map[keys.BindingID]keys.BindingEntry{}
+	for _, e := range mainBindings(m.keys) {
+		byID[e.ID] = e
 	}
 	rows := helpBindingTexts(m.helpLines())
 	if len(rows) < len(order) {
 		t.Fatalf("the list has %d binding rows, want at least %d", len(rows), len(order))
 	}
-	for i, b := range order {
-		if want := b.Help().Desc + " "; !strings.HasPrefix(rows[i], want) {
+	for i, id := range order {
+		if want := m.titleOf(byID[id]) + " "; !strings.HasPrefix(rows[i], want) {
 			t.Errorf("binding row %d is %q, want it to start %q", i+1, rows[i], want)
 		}
 	}
@@ -83,13 +86,13 @@ func TestHelpListFollowsTheStartHereOrder(t *testing.T) {
 func TestHelpListHeadingNoteAndTrailingZodiacNote(t *testing.T) {
 	m := helpFixture(t, 144, 40)
 	lines := m.helpLines()
-	if lines[0].text != "Start here" || lines[0].binding {
+	if lines[0].Text != "Start here" || lines[0].Binding {
 		t.Errorf("line 0 = %+v, want the non-binding heading `Start here`", lines[0])
 	}
-	if !lines[1].binding {
+	if !lines[1].Binding {
 		t.Errorf("line 1 = %+v, want the first binding row right under the heading", lines[1])
 	}
-	tail := lines[len(lines)-len(helpZodiacNote):]
+	tail := lines[len(lines)-len(keys.HelpZodiacNote):]
 	want := []string{
 		"Zodiac: Astrolog's ayanamsas are fixed offsets from",
 		"Fagan-Bradley. Each chart is precessed to its own",
@@ -97,17 +100,17 @@ func TestHelpListHeadingNoteAndTrailingZodiacNote(t *testing.T) {
 		"tropical pair by the precession between the two dates.",
 	}
 	for i, l := range tail {
-		if l.text != want[i] || l.binding {
+		if l.Text != want[i] || l.Binding {
 			t.Errorf("zodiac line %d = %+v, want %q as a note", i, l, want[i])
 		}
 	}
 	lastBinding := 0
 	for i, l := range lines {
-		if l.binding {
+		if l.Binding {
 			lastBinding = i
 		}
 	}
-	if lastBinding >= len(lines)-len(helpZodiacNote) {
+	if lastBinding >= len(lines)-len(keys.HelpZodiacNote) {
 		t.Errorf("a binding row (line %d) sits inside or after the zodiac note", lastBinding)
 	}
 }
@@ -117,8 +120,8 @@ func TestHelpListHeadingNoteAndTrailingZodiacNote(t *testing.T) {
 func TestHelpListHasNoLimitedViewOrEscLine(t *testing.T) {
 	for _, m := range []Model{helpFixtureOneChart(t, 80, 24), helpFixture(t, 80, 24), helpFixture(t, 144, 40)} {
 		for _, l := range m.helpLines() {
-			if strings.Contains(l.text, "Limited view") || strings.HasPrefix(l.text, "Esc ") {
-				t.Errorf("the Help list says %q", l.text)
+			if strings.Contains(l.Text, "Limited view") || strings.HasPrefix(l.Text, "Esc ") {
+				t.Errorf("the Help list says %q", l.Text)
 			}
 		}
 	}

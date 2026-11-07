@@ -135,7 +135,6 @@ func TestEnterOnATimelineRowKeepsDetailsFocused(t *testing.T) {
 	held(m, "after the key")
 	n := 0
 	m = pumpSeen(t, m, 400*time.Millisecond, func(m Model) { n++; held(m, fmt.Sprintf("after message %d", n)) }, cmd)
-	m = m.releaseDetailsHold(detailsHoldMsg{id: m.detailsHold.id})
 	held(m, "settled")
 	if !m.focusedIsFloating() {
 		t.Errorf("settled: the Chart cursor is at %d, want now", m.cursorIdx)

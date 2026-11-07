@@ -397,7 +397,9 @@ func compareValues(t *testing.T, tz string, utc time.Time, got payload.RawOutput
 		}
 		argv = append(argv, plain.Argv[i])
 	}
-	bare, err := Run(context.Background(), newBodyCall(argv, plain.call.band))
+	bareCall := newBodyCall(argv, plain.call.band)
+	bareCall.Registry, bareCall.Objects = plain.call.Registry, plain.call.Objects
+	bare, err := Run(context.Background(), bareCall)
 	if err != nil {
 		t.Fatalf("%s %s: %v", tz, utc, err)
 	}

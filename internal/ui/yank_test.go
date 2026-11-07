@@ -82,7 +82,7 @@ func TestYankCopiesUntruncatedLine(t *testing.T) {
 	long := "a log line far wider than any panel could ever show: " + strings.Repeat("wide ", 40)
 	m := consoleModel(t, 5)
 	m = m.logCommands([]string{long})
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	m, _ = press(t, m, "enter")
 
 	if *last != long {
@@ -200,7 +200,7 @@ func TestYankStaleFlashTickDropped(t *testing.T) {
 	if cmd != nil {
 		t.Error("a stale flash tick returned a command")
 	}
-	if !reflect.DeepEqual(before, tm.(Model)) {
+	if !sameModel(before, tm.(Model)) {
 		t.Error("a stale flash tick changed the Model")
 	}
 	if !tm.(Model).yank.active {

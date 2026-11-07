@@ -60,7 +60,8 @@ func TestSessionFromAnotherFolderIsNotRestored(t *testing.T) {
 	if n := inB.slots.AnchoredCount(); n != 0 {
 		t.Errorf("starting in B restored %d chart(s) from A's session", n)
 	}
-	want := "session: the saved session belongs to another charts folder and was not opened"
+	want := "session: the saved session is another folder's and was not opened" +
+		" | session: this run is saved only by name (,o)"
 	if got := strings.Join(sessionLines(inB), " | "); got != want {
 		t.Errorf("session lines in B = %q, want exactly %q", got, want)
 	}
@@ -88,7 +89,7 @@ func TestSessionWithoutAFolderIsNotRestored(t *testing.T) {
 	if n := m.slots.AnchoredCount(); n != 0 {
 		t.Errorf("a session naming no folder restored %d chart(s)", n)
 	}
-	if got := strings.Join(sessionLines(m), " | "); !strings.Contains(got, "belongs to another charts folder") {
+	if got := strings.Join(sessionLines(m), " | "); !strings.Contains(got, "is another folder's") {
 		t.Errorf("session lines = %q", got)
 	}
 }
@@ -109,7 +110,7 @@ func TestQuitRecordsTheChartsFolder(t *testing.T) {
 
 // The one-time copy's line, handed over by main, is one Log line.
 func TestMigrationLineIsLogged(t *testing.T) {
-	m := NewModelWithClock(Config{Migration: "copied session from the old places; the old files were left as they are"}, FrozenClock(sessionFrozen))
+	m := newTestModel(t, Config{Migration: "copied session from the old places; the old files were left as they are"}, FrozenClock(sessionFrozen))
 	n := 0
 	for _, l := range m.logLines {
 		if strings.HasPrefix(l.text, "state: copied session") {

@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,13 +33,13 @@ func renameLibrary(t *testing.T) string {
 // cursorTo puts the picker's cursor on file's row.
 func cursorTo(t *testing.T, m Model, file string) Model {
 	t.Helper()
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == file {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 			return m
 		}
 	}
-	t.Fatalf("no row for %s in %v", file, pickerNames(m.picker.matches))
+	t.Fatalf("no row for %s in %v", file, pickerNames(m.picker.Matches))
 	return m
 }
 
@@ -50,7 +51,7 @@ func ctrlR(t *testing.T, m Model) (Model, tea.Cmd) {
 // eraseField backspaces the focused field empty.
 func eraseField(t *testing.T, m Model) Model {
 	t.Helper()
-	for range []rune(m.title.form.fields[m.title.form.focus].value) {
+	for range []rune(m.title.Fields.Fields[m.title.Fields.Focus].Value) {
 		m, _ = escSend(t, m, escKey(tea.KeyBackspace))
 	}
 	return m
@@ -101,12 +102,12 @@ func renameDriving(t *testing.T, m Model, file, title, place string, allowRecomp
 		m, _ = escSend(t, m, escRunes(place))
 	}
 	m, cmd := escSend(t, m, escKey(tea.KeyEnter))
-	if cmd == nil || !m.title.saving {
+	if cmd == nil || !m.title.Saving {
 		t.Fatal("the submit dispatched no write")
 	}
 	m, cmd = runCmd(t, m, cmd)
-	if m.title.refusal != "" {
-		t.Fatalf("the write was refused: %s", m.title.refusal)
+	if m.title.Refusal != "" {
+		t.Fatalf("the write was refused: %s", m.title.Refusal)
 	}
 	if cmd == nil {
 		t.Fatal("the write was not followed by a library reload")
@@ -184,12 +185,12 @@ func TestCtrlROpensRenameForm(t *testing.T) {
 			if m.startup != startupTitleOpen || !m.title.rename || cmd != nil {
 				t.Fatalf("Ctrl+R: startup %s, rename %v, cmd %v; want the rename form and nothing dispatched", m.startup, m.title.rename, cmd != nil)
 			}
-			f := m.title.form
-			if f.fields[0].value != tc.title || f.fields[0].placeholder != tc.titleHint {
-				t.Errorf("Title field = %+v, want value %q hint %q", f.fields[0], tc.title, tc.titleHint)
+			f := m.title.Fields
+			if f.Fields[0].Value != tc.title || f.Fields[0].Placeholder != tc.titleHint {
+				t.Errorf("Title field = %+v, want value %q hint %q", f.Fields[0], tc.title, tc.titleHint)
 			}
-			if f.fields[1].value != tc.place {
-				t.Errorf("Place field = %+v, want value %q", f.fields[1], tc.place)
+			if f.Fields[1].Value != tc.place {
+				t.Errorf("Place field = %+v, want value %q", f.Fields[1], tc.place)
 			}
 			if m.title.chart.Source.File != tc.file {
 				t.Errorf("the form renames %s, want %s", m.title.chart.Source.File, tc.file)
@@ -257,10 +258,10 @@ func TestRenameWritesAndReturnsToPicker(t *testing.T) {
 				place = "Munich, Germany"
 			}
 
-			if m.startup != startupChartOpen || !m.picker.loaded || m.picker.filterText != "" {
-				t.Fatalf("want the picker back, loaded, filter cleared: startup %s, loaded %v, filter %q", m.startup, m.picker.loaded, m.picker.filterText)
+			if m.startup != startupChartOpen || !m.picker.loaded || m.picker.FilterText != "" {
+				t.Fatalf("want the picker back, loaded, filter cleared: startup %s, loaded %v, filter %q", m.startup, m.picker.loaded, m.picker.FilterText)
 			}
-			row := m.picker.matches[m.picker.cursor]
+			row := m.picker.Matches[m.picker.Cursor]
 			if row.Source.File != "Titled.as" || row.Name != title || row.PlaceLabel != place {
 				t.Errorf("cursor on %s %q %q, want Titled.as %q %q", row.Source.File, row.Name, row.PlaceLabel, title, place)
 			}
@@ -322,8 +323,8 @@ func TestRenameNoChangeWritesNothing(t *testing.T) {
 				t.Error("a command was dispatched")
 			}
 			requireSameScreen(t, tc.name, screen, snapshotForEsc(m))
-			if m.picker.filterText != picker.filterText || m.picker.cursor != picker.cursor || m.picker.resolving {
-				t.Errorf("the picker is not as it was: filter %q cursor %d resolving %v", m.picker.filterText, m.picker.cursor, m.picker.resolving)
+			if m.picker.FilterText != picker.FilterText || m.picker.Cursor != picker.Cursor || m.picker.resolving {
+				t.Errorf("the picker is not as it was: filter %q cursor %d resolving %v", m.picker.FilterText, m.picker.Cursor, m.picker.resolving)
 			}
 			if fileText(t, path) != before {
 				t.Error("the file changed")
@@ -341,20 +342,20 @@ func TestRenameNoChangeWritesNothing(t *testing.T) {
 // C4.5: Ctrl+R is the open-chart popup's entry, in its key bar, and no other
 // owner's; pressed anywhere else it changes nothing.
 func TestCtrlRIsDeclared(t *testing.T) {
-	m := NewModel(Config{})
+	m := newTestModel(t, Config{}, RealClock{})
 	ctrl := tea.KeyMsg{Type: tea.KeyCtrlR}
 	for o := ownerMain; o <= ownerDetails; o++ {
-		id := matchBinding(ctrl, m.ownerBindings(o))
+		id := keys.MatchBinding(ctrl, m.ownerBindings(o))
 		switch {
-		case o == ownerOpenChart && id != BindingRename:
+		case o == ownerOpenChart && id != keys.BindingRename:
 			t.Errorf("the open-chart table matches Ctrl+R as %d, want BindingRename", id)
-		case o != ownerOpenChart && id != BindingNone:
+		case o != ownerOpenChart && id != keys.BindingNone:
 			t.Errorf("owner %d's table matches Ctrl+R (%d)", o, id)
 		}
 	}
 	inBar := false
 	for _, e := range openChartBindings() {
-		if e.ID == BindingRename && e.Bar && e.Action == "Rename" {
+		if e.ID == keys.BindingRename && e.Bar && e.Title == "Rename" {
 			inBar = true
 		}
 	}
@@ -367,8 +368,16 @@ func TestCtrlRIsDeclared(t *testing.T) {
 		if c.owner == ownerOpenChart {
 			continue
 		}
+		if c.owner == ownerLog {
+			// The Log gives any key it does not own back to the screen it came
+			// from, so the screen changes (TestLogFocusOtherKeyLeavesAndRuns).
+			continue
+		}
 		t.Run(c.name, func(t *testing.T) {
 			m := reachOwner(t, c, Config{Accessible: true}, 144, 40)
+			// The fixture widened the screen by hand, so Details is owed a report
+			// its first message starts (the reconciler); that is not Ctrl+R's.
+			m, _ = escSend(t, m, tea.WindowSizeMsg{Width: 144, Height: 40})
 			screen, view, logged := snapshotForEsc(m), m.View(), len(m.logLines)
 			m, cmd := ctrlR(t, m)
 			if cmd != nil {

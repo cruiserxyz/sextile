@@ -8,8 +8,9 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// highlightRender builds the production wheel styling with a highlight.
-func highlightRender(selected []aspect.Body, focused aspect.Body) recipe.RenderSpec {
+// highlightRenderObjects builds the production wheel styling with a highlight
+// of Astrolog object numbers (the zero Object focuses nothing).
+func highlightRenderObjects(selected []int, focused aspect.Object) recipe.RenderSpec {
 	r := recipe.DefaultWheelRender()
 	r.Highlight = recipe.NewHighlight(selected, focused)
 	return r
@@ -37,7 +38,7 @@ func showList(argv []string) (nums []string, ok bool) {
 // wheel, byte-identical to a zero-value highlight.
 func TestCompileWheelNoHighlightEmitsNoYkO(t *testing.T) {
 	plain := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: recipe.DefaultWheelRender()})
-	zeroHl := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender(nil, aspect.BodyUnknown)})
+	zeroHl := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(nil, aspect.Object{})})
 	for _, plan := range []ExecutionPlan{plain, zeroHl} {
 		if len(plan.Invocations) != 1 {
 			t.Fatalf("inactive highlight must compile to one invocation, got %d", len(plan.Invocations))
@@ -56,7 +57,7 @@ func TestCompileWheelNoHighlightEmitsNoYkO(t *testing.T) {
 // M9 (amended: ≥1 drawn member) — an active highlight compiles to exactly
 // three WheelImage invocations in the order base, foreground, furniture.
 func TestCompileWheelHighlightEmitsThreeInvocations(t *testing.T) {
-	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Venus}, aspect.Moon)})
+	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(objectNums(objVenus), objMoon)})
 	if len(plan.Invocations) != 3 {
 		t.Fatalf("want 3 invocations (base, foreground, furniture), got %d", len(plan.Invocations))
 	}
@@ -83,7 +84,7 @@ func TestCompileWheelHighlightEmitsThreeInvocations(t *testing.T) {
 // itself stays compose's pixel job — no color switch appears.
 func TestBaseLayerHidesHighlightMembers(t *testing.T) {
 	plain := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: recipe.DefaultWheelRender()})
-	hl := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Sun, aspect.Mars}, aspect.BodyUnknown)})
+	hl := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(objectNums(objSun, objMars), aspect.Object{})})
 	want := strings.Join(plain.Invocations[0].Argv, " ") + " -R 1 -R 5"
 	got := strings.Join(hl.Invocations[0].Argv, " ")
 	if got != want {
@@ -94,7 +95,7 @@ func TestBaseLayerHidesHighlightMembers(t *testing.T) {
 // M10 — the foreground show-list is the highlight members' object numbers in
 // ascending order: selected ∪ focused, Venus(4) + Moon(2) + Saturn(7) → 2 4 7.
 func TestForegroundInvocationShowList(t *testing.T) {
-	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Venus, aspect.Saturn}, aspect.Moon)})
+	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(objectNums(objVenus, objSaturn), objMoon)})
 	nums, ok := showList(plan.Invocations[1].Argv)
 	if !ok {
 		t.Fatalf("foreground carries no -R0: %v", plan.Invocations[1].Argv)
@@ -108,7 +109,7 @@ func TestForegroundInvocationShowList(t *testing.T) {
 // (2026-08-23), so the focused body is a plain foreground member and every
 // member keeps Astrolog's own colors.
 func TestNoLayerCarriesRecolorSwitches(t *testing.T) {
-	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Venus}, aspect.Moon)})
+	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(objectNums(objVenus), objMoon)})
 	for i, inv := range plan.Invocations {
 		if argv := strings.Join(inv.Argv, " "); strings.Contains(argv, "-YkO") {
 			t.Errorf("layer %d carries a recolor switch: %s", i, argv)
@@ -120,8 +121,8 @@ func TestNoLayerCarriesRecolorSwitches(t *testing.T) {
 // compiles to the single plain invocation.
 func TestSingleSelectionEmitsOneInvocation(t *testing.T) {
 	spec := siderealHidePlutoSpec(t)
-	// Pluto is hidden by the lens; Body(99) has no astrolog number.
-	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Pluto, aspect.Body(99)}, aspect.BodyUnknown)})
+	// Pluto is hidden by the lens; object 60 (Iapetus) is not in the lens's set.
+	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRenderObjects([]int{10, 60}, aspect.Object{})})
 	if len(plan.Invocations) != 1 {
 		t.Fatalf("no drawable member → single invocation, got %d", len(plan.Invocations))
 	}
@@ -131,7 +132,7 @@ func TestSingleSelectionEmitsOneInvocation(t *testing.T) {
 	}
 	// One drawable member IS enough for the composite: the glyph over the
 	// dimmed base shares the visual language of the growing web.
-	one := mustCompile(t, spec, recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Sun}, aspect.BodyUnknown)})
+	one := mustCompile(t, spec, recipe.WheelImage{Render: highlightRenderObjects(objectNums(objSun), aspect.Object{})})
 	if len(one.Invocations) != 3 {
 		t.Errorf("one drawn member → composite plan, got %d invocations", len(one.Invocations))
 	}
@@ -140,7 +141,7 @@ func TestSingleSelectionEmitsOneInvocation(t *testing.T) {
 // M19 (amended for the focused tint) — the furniture argv equals the
 // foreground argv except its -R0 carries no object numbers.
 func TestFurnitureArgvMatchesForegroundExceptShowList(t *testing.T) {
-	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Venus, aspect.Mars}, aspect.Moon)})
+	plan := mustCompile(t, hellenisticSpec(t), recipe.WheelImage{Render: highlightRenderObjects(objectNums(objVenus, objMars), objMoon)})
 	fore, furn := plan.Invocations[1].Argv, plan.Invocations[2].Argv
 	nums, _ := showList(fore)
 	// Removing exactly the show-list numbers from fore must yield furn.
@@ -163,7 +164,7 @@ func TestFurnitureArgvMatchesForegroundExceptShowList(t *testing.T) {
 // show-list and never unrestricted into it.
 func TestForegroundOmitsInvisibleSelection(t *testing.T) {
 	spec := siderealHidePlutoSpec(t)
-	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Sun, aspect.Pluto}, aspect.BodyUnknown)})
+	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRenderObjects(objectNums(objSun, objPluto), aspect.Object{})})
 	if len(plan.Invocations) != 3 {
 		t.Fatalf("Sun is drawable → composite plan, got %d invocations", len(plan.Invocations))
 	}
@@ -173,12 +174,12 @@ func TestForegroundOmitsInvisibleSelection(t *testing.T) {
 	}
 }
 
-// F7/F8 retargeted — an unmapped or invisible focused body contributes no
+// F7/F8 retargeted — an undrawn or invisible focused object contributes no
 // member and no tint.
 func TestForegroundOmitsUndrawableFocusedBody(t *testing.T) {
 	spec := siderealHidePlutoSpec(t)
-	for _, focused := range []aspect.Body{aspect.Body(99), aspect.Pluto} {
-		plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Sun}, focused)})
+	for _, focused := range []aspect.Object{{Number: 60, Name: "Iapetus"}, objPluto} {
+		plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRenderObjects(objectNums(objSun), focused)})
 		if len(plan.Invocations) != 3 {
 			t.Fatalf("focused %v: Sun still drawable → composite plan, got %d", focused, len(plan.Invocations))
 		}
@@ -198,7 +199,7 @@ func TestCompileTextProjectionsCarryNoYkO(t *testing.T) {
 	spec := hellenisticSpec(t)
 	for _, p := range []recipe.Projection{
 		recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(),
-		recipe.BodyRawReport(aspect.Moon), recipe.AspectsRawReport(),
+		recipe.BodyRawReport(objMoon), recipe.AspectsRawReport(),
 	} {
 		plan := mustCompile(t, spec, p)
 		for _, tok := range plan.Invocations[0].Argv {
@@ -223,7 +224,7 @@ func TestCompileComparisonWheelSuppressesHighlight(t *testing.T) {
 	if err != nil {
 		t.Fatalf("comparison spec: %v", err)
 	}
-	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRender([]aspect.Body{aspect.Sun}, aspect.Moon)})
+	plan := mustCompile(t, spec, recipe.WheelImage{Render: highlightRenderObjects(objectNums(objSun), objMoon)})
 	if len(plan.Invocations) != 1 {
 		t.Fatalf("comparison must compile to one invocation, got %d", len(plan.Invocations))
 	}
@@ -241,7 +242,7 @@ func siderealHidePlutoSpec(t *testing.T) recipe.ChartSpec {
 	spec, err := recipe.NewChartSpec(
 		recipe.MomentAtPlace{JD: 2451545.0, Lon: -0.1278, Lat: 51.5074},
 		recipe.Placidus, recipe.Sidereal,
-		recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Remove: recipe.NewBodySet(aspect.Pluto)},
+		recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Remove: recipe.NewObjectSet(10)}, // Pluto
 	)
 	if err != nil {
 		t.Fatalf("sidereal spec: %v", err)

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -27,52 +29,57 @@ import (
 // row's aspect beside a decoy. cfg is the screen's.
 func markFixture(t *testing.T, cfg Config) (Model, *[]textCall) {
 	t.Helper()
+	freshModels(t)
 	m, text := enteredFixture(t, 2, true, cfg)
-	inner := firstCallTransits
-	firstCallTransits = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
-		res, err := inner(ctx, p, when, place, lens)
-		res.Positions = []aspect.Position{
-			{Body: aspect.Sun, Longitude: 200}, {Body: aspect.Moon, Longitude: 244.25}, {Body: aspect.Mars, Longitude: 130},
-			{Body: aspect.Pluto, Longitude: 301},
+	m = withSpawns(m, func(s *rowSpawns) {
+		if s.cast.transit == nil {
+			return
 		}
-		own := func(a, b aspect.Body, k aspect.AspectKind, orb aspect.Orb) aspect.Aspect {
-			return aspect.Aspect{A: a, B: b, Kind: k, Orb: orb, Power: 10 - float64(orb)}
+		inner, innerNatal := s.cast.transit, s.cast.natal
+		s.cast.transit = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+			res, err := inner(ctx, p, when, place, lens)
+			res.Positions = []aspect.Position{
+				{Object: objSun, Longitude: 200}, {Object: objMoon, Longitude: 244.25}, {Object: objMars, Longitude: 130},
+				{Object: objPluto, Longitude: 301},
+			}
+			own := func(a, b aspect.Object, k aspect.AspectKind, orb aspect.Orb) aspect.Aspect {
+				return aspect.Aspect{AObject: a, BObject: b, Kind: k, Orb: orb, Power: 10 - float64(orb)}
+			}
+			res.Aspects = []aspect.Aspect{
+				own(objSun, objMoon, aspect.Square, 0.5), own(objSun, objMoon, aspect.Sextile, 1),
+				own(objMoon, objMars, aspect.Trine, 0), own(objMoon, objMars, aspect.Opposition, 2),
+				own(objMoon, objMars, aspect.Square, 3), own(objSun, objMars, aspect.Trine, 4),
+			}
+			res.AspectStyles = astrologstyle.Aspects{
+				{First: objMoon, Second: objMars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
+			}
+			return res, err
 		}
-		res.Aspects = []aspect.Aspect{
-			own(aspect.Sun, aspect.Moon, aspect.Square, 0.5), own(aspect.Sun, aspect.Moon, aspect.Sextile, 1),
-			own(aspect.Moon, aspect.Mars, aspect.Trine, 0), own(aspect.Moon, aspect.Mars, aspect.Opposition, 2),
-			own(aspect.Moon, aspect.Mars, aspect.Square, 3), own(aspect.Sun, aspect.Mars, aspect.Trine, 4),
+		s.cast.natal = func(ctx context.Context, p *lookup.Probers, chart store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
+			res, err := innerNatal(ctx, p, chart, lens)
+			res.Positions = []aspect.Position{
+				{Object: objMoon, Longitude: 7}, {Object: objSun, Longitude: 54}, {Object: objMars, Longitude: 100}, {Object: objPluto, Longitude: 250},
+			}
+			return res, err
 		}
-		res.AspectStyles = astrologstyle.Aspects{
-			{First: aspect.Moon, Second: aspect.Mars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
-		}
-		return res, err
-	}
-	innerNatal := firstCallNatalPositions
-	firstCallNatalPositions = func(ctx context.Context, p *lookup.Probers, chart store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
-		res, err := innerNatal(ctx, p, chart, lens)
-		res.Positions = []aspect.Position{
-			{Body: aspect.Moon, Longitude: 7}, {Body: aspect.Sun, Longitude: 54}, {Body: aspect.Mars, Longitude: 100}, {Body: aspect.Pluto, Longitude: 250},
-		}
-		return res, err
-	}
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		*text = append(*text, textCall{kind: "aspects", when: when})
-		x := func(transit, natalBody aspect.Body, k aspect.AspectKind, orb aspect.Orb) lookup.OverlayAspect {
-			return lookup.OverlayAspect{Transit: transit, Natal: natalBody, Kind: k, Orb: orb, Power: 10 - float64(orb)}
-		}
-		if natal.When.Equal(enteredSecondNatal) {
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			*text = append(*text, textCall{kind: "aspects", when: when})
+			x := func(transit, natalBody aspect.Object, k aspect.AspectKind, orb aspect.Orb) lookup.OverlayAspect {
+				return lookup.OverlayAspect{TransitObject: transit, NatalObject: natalBody, Kind: k, Orb: orb, Power: 10 - float64(orb)}
+			}
+			if natal.When.Equal(enteredSecondNatal) {
+				return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{
+					x(objSun, objVenus, aspect.Opposition, 0), x(objVenus, objSun, aspect.Opposition, 1), x(objSun, objVenus, aspect.Square, 2),
+				}}, nil
+			}
 			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{
-				x(aspect.Sun, aspect.Venus, aspect.Opposition, 0), x(aspect.Venus, aspect.Sun, aspect.Opposition, 1), x(aspect.Sun, aspect.Venus, aspect.Square, 2),
+				x(objMoon, objMoon, aspect.Conjunction, 0), x(objMars, objMoon, aspect.Square, 3), x(objMoon, objMars, aspect.Conjunction, 4),
+				// The same cell as chart ②'s transit row, in chart ①'s list: it is
+				// bold only on the tab of the chart whose row was entered.
+				x(objSun, objVenus, aspect.Opposition, 0),
 			}}, nil
 		}
-		return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{
-			x(aspect.Moon, aspect.Moon, aspect.Conjunction, 0), x(aspect.Mars, aspect.Moon, aspect.Square, 3), x(aspect.Moon, aspect.Mars, aspect.Conjunction, 4),
-			// The same cell as chart ②'s transit row, in chart ①'s list: it is
-			// bold only on the tab of the chart whose row was entered.
-			x(aspect.Sun, aspect.Venus, aspect.Opposition, 0),
-		}}, nil
-	}
+	})
 	return m, text
 }
 
@@ -144,17 +151,17 @@ func boldSpanTexts(lines []string) []string {
 func boldLines(lines []string) []string {
 	var out []string
 	for _, ln := range lines {
-		if strings.Contains(ln, sgrBold) {
+		if strings.Contains(ln, term.SGRBold) {
 			out = append(out, strings.TrimSpace(ansi.Strip(ln)))
 		}
 	}
 	return out
 }
 
-func glyphs(parts ...aspect.Body) string {
+func glyphs(parts ...aspect.Object) string {
 	var out []string
 	for _, b := range parts {
-		out = append(out, bodyGlyph(b))
+		out = append(out, panel.BodyGlyph(b))
 	}
 	return strings.Join(out, " ")
 }
@@ -174,8 +181,8 @@ func TestEnteredAspectCellIsBold(t *testing.T) {
 	}
 	_, aspects := leftPanels(t, m.View())
 	got := boldSpanTexts(aspects)
-	if len(got) != 1 || !strings.HasPrefix(got[0], bodyGlyph(aspect.Venus)+" "+aspectGlyph(aspect.Opposition)+" "+bodyGlyph(aspect.Sun)+" ") {
-		t.Errorf("transit row: bold cells = %q, want exactly the natal-Venus-opposite-Sun cell\n%s", got, strings.Join(aspects, "\n"))
+	if len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus)+" ") {
+		t.Errorf("transit row: bold cells = %q, want exactly the transiting-Sun-opposite-natal-Venus cell, read as the row\n%s", got, strings.Join(aspects, "\n"))
 	}
 
 	// A sky row: Moon trine Mars on the `Aspects` tab, bodies in either order.
@@ -186,7 +193,7 @@ func TestEnteredAspectCellIsBold(t *testing.T) {
 	}
 	_, aspects = leftPanels(t, m.View())
 	got = boldSpanTexts(aspects)
-	if len(got) != 1 || !strings.HasPrefix(got[0], glyphs(aspect.Moon)+" "+aspectGlyph(aspect.Trine)+" "+glyphs(aspect.Mars)+" ") {
+	if len(got) != 1 || !strings.HasPrefix(got[0], glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Trine)+" "+glyphs(objMars)+" ") {
 		t.Errorf("sky row: bold cells = %q, want exactly the Moon-trine-Mars cell\n%s", got, strings.Join(aspects, "\n"))
 	}
 
@@ -205,16 +212,40 @@ func TestEnteredAspectCellIsBold(t *testing.T) {
 // orders. The Bodies cursor starts on row 0 (the Sun), the Moon is row 1.
 func sameOrderFixture(t *testing.T, cfg Config) Model {
 	t.Helper()
+	return sameOrderFixtureWith(t, cfg)
+}
+
+// sameOrderFixtureWith is sameOrderFixture with extra rows after the four
+// (an object with no glyph, say).
+func sameOrderFixtureWith(t *testing.T, cfg Config, extra ...aspect.Position) Model {
+	t.Helper()
 	m, _ := markFixture(t, cfg)
-	old := firstCallNatalPositions
-	t.Cleanup(func() { firstCallNatalPositions = old })
-	inner := firstCallNatalPositions
-	firstCallNatalPositions = func(ctx context.Context, p *lookup.Probers, chart store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
-		res, err := inner(ctx, p, chart, lens)
-		res.Positions = []aspect.Position{
-			{Body: aspect.Sun, Longitude: 54}, {Body: aspect.Moon, Longitude: 7}, {Body: aspect.Mars, Longitude: 100}, {Body: aspect.Pluto, Longitude: 250},
+	m = withSpawns(m, func(s *rowSpawns) {
+		inner := s.cast.natal
+		if inner == nil {
+			return
 		}
-		return res, err
+		s.cast.natal = func(ctx context.Context, p *lookup.Probers, chart store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
+			res, err := inner(ctx, p, chart, lens)
+			res.Positions = []aspect.Position{
+				{Object: objSun, Longitude: 54}, {Object: objMoon, Longitude: 7}, {Object: objMars, Longitude: 100}, {Object: objPluto, Longitude: 250},
+			}
+			res.Positions = append(res.Positions, extra...)
+			return res, err
+		}
+	})
+	if len(extra) > 0 {
+		m = withSpawns(m, func(s *rowSpawns) {
+			inner := s.cast.transit
+			if inner == nil {
+				return
+			}
+			s.cast.transit = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+				res, err := inner(ctx, p, when, place, lens)
+				res.Positions = append(res.Positions, extra...)
+				return res, err
+			}
+		})
 	}
 	m, cmd := m.afterFocusChange()
 	m = pump(t, m, cmd)
@@ -228,7 +259,7 @@ func sameOrderFixture(t *testing.T, cfg Config) Model {
 // station walks now's Bodies row cursor to the moving body's row, in the frame
 // of the key, under the hold; the panel then holds one bold row (the cursor's)
 // and `2` lands on it. An aspect row, or a body the rows do not list, moves
-// nothing. The fixture's Bodies cursor starts on row 0 (the Sun), and the
+// nothing (a sky aspect row leads to its faster body since specs/timeline-row-body.md). The fixture's Bodies cursor starts on row 0 (the Sun), and the
 // anchored chart's rows are laid out as the sky's, so a cursor that never moved
 // cannot pass for one that did.
 func TestEnteredIngressMovesTheBodiesCursor(t *testing.T) {
@@ -297,17 +328,19 @@ func TestEnteredIngressMovesTheBodiesCursor(t *testing.T) {
 	// A body the rows do not list: nothing moves.
 	m := fixture()
 	i := timelineRowWith(t, m.timeline.rows, "Moon (Sco) --> Sagittarius")
-	m.timeline.rows[i].BodyID = aspect.Neptune
+	m.timeline.rows[i].Object = objNeptune
 	m = enter(t, m, i)
 	if m.bodyCursorIdx != 0 {
 		t.Errorf("a body Bodies does not list moved the cursor to row %d", m.bodyCursorIdx)
 	}
-	// No move for an aspect row, sky or transit.
-	for _, row := range []string{"Moon (Sag) Tri (Leo) Mars", "Opp natal (Ari) Venus"} {
+	// A chart row's transiting body here is the Sun, already under the cursor
+	// (a sky aspect row now leads to its faster body: specs/timeline-row-body.md,
+	// pinned in timeline_row_body_test.go).
+	for _, row := range []string{"Opp natal (Ari) Venus"} {
 		m := fixture()
 		m = enter(t, m, timelineRowWith(t, m.timeline.rows, row))
 		if m.bodyCursorIdx != 0 {
-			t.Errorf("%s: an aspect row moved the Bodies cursor to row %d", row, m.bodyCursorIdx)
+			t.Errorf("%s: the Sun's chart row moved the Bodies cursor to row %d", row, m.bodyCursorIdx)
 		}
 	}
 }
@@ -321,7 +354,7 @@ func TestUnresolvedRowMarksNothing(t *testing.T) {
 		resolved = enter(t, resolved, timelineRowWith(t, resolved.timeline.rows, frag))
 		// An aspect row marks a cell; an ingress moves the Bodies cursor off row 0
 		// (the specification).
-		if resolved.enteredMark() == (enteredMark{}) && resolved.bodyCursorIdx == 0 {
+		if resolved.enteredMark() == (panel.EnteredMark{}) && resolved.bodyCursorIdx == 0 {
 			t.Fatalf("%s: control: the resolved row marks nothing, so the test proves nothing", frag)
 		}
 		m := sameOrderFixture(t, cfg)
@@ -329,7 +362,7 @@ func TestUnresolvedRowMarksNothing(t *testing.T) {
 		m.timeline.rows[i].Resolved = false
 		logs := len(m.logLines)
 		m = enter(t, m, i)
-		if got := m.enteredMark(); got != (enteredMark{}) {
+		if got := m.enteredMark(); got != (panel.EnteredMark{}) {
 			t.Errorf("%s: an unresolved row marks %+v", frag, got)
 		}
 		if m.bodyCursorIdx != 0 {
@@ -365,7 +398,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 		return len(boldSpanTexts(aspects))
 	}
 	m := fresh()
-	if marks(m) != 1 || m.enteredMark() == (enteredMark{}) {
+	if marks(m) != 1 || m.enteredMark() == (panel.EnteredMark{}) {
 		t.Fatalf("control: the entered row marks %d cells, want 1", marks(m))
 	}
 	// A time step. With the cursor on ② (C2 of the specification)
@@ -374,7 +407,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	m, _ = tpress(t, m, keyEsc)
 	m, cmd := tpress(t, m, runes("d"))
 	m = pump(t, m, cmd)
-	if marks(m) != 0 || m.enteredMark() != (enteredMark{}) {
+	if marks(m) != 0 || m.enteredMark() != (panel.EnteredMark{}) {
 		t.Errorf("a step key on the anchored cursor left %d marked cells, mark %+v", marks(m), m.enteredMark())
 	}
 	// And the path a step takes, called directly, from a fresh entered row.
@@ -382,7 +415,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	m, _ = tpress(t, m, keyEsc)
 	m, cmd = m.setFloatingTarget(m.targetFloatingTime.Add(24 * time.Hour))
 	m = pump(t, m, cmd)
-	if marks(m) != 0 || m.enteredMark() != (enteredMark{}) {
+	if marks(m) != 0 || m.enteredMark() != (panel.EnteredMark{}) {
 		t.Errorf("a time step left %d marked cells, mark %+v", marks(m), m.enteredMark())
 	}
 	// A cursor arrival.
@@ -390,7 +423,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	m, _ = tpress(t, m, keyEsc)
 	m, cmd = tpress(t, m, keyUp)
 	m = pump(t, m, cmd)
-	if marks(m) != 0 || m.enteredMark() != (enteredMark{}) {
+	if marks(m) != 0 || m.enteredMark() != (panel.EnteredMark{}) {
 		t.Errorf("a cursor arrival left %d marked cells, mark %+v", marks(m), m.enteredMark())
 	}
 	// A selection change.
@@ -398,7 +431,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	m, _ = tpress(t, m, keyEsc)
 	m, cmd = tpress(t, m, keySpace)
 	m = pump(t, m, cmd)
-	if marks(m) != 0 || m.enteredMark() != (enteredMark{}) {
+	if marks(m) != 0 || m.enteredMark() != (panel.EnteredMark{}) {
 		t.Errorf("a selection change left %d marked cells, mark %+v", marks(m), m.enteredMark())
 	}
 	// `[` moves to the other pair tab of the cursor's chart (the cursor is on
@@ -406,11 +439,12 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	// same cell (the transit answer below): the row is still entered, its cell
 	// is not bold there; `]` returns to the row's own tab and the cell is bold
 	// again.
-	oldOver := overlayCrossAspects
-	t.Cleanup(func() { overlayCrossAspects = oldOver })
-	overlayCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-		return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{Transit: aspect.Sun, Natal: aspect.Venus, Kind: aspect.Opposition, Orb: 0, Power: 10}}}, nil
-	}
+	freshModels(t)
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
+			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0, Power: 10}}}, nil
+		}
+	})
 	m = fresh()
 	m, _ = tpress(t, m, keyEsc)
 	m, _ = tpress(t, m, runes("3"))
@@ -419,7 +453,7 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	if m.deriveScene().entered == nil || activeAspectsTitle(m) != "3 in 1" {
 		t.Fatalf("fixture: after `[` the tab is %q, entered %v, want 3 in 1", activeAspectsTitle(m), m.deriveScene().entered != nil)
 	}
-	if _, aspects := leftPanels(t, m.View()); !strings.Contains(strings.Join(aspects, "\n"), aspectGlyph(aspect.Opposition)) {
+	if _, aspects := leftPanels(t, m.View()); !strings.Contains(strings.Join(aspects, "\n"), panel.AspectGlyph(aspect.Opposition)) {
 		t.Fatalf("fixture: chart 1's list does not hold the row's cell:\n%s", strings.Join(aspects, "\n"))
 	}
 	if got := marks(m); got != 0 {
@@ -442,10 +476,10 @@ func TestLabelledRowsMarkTheirAspect(t *testing.T) {
 		want       string
 		cross      bool
 	}{
-		{"a phase label and a void tail", "Sun (Lib) Squ (Cap) Moon (Half Moon) (v/c 9:27)", glyphs(aspect.Sun) + " " + aspectGlyph(aspect.Square) + " " + glyphs(aspect.Moon), false},
-		{"an occultation label", "Moon (Aqu) Opp (Leo) Mars (Total Occultation)", glyphs(aspect.Moon) + " " + aspectGlyph(aspect.Opposition) + " " + glyphs(aspect.Mars), false},
-		{"a void tail", "Sun (Lib) Sex (Sag) Moon (v/c 15:01)", glyphs(aspect.Sun) + " " + aspectGlyph(aspect.Sextile) + " " + glyphs(aspect.Moon), false},
-		{"a return row", "Moon (Cap) Con natal (Cap) Moon (Lunar Return)", bodyGlyph(aspect.Moon) + " " + aspectGlyph(aspect.Conjunction) + " " + bodyGlyph(aspect.Moon), true},
+		{"a phase label and a void tail", "Sun (Lib) Squ (Cap) Moon (Half Moon) (v/c 9:27)", glyphs(objSun) + " " + panel.AspectGlyph(aspect.Square) + " " + glyphs(objMoon), false},
+		{"an occultation label", "Moon (Aqu) Opp (Leo) Mars (Total Occultation)", glyphs(objMoon) + " " + panel.AspectGlyph(aspect.Opposition) + " " + glyphs(objMars), false},
+		{"a void tail", "Sun (Lib) Sex (Sag) Moon (v/c 15:01)", glyphs(objSun) + " " + panel.AspectGlyph(aspect.Sextile) + " " + glyphs(objMoon), false},
+		{"a return row", "Moon (Cap) Con natal (Cap) Moon (Lunar Return)", panel.BodyGlyph(objMoon) + " " + panel.AspectGlyph(aspect.Conjunction) + " " + panel.BodyGlyph(objMoon), true},
 	} {
 		m, _ := markFixture(t, cfg)
 		m = enter(t, m, timelineRowWith(t, m.timeline.rows, tc.frag))
@@ -470,22 +504,22 @@ var sgrRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // byte; and the cell of a full screen is bold over Astrolog's own colours.
 func TestEnteredBoldKeepsAstrologsColour(t *testing.T) {
 	cfg := Config{Color: ColorAlways}
-	moonMars := aspect.Aspect{A: aspect.Moon, B: aspect.Mars, Kind: aspect.Trine, Orb: 0, Power: 10}
+	moonMars := aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: aspect.Trine, Orb: 0, Power: 10}
 	state := chartViewState{
-		aspects: []aspect.Aspect{moonMars, {A: aspect.Sun, B: aspect.Moon, Kind: aspect.Square, Orb: 1, Power: 9}},
+		aspects: []aspect.Aspect{moonMars, {AObject: objSun, BObject: objMoon, Kind: aspect.Square, Orb: 1, Power: 9}},
 		aspectStyles: astrologstyle.Aspects{
-			{First: aspect.Moon, Second: aspect.Mars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
+			{First: objMoon, Second: objMars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
 		},
 		settled: true,
 	}
 	plain := renderAspectsBody(state, TabAspects, 64, 4, cfg)
-	state.mark = enteredMark{tab: TabAspects, first: aspect.Mars, other: aspect.Moon, kind: aspect.Trine}
+	state.mark = panel.EnteredMark{Tab: string(TabAspects), First: objMars, Other: objMoon, Kind: aspect.Trine}
 	marked := renderAspectsBody(state, TabAspects, 64, 4, cfg)
 	if marked == plain {
 		t.Fatal("the mark changed nothing")
 	}
 	colours := func(s string) string {
-		return strings.Join(sgrRe.FindAllString(strings.ReplaceAll(strings.ReplaceAll(s, sgrBold, ""), sgrReset, ""), -1), "")
+		return strings.Join(sgrRe.FindAllString(strings.ReplaceAll(strings.ReplaceAll(s, term.SGRBold, ""), term.SGRReset, ""), -1), "")
 	}
 	if got, want := colours(marked), colours(plain); got != want || !strings.Contains(want, "\x1b[31m") {
 		t.Errorf("the marked cell's colour sequences are %q, want Astrolog's %q", got, want)
@@ -493,7 +527,7 @@ func TestEnteredBoldKeepsAstrologsColour(t *testing.T) {
 	if ansi.Strip(marked) != ansi.Strip(plain) {
 		t.Errorf("the mark changed the text: %q vs %q", ansi.Strip(marked), ansi.Strip(plain))
 	}
-	if n := strings.Count(marked, sgrBold) - strings.Count(plain, sgrBold); n < 1 {
+	if n := strings.Count(marked, term.SGRBold) - strings.Count(plain, term.SGRBold); n < 1 {
 		t.Errorf("the marked cell is not bold")
 	}
 	// The same on a full screen: the Aspects cell is bold over Astrolog's SGR.
@@ -501,7 +535,7 @@ func TestEnteredBoldKeepsAstrologsColour(t *testing.T) {
 	m = enter(t, m, timelineRowWith(t, m.timeline.rows, "Moon (Sag) Tri (Leo) Mars"))
 	_, aspects := leftPanels(t, m.View())
 	joined := strings.Join(aspects, "\n")
-	if !strings.Contains(joined, sgrBold+"\x1b[31m") {
+	if !strings.Contains(joined, term.SGRBold+"\x1b[31m") {
 		t.Errorf("the screen's marked cell is not bold over Astrolog's red:\n%q", joined)
 	}
 }

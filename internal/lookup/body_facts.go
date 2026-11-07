@@ -110,10 +110,14 @@ type CycleResult struct {
 	Commands []string
 }
 
-// SearchCycle runs the cycle search of the Sun and the body over the span.
-func SearchCycle(ctx context.Context, body aspect.Body, span CycleSpan, lens Lens, search astrolog.TimelineSearcher) (CycleResult, error) {
+// sunObject is the Sun's number in Astrolog's object registry (object 1): the
+// one object every cycle event and Sun pair is measured against.
+const sunObject = 1
+
+// SearchCycle runs the cycle search of the Sun and the object over the span.
+func SearchCycle(ctx context.Context, o aspect.Object, span CycleSpan, lens Lens, search astrolog.TimelineSearcher) (CycleResult, error) {
 	res := CycleResult{Span: span}
-	call, err := astrolog.CycleCall(astrolog.CycleRequest{StartYear: span.StartYear, Years: span.Years, Other: body, Houses: lens.Houses, Zodiac: lens.Zodiac})
+	call, err := astrolog.CycleCall(astrolog.CycleRequest{StartYear: span.StartYear, Years: span.Years, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry})
 	if err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
@@ -124,7 +128,7 @@ func SearchCycle(ctx context.Context, body aspect.Body, span CycleSpan, lens Len
 	if err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
-	if res.Events, err = astrolog.ParseCycleEvents(out); err != nil {
+	if res.Events, err = astrolog.ParseCycleEvents(out, call.Registry); err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
 	return res, nil
@@ -137,9 +141,9 @@ type SunPairResult struct {
 }
 
 // SunPair runs the precise positions call for the moment.
-func SunPair(ctx context.Context, body aspect.Body, when time.Time, place location.PlaceInfo, lens Lens, search astrolog.TimelineSearcher) (SunPairResult, error) {
+func SunPair(ctx context.Context, o aspect.Object, when time.Time, place location.PlaceInfo, lens Lens, search astrolog.TimelineSearcher) (SunPairResult, error) {
 	var res SunPairResult
-	call, err := astrolog.SunPairCall(astrolog.SunPairRequest{When: when, Lon: place.Lon, Lat: place.Lat, Other: body, Houses: lens.Houses, Zodiac: lens.Zodiac})
+	call, err := astrolog.SunPairCall(astrolog.SunPairRequest{When: when, Lon: place.Lon, Lat: place.Lat, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry})
 	if err != nil {
 		return res, fmt.Errorf("lookup: SunPair: %w", err)
 	}
@@ -150,7 +154,7 @@ func SunPair(ctx context.Context, body aspect.Body, when time.Time, place locati
 	if err != nil {
 		return res, fmt.Errorf("lookup: SunPair: %w", err)
 	}
-	if res.Sun, res.Body, err = astrolog.ParseSunPair(out, body); err != nil {
+	if res.Sun, res.Body, err = astrolog.ParseSunPair(out, call.Objects, call.Registry); err != nil {
 		return res, fmt.Errorf("lookup: SunPair: %w", err)
 	}
 	return res, nil
@@ -172,7 +176,7 @@ func NowFacts(pair SunPairResult, cycle CycleResult, when time.Time, zone *time.
 		"elongation.side":    {Kind: FactCategory, Term: ElongationSide(e)},
 	}
 	spec, _ := FactSpecFor("synodic.conjunction.inferior.last5")
-	last := LastInferior(cycle.Events, pair.Body.Body, when, spec.Max)
+	last := LastInferior(cycle.Events, pair.Body.Object, when, spec.Max)
 	// Ten years hold at least six inner conjunctions of an inner planet; a
 	// search that yields fewer lacks events the list needs, which is a
 	// failure, never a short list (P5).
@@ -204,26 +208,35 @@ func NowFacts(pair SunPairResult, cycle CycleResult, when time.Time, zone *time.
 		motion = "retrograde"
 	}
 	facts["motion.direction"] = BodyFact{Kind: FactCategory, Term: motion}
-	body := pair.Body.Body
+	obj := pair.Body.Object
 	picks := []struct {
 		key, what string
 		keep      func(astrolog.CycleEvent) bool
 	}{
-		{"station", "a station", func(ev astrolog.CycleEvent) bool { return ev.Kind == astrolog.CycleStation && ev.Body == body }},
-		{"synodic.conjunction.inferior", "an inner conjunction", func(ev astrolog.CycleEvent) bool { return conjunctionIsInner(ev, body) }},
-		{"synodic.conjunction.superior", "an outer conjunction", func(ev astrolog.CycleEvent) bool { return conjunctionIsOuter(ev, body) }},
+		{"station", "a station", func(ev astrolog.CycleEvent) bool {
+			return ev.Kind == astrolog.CycleStation && ev.Object.Number == obj.Number
+		}},
+		{"synodic.conjunction.inferior", "an inner conjunction", func(ev astrolog.CycleEvent) bool { return conjunctionIsInner(ev, obj) }},
+		{"synodic.conjunction.superior", "an outer conjunction", func(ev astrolog.CycleEvent) bool { return conjunctionIsOuter(ev, obj) }},
 	}
 	for _, p := range picks {
 		last, next, ok := LastAndNext(cycle.Events, when, p.keep)
 		if !ok {
 			return nil, &MissingEventError{Event: p.what + " before and after the moment"}
 		}
-		facts[p.key+".last"] = instantFact(last, body, zone)
-		facts[p.key+".next"] = instantFact(next, body, zone)
+		facts[p.key+".last"] = instantFact(last, obj, zone)
+		facts[p.key+".next"] = instantFact(next, obj, zone)
 	}
-	facts["brightness.magnitude"] = BodyFact{Kind: FactValue, Text: magnitudeText(pair.Body.Magnitude), Num: pair.Body.Magnitude}
-	facts["brightness.lit"] = BodyFact{Kind: FactValue, Text: fmt.Sprintf("%.0f%%", math.Round(pair.Body.LitPercent)), Num: pair.Body.LitPercent}
-	six := LastInferior(cycle.Events, body, when, 6)
+	if pair.Body.HasBrightness {
+		facts["brightness.magnitude"] = BodyFact{Kind: FactValue, Text: magnitudeText(pair.Body.Magnitude), Num: pair.Body.Magnitude}
+		facts["brightness.lit"] = BodyFact{Kind: FactValue, Text: fmt.Sprintf("%.0f%%", math.Round(pair.Body.LitPercent)), Num: pair.Body.LitPercent}
+	} else {
+		// Astrolog printed no brightness for this object: the lines naming it
+		// are omitted, never read as a magnitude of 0.
+		facts["brightness.magnitude"] = BodyFact{Kind: FactValue, Absent: true}
+		facts["brightness.lit"] = BodyFact{Kind: FactValue, Absent: true}
+	}
+	six := LastInferior(cycle.Events, obj, when, 6)
 	if len(six) < 6 {
 		return nil, &MissingEventError{Event: "six inner conjunctions before the moment"}
 	}
@@ -267,9 +280,9 @@ func listItem(ev astrolog.CycleEvent, zone *time.Location) string {
 // every other moment on screen; the specification), Astrolog's seconds
 // rounded to the nearest minute, in the zone, then the body's degree and sign;
 // a station carries its kind as a term (P12, C4).
-func instantFact(ev astrolog.CycleEvent, body aspect.Body, zone *time.Location) BodyFact {
+func instantFact(ev astrolog.CycleEvent, o aspect.Object, zone *time.Location) BodyFact {
 	at := ev.At
-	if ev.Kind == astrolog.CycleConjunction && ev.Other == body {
+	if ev.Kind == astrolog.CycleConjunction && ev.OtherObject.Number == o.Number {
 		at = ev.OtherAt
 	}
 	f := BodyFact{Kind: FactInstant, Text: fmt.Sprintf("%s %d°%02d′ %s", heldDateClock(ev.Instant.Round(time.Minute).In(zone)), at.Deg, at.Min, at.Sign)}
@@ -360,8 +373,8 @@ func SameSignAsSun(sunSign, bodySign string) string {
 // printed in ( ) (direct) is the outer one (C5).
 //
 // derivation: outer conjunction from Astrolog's bracket
-func conjunctionIsOuter(ev astrolog.CycleEvent, body aspect.Body) bool {
-	return ev.Kind == astrolog.CycleConjunction && ev.Body == aspect.Sun && ev.Other == body && ev.OtherAt.Bracket == '('
+func conjunctionIsOuter(ev astrolog.CycleEvent, o aspect.Object) bool {
+	return ev.Kind == astrolog.CycleConjunction && ev.Object.Number == sunObject && ev.OtherObject.Number == o.Number && ev.OtherAt.Bracket == '('
 }
 
 // LastAndNext picks the newest kept event at or before the moment and the
@@ -435,18 +448,18 @@ func ElongationSide(e float64) string {
 // (P11). Astrolog prints no word for either.
 //
 // derivation: inner conjunction from Astrolog's bracket
-func conjunctionIsInner(ev astrolog.CycleEvent, body aspect.Body) bool {
-	return ev.Kind == astrolog.CycleConjunction && ev.Body == aspect.Sun && ev.Other == body && ev.OtherAt.Bracket == '['
+func conjunctionIsInner(ev astrolog.CycleEvent, o aspect.Object) bool {
+	return ev.Kind == astrolog.CycleConjunction && ev.Object.Number == sunObject && ev.OtherObject.Number == o.Number && ev.OtherAt.Bracket == '['
 }
 
 // LastInferior is the n most recent inner conjunctions of the body at or
 // before the moment, newest first.
 //
 // derivation: last inner conjunctions
-func LastInferior(events []astrolog.CycleEvent, body aspect.Body, when time.Time, n int) []astrolog.CycleEvent {
+func LastInferior(events []astrolog.CycleEvent, o aspect.Object, when time.Time, n int) []astrolog.CycleEvent {
 	var out []astrolog.CycleEvent
 	for _, ev := range events {
-		if conjunctionIsInner(ev, body) && !ev.Instant.After(when) {
+		if conjunctionIsInner(ev, o) && !ev.Instant.After(when) {
 			out = append(out, ev)
 		}
 	}
@@ -461,11 +474,11 @@ func LastInferior(events []astrolog.CycleEvent, body aspect.Body, when time.Time
 // Cycle, when it covers the moment's span for the same body and frame, is
 // reused, so a time step inside the span starts no new search (P11).
 type BodyFactsRequest struct {
-	Body  aspect.Body
-	When  time.Time
-	Place location.PlaceInfo
-	Lens  Lens
-	Cycle *CycleResult
+	Object aspect.Object
+	When   time.Time
+	Place  location.PlaceInfo
+	Lens   Lens
+	Cycle  *CycleResult
 }
 
 // BodyFactsResult is the facts, the cycle search they used (fresh or
@@ -491,14 +504,14 @@ func bodyNowFactsWith(ctx context.Context, req BodyFactsRequest, search astrolog
 	if req.Cycle != nil && req.Cycle.Span == span {
 		res.Cycle = *req.Cycle
 	} else {
-		cycle, err := SearchCycle(ctx, req.Body, span, req.Lens, search)
+		cycle, err := SearchCycle(ctx, req.Object, span, req.Lens, search)
 		res.Commands = append(res.Commands, cycle.Commands...)
 		if err != nil {
 			return res, err
 		}
 		res.Cycle = cycle
 	}
-	pair, err := SunPair(ctx, req.Body, req.When, req.Place, req.Lens, search)
+	pair, err := SunPair(ctx, req.Object, req.When, req.Place, req.Lens, search)
 	res.Commands = append(res.Commands, pair.Commands...)
 	if err != nil {
 		return res, err

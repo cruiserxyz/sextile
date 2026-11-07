@@ -20,13 +20,13 @@ import (
 // so the modal-close → recompute gap shows empty panels rather than the
 // previous city's chart.
 func TestAtlasPicked_ClearsStaleChart(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupReady
 	m.chart.positions = []aspect.Position{
-		{Body: aspect.Sun, Longitude: 35.5},
+		{Object: objSun, Longitude: 35.5},
 	}
 	m.chart.aspects = []aspect.Aspect{
-		aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Square, aspect.Orb(0.5)),
+		aspect.NewObjectAspect(objSun, objMoon, aspect.Square, aspect.Orb(0.5)),
 	}
 
 	picked := AtlasPickedMsg{Place: location.PlaceInfo{
@@ -69,7 +69,7 @@ func TestApplyAtlasPicked_FiresComputeOnEachCityChange(t *testing.T) {
 		{Name: "Tokyo", Country: "JP", Lat: 35.6762, Lon: 139.6503, TZ: "Asia/Tokyo"},
 	}
 
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupReady
 
 	for _, p := range cities {
@@ -92,7 +92,7 @@ func TestApplyAtlasPicked_FiresComputeOnEachCityChange(t *testing.T) {
 // m.slots stays nil forever, ↑/↓ silently no-op, and downstream slot
 // surfaces stay dark for any first-run user who needed to disambiguate.
 func TestApplyAtlasPicked_ColdStart_BuildsSlots(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupAtlasOpen
 	// No prior place, no prior slots — the cold-start-via-atlas shape.
 	if m.slots != nil {
@@ -140,7 +140,7 @@ func TestApplyAtlasPicked_RePick_RefreshesPlace_PreservesAnchor(t *testing.T) {
 		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
 	}
 
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupReady
 	m.place = originalPlace
 	slots, err := store.NewSlots(m.clock.Now(), originalPlace)
@@ -153,8 +153,8 @@ func TestApplyAtlasPicked_RePick_RefreshesPlace_PreservesAnchor(t *testing.T) {
 	m.slots = slots
 	m.cursorIdx = 1
 	m.slots.ToggleSlotSelection(1) // preserve a deliberate comparison-off state
-	m.slots.ToggleBodySelection(0, aspect.Sun)
-	m.slots.ToggleBodySelection(1, aspect.Moon)
+	m.slots.ToggleObjectSelection(0, objSun)
+	m.slots.ToggleObjectSelection(1, objMoon)
 
 	newPlace := location.PlaceInfo{
 		Name: "Tokyo", Country: "JP",
@@ -201,7 +201,7 @@ func TestUnresolvedStartup_SessionSurvivesCityPick(t *testing.T) {
 		},
 	}, v1(&snap, true, true, nil, nil))
 
-	var tm tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	tm, _ = tm.Update(p)
 	m := tm.(Model)
@@ -249,7 +249,7 @@ func TestApplyAtlasPicked_RePick_PreservesNatalOverlayRoute(t *testing.T) {
 	}
 	natalWhen := time.Date(1990, 1, 1, 14, 0, 0, 0, time.UTC)
 
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupReady
 	m.place = originalPlace
 	slots, err := store.NewSlots(m.clock.Now(), originalPlace)
@@ -262,8 +262,8 @@ func TestApplyAtlasPicked_RePick_PreservesNatalOverlayRoute(t *testing.T) {
 	m.slots = slots
 	m.cursorIdx = 1
 	m.slots.ToggleSlotSelection(1) // preserve a deliberate comparison-off state
-	m.slots.ToggleBodySelection(0, aspect.Sun)
-	m.slots.ToggleBodySelection(1, aspect.Moon)
+	m.slots.ToggleObjectSelection(0, objSun)
+	m.slots.ToggleObjectSelection(1, objMoon)
 
 	newPlace := location.PlaceInfo{
 		Name: "Tokyo", Country: "JP",
@@ -285,7 +285,7 @@ func TestApplyAtlasPicked_RePick_PreservesNatalOverlayRoute(t *testing.T) {
 		t.Errorf("slot selection changed across city re-pick: anchor=%v floating=%v comparison=%v",
 			got.slots.SlotSelected(0), got.slots.SlotSelected(1), got.slots.ComparisonSelected())
 	}
-	if !got.slots.BodySelected(0, aspect.Sun) || !got.slots.BodySelected(1, aspect.Moon) {
+	if !got.slots.ObjectSelected(0, objSun.Number) || !got.slots.ObjectSelected(1, objMoon.Number) {
 		t.Error("per-slot body selection changed across city re-pick")
 	}
 }
@@ -299,7 +299,7 @@ func TestApplyAtlasPicked_SameCityStillFiresCompute(t *testing.T) {
 		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
 	}
 
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupReady
 
 	m1, cmd1 := applyAtlasPicked(m, AtlasPickedMsg{Place: berlin})

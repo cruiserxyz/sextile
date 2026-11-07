@@ -35,30 +35,27 @@ func recordLensSeams(t *testing.T) *[]lookup.Lens {
 	t.Helper()
 	seen := &[]lookup.Lens{}
 
-	natal, transits, overlay := firstCallNatalPositions, firstCallTransits, overlayCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects = natal, transits, overlay
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
+			*seen = append(*seen, lens)
+			return lookup.Result{}, context.Canceled
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, _ time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+			*seen = append(*seen, lens)
+			return lookup.Result{}, context.Canceled
+		}
+		s.cast.overlay = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			*seen = append(*seen, lens)
+			return lookup.OverlayAspects{}, context.Canceled
+		}
 	})
-
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
-		*seen = append(*seen, lens)
-		return lookup.Result{}, context.Canceled
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, _ time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
-		*seen = append(*seen, lens)
-		return lookup.Result{}, context.Canceled
-	}
-	overlayCrossAspects = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		*seen = append(*seen, lens)
-		return lookup.OverlayAspects{}, context.Canceled
-	}
 	return seen
 }
 
 func TestConfirmedAspectsReachTheCompute(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
@@ -98,7 +95,7 @@ func TestConfirmedAspectsReachTheCompute(t *testing.T) {
 func TestComputeNeverUsesTheDefaultLensAfterAChoice(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{4}}
 
 	_, cmd := m.bumpIdentity(surfaceText)
@@ -138,7 +135,7 @@ func drainCmd(cmd tea.Cmd) {
 func TestToggleLivePreviewsBehindTheModal(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 
@@ -170,7 +167,7 @@ func TestToggleLivePreviewsBehindTheModal(t *testing.T) {
 func TestTogglesCoalesceIntoOneCompute(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 
@@ -207,7 +204,7 @@ func settle(t *testing.T, m Model, cmd tea.Cmd) {
 // Typing and moving the cursor must NOT preview. Only a changed selection is a
 // new chart; filtering is just looking.
 func TestFilteringDoesNotPreview(t *testing.T) {
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2}}
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 
@@ -234,7 +231,7 @@ func TestCancelRecomputesAwayThePreview(t *testing.T) {
 	seen := recordLensSeams(t)
 	entry := recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = entry
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	tm, previewCmd := tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -265,7 +262,7 @@ func TestCancelRecomputesAwayThePreview(t *testing.T) {
 
 // Cancelling without having touched anything must not spend a compute.
 func TestCancelWithoutEditsRecomputesNothing(t *testing.T) {
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2}}
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	_, cmd := tm.(Model).Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -279,7 +276,7 @@ func TestCancelWithoutEditsRecomputesNothing(t *testing.T) {
 // frame commit used to promote to startupReady unconditionally and the
 // preview's own result slammed the chooser shut the moment it landed.
 func TestPreviewResultDoesNotCloseTheModal(t *testing.T) {
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
@@ -315,7 +312,7 @@ func TestPreviewResultDoesNotCloseTheModal(t *testing.T) {
 // A commit arriving in a NON-modal state must still promote to ready, or the
 // ordinary startup path never finishes.
 func TestCommitStillPromotesWhenNoModalIsOpen(t *testing.T) {
-	m := NewModel(Config{Accessible: true, Color: ColorNever})
+	m := newTestModel(t, Config{Accessible: true, Color: ColorNever}, RealClock{})
 	m.width, m.height = 132, 40
 	if m.startup == startupReady {
 		t.Fatal("fixture is already ready")

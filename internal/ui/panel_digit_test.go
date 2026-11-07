@@ -28,11 +28,12 @@ func TestPanelDigitAgainStepsItsTabs(t *testing.T) {
 
 	stepped := 0
 	for id, p := range panelDigits {
+		freshModels(t)
 		stubPairCompute(t)
 		// Comparing ①②③ + now, so Aspects declares three pair tabs.
 		m := selectedSet(t, 3, true, 0)
 		key := ""
-		for _, e := range m.keys.mainBindings() {
+		for _, e := range mainBindings(m.keys) {
 			if ks := e.Binding.Keys(); e.ID == id && len(ks) > 0 {
 				key = ks[0]
 			}

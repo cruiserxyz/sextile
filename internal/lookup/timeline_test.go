@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,8 @@ var (
 
 // cannedSearch answers each search mode with its canned output and records
 // the argv of every call. Its command is the argv joined, so a row's command
-// names its search unambiguously.
+// names its search unambiguously. The sky's day searches (-d) are answered
+// with the sky's month output: each keeps only its own day's rows.
 type cannedSearch struct {
 	byMode map[string]string
 	argvs  [][]string
@@ -50,8 +52,11 @@ type cannedSearch struct {
 func (c *cannedSearch) run(_ context.Context, call BodyCall) (string, string, error) {
 	argv := call.Argv()
 	c.argvs = append(c.argvs, slices.Clone(argv))
-	for _, mode := range []string{"-tr", "-t", "-dm"} {
+	for _, mode := range []string{"-tr", "-t", "-dm", "-d"} {
 		if slices.Contains(argv, mode) {
+			if mode == "-d" {
+				mode = "-dm"
+			}
 			return c.byMode[mode], "astrolog " + strings.Join(argv, " "), nil
 		}
 	}
@@ -67,9 +72,14 @@ func stubDefaults(context.Context) (DefaultSets, error) {
 	}, nil
 }
 
+// mode is the canned output's key of a command: the sky's day searches (-d)
+// read the sky's month output, so they are "-dm" too.
 func mode(command string) string {
-	for _, m := range []string{" -tr ", " -t ", " -dm"} {
+	for _, m := range []string{" -tr ", " -t ", " -dm", " -d "} {
 		if strings.Contains(command+" ", m) {
+			if m == " -d " {
+				return "-dm"
+			}
 			return strings.TrimSpace(m)
 		}
 	}
@@ -85,7 +95,7 @@ func timelineNatal() store.AnchorChart {
 }
 
 func mayRequest() TimelineRequest {
-	return TimelineRequest{When: time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC), Place: timelinePlace(), Natal: timelineNatal()}
+	return TimelineRequest{When: time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC), Place: timelinePlace(), Natal: timelineNatal(), Lens: Lens{Registry: Hellenistic.Registry}}
 }
 
 func lines(rows []TimelineRow) []string {
@@ -124,8 +134,8 @@ func TestTimelineMergesThreeSearchesInInstantOrder(t *testing.T) {
 			t.Errorf("row %d at %v precedes row %d at %v", i, res.Rows[i].Instant, i-1, res.Rows[i-1].Instant)
 		}
 	}
-	if len(res.Commands) != 3 {
-		t.Errorf("commands = %v, want one per spawn", res.Commands)
+	if len(res.Commands) != 34 {
+		t.Errorf("commands = %v, want one per spawn: -t, the sky's month search and 31 days, -tr", res.Commands)
 	}
 }
 
@@ -173,8 +183,13 @@ func TestTimelineWithNoAnchorRunsOnlyTheSkySearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.argvs) != 1 || !slices.Equal(c.argvs[0], []string{"-z", "-2", "-qm", "5", "2026", "-dm", "-c", "0", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "_Yt", "_Yd"}) {
-		t.Fatalf("spawned %v, want exactly the one -dm search", c.argvs)
+	pins := []string{"-c", "0", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "_Yt", "_Yd"}
+	want := [][]string{append(append([]string{"-z", "-2", "-qm", "5", "2026", "-dm"}, pins...), "-R0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10")}
+	for d := 1; d <= 31; d++ {
+		want = append(want, append([]string{"-z", "-2", "-qd", "5", strconv.Itoa(d), "2026", "-d"}, pins...))
+	}
+	if !slices.EqualFunc(c.argvs, want, slices.Equal) {
+		t.Fatalf("spawned %v, want exactly the sky: its void-mark month search over the planets, then a day search per day", c.argvs)
 	}
 	if got, want := lines(res.Rows), strings.Split(strings.TrimSuffix(maySky, "\n"), "\n"); !slices.Equal(got, want) {
 		t.Fatalf("rows = %q, want only the sky rows %q", got, want)
@@ -186,8 +201,16 @@ func TestTimelineWithNoAnchorRunsOnlyTheSkySearch(t *testing.T) {
 	if _, err := TimelineWith(context.Background(), req, c.run, stubDefaults); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.argvs) != 2 || !slices.Contains(c.argvs[0], "-dm") || !slices.Contains(c.argvs[1], "-dm") {
-		t.Fatalf("October spawned %v, want the -dm search once per segment", c.argvs)
+	sky := 0
+	for _, a := range c.argvs {
+		if slices.Contains(a, "-dm") {
+			sky++
+		} else if !slices.Contains(a, "-d") {
+			t.Fatalf("October spawned %v, which is not the sky's", a)
+		}
+	}
+	if sky != 2 || len(c.argvs) != 2+25+7 {
+		t.Fatalf("October spawned %d searches, %d of them month searches; want per segment one month search and its days (25 and 7)", len(c.argvs), sky)
 	}
 }
 
@@ -279,8 +302,11 @@ func mergedArgvAcrossSegments(t *testing.T) {
 		"-tr -1": head("1E") + "10/17/2026  3:05am trans    Moon (Cap) Con natal (Cap) Moon (Lunar Return)\n10/30/2026 12:05pm trans     Sun (Sco) Con natal (Sco) Mars (Mars Return)\n",
 	}
 	ident := func(argv []string) string {
-		for _, m := range []string{"-tr", "-t", "-dm"} {
+		for _, m := range []string{"-tr", "-t", "-dm", "-d"} {
 			if slices.Contains(argv, m) {
+				if m == "-d" {
+					m = "-dm" // a sky day search reads its segment's month output
+				}
 				return m + " " + argv[1]
 			}
 		}
@@ -299,8 +325,8 @@ func mergedArgvAcrossSegments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(outByCommand) != 6 {
-		t.Fatalf("%d distinct invocations, want six: three searches, two segments", len(outByCommand))
+	if len(outByCommand) != 38 {
+		t.Fatalf("%d distinct invocations, want 38: three searches over two segments, the sky as a month search and a day search per day (25 and 7)", len(outByCommand))
 	}
 	fallBack := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
 	lateReturn := false
@@ -308,6 +334,9 @@ func mergedArgvAcrossSegments(t *testing.T) {
 		if strings.HasSuffix(r.Line, "(Mars Return)") {
 			lateReturn = true
 			if r.Command != "astrolog -z -1 "+strings.Join(natalArgv(), " ")+" -tr 10 2026 -c 0 _s _Ys _sr0 :sz -qag 10 15 1582 12:00am 0 0:00E 0:00N _Yt _Yd" {
+				// A return's transiting side is the ticked set without the cusp
+				// points; an untouched lens equals Astrolog's own return default
+				// (Main without its cusp points), so no band is emitted.
 				t.Errorf("the post-transition return carries %q, want exactly the -z -1 -tr invocation", r.Command)
 			}
 		}
@@ -406,28 +435,38 @@ func TestTimelineCarriesTheLensBand(t *testing.T) {
 	amPmMonthFirst(t)
 	c := &cannedSearch{byMode: map[string]string{"-t": mayTransit, "-dm": maySky, "-tr": mayReturn}}
 	req := mayRequest()
-	req.Lens = Lens{Objects: recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 31}}}
+	req.Lens = Lens{Registry: Hellenistic.Registry, Objects: recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 31}}}
 	if _, err := TimelineWith(context.Background(), req, c.run, stubDefaults); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.argvs) != 3 {
-		t.Fatalf("spawns = %v, want three searches", c.argvs)
+	if len(c.argvs) != 34 {
+		t.Fatalf("spawns = %v, want three searches (the sky as a month search and 31 days)", c.argvs)
 	}
 	for _, argv := range c.argvs {
 		joined := " " + strings.Join(argv, " ") + " "
-		if !strings.Contains(joined, " -R0 1 3 4 5 6 7 8 9 10 16 22 31") {
+		band := " -R0 1 3 4 5 6 7 8 9 10 16 22 31"
+		if slices.Contains(argv, "-dm") {
+			band = " -R0 1 3 4 5 6 7 8 9 10 " // the void marks' search: the planets alone
+		}
+		if !strings.Contains(joined, band) {
 			t.Errorf("%v carries no Moon-less main band", argv)
 		}
+		// -t and -dm carry no transiting band (its default already omits the
+		// Moon); -tr mirrors the natal side minus the cusp points, so it keeps no
+		// Moon-less list either.
 		if strings.Contains(joined, " -RT0 ") {
-			t.Errorf("%v bands the transiting side, whose default already omits the Moon", argv)
+			if !strings.Contains(joined, " -tr ") || strings.Contains(joined, " -RT0 1 2 ") || !strings.Contains(joined, " -RT0 1 3 4 5 6 7 8 9 10 16 ") {
+				t.Errorf("%v bands the transiting side, want the Moon-less return list on -tr only", argv)
+			}
 		}
 	}
 }
 
 // the specification rule 2: a lookup.TimelineRow carries its
 // kind, its aspect and its second body as Astrolog named them, and the
-// registry values those names resolve to; a name no registry holds leaves the
-// row unresolved.
+// registry values those names resolve to; a name the registry does not list
+// leaves the row unresolved. Ceres is listed, so its row is resolved
+// (objects slice 0b).
 func TestTimelineRowsCarryTheirKind(t *testing.T) {
 	amPmMonthFirst(t)
 	sky := "Fri  5/ 1/2026  7:23pm     Sun (Tau) Opp (Sco) Moon (Full Moon)\n" +
@@ -454,24 +493,24 @@ func TestTimelineRowsCarryTheirKind(t *testing.T) {
 		kind     TimelineKind
 		aspect   string
 		other    string
-		body     aspect.Body
-		otherID  aspect.Body
+		object   aspect.Object
+		otherObj aspect.Object
 		aspectID aspect.AspectKind
 		resolved bool
 	}{
-		{"Sun (Tau) Opp (Sco) Moon", TimelineKindAspect, "Opp", "Moon", aspect.Sun, aspect.Moon, aspect.Opposition, true},
-		{"trans     Sun (Tau) Squ natal (Leo) Ascendant", TimelineKindAspect, "Squ", "Ascendant", aspect.Sun, aspect.Ascendant, aspect.Square, true},
-		{"Moon (Gem) --> Cancer", TimelineKindIngress, "", "", aspect.Moon, 0, 0, true},
-		{"Venus <Sco> S/R", TimelineKindStation, "", "", aspect.Venus, 0, 0, true},
-		{"Con [Gem] Ceres", TimelineKindAspect, "Con", "Ceres", aspect.Moon, 0, aspect.Conjunction, false},
+		{"Sun (Tau) Opp (Sco) Moon", TimelineKindAspect, "Opp", "Moon", objSun, objMoon, aspect.Opposition, true},
+		{"trans     Sun (Tau) Squ natal (Leo) Ascendant", TimelineKindAspect, "Squ", "Ascendant", objSun, objAscendant, aspect.Square, true},
+		{"Moon (Gem) --> Cancer", TimelineKindIngress, "", "", objMoon, aspect.Object{}, 0, true},
+		{"Venus <Sco> S/R", TimelineKindStation, "", "", objVenus, aspect.Object{}, 0, true},
+		{"Con [Gem] Ceres", TimelineKindAspect, "Con", "Ceres", objMoon, aspect.Object{Number: 12, Name: "Ceres"}, aspect.Conjunction, true},
 	}
 	for _, tc := range cases {
 		r := byLine(tc.frag)
-		if r.Kind != tc.kind || r.Aspect != tc.aspect || r.Other != tc.other || r.BodyID != tc.body ||
-			r.OtherID != tc.otherID || r.AspectID != tc.aspectID || r.Resolved != tc.resolved {
-			t.Errorf("%q: kind %d aspect %q other %q ids %d/%d/%d resolved %v, want %d %q %q %d/%d/%d %v", tc.frag,
-				r.Kind, r.Aspect, r.Other, r.BodyID, r.OtherID, r.AspectID, r.Resolved,
-				tc.kind, tc.aspect, tc.other, tc.body, tc.otherID, tc.aspectID, tc.resolved)
+		if r.Kind != tc.kind || r.Aspect != tc.aspect || r.Other != tc.other || r.Object != tc.object ||
+			r.OtherObject != tc.otherObj || r.AspectID != tc.aspectID || r.Resolved != tc.resolved {
+			t.Errorf("%q: kind %d aspect %q other %q objects %v/%v aspect %d resolved %v, want %d %q %q %v/%v %d %v", tc.frag,
+				r.Kind, r.Aspect, r.Other, r.Object, r.OtherObject, r.AspectID, r.Resolved,
+				tc.kind, tc.aspect, tc.other, tc.object, tc.otherObj, tc.aspectID, tc.resolved)
 		}
 	}
 	if r := byLine("Moon (Gem) --> Cancer"); r.Sign != "Cancer" || r.Direction != "-->" {

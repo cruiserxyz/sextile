@@ -26,16 +26,16 @@ import (
 // Moon, ③ Venus; anything else (now) Mars. The fake puts the LEFT chart's body
 // in OverlayAspect.Natal and the RIGHT chart's in .Transit, so a rendered row
 // says which chart was handed to Astrolog first.
-func sidedBody(year int) aspect.Body {
+func sidedBody(year int) aspect.Object {
 	switch year {
 	case 1961:
-		return aspect.Sun
+		return objSun
 	case 1962:
-		return aspect.Moon
+		return objMoon
 	case 1963:
-		return aspect.Venus
+		return objVenus
 	}
-	return aspect.Mars
+	return objMars
 }
 
 type sidedCalls struct {
@@ -71,25 +71,27 @@ func stubSidedCross(t *testing.T) (*sidedCalls, *columnCalls) {
 	t.Helper()
 	cols := stubColumnLookups(t, nil)
 	calls := &sidedCalls{}
-	row := func(left, right aspect.Body) lookup.OverlayAspects {
+	row := func(left, right aspect.Object) lookup.OverlayAspects {
 		return lookup.OverlayAspects{
-			Aspects: []lookup.OverlayAspect{{Natal: left, Transit: right, Kind: aspect.Square, Orb: 0.5, Power: 5}},
+			Aspects: []lookup.OverlayAspect{{NatalObject: left, TransitObject: right, Kind: aspect.Square, Orb: 0.5, Power: 5}},
 			Report:  "cross",
 		}
 	}
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, at time.Time, atPlace location.PlaceInfo) (lookup.OverlayAspects, error) {
-		calls.mu.Lock()
-		calls.rt = append(calls.rt, natal)
-		calls.rtAt = append(calls.rtAt, store.AnchorChart{When: at, Place: atPlace})
-		calls.mu.Unlock()
-		return row(sidedBody(natal.When.Year()), aspect.Mars), nil
-	}
-	synastryCrossAspects = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		calls.mu.Lock()
-		calls.synastry = append(calls.synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
-		calls.mu.Unlock()
-		return row(sidedBody(c.When.Year()), sidedBody(when.Year())), nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, at time.Time, atPlace location.PlaceInfo) (lookup.OverlayAspects, error) {
+			calls.mu.Lock()
+			calls.rt = append(calls.rt, natal)
+			calls.rtAt = append(calls.rtAt, store.AnchorChart{When: at, Place: atPlace})
+			calls.mu.Unlock()
+			return row(sidedBody(natal.When.Year()), objMars), nil
+		}
+		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			calls.mu.Lock()
+			calls.synastry = append(calls.synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
+			calls.mu.Unlock()
+			return row(sidedBody(c.When.Year()), sidedBody(when.Year())), nil
+		}
+	})
 	return calls, cols
 }
 
@@ -107,11 +109,12 @@ func crossRows(t *testing.T, m Model) string {
 	return strings.Join(rows, "\n")
 }
 
-// Rule 4: the left glyph of a cross row is the left chart's body, the base's.
-// Two charts flip their sides with the cursor: ① read in ② puts ②'s Moon left
-// of ①'s Sun, and landing on ②, the base, swaps it to ② read in ① with ①'s Sun
-// on the left. With now selected as ③ and the cursor on it, the `③ in ②` rows
-// carry ②'s body left and now's right.
+// Rule 4: the left glyph of a cross row is the cursor's body, as the tab's
+// title names it first (operator, 2026-11-06: "make it consistent"). Two charts
+// flip their sides with the cursor: ① read in ② puts ①'s Sun left of ②'s Moon,
+// and landing on ②, the base, swaps it to ② read in ① with ②'s Moon on the
+// left. With now selected as ③ and the cursor on it, the `③ in ②` rows carry
+// now's body left and ②'s right.
 func TestTwoChartsFlipTheirSides(t *testing.T) {
 	_, _ = stubSidedCross(t)
 	settle := func(m Model) Model {
@@ -124,16 +127,16 @@ func TestTwoChartsFlipTheirSides(t *testing.T) {
 	m := selectedSet(t, 2, false, 0)
 	m.base = m.slots.All()[1] // ① read in ②
 	m = settle(m)
-	if rows := crossRows(t, m); !strings.Contains(rows, "☽ □ ☉") || strings.Contains(rows, "☉ □ ☽") {
-		t.Fatalf("cursor on ①: the cross rows are not ②'s Moon left of ①'s Sun:\n%s", rows)
+	if rows := crossRows(t, m); !strings.Contains(rows, "☉ □ ☽") || strings.Contains(rows, "☽ □ ☉") {
+		t.Fatalf("cursor on ①: the cross rows are not ①'s Sun left of ②'s Moon:\n%s", rows)
 	}
 	m, cmd := tpress(t, m, keyDown)
 	m = pump(t, m, cmd)
 	if m.cursorIdx != 1 || m.activeTabID(PanelAspects) != TabAspectsCross {
 		t.Fatalf("fixture: cursor %d, active %q", m.cursorIdx, m.activeTabID(PanelAspects))
 	}
-	if rows := crossRows(t, m); !strings.Contains(rows, "☉ □ ☽") || strings.Contains(rows, "☽ □ ☉") {
-		t.Errorf("cursor on ②: the cross rows are not ①'s Sun left of ②'s Moon:\n%s", rows)
+	if rows := crossRows(t, m); !strings.Contains(rows, "☽ □ ☉") || strings.Contains(rows, "☉ □ ☽") {
+		t.Errorf("cursor on ②: the cross rows are not ②'s Moon left of ①'s Sun:\n%s", rows)
 	}
 
 	// Now selected as ③, the cursor on now, read in ②: `③ in ②`.
@@ -143,8 +146,8 @@ func TestTwoChartsFlipTheirSides(t *testing.T) {
 	if got := titlesOf(m.panelTabs(PanelAspects)); strings.Join(got, "|") != "Aspects|3 in 1|3 in 2" {
 		t.Fatalf("fixture: tabs %v", got)
 	}
-	if rows := crossRows(t, m); !strings.Contains(rows, "☽ □ ♂") || strings.Contains(rows, "♂ □") || strings.Contains(rows, "☉ □") {
-		t.Errorf("③ in ②: the cross rows are not ②'s Moon left of now's Mars:\n%s", rows)
+	if rows := crossRows(t, m); !strings.Contains(rows, "♂ □ ☽") || strings.Contains(rows, "☽ □") || strings.Contains(rows, "☉") {
+		t.Errorf("③ in ②: the cross rows are not now's Mars left of ②'s Moon:\n%s", rows)
 	}
 }
 
@@ -205,6 +208,7 @@ func TestPairArgvFollowsTheSides(t *testing.T) {
 	if len(got.dats) != 2 || !strings.Contains(got.dats[0], wantLines["① of 2"]) || !strings.Contains(got.dats[1], wantLines["② of 2"]) {
 		t.Errorf("-r0 after `]` on ② staged chart lines are not ① then ②: %q", got.dats)
 	}
+	freshModels(t)
 	calls, _ := stubSidedCross(t)
 	settle := func(m Model) Model {
 		m.cfg = Config{Color: ColorNever}
@@ -345,30 +349,30 @@ func TestAspectsPairsFrames(t *testing.T) {
 		own       []aspect.Aspect // the cursor's own list, for the `Aspects` tab
 		base      int             // list index of the base, -1 for the chart's own tab
 	}{
-		// The cursor on now, read in ②: now on the right.
+		// The cursor on now, read in ②: now on the left (operator, 2026-11-06).
 		{"aspects-pairs-now-right-156x40-never", true, 2, false, []lookup.OverlayAspect{
-			{Natal: aspect.Midheaven, Transit: aspect.Venus, Kind: aspect.Trine, Orb: 0, Power: 9, Applying: true},
-			{Natal: aspect.Mercury, Transit: aspect.Jupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
+			{NatalObject: objMidheaven, TransitObject: objVenus, Kind: aspect.Trine, Orb: 0, Power: 9, Applying: true},
+			{NatalObject: objMercury, TransitObject: objJupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
 		}, "[3] Aspects - 3 in 1 - [3 in 2]", nil, 1},
-		// The cursor on ①, read in ②: a synastry, ②'s body on the left.
+		// The cursor on ①, read in ②: a synastry, ①'s body on the left.
 		{"aspects-pairs-cursor-one-156x40-never", true, 0, true, []lookup.OverlayAspect{
-			{Natal: aspect.Midheaven, Transit: aspect.Venus, Kind: aspect.Trine, Orb: 0, Power: 9},
-			{Natal: aspect.Mercury, Transit: aspect.Jupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
+			{NatalObject: objMidheaven, TransitObject: objVenus, Kind: aspect.Trine, Orb: 0, Power: 9},
+			{NatalObject: objMercury, TransitObject: objJupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
 		}, "[3] Aspects - [1 in 2]", nil, 1},
 		// V1 of the specification: the cursor on now, the
 		// `Aspects` tab, now's own list.
 		{"aspects-pairs-cursor-now-156x40-never", true, 2, false, []lookup.OverlayAspect{
-			{Natal: aspect.Midheaven, Transit: aspect.Venus, Kind: aspect.Trine, Orb: 0, Power: 9, Applying: true},
-			{Natal: aspect.Mercury, Transit: aspect.Jupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
+			{NatalObject: objMidheaven, TransitObject: objVenus, Kind: aspect.Trine, Orb: 0, Power: 9, Applying: true},
+			{NatalObject: objMercury, TransitObject: objJupiter, Kind: aspect.Conjunction, Orb: 1.2003, Power: 6},
 		}, "[3] [Aspects] - 3 in 1 - 3 in 2", []aspect.Aspect{
-			{A: aspect.Sun, B: aspect.Moon, Kind: aspect.Square, Orb: 0.5, Power: 9},
-			{A: aspect.Moon, B: aspect.Mars, Kind: aspect.Trine, Orb: 1.25, Power: 7},
+			{AObject: objSun, BObject: objMoon, Kind: aspect.Square, Orb: 0.5, Power: 9},
+			{AObject: objMoon, BObject: objMars, Kind: aspect.Trine, Orb: 1.25, Power: 7},
 		}, -1},
 		{"aspects-pairs-two-flip-144x40-never", false, 1, true, []lookup.OverlayAspect{
-			// The pair `1 in 2` showed as ☽ □ ☉ (②'s Moon, ①'s Sun); seen as
-			// `2 in 1` the same aspects put ①'s body on the left (rule 4).
-			{Natal: aspect.Sun, Transit: aspect.Moon, Kind: aspect.Square, Orb: 0.5, Power: 9},
-			{Natal: aspect.Venus, Transit: aspect.Jupiter, Kind: aspect.Trine, Orb: 1.3837, Power: 6},
+			// The pair `1 in 2` shows ☉ □ ☽ (①'s Sun, ②'s Moon); seen as
+			// `2 in 1` the same aspects put ②'s body on the left (rule 4).
+			{NatalObject: objSun, TransitObject: objMoon, Kind: aspect.Square, Orb: 0.5, Power: 9},
+			{NatalObject: objVenus, TransitObject: objJupiter, Kind: aspect.Trine, Orb: 1.3837, Power: 6},
 		}, "[3] Aspects - [2 in 1]", nil, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -453,6 +457,7 @@ func TestAspectsStripFollowsTheCursorKeys(t *testing.T) {
 	}
 	step := func(m Model, k tea.KeyMsg) Model {
 		t.Helper()
+		m = m.forgetMemory() // the test reads the compute a key asks for: a place seen before is answered from memory
 		calls.reset()
 		m, cmd := tpress(t, m, k)
 		return pump(t, m, cmd)
@@ -462,33 +467,33 @@ func TestAspectsStripFollowsTheCursorKeys(t *testing.T) {
 	calls.reset()
 	m, cmd = m.afterComparisonChange()
 	m = pump(t, m, cmd)
-	check("cursor ①", m, "[3] [Aspects] - 1 in 2", TabAspects, "☽ □ ☉", nil, nil, false)
+	check("cursor ①", m, "[3] [Aspects] - 1 in 2", TabAspects, "☉ □ ☽", nil, nil, false)
 
 	// `]` from the own tab reaches `1 in 2`: one -r0 with ② as chart 1.
 	m = step(m, runes("3"))
 	m = step(m, runes("]"))
-	check("] on ①", m, "[3] Aspects - [1 in 2]", TabAspectsCross, "☽ □ ☉", all[1], all[0], true)
+	check("] on ①", m, "[3] Aspects - [1 in 2]", TabAspectsCross, "☉ □ ☽", all[1], all[0], true)
 	m = step(m, runes("1"))
 
 	// Down onto ②, the base: the chart you came from, ①, becomes the base.
 	m = step(m, keyDown)
-	check("Down to ②", m, "[3] Aspects - [2 in 1]", TabAspectsCross, "☉ □ ☽", all[0], all[1], true)
+	check("Down to ②", m, "[3] Aspects - [2 in 1]", TabAspectsCross, "☽ □ ☉", all[0], all[1], true)
 
 	// Down to now: ① stays the base, one -rt with ① as the natal.
 	m = step(m, keyDown)
-	check("Down to now", m, "[3] Aspects - [3 in 1] - 3 in 2", TabAspectsCross, "☉ □ ♂", all[0], all[2], false)
+	check("Down to now", m, "[3] Aspects - [3 in 1] - 3 in 2", TabAspectsCross, "♂ □ ☉", all[0], all[2], false)
 
 	// `]` on now picks `3 in 2`: the natal follows the tab.
 	m = step(m, runes("3"))
 	m = step(m, runes("]"))
-	check("] on now", m, "[3] Aspects - 3 in 1 - [3 in 2]", aspectsPairTabID(2, 3), "☽ □ ♂", all[1], all[2], false)
+	check("] on now", m, "[3] Aspects - 3 in 1 - [3 in 2]", aspectsPairTabID(2, 3), "♂ □ ☽", all[1], all[2], false)
 	m = step(m, runes("]"))
-	check("]] on now", m, "[3] [Aspects] - 3 in 1 - 3 in 2", TabAspects, "☉ □ ♂", nil, nil, false)
+	check("]] on now", m, "[3] [Aspects] - 3 in 1 - 3 in 2", TabAspects, "♂ □ ☉", nil, nil, false)
 	m = step(m, runes("1"))
 
 	// The own tab was chosen, so it follows the cursor up to ②.
 	m = step(m, keyUp)
-	check("Up to ②", m, "[3] [Aspects] - 2 in 1", TabAspects, "☉ □ ☽", nil, nil, false)
+	check("Up to ②", m, "[3] [Aspects] - 2 in 1", TabAspects, "☽ □ ☉", nil, nil, false)
 
 	// `]` on ② reaches `2 in 1`: one -r0, ① as chart 1 then ②.
 	m = step(m, runes("3"))
@@ -496,7 +501,7 @@ func TestAspectsStripFollowsTheCursorKeys(t *testing.T) {
 		t.Fatalf("`3` did not focus Aspects (focused %v)", m.focused)
 	}
 	m = step(m, runes("]"))
-	check("] on ②", m, "[3] Aspects - [2 in 1]", TabAspectsCross, "☉ □ ☽", all[0], all[1], true)
+	check("] on ②", m, "[3] Aspects - [2 in 1]", TabAspectsCross, "☽ □ ☉", all[0], all[1], true)
 	if m.cursorIdx != 1 {
 		t.Errorf("`]` moved the slot cursor to %d", m.cursorIdx)
 	}
@@ -504,5 +509,5 @@ func TestAspectsStripFollowsTheCursorKeys(t *testing.T) {
 	// Up onto ①, the base: ②, the chart you came from, becomes the base.
 	m = step(m, runes("1"))
 	m = step(m, keyUp)
-	check("Up to ① the base", m, "[3] Aspects - [1 in 2]", TabAspectsCross, "☽ □ ☉", all[1], all[0], true)
+	check("Up to ① the base", m, "[3] Aspects - [1 in 2]", TabAspectsCross, "☉ □ ☽", all[1], all[0], true)
 }

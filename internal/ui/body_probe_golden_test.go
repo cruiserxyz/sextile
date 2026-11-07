@@ -2,9 +2,11 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"strings"
 	"testing"
 
+	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -20,25 +22,26 @@ func TestBodyModalEphemerisGolden(t *testing.T) {
 	reg := make([]aspect.RegistryObject, 0, 40)
 	names := []string{"Earth", "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron", "Ceres", "Pallas", "Juno", "Vesta"}
 	for i, n := range names {
-		reg = append(reg, aspect.RegistryObject{Number: i, Name: n})
+		reg = append(reg, aspect.RegistryObject{Object: aspect.Object{Number: i, Name: n}})
 	}
 	for i := len(names); i < 40; i++ {
-		reg = append(reg, aspect.RegistryObject{Number: 40 + i, Name: fmt.Sprintf("Asteroid %d", i)})
+		reg = append(reg, aspect.RegistryObject{Object: aspect.Object{Number: 40 + i, Name: fmt.Sprintf("Asteroid %d", i)}})
 	}
 	// cursor is a LIST row (0 = Earth); the group rows sit above it.
-	build := func(cursor int, marks map[int][]string) bodyModalState {
-		st := openBodyModal(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}}, nil)
+	build := func(cursor int, marks map[int][]string) popup.Body {
+		st := popup.Open(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}}, nil)
 		for obj, files := range marks {
-			st.recordProbe(obj, len(files) == 0, files)
+			said := "SwissEph file '" + files[0] + "' not found in PATH '/usr/local/share/astrolog/'"
+			st.SetProbe(obj, st.Inputs, lookup.BodyProbe{MissingFiles: files, Said: said})
 		}
-		st.cursor = groupRows() + cursor
-		st.scrollTo(cursor, bodyListHeight(24))
+		st.Cursor = popup.GroupRows() + cursor
+		st.ScrollTo(cursor, popup.ListHeight(24))
 		return st
 	}
 	long := []string{"se_a_very_long_ephemeris_file_name_for_one_asteroid.se1", "second.se1"}
 	frames := []struct {
 		label string
-		state bodyModalState
+		state popup.Body
 		w, h  int
 	}{
 		{"unprobed row under the cursor", build(2, nil), 80, 24},

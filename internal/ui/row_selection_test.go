@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 	"time"
@@ -10,12 +12,13 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 func rowSelectionModel(t *testing.T) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -28,18 +31,18 @@ func rowSelectionModel(t *testing.T) Model {
 	m.cursorIdx = 1
 	m.place = testPlaceBerlin()
 	m.chart.positions = []aspect.Position{
-		{Body: aspect.Midheaven, Longitude: 100},
-		{Body: aspect.Sun, Longitude: 35},
-		{Body: aspect.Moon, Longitude: 136},
-		{Body: aspect.Mars, Longitude: 210},
-		{Body: aspect.Jupiter, Longitude: 240},
-		{Body: aspect.Saturn, Longitude: 270},
-		{Body: aspect.Uranus, Longitude: 300},
-		{Body: aspect.Neptune, Longitude: 330},
-		{Body: aspect.Pluto, Longitude: 15},
-		{Body: aspect.Ascendant, Longitude: 10},
-		{Body: aspect.Descendant, Longitude: 190},
-		{Body: aspect.ImumCoeli, Longitude: 280},
+		{Object: objMidheaven, Longitude: 100},
+		{Object: objSun, Longitude: 35},
+		{Object: objMoon, Longitude: 136},
+		{Object: objMars, Longitude: 210},
+		{Object: objJupiter, Longitude: 240},
+		{Object: objSaturn, Longitude: 270},
+		{Object: objUranus, Longitude: 300},
+		{Object: objNeptune, Longitude: 330},
+		{Object: objPluto, Longitude: 15},
+		{Object: objAscendant, Longitude: 10},
+		{Object: objDescendant, Longitude: 190},
+		{Object: objNadir, Longitude: 280},
 	}
 	return m
 }
@@ -56,17 +59,17 @@ func TestBodiesOwnsArrowCursorAndSpaceSelection(t *testing.T) {
 	if m.cursorIdx != 1 {
 		t.Fatalf("slot cursor moved while Bodies owned focus: %d", m.cursorIdx)
 	}
-	body, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx)
-	if !ok || body != aspect.Moon {
-		t.Fatalf("body cursor resolved to (%v, %v), want Moon", body, ok)
+	obj, ok := panel.ObjectAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx)
+	if !ok || obj != objMoon {
+		t.Fatalf("body cursor resolved to (%v, %v), want Moon", obj, ok)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = updated.(Model)
-	if !m.slots.BodySelected(1, aspect.Moon) {
+	if !m.slots.ObjectSelected(1, objMoon.Number) {
 		t.Error("Space did not persist floating-slot Moon selection in store")
 	}
-	if m.slots.BodySelected(0, aspect.Moon) {
+	if m.slots.ObjectSelected(0, objMoon.Number) {
 		t.Error("floating-slot body selection leaked into natal slot")
 	}
 }
@@ -138,12 +141,12 @@ func TestChartSpaceAndTDeriveComparisonFromSlotSelection(t *testing.T) {
 func TestBodiesCursorScrollsWithTheAnglesNotPinned(t *testing.T) {
 	m := rowSelectionModel(t)
 	m.bodyCursorIdx = 7 // Pluto in planets-then-angles order
-	m.slots.ToggleBodySelection(1, aspect.Pluto)
+	m.slots.ToggleObjectSelection(1, objPluto)
 
 	// With colours off the cursor row is reverse video and opens with the
 	// cursor column, then the selection column.
 	focused, _, _ := renderBodiesBody(m.chart, m.slots, 1, m.bodyCursorIdx, 48, 6, true, Config{Accessible: true})
-	if !strings.Contains(focused, cursorRowOff+rowCursorASCII+rowSelectionASCII+" ♇ Pluto") {
+	if !strings.Contains(focused, term.CursorRowOff+menu.RowCursorASCII+menu.RowSelectionASCII+" ♇ Pluto") {
 		t.Fatalf("focused selected Pluto row lacks the cursor row, cursor marker and selection marker:\n%s", focused)
 	}
 	// Nothing is pinned (the specification sentence 5, reversing
@@ -167,21 +170,21 @@ func TestBodiesCursorScrollsWithTheAnglesNotPinned(t *testing.T) {
 	}
 
 	unfocused, _, _ := renderBodiesBody(m.chart, m.slots, 1, m.bodyCursorIdx, 48, 6, false, Config{Accessible: true})
-	if strings.Contains(unfocused, rowCursorASCII) {
+	if strings.Contains(unfocused, menu.RowCursorASCII) {
 		t.Fatalf("Bodies retained cursor after losing panel focus:\n%s", unfocused)
 	}
 	// The cursor row (Pluto) stays bold without the keyboard, and nothing else
 	// does: no reverse, no other bold row (the specification).
-	if !strings.Contains(unfocused, sgrBold+rowSelectionASCII+" ♇ Pluto") || strings.Count(unfocused, sgrBold) != 1 || strings.Contains(unfocused, sgrReverse) {
+	if !strings.Contains(unfocused, term.SGRBold+menu.RowSelectionASCII+" ♇ Pluto") || strings.Count(unfocused, term.SGRBold) != 1 || strings.Contains(unfocused, term.SGRReverse) {
 		t.Fatalf("Bodies lost the persistent marker, or its cursor row is not the one bold row, after losing panel focus:\n%s", unfocused)
 	}
 	for _, line := range strings.Split(unfocused, "\n") {
 		plain := astrologstyle.StripSGR(line)
-		if strings.Contains(plain, "Sun") && !strings.HasPrefix(plain, rowMarkerBlank+"☉ Sun") {
+		if strings.Contains(plain, "Sun") && !strings.HasPrefix(plain, menu.RowMarkerBlank+"☉ Sun") {
 			t.Fatalf("unselected row did not reserve the active selection column: %q", plain)
 		}
 	}
-	m.slots.ToggleBodySelection(1, aspect.Pluto)
+	m.slots.ToggleObjectSelection(1, objPluto)
 	cleared, _, _ := renderBodiesBody(m.chart, m.slots, 1, m.bodyCursorIdx, 48, 6, false, Config{Accessible: true})
 	for _, line := range strings.Split(cleared, "\n") {
 		plain := astrologstyle.StripSGR(line)
@@ -198,9 +201,9 @@ func TestBodiesCursorScrollsWithTheAnglesNotPinned(t *testing.T) {
 func TestCursorRowKeepsAstrologColour(t *testing.T) {
 	forceColor(t)
 	cfg := Config{Color: ColorAlways}
-	band := cursorBandStart(cfg)
-	got := renderRowState("\x1b[91mMars\x1b[0m", 8, true, cfg)
-	want := band + "\x1b[91m" + band + "Mars\x1b[0m" + band + "    " + sgrReset
+	band := term.CursorBandStart(cfg)
+	got := menu.RenderRowState("\x1b[91mMars\x1b[0m", 8, true, cfg)
+	want := band + "\x1b[91m" + band + "Mars\x1b[0m" + band + "    " + term.SGRReset
 	if got != want {
 		t.Errorf("cursor row = %q, want %q", got, want)
 	}
@@ -210,7 +213,7 @@ func TestCursorRowKeepsAstrologColour(t *testing.T) {
 func TestSelectionAddsNothingToTheRow(t *testing.T) {
 	row := "Mars \x1b[91mred\x1b[0m end"
 	for _, cfg := range []Config{{Color: ColorAlways}, {Color: ColorNever}, {Accessible: true}} {
-		if got := renderRowState(row, 40, false, cfg); got != row {
+		if got := menu.RenderRowState(row, 40, false, cfg); got != row {
 			t.Errorf("%+v: a row off the cursor = %q, want it untouched", cfg, got)
 		}
 	}

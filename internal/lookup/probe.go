@@ -18,6 +18,9 @@ type BodyProbe struct {
 	// MissingFiles names the ephemeris files Astrolog reported absent for this
 	// call, exactly as it printed them. Empty when Drawable.
 	MissingFiles []string
+	// Said is the first line Astrolog wrote on stderr for this call ("" when
+	// it wrote none). Empty when Drawable.
+	Said string
 }
 
 // ProbeBody asks Astrolog about ONE object, by registry number, in the chart's
@@ -30,8 +33,8 @@ type BodyProbe struct {
 //
 // The file names are Astrolog's own, read from the call's stderr; Sextile keeps
 // no table of which file belongs to which body. A call that gives the body no
-// position while naming no missing file is an error, not a verdict: nothing is
-// known about why.
+// position while naming no file (a generic stderr line, a silently missing row)
+// is a verdict too: not drawable, no file.
 func ProbeBody(ctx context.Context, probers *Probers, when time.Time, place location.PlaceInfo, lens Lens, object int) (BodyProbe, error) {
 	if !place.HasTimezone() {
 		return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: place %q has no IANA timezone", place.Display())
@@ -41,7 +44,7 @@ func ProbeBody(ctx context.Context, probers *Probers, when time.Time, place loca
 	if err != nil {
 		return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: %w", err)
 	}
-	raw, err := probers.positionsOnly()(ctx, spec)
+	raw, err := probers.probe()(ctx, spec)
 	if err != nil {
 		return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: %w", err)
 	}
@@ -49,7 +52,9 @@ func ProbeBody(ctx context.Context, probers *Probers, when time.Time, place loca
 	case len(raw.Positions) > 0:
 		return BodyProbe{Drawable: true}, nil
 	case len(raw.MissingEphemeris) > 0:
-		return BodyProbe{MissingFiles: raw.MissingEphemeris}, nil
+		return BodyProbe{MissingFiles: raw.MissingEphemeris, Said: raw.Said}, nil
 	}
-	return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: object %d has no position and Astrolog named no missing file", object)
+	// No position and no file: still "asked for and not returned at a real
+	// position", so not drawable, whatever Astrolog said or did not say.
+	return BodyProbe{Said: raw.Said}, nil
 }

@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"strings"
 	"testing"
 
@@ -68,15 +70,15 @@ func attachedReport(t *testing.T, onPair bool, title, body string) Model {
 }
 
 func hasSearchBinding(m Model) bool {
-	for _, e := range m.available(m.keys.detailsBindings()) {
-		if e.ID == BindingSearch {
+	for _, e := range m.available(ownerDetails, detailsBindings(m.keys)) {
+		if e.ID == keys.BindingSearch {
 			return true
 		}
 	}
 	return false
 }
 
-func viewText(m Model) string { return strings.Join(m.detailsView().lines, "\n") }
+func viewText(m Model) string { return strings.Join(m.detailsView().Lines, "\n") }
 
 // Acceptance 2: `/squ` keeps the 2 header lines, every Squ row and the 5
 // footer lines, and the query line says N of M with M the row count.
@@ -88,7 +90,7 @@ func TestSlashKeepsHeaderAndFooterAroundTheMatchingRows(t *testing.T) {
 	}
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, "squ") // exact, so Squ and nothing fuzzier
-	src := detailsReportLines(body)
+	src := panel.ReportLines(body)
 	var want []string
 	want = append(want, src[:2]...)
 	for _, l := range src[2:10] {
@@ -97,7 +99,7 @@ func TestSlashKeepsHeaderAndFooterAroundTheMatchingRows(t *testing.T) {
 		}
 	}
 	want = append(want, src[10:]...)
-	if got := m.detailsView().lines; strings.Join(got, "\n") != strings.Join(want, "\n") {
+	if got := m.detailsView().Lines; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("lines =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if len(want) != 2+4+5 {
@@ -124,8 +126,8 @@ func TestSlashFiltersComparisonAndBodyReports(t *testing.T) {
 	m := attachedReport(t, true, "[0] Aspects ②", body)
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, "squ")
-	src := detailsReportLines(body)
-	got := m.detailsView().lines
+	src := panel.ReportLines(body)
+	got := m.detailsView().Lines
 	if strings.Join(got[:3], "\n") != strings.Join(src[:3], "\n") || strings.Join(got[len(got)-3:], "\n") != strings.Join(src[len(src)-3:], "\n") {
 		t.Errorf("comparison header/footer moved:\n%s", strings.Join(got, "\n"))
 	}
@@ -140,7 +142,7 @@ func TestSlashFiltersComparisonAndBodyReports(t *testing.T) {
 	b.details.title, b.details.body, b.details.attached = "[0] Moon", ownFilterBody(4), true
 	b, _ = tpress(t, b, runes("/"))
 	b = typeQuery(t, b, "/tri")
-	if got := b.detailsView().lines; len(got) != 2+1+5 {
+	if got := b.detailsView().Lines; len(got) != 2+1+5 {
 		t.Errorf("single body report: %d lines kept, want 2 + 1 Tri row + 5:\n%s", len(got), strings.Join(got, "\n"))
 	}
 }
@@ -156,7 +158,7 @@ func TestMultiLineRecordIsKeptWholeWhenAnyLineMatches(t *testing.T) {
 	m := attachedReport(t, false, "[0] Aspects", body)
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, "/makes")
-	got := m.detailsView().lines
+	got := m.detailsView().Lines
 	want := []string{"Astrolog 8.00 chart for X", "",
 		"  1:    Moon (Aqu) Con [Tau] Chiron     - orb: s0°50' - power: 11.09",
 		"        Midpoint Moon makes Con with Chiron", "        second note line",
@@ -243,8 +245,8 @@ func TestQueryLivesAndDiesWithTheReportTitle(t *testing.T) {
 	frame2.AspectsReport = ownFilterBody(8)
 	m, cmd = applyTextCommit(m, frame2)
 	m = pump(t, m, cmd)
-	if m.details.query != "squ" || len(m.detailsView().lines) != 2+4+5 {
-		t.Errorf("after a refresh of the same title: query %q, %d lines, want it kept and 4 Squ rows", m.details.query, len(m.detailsView().lines))
+	if m.details.query != "squ" || len(m.detailsView().Lines) != 2+4+5 {
+		t.Errorf("after a refresh of the same title: query %q, %d lines, want it kept and 4 Squ rows", m.details.query, len(m.detailsView().Lines))
 	}
 	if m.timeline.query != "" {
 		t.Errorf("Details' query leaked into the timeline: %q", m.timeline.query)
@@ -264,7 +266,7 @@ func TestQueryLivesAndDiesWithTheReportTitle(t *testing.T) {
 // nothing.
 func TestWaitingReportIgnoresTheQueryKeys(t *testing.T) {
 	m := attachedReport(t, false, "[0] Aspects", ownFilterBody(6))
-	m.details.pending = true
+	m = m.withReportWaiting(true)
 	if !m.detailsTabWaiting(TabDetailsReport) {
 		t.Fatal("fixture: the report is not waiting")
 	}
@@ -273,16 +275,16 @@ func TestWaitingReportIgnoresTheQueryKeys(t *testing.T) {
 		t.Error("/ opened the line on a waiting report")
 	}
 	// A line that was open when the wait began swallows the keys.
-	m.details.pending = false
+	m = m.withReportWaiting(false)
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, "sq")
-	m.details.pending = true
+	m = m.withReportWaiting(true)
 	m, _ = tpress(t, m, runes("u"))
 	m, _ = tpress(t, m, keyEnter)
 	if m.details.query != "sq" || !m.details.searching {
 		t.Errorf("a waiting report took query keys: query %q searching=%v", m.details.query, m.details.searching)
 	}
-	m.details.pending = false
+	m = m.withReportWaiting(false)
 	m = typeQuery(t, m, "u")
 	if m.details.query != "squ" {
 		t.Errorf("settled, the line did not type again: %q", m.details.query)
@@ -305,7 +307,7 @@ func TestEmptyQueryIsByteIdenticalAndScrollReclamps(t *testing.T) {
 	if renderDetailsPanel(r.w, r.h, true, m.cfg, fr) != renderDetailsPanel(r.w, r.h, true, m.cfg, fr2) {
 		t.Error("an empty query changed the report's drawing")
 	}
-	if got := opened.detailsView().lines; strings.Join(got, "\n") != strings.Join(detailsReportLines(body), "\n") {
+	if got := opened.detailsView().Lines; strings.Join(got, "\n") != strings.Join(panel.ReportLines(body), "\n") {
 		t.Error("an open line with an empty query changed the lines")
 	}
 	// Scroll to the end, then filter down to a handful of rows.
@@ -317,7 +319,7 @@ func TestEmptyQueryIsByteIdenticalAndScrollReclamps(t *testing.T) {
 	}
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, "/tri")
-	lines := len(m.detailsView().lines)
+	lines := len(m.detailsView().Lines)
 	if limit := max(0, lines-m.detailsReportHeight()); m.details.scrollOffset > limit {
 		t.Errorf("offset %d beyond what %d filtered lines can scroll (%d)", m.details.scrollOffset, lines, limit)
 	}

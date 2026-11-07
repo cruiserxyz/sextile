@@ -2,11 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // The Details report tab's `/` filter (the specification). A report
@@ -40,7 +43,7 @@ func (m Model) detailsGrammar() lookup.ReportGrammar {
 // detailsReportFilterable is whether `/` has a list to act on: the report tab
 // is active and its text holds exactly one list under its grammar.
 func (m Model) detailsReportFilterable() bool {
-	_, ok := lookup.ReportListSpans(m.details.body, m.detailsGrammar())
+	_, ok := lookup.ReportListSpans(m.detailsBodyShown(), m.detailsGrammar())
 	return ok
 }
 
@@ -69,23 +72,18 @@ func (m Model) detailsReportSearchOpen() bool {
 	return m.details.searching && m.details.attached && m.detailsReportSearchLine()
 }
 
-// detailsViewLines is what the report tab draws: the lines the panel scrolls,
-// and, when the query line is there, how many records it keeps of how many.
-type detailsViewLines struct {
-	lines        []string
-	line         bool // the query line takes the panel's last row
-	shown, total int
-}
-
 // detailsView is the report's lines under the query. With no query it is the
 // report as printed, byte for byte.
-func (m Model) detailsView() detailsViewLines {
-	lines := detailsReportLines(m.details.body)
-	spans, ok := lookup.ReportListSpans(m.details.body, m.detailsGrammar())
+func (m Model) detailsView() panel.ViewLines { return m.detailsViewOf(m.detailsBodyShown()) }
+
+// detailsViewOf is detailsView for a report text the caller names.
+func (m Model) detailsViewOf(body string) panel.ViewLines {
+	lines := panel.ReportLines(body)
+	spans, ok := lookup.ReportListSpans(body, m.detailsGrammar())
 	if !ok {
-		return detailsViewLines{lines: lines}
+		return panel.ViewLines{Lines: lines}
 	}
-	v := detailsViewLines{lines: lines, line: m.detailsReportSearchLine(), shown: len(spans.Records), total: len(spans.Records)}
+	v := panel.ViewLines{Lines: lines, Line: m.detailsReportSearchLine(), Shown: len(spans.Records), Total: len(spans.Records)}
 	if m.details.query == "" {
 		return v
 	}
@@ -93,7 +91,7 @@ func (m Model) detailsView() detailsViewLines {
 	for i, r := range spans.Records {
 		recs[i] = strings.Join(lines[r.Start:r.End], " ")
 	}
-	kept, n, total := listFilter{query: m.details.query}.apply(recs, 0)
+	kept, n, total := menu.Filter{Query: m.details.query}.Apply(recs, 0)
 	out := make([]string, 0, len(lines))
 	out = append(out, lines[spans.Header.Start:spans.Header.End]...)
 	if n == 0 && total > 0 {
@@ -103,7 +101,7 @@ func (m Model) detailsView() detailsViewLines {
 		out = append(out, lines[spans.Records[i].Start:spans.Records[i].End]...)
 	}
 	out = append(out, lines[spans.Footer.Start:spans.Footer.End]...)
-	v.lines, v.shown, v.total = out, n, total
+	v.Lines, v.Shown, v.Total = out, n, total
 	return v
 }
 
@@ -111,7 +109,7 @@ func (m Model) detailsView() detailsViewLines {
 // height, less the query line when it is there.
 func (m Model) detailsReportHeight() int {
 	h := m.detailsInnerHeight()
-	if h > 0 && m.detailsView().line {
+	if h > 0 && m.detailsView().Line {
 		h--
 	}
 	return h
@@ -131,10 +129,10 @@ func (m Model) updateDetailsReportSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	if m.detailsReportFilterBlocked() {
 		return m, nil
 	}
-	switch matchBinding(msg, reportSearchBindings()) {
-	case BindingScrollUp:
+	switch keys.MatchBinding(msg, reportSearchBindings()) {
+	case keys.BindingScrollUp:
 		return m.scrollDetails(-detailsScrollStep), nil
-	case BindingScrollDown:
+	case keys.BindingScrollDown:
 		return m.scrollDetails(detailsScrollStep), nil
 	}
 	switch msg.Type {
@@ -147,9 +145,9 @@ func (m Model) updateDetailsReportSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		m.details.scrollOffset = m.searchBefore.scrollOffset
 		return m.clampDetailsOffset(), nil
 	}
-	l := fuzzyList[struct{}]{filterText: m.details.query}
-	if l.typeKey(msg) {
-		m.details.query = l.filterText
+	l := menu.FuzzyList[struct{}]{FilterText: m.details.query}
+	if l.TypeKey(msg) {
+		m.details.query = l.FilterText
 		m = m.clampDetailsOffset()
 	}
 	return m, nil

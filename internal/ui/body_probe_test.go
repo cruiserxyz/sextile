@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"os"
 	"reflect"
 	"slices"
@@ -28,14 +30,14 @@ import (
 // rows that are never probed. Numbers follow Astrolog's own registry.
 func probeRegistry() []aspect.RegistryObject {
 	return []aspect.RegistryObject{
-		{Number: 0, Name: "Earth"},
-		{Number: 1, Name: "Sun"},
-		{Number: 5, Name: "Mars"},
-		{Number: 12, Name: "Ceres"},
-		{Number: 22, Name: "Ascendant"},
-		{Number: 23, Name: "2nd Cusp"},
-		{Number: 36, Name: "Hades"},
-		{Number: 43, Name: "Hygiea"},
+		{Object: aspect.Object{Number: 0, Name: "Earth"}},
+		{Object: aspect.Object{Number: 1, Name: "Sun"}},
+		{Object: aspect.Object{Number: 5, Name: "Mars"}},
+		{Object: aspect.Object{Number: 12, Name: "Ceres"}},
+		{Object: aspect.Object{Number: 22, Name: "Ascendant"}},
+		{Object: aspect.Object{Number: 23, Name: "2nd Cusp"}},
+		{Object: aspect.Object{Number: 36, Name: "Hades"}},
+		{Object: aspect.Object{Number: 43, Name: "Hygiea"}},
 	}
 }
 
@@ -107,7 +109,11 @@ func undrawable(files []string, objs ...int) func(int) (lookup.BodyProbe, error)
 	return func(obj int) (lookup.BodyProbe, error) {
 		for _, o := range objs {
 			if o == obj {
-				return lookup.BodyProbe{MissingFiles: files}, nil
+				p := lookup.BodyProbe{MissingFiles: files}
+				if len(files) > 0 {
+					p.Said = "SwissEph file '" + files[0] + "' not found in PATH '/x/'"
+				}
+				return p, nil
 			}
 		}
 		return lookup.BodyProbe{Drawable: true}, nil
@@ -143,7 +149,7 @@ func openProbePopup(t *testing.T, m Model) (Model, tea.Cmd) {
 	if m.startup != startupBodyOpen {
 		t.Fatalf("⌃b did not open the popup (startup=%q)", m.startup)
 	}
-	for i := 0; i < groupRows(); i++ {
+	for i := 0; i < popup.GroupRows(); i++ {
 		m, cmd = probeKey(m, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	return m, cmd
@@ -389,7 +395,7 @@ func TestPopupProbesTheBodyUnderTheCursor(t *testing.T) {
 			// The focused slot's own moment, place and frame, as the chart
 			// compute for that slot gives them.
 			ref := fixtureAstrolog(t, nil)
-			refMsg := computeNatalSingleCmd(context.Background(), 1, 1, m.probers, m.focusedChart(), m.viewLens())()
+			refMsg := computeNatalSingleCmd(context.Background(), 1, 1, m.rows[surfaceText].spawn.cast, m.probers, m.focusedChart(), m.viewLens())()
 			if fm, ok := refMsg.(FirstFrameReadyMsg); ok && fm.Err != nil {
 				t.Fatalf("reference chart compute failed: %v", fm.Err)
 			}
@@ -446,8 +452,8 @@ func flagValue(argv []string, flag string) string {
 	return ""
 }
 
-// C3: an undrawable body is marked, and the line below the pinned bar names the
-// file. Three registry objects of different kinds stand in for the missing one.
+// C3: an undrawable body is marked, and the bottom line names the file in place of
+// the count. Three registry objects of different kinds stand in for the missing one.
 func TestPopupMarksAnUndrawableBody(t *testing.T) {
 	reg := probeRegistry()
 	nameOf := func(n int) string {
@@ -472,19 +478,18 @@ func TestPopupMarksAnUndrawableBody(t *testing.T) {
 			if row := rowOf(frame, "! "+name); row == "" {
 				t.Fatalf("no `! %s` row in:\n%s", name, frame)
 			}
-			want := name + " can't be drawn: no ephemeris file a.se1, b.se1"
+			want := "Astrolog: SwissEph file 'a.se1' not found in PATH '/x/'"
 			lines := strings.Split(frame, "\n")
-			bar, status := -1, -1
+			status := -1
 			for i, l := range lines {
-				if strings.Contains(l, " selected ") {
-					bar = i
-				}
 				if strings.Contains(l, want) {
 					status = i
 				}
 			}
-			if bar < 0 || status != bar+2 || strings.TrimSpace(strings.Trim(lines[bar+1], "|│ ")) != "" {
-				t.Fatalf("the status line %q must sit in the message zone: a blank row below the tag bar, then the note (bar %d, status %d):\n%s", want, bar, status, frame)
+			// The message is the bottom line, a blank buffer row above it,
+			// and the count is not shown beside it (F12).
+			if status < 2 || strings.TrimSpace(strings.Trim(lines[status-1], "|│ ")) != "" || strings.Contains(frame, " selected ") {
+				t.Fatalf("the status line %q must be the bottom line, a blank row above it, no count (status %d):\n%s", want, status, frame)
 			}
 
 			// Away from the cursor the row stays marked and the line goes.
@@ -493,8 +498,11 @@ func TestPopupMarksAnUndrawableBody(t *testing.T) {
 			}
 			m, _ = probeKey(m, tea.KeyMsg{Type: tea.KeyDown})
 			frame = popupText(m)
-			if strings.Contains(frame, "can't be drawn") {
+			if strings.Contains(frame, "Astrolog: ") {
 				t.Errorf("the status line stays after the cursor moved on:\n%s", frame)
+			}
+			if !strings.Contains(frame, " selected ") {
+				t.Errorf("the count did not come back after the cursor moved on:\n%s", frame)
 			}
 			if rowOf(frame, "! "+name) == "" {
 				t.Errorf("the marked row lost its mark away from the cursor:\n%s", frame)
@@ -513,11 +521,11 @@ func TestPopupMarksAnUndrawableBody(t *testing.T) {
 		m = pump(t, m, cmd)
 		frame := popupText(m)
 		row := rowOf(frame, "! Ceres")
-		if !strings.Contains(row, sgrFaint) {
+		if !strings.Contains(row, term.SGRFaint) {
 			t.Errorf("the marked row is not dim with colours on: %q", row)
 		}
 		m.cfg = Config{Accessible: true, Color: ColorNever}
-		if r := rowOf(popupText(m), "! Ceres"); r == "" || strings.Contains(r, sgrFaint) {
+		if r := rowOf(popupText(m), "! Ceres"); r == "" || strings.Contains(r, term.SGRFaint) {
 			t.Errorf("with colours off the row must be `! Ceres` and plain: %q", r)
 		}
 	})
@@ -551,7 +559,7 @@ func TestSupersededProbeMarksOnlyItsOwnBody(t *testing.T) {
 	if r := rowOf(frame, "Sun"); strings.Contains(r, "!") {
 		t.Errorf("Earth's result marked the row under the cursor: %q", r)
 	}
-	if strings.Contains(frame, "can't be drawn") {
+	if strings.Contains(frame, "Astrolog: ") {
 		t.Errorf("Earth's result printed a status line while the cursor is on Sun:\n%s", frame)
 	}
 }
@@ -778,7 +786,7 @@ func TestProbeChangesNothingElse(t *testing.T) {
 	chartBefore := m.chart
 	lensBefore := m.lens
 	m, cmd := openProbePopup(t, m)
-	entry := ticksOn(m.bodyModal.selected)
+	entry := ticksOn(m.bodyModal.Selected)
 	m = pump(t, m, cmd)
 	// A second probe is held back, to be delivered after Esc.
 	m, cmd = probeKey(m, tea.KeyMsg{Type: tea.KeyDown})
@@ -791,8 +799,8 @@ func TestProbeChangesNothingElse(t *testing.T) {
 	if rec.count() != 2 || len(late) == 0 {
 		t.Fatalf("probes run = %d, late results = %d; want Earth and Sun probed, Sun's held back", rec.count(), len(late))
 	}
-	if !reflect.DeepEqual(ticksOn(m.bodyModal.selected), entry) {
-		t.Errorf("the selection changed under probe activity: %v -> %v", entry, ticksOn(m.bodyModal.selected))
+	if !reflect.DeepEqual(ticksOn(m.bodyModal.Selected), entry) {
+		t.Errorf("the selection changed under probe activity: %v -> %v", entry, ticksOn(m.bodyModal.Selected))
 	}
 	m, _ = probeKey(m, tea.KeyMsg{Type: tea.KeyEsc})
 	for _, msg := range late { // delivered after Esc

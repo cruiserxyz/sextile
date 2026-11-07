@@ -10,6 +10,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // What the wheel draws, derived from the cursor and the selected set
@@ -59,7 +60,7 @@ func slotLabel(n int, slot *store.Slot, cfg Config) string {
 	case name == "":
 		name = "chart"
 	}
-	return numeralForColour(n, cfg) + " " + name
+	return panel.NumeralForColour(n, cfg) + " " + name
 }
 
 // wheelPlan reads what the wheel would draw now. ok is false before a slot
@@ -168,9 +169,9 @@ func (m Model) wheelUnchanged() bool {
 // renderMultiWheelCmd renders the selected set as rings (astrolog -r3..-r6),
 // tagged with the image surface's runID/wantID; labels name each ring for a
 // failure line. Same coordinator contract as renderWheelCmd.
-func renderMultiWheelCmd(ctx context.Context, runID, wantID uint64, rings []lookup.WheelRing, labels []string, lens lookup.Lens) tea.Cmd {
+func renderMultiWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, []lookup.WheelRing, lookup.Lens) ([]byte, []string, error), rings []lookup.WheelRing, labels []string, lens lookup.Lens) tea.Cmd {
 	return func() tea.Msg {
-		img, commands, err := renderMultiWheelImage(ctx, rings, lens)
+		img, commands, err := render(ctx, rings, lens)
 		return refreshResultMsg{
 			surface: surfaceImage,
 			runID:   runID,
@@ -181,4 +182,119 @@ func renderMultiWheelCmd(ctx context.Context, runID, wantID uint64, rings []look
 	}
 }
 
-var renderMultiWheelImage = lookup.RenderMultiWheelImageCommands
+// buildImageCmd is the Image row's build (specs/refresh-descriptor-image.md):
+// the render of the wheel the screen would ask for now, nil when there is none.
+func buildImageCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
+	// Gate the render-START on previewActive (not just the request
+	// triggers): this makes it impossible for a queued debounce tick or a
+	// stale-want follow-up to revive rendering after a render error cleared
+	// previewActive. previewActive is set true by Ctrl+X
+	// (dispatchRenderWheel) before its immediate request, and stays true
+	// across auto-refreshes until a render error turns it off.
+	if !m.previewActive {
+		return nil
+	}
+	plan, ok := m.wheelPlan()
+	if !ok {
+		return nil
+	}
+	if m.unresolvedFor(m.focusedSlot()) != nil {
+		return nil
+	}
+	lens := m.wheelLens(plan)
+	wheel := m.rows[surfaceImage].spawn.wheel
+	switch plan.mode {
+	case wheelPair:
+		// The active tab's bi-wheel: the pair's left chart, the base,
+		// passed first, which Astrolog draws on the outer ring with its
+		// houses; the cursor's chart inside (the floating slot at the
+		// operator's target, or an anchored slot at its own moment).
+		return renderOverlayWheelCmd(ctx, runID, wantID, wheel.renderOverlay, plan.inner, plan.rings[1].When, plan.rings[1].Place, lens, plan.labels)
+	case wheelRings:
+		return renderMultiWheelCmd(ctx, runID, wantID, wheel.renderRings, plan.rings, plan.labels, lens)
+	}
+	return renderWheelCmd(ctx, runID, wantID, wheel.render, plan.when, plan.place, lens, plan.highlight)
+}
+
+// stampWheelRunKey is the Image row's started column: the key of the wheel the
+// run was asked for, which the accept and the publish compare with the screen.
+func stampWheelRunKey(m Model) Model {
+	m.wheelRunKey, _ = m.wheelStillKey()
+	return m
+}
+
+// acceptImageFrame is the Image row's accept. A stale ERROR is dropped (a
+// mid-burst render failure must not close a working preview when a newer
+// target already exists), and so is a stale success whose plan differs from
+// the screen's in more than the floating time: a picture of another chart, tab
+// or lens is the cursor's scan leaving pictures behind. Anything else lands.
+func acceptImageFrame(m Model, msg refreshResultMsg) bool {
+	if msg.wantID == m.refresh[surfaceImage].wantID {
+		return true
+	}
+	if msg.err != nil {
+		return false
+	}
+	now, ok := m.wheelStillKey()
+	return ok && now == m.wheelRunKey
+}
+
+// commitImage is the Image row's commit: the ONLY place that queues bytes for
+// preview.Show. A render error clears previewActive so a failed render stops
+// the auto-refresh. A stale success that landed (a frame of a held time step)
+// chains the run for the newest want, batched with its publish.
+func commitImage(m Model, msg refreshResultMsg) (Model, tea.Cmd) {
+	stale := msg.wantID != m.refresh[surfaceImage].wantID
+	m, cmd := commitImageResult(m, msg)
+	if stale && m.previewActive {
+		var follow tea.Cmd
+		m, follow = m.startRun(surfaceImage)
+		return m, tea.Batch(cmd, follow)
+	}
+	return m, cmd
+}
+
+func commitImageResult(m Model, msg refreshResultMsg) (Model, tea.Cmd) {
+	// Route on surface (always set), not payload type: an error result may
+	// carry a nil payload, and the error handling must not depend on it.
+	if p, ok := msg.payload.(imagePayload); ok {
+		// A ring whose chart file could not be written failed before any
+		// spawn: no command of this result is the one that failed.
+		var failed []int
+		if _, staged := lookup.StagedRing(msg.err); !staged {
+			failed = failedLast(msg.err, p.commands)
+		}
+		m = m.logCommandsFor(surfaceImage, msg.wantID, p.commands, failed...)
+	}
+	if msg.err != nil {
+		m.previewActive = false
+		m.wheelPublishPending = nil
+		// Error lane: the render the operator asked for failed.
+		m = m.noteEphemeris(msg.err)
+		reason := m.failureReason(msg.err, wheelRenderFallback)
+		if ring, staged := lookup.StagedRing(msg.err); staged {
+			// A ring's chart file could not be written: nothing was drawn,
+			// the picture on screen is still the last one, and the line
+			// names the slot (C16).
+			if p, _ := msg.payload.(imagePayload); ring >= 1 && ring <= len(p.rings) {
+				reason = "The chart file for " + p.rings[ring-1] + " could not be written."
+			}
+		}
+		return m.logError("Couldn't draw the wheel. %s", reason).logWarnings(msg.err), nil
+	}
+	// Symmetric to the build's render-start gate: drop a SUCCESSFUL render
+	// that was already in flight when the preview was disabled (a render or
+	// publish error cleared previewActive). Without this, an in-flight render
+	// committing after a publish failure would queue a new publish and revive
+	// the broken preview.
+	if !m.previewActive {
+		return m, nil
+	}
+	// Hand the bytes to the serialized off-thread publisher rather than
+	// calling preview.Show synchronously in Update: keeps the HTTP publish +
+	// browser launch off the render loop while preserving order (one publish
+	// at a time) and latest-wins.
+	img, _ := msg.payload.(imagePayload)
+	m.wheelPublishPending, m.wheelPublishKey = img.bytes, m.wheelRunKey
+	return m.kickWheelPublish()
+}

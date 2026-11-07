@@ -33,8 +33,8 @@ func TestRenderWheelImageHighlightComposite(t *testing.T) {
 		t.Fatalf("plain render: %v", err)
 	}
 	composite, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{
-		Selected: []aspect.Body{aspect.Venus, aspect.Mars},
-		Focused:  aspect.Moon,
+		Selected: []int{4, 5},          // Venus, Mars
+		Focused:  registryObject(t, 2), // the Moon
 	})
 	if err != nil {
 		t.Fatalf("composite render: %v", err)
@@ -68,8 +68,8 @@ func TestRenderWheelImageHighlightParkedByDefault(t *testing.T) {
 		t.Fatalf("plain render: %v", err)
 	}
 	highlighted, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{
-		Selected: []aspect.Body{aspect.Venus, aspect.Mars},
-		Focused:  aspect.Moon,
+		Selected: []int{4, 5},          // Venus, Mars
+		Focused:  registryObject(t, 2), // the Moon
 	})
 	if err != nil {
 		t.Fatalf("highlighted render: %v", err)
@@ -93,21 +93,28 @@ func TestRenderTasteFrames(t *testing.T) {
 	}
 	t.Setenv(wheelHighlightEnvVar, "1") // taste frames render the parked composite
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
-	sel := func(bs ...aspect.Body) []aspect.Body { return bs }
+	moon := registryObject(t, 2)
+	sel := func(os ...aspect.Object) []int {
+		out := make([]int, 0, len(os))
+		for _, o := range os {
+			out = append(out, o.Number)
+		}
+		return out
+	}
 	frames := []struct {
 		name string
 		hl   WheelHighlight
 	}{
 		{"v2-0-none", WheelHighlight{}},
-		{"v2-1-focus-only", WheelHighlight{Focused: aspect.Moon}},
-		{"v2-2sel", WheelHighlight{Selected: sel(aspect.Venus, aspect.Mars)}},
-		{"v2-3sel", WheelHighlight{Selected: sel(aspect.Venus, aspect.Mars, aspect.Jupiter)}},
-		{"v2-4sel-focus", WheelHighlight{Selected: sel(aspect.Venus, aspect.Mars, aspect.Jupiter, aspect.Saturn), Focused: aspect.Moon}},
-		{"v2-6sel", WheelHighlight{Selected: sel(aspect.Sun, aspect.Moon, aspect.Venus, aspect.Mars, aspect.Jupiter, aspect.Saturn)}},
+		{"v2-1-focus-only", WheelHighlight{Focused: moon}},
+		{"v2-2sel", WheelHighlight{Selected: sel(objVenus, objMars)}},
+		{"v2-3sel", WheelHighlight{Selected: sel(objVenus, objMars, objJupiter)}},
+		{"v2-4sel-focus", WheelHighlight{Selected: sel(objVenus, objMars, objJupiter, objSaturn), Focused: moon}},
+		{"v2-6sel", WheelHighlight{Selected: sel(objSun, objMoon, objVenus, objMars, objJupiter, objSaturn)}},
 		// V3: the J2000 Cap/Aqu cluster with ONLY the Sun selected — the
 		// foreground draws the Sun unbumped while the dimmed base keeps the
 		// bumped stack, so the faint duplicate is visible for judgement.
-		{"v3-sun-split", WheelHighlight{Selected: sel(aspect.Sun)}},
+		{"v3-sun-split", WheelHighlight{Selected: sel(objSun)}},
 	}
 	for _, f := range frames {
 		img, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, f.hl)

@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cruiserxyz/sextile/internal/rules"
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // Line is one rendered line of a tab, in the three columns every line has
@@ -365,14 +366,28 @@ func (f sectionFacts) Category(key string) (string, bool) {
 	return v.Term, true
 }
 
-// ForBody is the shipped template that lists the body, if any.
-func ForBody(ts []Template, body string) (Template, bool) {
+// ForObject is the template that lists the object, if any, and the subject id
+// it lists it by (what Render takes as its subject). A template names objects
+// by lower-case ids, never numbers: an id lists the object when it is the
+// registry name lower-cased with spaces as underscores (ceres, north_node,
+// 11th_cusp), or when it is one of the legacy wire names whose registry name
+// the object carries (imum_coeli for Nadir). Astrolog's own name is the
+// identity, so an object no Sextile table has ever heard of finds its template
+// as the Sun does.
+func ForObject(ts []Template, o aspect.Object) (Template, string, bool) {
+	if o.Name == "" {
+		return Template{}, "", false
+	}
+	id := strings.ToLower(strings.ReplaceAll(o.Name, " ", "_"))
 	for _, t := range ts {
 		for _, b := range t.Bodies {
-			if b == body {
-				return t, true
+			if b == id {
+				return t, b, true
+			}
+			if name, ok := aspect.LegacyName(b); ok && name == o.Name {
+				return t, b, true
 			}
 		}
 	}
-	return Template{}, false
+	return Template{}, "", false
 }

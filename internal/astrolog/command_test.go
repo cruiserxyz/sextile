@@ -96,6 +96,7 @@ func bareCommand(path string, argv []string) string {
 // replayScript routes each spawn to the captured fixture its argv asks for.
 func replayScript(t *testing.T) string {
 	t.Helper()
+	useReplayObjects(t)
 	fix, err := filepath.Abs("testdata/provenance")
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +112,7 @@ esac`
 // marker, which runs onMatch instead (an exit, or a cat of a crafted file).
 func failOnScript(t *testing.T, marker, onMatch string) string {
 	t.Helper()
+	useReplayObjects(t)
 	fix, err := filepath.Abs("testdata/provenance")
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +138,9 @@ var singleChartArgv = []string{"-qa", "3", "21", "1985", "14:30", "0", "0:10W", 
 
 func transitSpec(t *testing.T) recipe.ChartSpec {
 	t.Helper()
+	// Every user replays testdata/provenance, so the ephemeris probe is asked
+	// for the eighteen objects that fixture prints.
+	useReplayAvailability(t)
 	spec, err := recipe.NewChartSpec(
 		recipe.Comparison{
 			Primary:   recipe.MomentAtPlace{JD: 2446232.0, Lon: 11.5667, Lat: 48.1333},
@@ -149,6 +154,7 @@ func transitSpec(t *testing.T) recipe.ChartSpec {
 	if err != nil {
 		t.Fatalf("comparison spec: %v", err)
 	}
+	spec.Registry = testRegistry(t)
 	return spec
 }
 

@@ -28,34 +28,32 @@ type frameStubs struct {
 
 func installFrameStubs(t *testing.T, s *frameStubs) {
 	t.Helper()
-	oldNatal, oldTransit, oldCross := firstCallNatalPositions, firstCallTransits, overlayCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects = oldNatal, oldTransit, oldCross
+	stubSpawns(t, func(sp *rowSpawns) {
+		sp.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+			s.calls = append(s.calls, "natal")
+			return s.natal, s.natalErr
+		}
+		sp.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			s.calls = append(s.calls, "transit")
+			return s.transit, s.transitErr
+		}
+		sp.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
+			s.calls = append(s.calls, "cross")
+			return s.cross, s.crossErr
+		}
 	})
-	firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-		s.calls = append(s.calls, "natal")
-		return s.natal, s.natalErr
-	}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		s.calls = append(s.calls, "transit")
-		return s.transit, s.transitErr
-	}
-	overlayCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-		s.calls = append(s.calls, "cross")
-		return s.cross, s.crossErr
-	}
 }
 
 func installDetailsStubs(t *testing.T, single, cross func() (string, string, error)) {
 	t.Helper()
-	oldSingle, oldCross := computeRawReport, computeCrossBodyReport
-	t.Cleanup(func() { computeRawReport, computeCrossBodyReport = oldSingle, oldCross })
-	computeRawReport = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
-		return single()
-	}
-	computeCrossBodyReport = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, aspect.Body) (string, string, error) {
-		return cross()
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.RawReportRequest) (string, string, error) {
+			return single()
+		}
+		s.reports.cross = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, aspect.Object) (string, string, error) {
+			return cross()
+		}
+	})
 }
 
 func commandsTestChart() store.AnchorChart {
@@ -71,14 +69,14 @@ func TestFrameMessagesCarryCommands(t *testing.T) {
 
 	t.Run("computeChartCmd", func(t *testing.T) {
 		installFrameStubs(t, &frameStubs{transit: lookup.Result{Commands: transitCommands}})
-		msg := computeChartCmd(context.Background(), 1, 1, nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
+		msg := computeChartCmd(context.Background(), 1, 1, testCast(t), nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
 		if !slices.Equal(msg.Commands, transitCommands) {
 			t.Errorf("Commands = %q, want %q", msg.Commands, transitCommands)
 		}
 	})
 	t.Run("computeNatalSingleCmd", func(t *testing.T) {
 		installFrameStubs(t, &frameStubs{natal: lookup.Result{Commands: natalCommands}})
-		msg := computeNatalSingleCmd(context.Background(), 1, 1, nil, commandsTestChart(), lookup.Hellenistic)().(FirstFrameReadyMsg)
+		msg := computeNatalSingleCmd(context.Background(), 1, 1, testCast(t), nil, commandsTestChart(), lookup.Hellenistic)().(FirstFrameReadyMsg)
 		if !slices.Equal(msg.Commands, natalCommands) {
 			t.Errorf("Commands = %q, want %q", msg.Commands, natalCommands)
 		}
@@ -88,11 +86,11 @@ func TestFrameMessagesCarryCommands(t *testing.T) {
 			transit: lookup.Result{Commands: transitCommands[:1]}, transitErr: boom,
 			natal: lookup.Result{Commands: natalCommands[:1]}, natalErr: boom,
 		})
-		chart := computeChartCmd(context.Background(), 1, 1, nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
+		chart := computeChartCmd(context.Background(), 1, 1, testCast(t), nil, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic)().(FirstFrameReadyMsg)
 		if !errors.Is(chart.Err, boom) || !slices.Equal(chart.Commands, transitCommands[:1]) {
 			t.Errorf("chart error frame: Err=%v Commands=%q", chart.Err, chart.Commands)
 		}
-		natal := computeNatalSingleCmd(context.Background(), 1, 1, nil, commandsTestChart(), lookup.Hellenistic)().(FirstFrameReadyMsg)
+		natal := computeNatalSingleCmd(context.Background(), 1, 1, testCast(t), nil, commandsTestChart(), lookup.Hellenistic)().(FirstFrameReadyMsg)
 		if !errors.Is(natal.Err, boom) || !slices.Equal(natal.Commands, natalCommands[:1]) {
 			t.Errorf("natal error frame: Err=%v Commands=%q", natal.Err, natal.Commands)
 		}
@@ -118,7 +116,7 @@ func TestFrameMessagesCarryCommands(t *testing.T) {
 		m := tabsOnPair(t, Config{Accessible: true})
 		m.width, m.height = 144, 40
 		m.focused = PanelBodies
-		m.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+		m.chart.positions = []aspect.Position{{Object: objMoon}}
 		p := runDetailsCmd(t, m).payload.(detailsPayload)
 		if p.body != "cross report" || !slices.Equal(p.commands, []string{"details cross"}) {
 			t.Errorf("details payload = %+v, want the cross report and its command", p)
@@ -181,7 +179,7 @@ func TestOverlayFrameCarriesEveryCommand(t *testing.T) {
 			s := full()
 			c.arrange(s)
 			installFrameStubs(t, s)
-			msg := computeOverlayCmd(context.Background(), 1, 1, nil, commandsTestChart(), store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), false, lookup.Hellenistic)().(FirstFrameReadyMsg)
+			msg := computeOverlayCmd(context.Background(), 1, 1, testCast(t), nil, commandsTestChart(), store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), false, lookup.Hellenistic)().(FirstFrameReadyMsg)
 			if !msg.Overlay {
 				t.Error("not an overlay frame")
 			}

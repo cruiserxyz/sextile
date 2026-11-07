@@ -1,4 +1,4 @@
-╭─▸[1] Chart───────────────────────────────────────╮╭─[0] Chart …──────────────────────────────────────────────────────────────────╮
+╭─▸[1] Chart───────────────────────────────────────╮╭─[0] Synthetic Birch──────────────────────────────────────────────────────────╮
 │  ① Synthetic Aster  Wed Jan 11, 1961  1:01   WhTr││                                                                              │
 │[1m[7m▶   Synthetic Birch  Mon Feb 12, 1962  1:02   WhTr[0m││                                                                              │
 │  ② ~ Now            Sat Apr 25, 2026 14:00   WhTr││                                                                              │
@@ -37,4 +37,4 @@
 │                                                  ││                                                                              │
 │                                                  ││                                                                              │
 ╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Report: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Remove: del | … | Help: ? | Quit: q      
+ Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Remove: del | … | Help: ? | Quit: q

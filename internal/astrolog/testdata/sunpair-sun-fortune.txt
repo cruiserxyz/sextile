@@ -1,0 +1,11 @@
+Astrolog 8.00: Wed Oct 14, 2026 12:00:00 (ST Zone 0:00W)   0:00'00W 51:00'00N
+Body  Location   Ret. Latitude Rul.      House  Rul. Velocity  Lat-Velocity
+
+Sun : 21Lib09'41"   - 0:00'00" (f) [ 9th house] [-] +0.9907618 +0.0000085
+Fort:  6Aqu15'43"   + 0:00'00" (-) [ 2nd house] [-] +314.08155 +0.0000000
+
+
+
+Body   Altitude    Azimuth    Azi. Vector    Magn. Full(Area,Time)  Diameter
+Sun : +30:40'03" 265:58'28" (1.000s 0.070w) -26.87 100.00% 100.00%  0:32'04.086"
+Fort: -24:10'10" 359:45'02" (0.004s 1.000e)

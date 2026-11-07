@@ -22,7 +22,7 @@ func TestRetrogradeFollowsAstrologsSign(t *testing.T) {
 		{"+0.420 is direct", 0.42, false},
 	}
 	for _, c := range cases {
-		if got := (Position{Body: Mercury, Speed: c.speed}).Retrograde(); got != c.want {
+		if got := (Position{Object: Object{Number: 3, Name: "Mercury"}, Speed: c.speed}).Retrograde(); got != c.want {
 			t.Errorf("%s: Retrograde() = %v, want %v", c.name, got, c.want)
 		}
 	}

@@ -5,8 +5,8 @@ package ui
 // results of the previous scene, tab strip included, so the screen never mixes
 // two selections. It is ephemeral presentation state, never stored.
 //
-// Every text commit STAMPS the scene it drew (the Aspects tab strip, whether it
-// compared, the cursor's column, the slot and body row it was cast for). A
+// Every text commit STAMPS the scene it drew (the key it was computed from,
+// whether it compared, the cursor's column, the slot and body row it was cast for). A
 // scene change HOLDS the committed results as they stand (holdShown) and the
 // next text commit replaces the hold by stamping its own scene: that one
 // commit carries positions, aspects, cross-aspects and columns, so the swap
@@ -19,13 +19,18 @@ type shownFrame struct {
 	held  bool
 	chart chartViewState
 
-	aspects    tabStrip   // the Aspects strip as the committed scene had it
 	comparing  bool       // the committed scene compared
 	focus      int        // the cursor's column in it
 	count      int        // how many charts it showed (the panels' width)
 	slot       int        // the slot index the committed frame was cast for
 	bodyCursor int        // the Bodies row the committed frame was cast with
 	columns    columnsFor // the shown set the committed scene named
+
+	// key is the key of the frame on screen: what the commit was computed
+	// from, stored with the results (C1). Bodies and Aspects each draw their
+	// pane key from it (shownPaneKey); keyed says there is one.
+	key   textKey
+	keyed bool
 }
 
 // holding says Bodies and Aspects draw the held frame. A zeroed chart epoch
@@ -48,12 +53,12 @@ func (m Model) holdShown() Model {
 // stampShown records the scene the text commit just drew and releases any hold.
 // It runs after the commit has set the floating slot's time, so the columns'
 // identity is the one bodyColumnsForScene judges.
-func (m Model) stampShown() Model {
+func (m Model) stampShown(key textKey, keyed bool) Model {
 	sc := m.deriveScene()
-	tabs := m.panelTabs(PanelAspects)
 	s := shownFrame{
 		stamped:    true,
-		aspects:    tabStrip{prefix: aspectsStripPrefix, tabs: tabs, active: activeTabIndex(tabs, m.tabChoice(PanelAspects))},
+		key:        key,
+		keyed:      keyed,
 		comparing:  sc.mode == sceneComparing,
 		focus:      sc.focus,
 		count:      len(sc.shown),
@@ -100,6 +105,7 @@ func (m Model) clearChartKeepingHold() Model {
 func (m Model) paintedChart() chartViewState {
 	state := m.shownChart()
 	state.mark = m.enteredMark()
+	state = m.enterColour(state)
 	state.forced = m.enteredStation()
 	state.houseForm = m.houseDisplay
 	return state

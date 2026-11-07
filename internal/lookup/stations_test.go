@@ -16,6 +16,16 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
+// sp is a position of a registry object as a parsed row carries it: with the
+// registry's Object, which is what the marks key on.
+func sp(t *testing.T, o aspect.Object, speed float64) aspect.Position {
+	t.Helper()
+	if got, ok := Hellenistic.Registry.ByNumber(o.Number); !ok || got != o {
+		t.Fatalf("registry has no %v", o)
+	}
+	return aspect.Position{Object: o, Speed: speed}
+}
+
 func stationPlace() location.PlaceInfo {
 	return location.PlaceInfo{Name: "Berlin", Country: "DE", Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin"}
 }
@@ -45,36 +55,43 @@ func TestStationCandidatesAreTheSlowDirectBodies(t *testing.T) {
 		p    aspect.Position
 		want bool
 	}{
-		{"+0.049 is a candidate", aspect.Position{Body: aspect.Mercury, Speed: 0.049}, true},
-		{"+0.000 is a candidate", aspect.Position{Body: aspect.Saturn, Speed: 0}, true},
-		{"+0.050 is not", aspect.Position{Body: aspect.Mercury, Speed: 0.050}, false},
-		{"-0.010 is not (retrograde)", aspect.Position{Body: aspect.Mercury, Speed: -0.010}, false},
-		{"ascendant at +0.000 is not", aspect.Position{Body: aspect.Ascendant, Speed: 0}, false},
-		{"midheaven at +0.000 is not", aspect.Position{Body: aspect.Midheaven, Speed: 0}, false},
-		{"north node at +0.000 is not", aspect.Position{Body: aspect.NorthNode, Speed: 0}, false},
-		{"south node at +0.000 is not", aspect.Position{Body: aspect.SouthNode, Speed: 0}, false},
-		{"lilith at +0.000 is not", aspect.Position{Body: aspect.Lilith, Speed: 0}, false},
-		{"unnamed asteroid at +0.000 is not", aspect.Position{Body: aspect.BodyUnknown, Label: "Cere", Speed: 0}, false},
+		{"+0.049 is a candidate", sp(t, objMercury, 0.049), true},
+		{"+0.000 is a candidate", sp(t, objSaturn, 0), true},
+		{"+0.050 is not", sp(t, objMercury, 0.050), false},
+		{"-0.010 is not (retrograde)", sp(t, objMercury, -0.010), false},
+		{"ascendant at +0.000 is not", sp(t, objAscendant, 0), false},
+		{"midheaven at +0.000 is not", sp(t, objMidheaven, 0), false},
+		{"north node at +0.000 is not", sp(t, objNorthNode, 0), false},
+		{"south node at +0.000 is not", sp(t, objSouthNode, 0), false},
+		{"lilith at +0.000 is not", sp(t, objLilith, 0), false},
+		{"Ceres (12) at +0.000 is a candidate", aspect.Position{Object: registryObject(t, 12), Speed: 0}, true},
+		{"Ceres (12) slow and direct is a candidate", aspect.Position{Object: registryObject(t, 12), Speed: 0.03}, true},
+		{"a position with no Object is not", aspect.Position{Speed: 0}, false},
+		{"Sirius (84, a star) at +0.000 is not", aspect.Position{Object: registryObject(t, 84), Speed: 0}, false},
+		{"Fortune (19) at +0.000 is not", aspect.Position{Object: registryObject(t, 19), Speed: 0}, false},
+		{"Vertex (20) at +0.000 is not", aspect.Position{Object: registryObject(t, 20), Speed: 0}, false},
+		{"East Point (21) at +0.000 is not", aspect.Position{Object: registryObject(t, 21), Speed: 0}, false},
+		{"11th Cusp (32) at +0.000 is not", aspect.Position{Object: registryObject(t, 32), Speed: 0}, false},
 	}
 	for _, c := range cases {
-		if got := stationCandidate(c.p); got != c.want {
+		if got := stationCandidate(c.p, Hellenistic.Registry); got != c.want {
 			t.Errorf("%s: candidate = %v, want %v", c.name, got, c.want)
 		}
 	}
 
 	// A negative zero is Astrolog's R: not a candidate either.
-	if stationCandidate(aspect.Position{Body: aspect.Mercury, Speed: math.Copysign(0, -1)}) {
+	if stationCandidate(sp(t, objMercury, math.Copysign(0, -1)), Hellenistic.Registry) {
 		t.Error("-0.000 is a candidate; Astrolog prints R there")
 	}
 
 	// No candidate, no Astrolog call.
 	probe := &stationProbe{}
 	got, cmds, err := StationMarks(context.Background(), probe.probers(), []aspect.Position{
-		{Body: aspect.Sun, Speed: 1.0},
-		{Body: aspect.Mercury, Speed: 0.050},
-		{Body: aspect.Ascendant, Speed: 0},
-		{Body: aspect.NorthNode, Speed: 0},
-		{Body: aspect.BodyUnknown, Label: "Cere", Speed: 0},
+		sp(t, objSun, 1.0),
+		sp(t, objMercury, 0.050),
+		sp(t, objAscendant, 0),
+		sp(t, objNorthNode, 0),
+		{Object: registryObject(t, 84), Speed: 0},
 	}, time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), stationPlace(), Hellenistic)
 	if err != nil || len(got) != 0 || len(cmds) != 0 {
 		t.Fatalf("no candidate: marks=%v cmds=%v err=%v, want none", got, cmds, err)
@@ -94,8 +111,8 @@ func TestStationProbeIsOneCallADayLater(t *testing.T) {
 	// 2026-03-28 12:00 Berlin; the next civil day crosses the DST change
 	// (2026-03-29 02:00), so a civil-clock "+24h" would not be one UT day.
 	at := time.Date(2026, 3, 28, 12, 0, 0, 0, berlin)
-	probe := &stationProbe{pos: []aspect.Position{{Body: aspect.Mercury, Speed: 0.02}}}
-	positions := []aspect.Position{{Body: aspect.Mercury, Speed: 0.03}, {Body: aspect.Venus, Speed: 0.04}}
+	probe := &stationProbe{pos: []aspect.Position{sp(t, objMercury, 0.02)}}
+	positions := []aspect.Position{sp(t, objMercury, 0.03), sp(t, objVenus, 0.04)}
 	_, cmds, err := StationMarks(context.Background(), probe.probers(), positions, at, place, Hellenistic)
 	if err != nil {
 		t.Fatal(err)
@@ -134,20 +151,20 @@ func TestStationDirectionComesFromTheProbe(t *testing.T) {
 		later []aspect.Position
 		want  Station
 	}{
-		{"+0.030 to +0.000 is S/R", 0.030, []aspect.Position{{Body: aspect.Mercury, Speed: 0.000}}, StationRetro},
-		{"+0.000 to +0.119 is S/D", 0.000, []aspect.Position{{Body: aspect.Mercury, Speed: 0.119}}, StationDirect},
-		{"+0.030 to -0.010 is S/R", 0.030, []aspect.Position{{Body: aspect.Mercury, Speed: -0.010}}, StationRetro},
-		{"equal is none", 0.030, []aspect.Position{{Body: aspect.Mercury, Speed: 0.030}}, StationNone},
-		{"missing is none", 0.030, []aspect.Position{{Body: aspect.Venus, Speed: 0.5}}, StationNone},
+		{"+0.030 to +0.000 is S/R", 0.030, []aspect.Position{sp(t, objMercury, 0.000)}, StationRetro},
+		{"+0.000 to +0.119 is S/D", 0.000, []aspect.Position{sp(t, objMercury, 0.119)}, StationDirect},
+		{"+0.030 to -0.010 is S/R", 0.030, []aspect.Position{sp(t, objMercury, -0.010)}, StationRetro},
+		{"equal is none", 0.030, []aspect.Position{sp(t, objMercury, 0.030)}, StationNone},
+		{"missing is none", 0.030, []aspect.Position{sp(t, objVenus, 0.5)}, StationNone},
 	}
 	for _, c := range cases {
 		probe := &stationProbe{pos: c.later}
 		marks, _, err := StationMarks(context.Background(), probe.probers(),
-			[]aspect.Position{{Body: aspect.Mercury, Speed: c.from}}, at, stationPlace(), Hellenistic)
+			[]aspect.Position{sp(t, objMercury, c.from)}, at, stationPlace(), Hellenistic)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got := marks[aspect.Mercury]; got != c.want {
+		if got := marks[registryObject(t, 3).Number]; got != c.want {
 			t.Errorf("%s: mark = %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -156,11 +173,26 @@ func TestStationDirectionComesFromTheProbe(t *testing.T) {
 	}
 }
 
+// The marks key on the object's number, not on a glyph: a Ceres mark (12)
+// comes back under 12.
+func TestStationMarksKeyOnTheNumber(t *testing.T) {
+	ceres := registryObject(t, 12)
+	probe := &stationProbe{pos: []aspect.Position{{Object: ceres, Speed: 0.0}}}
+	marks, _, err := StationMarks(context.Background(), probe.probers(),
+		[]aspect.Position{{Object: ceres, Speed: 0.03}}, time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), stationPlace(), Hellenistic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(marks) != 1 || marks[12] != StationRetro {
+		t.Errorf("marks = %v, want {12: S/R}", marks)
+	}
+}
+
 // A failing probe returns the error and the command that failed, no marks.
 func TestStationMarksProbeFailure(t *testing.T) {
 	probe := &stationProbe{err: errors.New("boom")}
 	marks, cmds, err := StationMarks(context.Background(), probe.probers(),
-		[]aspect.Position{{Body: aspect.Mercury, Speed: 0.03}}, time.Now(), stationPlace(), Hellenistic)
+		[]aspect.Position{sp(t, objMercury, 0.03)}, time.Now(), stationPlace(), Hellenistic)
 	if err == nil || len(marks) != 0 {
 		t.Fatalf("marks=%v err=%v, want an error and no marks", marks, err)
 	}
@@ -180,14 +212,14 @@ func TestStationRuleAgreesWithAstrologAtListedStations(t *testing.T) {
 	place := location.PlaceInfo{Name: "Amsterdam", Country: "NL", Lat: 52.3667, Lon: 4.9, TZ: "Europe/Amsterdam"}
 	for _, tc := range []struct {
 		name string
-		body aspect.Body
+		body aspect.Object
 		at   time.Time
 		want Station
 	}{
-		{"Mercury S/R", aspect.Mercury, time.Date(2026, 10, 24, 7, 12, 0, 0, time.UTC), StationRetro},
-		{"Venus S/R", aspect.Venus, time.Date(2026, 10, 3, 7, 15, 0, 0, time.UTC), StationRetro},
-		{"Pluto S/D", aspect.Pluto, time.Date(2026, 10, 16, 2, 40, 59, 0, time.UTC), StationDirect},
-		{"Saturn S/D", aspect.Saturn, time.Date(2026, 12, 10, 23, 31, 59, 0, time.UTC), StationDirect},
+		{"Mercury S/R", objMercury, time.Date(2026, 10, 24, 7, 12, 0, 0, time.UTC), StationRetro},
+		{"Venus S/R", objVenus, time.Date(2026, 10, 3, 7, 15, 0, 0, time.UTC), StationRetro},
+		{"Pluto S/D", objPluto, time.Date(2026, 10, 16, 2, 40, 59, 0, time.UTC), StationDirect},
+		{"Saturn S/D", objSaturn, time.Date(2026, 12, 10, 23, 31, 59, 0, time.UTC), StationDirect},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := FirstCallTransits(context.Background(), nil, tc.at, place, Hellenistic)
@@ -198,15 +230,38 @@ func TestStationRuleAgreesWithAstrologAtListedStations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := marks[tc.body]; got != tc.want {
+			if got := marks[sp(t, tc.body, 0).Object.Number]; got != tc.want {
 				var speed float64
 				for _, p := range res.Positions {
-					if p.Body == tc.body {
+					if p.Object == tc.body {
 						speed = p.Speed
 					}
 				}
 				t.Errorf("%s at %s: rule says %q (speed %v), Astrolog lists %q", tc.name, tc.at.Format(time.RFC3339), got, speed, tc.want)
 			}
 		})
+	}
+}
+
+// Rule pinned (council Custodian, 2026-11-07): the planetary moons, Astrolog's
+// objects 52 to 78, carry no station mark. A moon's geocentric speed crosses
+// zero several times a day, so the one-day probe would alias. The dwarf (51)
+// and the centres of body (79 and up) keep theirs.
+func TestStationShapeExcludesPlanetaryMoons(t *testing.T) {
+	for _, c := range []struct {
+		n    int
+		name string
+		want bool
+	}{
+		{51, "Dwarf", true},
+		{52, "FirstMoon", false},
+		{54, "Io", false},
+		{78, "LastMoon", false},
+		{79, "CentreOfBody", true},
+	} {
+		p := aspect.Position{Object: aspect.Object{Number: c.n, Name: c.name}, Speed: 0.01}
+		if got := stationShape(p); got != c.want {
+			t.Errorf("object %d (%s) at +0.010: candidate = %v, want %v", c.n, c.name, got, c.want)
+		}
 	}
 }

@@ -46,8 +46,8 @@ func TestSessionV3Frames(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	if !strings.HasPrefix(text, "version: 3\n") || strings.Count(text, "\nframes:\n") != 1 {
-		t.Fatalf("want version 3 and one frames block:\n%s", text)
+	if !strings.HasPrefix(text, "version: 4\n") || strings.Count(text, "\nframes:\n") != 1 {
+		t.Fatalf("want version 4 and one frames block:\n%s", text)
 	}
 	want := "frames:\n" +
 		"  - file: a.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Koch\n    from: chosen\n" +
@@ -61,7 +61,7 @@ func TestSessionV3Frames(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("reload: %v %v", ok, err)
 	}
-	if got.Version != 3 || got.DroppedFrames != 0 || len(got.Frames) != 4 {
+	if got.Version != 4 || got.DroppedFrames != 0 || len(got.Frames) != 4 {
 		t.Fatalf("Version=%d dropped=%d frames=%d", got.Version, got.DroppedFrames, len(got.Frames))
 	}
 	for i, w := range in.Frames {
@@ -146,7 +146,7 @@ func TestV2SessionLoadsWithNoFrameRecordsAndItsOriginalVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, "session.yaml"))
-	text := strings.Replace(string(b), "version: 3\n", "version: 2\n", 1) + "frames:\n" + goodEntry
+	text := strings.Replace(string(b), "version: 4\n", "version: 2\n", 1) + "frames:\n" + goodEntry
 	writeSessionText(t, dir, text, 0o644)
 	got, ok, err := LoadSession()
 	if err != nil || !ok {

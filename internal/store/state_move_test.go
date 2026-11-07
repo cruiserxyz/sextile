@@ -420,7 +420,7 @@ func TestSessionRecordsItsFolder(t *testing.T) {
 	if err := SaveSession(Session{Folder: id, Slots: oneSlot(fixtureChart(), false)}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(readString(t, SessionPath()), "version: 3\nfolder: "+id+"\n") {
+	if !strings.HasPrefix(readString(t, SessionPath()), "version: 4\nfolder: "+id+"\n") {
 		t.Errorf("the folder line is not written after the version:\n%s", readString(t, SessionPath()))
 	}
 	s, ok, err := LoadSession()

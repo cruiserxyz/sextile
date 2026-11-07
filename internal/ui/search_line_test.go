@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 )
@@ -89,19 +90,24 @@ func TestEscGoesBackInTheDetailsReport(t *testing.T) {
 
 // The bars say which key does which.
 func TestSearchLineBarsNameEnterAndEsc(t *testing.T) {
-	for name, entries := range map[string][]BindingEntry{
-		"timeline": timelineSearchBindings(),
-		"report":   reportSearchBindings(),
+	// The Timeline's line jumps on Enter, as its arrows move the row cursor;
+	// the report's line has no rows and Enter applies its filter.
+	for name, tc := range map[string]struct {
+		entries []keys.BindingEntry
+		enter   string
+	}{
+		"timeline": {timelineSearchBindings(), "enter Jump"},
+		"report":   {reportSearchBindings(), "enter Apply"},
 	} {
 		var got []string
-		for _, e := range entries {
+		for _, e := range tc.entries {
 			if e.Bar {
-				got = append(got, e.BarKey+" "+e.Action)
+				got = append(got, e.BarKey+" "+e.Title)
 			}
 		}
 		bar := strings.Join(got, " · ")
-		if !strings.Contains(bar, "enter Apply") || !strings.Contains(bar, "esc Back") {
-			t.Errorf("%s bar %q, want `enter Apply` and `esc Back`", name, bar)
+		if !strings.Contains(bar, tc.enter) || !strings.Contains(bar, "esc Back") {
+			t.Errorf("%s bar %q, want `%s` and `esc Back`", name, bar, tc.enter)
 		}
 	}
 }

@@ -12,10 +12,10 @@ func TestParseBodiesPreservesIndependentAstrologSpans(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseBodies: %v", err)
 	}
-	row, ok := rows["Sun"]
-	if !ok {
-		t.Fatalf("ParseBodies did not return Sun row: %#v", rows)
+	if len(rows) != 1 {
+		t.Fatalf("ParseBodies returned %d rows, want the Sun row alone: %#v", len(rows), rows)
 	}
+	row := rows[0]
 	if row.Body != "\x1b[31m" || row.Position != "\x1b[32m" || row.House != "\x1b[34m" {
 		t.Fatalf("independent spans = %#v, want body/position/house ANSI codes", row)
 	}

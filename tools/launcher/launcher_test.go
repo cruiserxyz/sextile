@@ -33,6 +33,7 @@ var update = flag.Bool("update", false, "rewrite tools/launcher/testdata/*.golde
 //	FAKE_DOCKER_SERVER   server version            (default 29.7.2)
 //	FAKE_DOCKER_IMAGE    labelled|unlabelled|absent (default absent)
 //	FAKE_DOCKER_COMMIT   the commit label a labelled image carries
+//	FAKE_DOCKER_MOONS    the moons label a labelled image carries (empty: none, as an image built before the switch)
 //	FAKE_DOCKER_EXPECT_IMAGE if set, `image inspect` of any other image fails loudly (exit 99, FAKE-DOCKER-MISMATCH)
 //	FAKE_DOCKER_FAIL     a verb ("build", "run", "version", "image inspect")
 //	FAKE_DOCKER_DENIED   1: `version` says permission denied
@@ -116,9 +117,16 @@ case $verb in
           exit 99
         fi
         printf '%s' "$target" > "$FAKE_DOCKER_LOG.inspected"
+        # The --format is rendered as docker renders it: each label the launcher
+        # asks for by name is replaced by its value ("" when the image lacks it).
+        fmt=; prev=
+        for a in "$@"; do [ "$prev" = --format ] && fmt=$a; prev=$a; done
+        L='{{index .Config.Labels "io.github.cruiserxyz.sextile.launcher"}}'
+        C='{{index .Config.Labels "io.github.cruiserxyz.sextile.commit"}}'
+        M='{{index .Config.Labels "io.github.cruiserxyz.sextile.moons"}}'
         case ${FAKE_DOCKER_IMAGE:-absent} in
-          labelled) echo "1 ${FAKE_DOCKER_COMMIT-}" ;;
-          unlabelled) echo " " ;;
+          labelled) fmt=${fmt//"$L"/1}; fmt=${fmt//"$C"/${FAKE_DOCKER_COMMIT-}}; fmt=${fmt//"$M"/${FAKE_DOCKER_MOONS-}}; echo "$fmt" ;;
+          unlabelled) fmt=${fmt//"$L"/}; fmt=${fmt//"$C"/}; fmt=${fmt//"$M"/}; echo "$fmt" ;;
           *) echo "Error: No such image" >&2; exit 1 ;;
         esac ;;
       ls)
@@ -1385,6 +1393,398 @@ func TestImageFromOtherCommitRebuilt(t *testing.T) {
 	}
 }
 
+// hasPair reports whether the call carries key then value, as `--label x=1`.
+func hasPair(call []string, key, value string) bool {
+	for i := 0; i+1 < len(call); i++ {
+		if call[i] == key && call[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+const moonsLabel = "io.github.cruiserxyz.sextile.moons"
+
+// SEXTILE_MOONS puts the planetary moons' files (about 240 MB) in the image.
+// Off unless it is 1; the build argument and the label follow it, and the
+// label is what a later launch compares.
+func TestMoonsSwitchBuildArgAndLabel(t *testing.T) {
+	cases := []struct {
+		name, value string
+		set         bool
+		arg, label  string
+	}{
+		{"1", "1", true, "SEXTILE_MOONS=true", moonsLabel + "=1"},
+		{"unset", "", false, "SEXTILE_MOONS=false", moonsLabel + "=0"},
+		{"empty", "", true, "SEXTILE_MOONS=false", moonsLabel + "=0"},
+		{"0", "0", true, "SEXTILE_MOONS=false", moonsLabel + "=0"},
+	}
+	for _, c := range cases {
+		r := newRig(t)
+		r.setenv("FAKE_DOCKER_IMAGE", "absent")
+		if c.set {
+			r.setenv("SEXTILE_MOONS", c.value)
+		}
+		r.mustSucceed(r.run("--charts-dir", r.mkdir("c")))
+		b := r.find("build")
+		if b == nil {
+			t.Fatalf("%s: no build: %q", c.name, r.verbs())
+		}
+		if !hasPair(b, "--build-arg", c.arg) {
+			t.Fatalf("%s: want --build-arg %s in %q", c.name, c.arg, b)
+		}
+		if !hasPair(b, "--label", c.label) {
+			t.Fatalf("%s: want --label %s in %q", c.name, c.label, b)
+		}
+	}
+
+	// --rebuild builds again from Docker's layer cache: the moons' download
+	// stage is kept through it, so no --no-cache.
+	r := newRig(t)
+	r.setenv("SEXTILE_MOONS", "1")
+	r.setenv("FAKE_DOCKER_MOONS", "1")
+	r.mustSucceed(r.run("--rebuild", "--charts-dir", r.mkdir("c")))
+	b := r.find("build")
+	if b == nil {
+		t.Fatalf("--rebuild must build: %q", r.verbs())
+	}
+	if indexOf(b, "--no-cache") >= 0 {
+		t.Fatalf("--rebuild must keep Docker's cache (the moons are downloaded once): %q", b)
+	}
+}
+
+// Switching the variable on or off rebuilds the image once, and says why.
+func TestMoonsSwitchFlipRebuilds(t *testing.T) {
+	// off -> on: an image labelled moons=0, the variable now 1.
+	r := newRig(t)
+	r.setenv("FAKE_DOCKER_MOONS", "0")
+	r.setenv("SEXTILE_MOONS", "1")
+	r.setenv("FAKE_DOCKER_EXPECT_IMAGE", "localhost/sextile:v0.1.0-rc.1")
+	res := r.run("--charts-dir", r.mkdir("c"))
+	r.mustSucceed(res)
+	b := r.find("build")
+	if b == nil {
+		t.Fatalf("switching the moons on must rebuild: %q", r.verbs())
+	}
+	if !hasPair(b, "--build-arg", "SEXTILE_MOONS=true") || !hasPair(b, "--label", moonsLabel+"=1") {
+		t.Fatalf("the rebuild asks for the moons and labels it: %q", b)
+	}
+	contains(t, res.stderr, "planetary moons switched on")
+	if r.count("run") != 1 {
+		t.Fatalf("then it runs: %q", r.verbs())
+	}
+
+	// on -> off: an image labelled moons=1, the variable unset.
+	r2 := newRig(t)
+	r2.setenv("FAKE_DOCKER_MOONS", "1")
+	r2.setenv("FAKE_DOCKER_EXPECT_IMAGE", "localhost/sextile:v0.1.0-rc.1")
+	res = r2.run("--charts-dir", r2.mkdir("c"))
+	r2.mustSucceed(res)
+	b = r2.find("build")
+	if b == nil {
+		t.Fatalf("switching the moons off must rebuild: %q", r2.verbs())
+	}
+	if !hasPair(b, "--build-arg", "SEXTILE_MOONS=false") || !hasPair(b, "--label", moonsLabel+"=0") {
+		t.Fatalf("the rebuild leaves the moons out and labels it: %q", b)
+	}
+	contains(t, res.stderr, "planetary moons switched off")
+
+	// The same setting twice is no rebuild.
+	for _, c := range []struct{ label, value string }{{"1", "1"}, {"0", "0"}} {
+		r3 := newRig(t)
+		r3.setenv("FAKE_DOCKER_MOONS", c.label)
+		r3.setenv("SEXTILE_MOONS", c.value)
+		res = r3.run("--charts-dir", r3.mkdir("c"))
+		r3.mustSucceed(res)
+		if r3.count("build") != 0 || r3.count("run") != 1 {
+			t.Fatalf("an image labelled moons=%s with SEXTILE_MOONS=%s is reused: %q", c.label, c.value, r3.verbs())
+		}
+		if strings.Contains(res.stderr, "planetary moons") {
+			t.Fatalf("nothing to explain when nothing is rebuilt: %q", res.stderr)
+		}
+	}
+
+	// doctor says the same, and changes nothing.
+	r4 := newRig(t)
+	r4.setenv("FAKE_DOCKER_MOONS", "0")
+	r4.setenv("SEXTILE_MOONS", "1")
+	res = r4.run("doctor", "--charts-dir", r4.mkdir("c"))
+	contains(t, res.stdout, "was built without the planetary moons' files and they are switched on")
+	if r4.count("build") != 0 {
+		t.Fatalf("doctor builds nothing: %q", r4.verbs())
+	}
+}
+
+// An image labelled before the switch existed has no moons label. It counts as
+// moons=0, so nobody who never set the variable rebuilds at an upgrade.
+func TestImageWithoutMoonsLabelNotRebuilt(t *testing.T) {
+	for _, v := range []struct {
+		name  string
+		set   bool
+		value string
+	}{{"unset", false, ""}, {"empty", true, ""}, {"0", true, "0"}} {
+		r := newRig(t) // labelled, this commit, no FAKE_DOCKER_MOONS: no moons label
+		if v.set {
+			r.setenv("SEXTILE_MOONS", v.value)
+		}
+		r.mustSucceed(r.run("--charts-dir", r.mkdir("c")))
+		if r.count("build") != 0 || r.count("run") != 1 {
+			t.Fatalf("SEXTILE_MOONS %s: an image without a moons label is reused: %q", v.name, r.verbs())
+		}
+	}
+	// ...but asking for the moons is a change, and rebuilds.
+	r := newRig(t)
+	r.setenv("SEXTILE_MOONS", "1")
+	r.mustSucceed(r.run("--charts-dir", r.mkdir("c")))
+	if r.count("build") != 1 {
+		t.Fatalf("an image without a moons label does not have them: %q", r.verbs())
+	}
+}
+
+// Anything but 1, 0 or nothing is refused before Docker is touched.
+func TestMoonsSwitchBadValueRefused(t *testing.T) {
+	for _, v := range []string{"yes", "true", "2", " 1", "on"} {
+		r := newRig(t)
+		r.setenv("FAKE_DOCKER_IMAGE", "absent")
+		r.setenv("SEXTILE_MOONS", v)
+		res := r.run("--charts-dir", r.mkdir("c"))
+		r.mustExit2(res)
+		contains(t, res.stderr, "SEXTILE_MOONS="+v+" is not accepted. Use SEXTILE_MOONS=1 for the planetary moons' files in the image, or 0 or leave it unset for none")
+		if strings.Count(strings.TrimSpace(res.stderr), "\n") != 0 {
+			t.Fatalf("%q: one line, got %q", v, res.stderr)
+		}
+		if len(r.calls()) != 0 {
+			t.Fatalf("%q: no docker call at all before the refusal: %q", v, r.verbs())
+		}
+	}
+
+	// doctor reports it instead of building anything.
+	r := newRig(t)
+	r.setenv("SEXTILE_MOONS", "yes")
+	res := r.run("doctor", "--charts-dir", r.mkdir("c"))
+	if res.code != 1 {
+		t.Fatalf("doctor exits 1 on a bad SEXTILE_MOONS, got %d:\n%s", res.code, res.stdout)
+	}
+	contains(t, res.stdout, "FAIL  image: SEXTILE_MOONS=yes is not accepted")
+
+	// --no-docker ignores the variable: the host's Astrolog folder decides.
+	r2 := newRig(t)
+	r2.setenv("SEXTILE_MOONS", "yes")
+	res = r2.run("--no-docker", "--charts-dir", r2.mkdir("c"))
+	if strings.Contains(res.stderr, "SEXTILE_MOONS") {
+		t.Fatalf("--no-docker does not read SEXTILE_MOONS: %q", res.stderr)
+	}
+	if len(r2.calls()) != 0 {
+		t.Fatalf("--no-docker runs no docker command: %q", r2.verbs())
+	}
+}
+
+// One list of the moons' files serves both routes: the Dockerfile's moons
+// stage COPYs it, scripts/build-astrolog reads it, and both name the commit
+// the list was taken at.
+func TestMoonsPinsOneListForTheImageAndBuildAstrolog(t *testing.T) {
+	const list = "scripts/ephemeris-moons.sha256"
+	if !strings.Contains(repoFile(t, "Dockerfile"), "COPY "+list+" ") {
+		t.Errorf("the Dockerfile's moons stage does not COPY %s", list)
+	}
+	if !strings.Contains(repoFile(t, "scripts/build-astrolog"), "ephemeris-moons.sha256") {
+		t.Errorf("scripts/build-astrolog does not read ephemeris-moons.sha256")
+	}
+	if !strings.Contains(repoFile(t, ".dockerignore"), "!"+list+"\n") {
+		t.Errorf(".dockerignore is an allow-list and does not let %s into the build context", list)
+	}
+
+	var names []string
+	var commit string
+	line := regexp.MustCompile(`^[0-9a-f]{64}  (sepm[0-9]{4}\.se1)$`)
+	at := regexp.MustCompile(`at commit ([0-9a-f]{40})`)
+	for _, l := range strings.Split(strings.TrimRight(repoFile(t, list), "\n"), "\n") {
+		if strings.HasPrefix(l, "#") {
+			if m := at.FindStringSubmatch(l); m != nil {
+				commit = m[1]
+			}
+			continue
+		}
+		m := line.FindStringSubmatch(l)
+		if m == nil {
+			t.Errorf("%s: not '<sha256>  sepmNNNN.se1': %q", list, l)
+			continue
+		}
+		names = append(names, m[1])
+	}
+	if len(names) != 32 {
+		t.Errorf("%s lists %d files, want 32", list, len(names))
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		if seen[n] {
+			t.Errorf("%s lists %s twice", list, n)
+		}
+		seen[n] = true
+	}
+	if commit == "" {
+		t.Fatalf("%s names no commit", list)
+	}
+	if !strings.Contains(repoFile(t, "Dockerfile"), "ARG SWISSEPH_MOONS_COMMIT="+commit+"\n") {
+		t.Errorf("the Dockerfile's SWISSEPH_MOONS_COMMIT is not the list's commit %s", commit)
+	}
+	if !strings.Contains(repoFile(t, "scripts/build-astrolog"), "MOONS_COMMIT="+commit+"\n") {
+		t.Errorf("scripts/build-astrolog's MOONS_COMMIT is not the list's commit %s", commit)
+	}
+}
+
+// scripts/build-astrolog refuses a SEXTILE_MOONS it does not know before it
+// downloads or creates anything.
+func TestBuildAstrologRefusesABadMoonsValue(t *testing.T) {
+	root := t.TempDir()
+	prefix, cache := filepath.Join(root, "prefix"), filepath.Join(root, "cache")
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "build-astrolog"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", script)
+	cmd.Env = []string{"PATH=" + filepath.Dir(mustLookPath(t, "bash")), "HOME=" + root,
+		"PREFIX=" + prefix, "ASTROLOG_CACHE=" + cache, "SEXTILE_MOONS=yes"}
+	out, err := cmd.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() == 0 {
+		t.Fatalf("want a non-zero exit, got %v:\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "SEXTILE_MOONS must be 1 or 0 (or unset), not 'yes'"; got != want {
+		t.Fatalf("want %q, got %q", want, got)
+	}
+	for _, d := range []string{prefix, cache} {
+		if _, err := os.Stat(d); err == nil {
+			t.Errorf("%s was created before the refusal", d)
+		}
+	}
+}
+
+// scripts/build-astrolog takes --moons and --no-moons and refuses any other
+// argument before it downloads or creates anything.
+func TestBuildAstrologRefusesAnUnknownArgument(t *testing.T) {
+	root := t.TempDir()
+	prefix, cache := filepath.Join(root, "prefix"), filepath.Join(root, "cache")
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "build-astrolog"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", script, "--moons", "--mons")
+	cmd.Env = []string{"PATH=" + filepath.Dir(mustLookPath(t, "bash")), "HOME=" + root,
+		"PREFIX=" + prefix, "ASTROLOG_CACHE=" + cache}
+	out, err := cmd.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 {
+		t.Fatalf("want exit 2, got %v:\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "scripts/build-astrolog takes --moons or --no-moons, not '--mons'"; got != want {
+		t.Fatalf("want %q, got %q", want, got)
+	}
+	for _, d := range []string{prefix, cache} {
+		if _, err := os.Stat(d); err == nil {
+			t.Errorf("%s was created before the refusal", d)
+		}
+	}
+}
+
+// --moons turns the moons on and outranks the environment: a copy of the
+// script with no moons list beside it refuses for the missing list, before it
+// creates anything, even with SEXTILE_MOONS=0.
+func TestBuildAstrologMoonsFlagOutranksTheEnvironment(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "scripts", "build-astrolog"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	script := filepath.Join(root, "build-astrolog")
+	if err := os.WriteFile(script, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prefix, cache := filepath.Join(root, "prefix"), filepath.Join(root, "cache")
+	run := func(env string, args ...string) (string, error) {
+		cmd := exec.Command("bash", append([]string{script}, args...)...)
+		cmd.Env = []string{"PATH=" + filepath.Dir(mustLookPath(t, "bash")), "HOME=" + root,
+			"PREFIX=" + prefix, "ASTROLOG_CACHE=" + cache, env}
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	out, err := run("SEXTILE_MOONS=0", "--moons")
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 {
+		t.Fatalf("--moons: want exit 1, got %v:\n%s", err, out)
+	}
+	if want := "the planetary moons need " + filepath.Join(root, "ephemeris-moons.sha256"); out != want {
+		t.Fatalf("--moons: want %q, got %q", want, out)
+	}
+	for _, d := range []string{prefix, cache} {
+		if _, err := os.Stat(d); err == nil {
+			t.Errorf("%s was created before the refusal", d)
+		}
+	}
+}
+
+// scripts/build-astrolog never overwrites a text file the operator changed in
+// Astrolog's folder (astrolog.as holds their default objects): it keeps theirs
+// and puts Astrolog's own beside it as <name>.stock. An unchanged or missing
+// file is installed as before. (2026-11-04: the moon-files run replaced a
+// customised astrolog.as on the operator's host.)
+func TestBuildAstrologKeepsTheOperatorsAstrologAs(t *testing.T) {
+	src := repoFile(t, "scripts/build-astrolog")
+	start := strings.Index(src, "install_text() {")
+	end := strings.Index(src[start:], "\n}\n")
+	if start < 0 || end < 0 {
+		t.Fatal("scripts/build-astrolog has no install_text function")
+	}
+	fn := src[start : start+end+3]
+	root := t.TempDir()
+	tree, data := filepath.Join(root, "tree"), filepath.Join(root, "data")
+	for _, d := range []string{tree, data} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(tree, "astrolog.as"), "stock\n")
+	write(filepath.Join(tree, "atlas.as"), "atlas\n")
+	write(filepath.Join(data, "astrolog.as"), "mine\n")
+	write(filepath.Join(data, "atlas.as"), "atlas\n")
+	cmd := exec.Command("bash", "-c", "set -Eeuo pipefail\n"+fn+"for f in astrolog.as atlas.as; do install_text \"$f\" \"$1\"; done", "x", data)
+	cmd.Dir = tree
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install_text: %v\n%s", err, out)
+	}
+	read := func(p string) string {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "<missing>"
+		}
+		return string(b)
+	}
+	if got := read(filepath.Join(data, "astrolog.as")); got != "mine\n" {
+		t.Errorf("the operator's astrolog.as became %q", got)
+	}
+	if got := read(filepath.Join(data, "astrolog.as.stock")); got != "stock\n" {
+		t.Errorf("astrolog.as.stock = %q, want Astrolog's own", got)
+	}
+	if got := read(filepath.Join(data, "atlas.as.stock")); got != "<missing>" {
+		t.Errorf("an unchanged atlas.as got a .stock copy: %q", got)
+	}
+	if want := "kept your " + filepath.Join(data, "astrolog.as") + ", Astrolog's own is beside it as astrolog.as.stock"; strings.TrimSpace(string(out)) != want {
+		t.Errorf("output %q, want %q", strings.TrimSpace(string(out)), want)
+	}
+}
+
+func mustLookPath(t *testing.T, name string) string {
+	t.Helper()
+	p, err := exec.LookPath(name)
+	if err != nil {
+		t.Fatalf("the tests need %s on PATH: %v", name, err)
+	}
+	return p
+}
+
 func TestLocalTag(t *testing.T) {
 	check := func(name string, r *rig) {
 		t.Helper()
@@ -2294,7 +2694,7 @@ func TestDoctorArgs(t *testing.T) {
 
 // ------------------------------------------------------------- C22 to C22c
 
-var doctorNames = []string{"docker", "daemon", "endpoint", "image", "port", "wheel", "time zone", "charts folder", "config", "state", "other images"}
+var doctorNames = []string{"docker", "daemon", "endpoint", "image", "moons", "port", "wheel", "time zone", "charts folder", "config", "state", "other images"}
 
 var doctorNativeNames = []string{"go", "astrolog", "astrolog files"}
 
@@ -2941,4 +3341,293 @@ func TestLauncherPruneFailureDoesNotStopLaunch(t *testing.T) {
 			t.Fatalf("%s failing: nothing was removed:\n%s", verb, res.stderr)
 		}
 	}
+}
+
+// ------------------------------------------------- remembered planetary moons
+
+func (r *rig) moonsPath() string { return filepath.Join(r.xdg, "sextile", "launcher-moons.conf") }
+
+func (r *rig) writeMoons(content string) {
+	r.t.Helper()
+	mustWrite(r.t, r.moonsPath(), content, 0o600)
+}
+
+const moonsHeader = "# written by sextile --moons or --no-moons. Delete this file for the default (no planetary moons)\n"
+
+// buildMoons returns the SEXTILE_MOONS build argument of the build call.
+func buildMoons(t *testing.T, r *rig) string {
+	t.Helper()
+	b := r.find("build")
+	if b == nil {
+		t.Fatalf("no build: %q", r.verbs())
+	}
+	for _, a := range b {
+		if strings.HasPrefix(a, "SEXTILE_MOONS=") {
+			return strings.TrimPrefix(a, "SEXTILE_MOONS=")
+		}
+	}
+	t.Fatalf("no SEXTILE_MOONS build argument: %q", b)
+	return ""
+}
+
+// --moons writes the choice in a file of its own, builds with the moons and
+// says so. A later start with no flag and no variable follows the file.
+func TestMoonsFlagRemembers(t *testing.T) {
+	r := newRig(t)
+	r.setenv("FAKE_DOCKER_IMAGE", "absent")
+	res := r.run("--moons", "--charts-dir", r.mkdir("c"))
+	r.mustSucceed(res)
+	b, err := os.ReadFile(r.moonsPath())
+	if err != nil {
+		t.Fatalf("--moons must write %s: %v", r.moonsPath(), err)
+	}
+	if string(b) != moonsHeader+"moons=1\n" {
+		t.Fatalf("the remembered file reads %q", b)
+	}
+	if got := octal(t, r.moonsPath()); got != 0o600 {
+		t.Fatalf("mode %v, want 0600", got)
+	}
+	if buildMoons(t, r) != "true" {
+		t.Fatalf("--moons builds with the moons: %q", r.find("build"))
+	}
+	contains(t, res.stderr, "planetary moons: on from now on (remembered in "+r.moonsPath()+"). sextile --no-moons turns them off")
+
+	// A later start with no flag and no variable: an image with the moons is reused...
+	r2 := newRig(t)
+	r2.writeMoons(moonsHeader + "moons=1\n")
+	r2.setenv("FAKE_DOCKER_MOONS", "1")
+	r2.mustSucceed(r2.run("--charts-dir", r2.mkdir("c")))
+	if r2.count("build") != 0 || r2.count("run") != 1 {
+		t.Fatalf("an image with the moons is reused: %q", r2.verbs())
+	}
+	// ...one without them is rebuilt with them.
+	r3 := newRig(t)
+	r3.writeMoons(moonsHeader + "moons=1\n")
+	r3.setenv("FAKE_DOCKER_MOONS", "0")
+	res = r3.run("--charts-dir", r3.mkdir("c"))
+	r3.mustSucceed(res)
+	if buildMoons(t, r3) != "true" {
+		t.Fatalf("the remembered choice builds with the moons: %q", r3.find("build"))
+	}
+	contains(t, res.stderr, "planetary moons switched on")
+}
+
+func TestNoMoonsFlagRemembers(t *testing.T) {
+	r := newRig(t)
+	r.writeMoons(moonsHeader + "moons=1\n")
+	r.setenv("FAKE_DOCKER_MOONS", "1")
+	res := r.run("--no-moons", "--charts-dir", r.mkdir("c"))
+	r.mustSucceed(res)
+	b, err := os.ReadFile(r.moonsPath())
+	if err != nil || string(b) != moonsHeader+"moons=0\n" {
+		t.Fatalf("--no-moons must leave moons=0: %q %v", b, err)
+	}
+	if buildMoons(t, r) != "false" {
+		t.Fatalf("--no-moons rebuilds without the moons: %q", r.find("build"))
+	}
+	contains(t, res.stderr, "planetary moons: off from now on (remembered in "+r.moonsPath()+")")
+	if strings.Contains(res.stderr, "turns them off") {
+		t.Fatalf("the off line has no hint: %q", res.stderr)
+	}
+	// Later, no flag: an image without the moons is reused.
+	r2 := newRig(t)
+	r2.writeMoons(moonsHeader + "moons=0\n")
+	r2.setenv("FAKE_DOCKER_MOONS", "0")
+	r2.mustSucceed(r2.run("--charts-dir", r2.mkdir("c")))
+	if r2.count("build") != 0 {
+		t.Fatalf("reused: %q", r2.verbs())
+	}
+}
+
+// The flag beats SEXTILE_MOONS, which beats the file, which beats off. An
+// empty variable counts as not set, and the variable is never written down.
+func TestMoonsPrecedence(t *testing.T) {
+	cases := []struct {
+		name, file string // file: "", "1" or "0"
+		env        string // "unset" or a value
+		flag       string
+		want       string // build argument
+	}{
+		{"nothing", "", "unset", "", "false"},
+		{"file on", "1", "unset", "", "true"},
+		{"file off", "0", "unset", "", "false"},
+		{"env on over file off", "0", "1", "", "true"},
+		{"env off over file on", "1", "0", "", "false"},
+		{"empty env falls to file", "1", "", "", "true"},
+		{"flag off over env on and file on", "1", "1", "--no-moons", "false"},
+		{"flag on over env off and file off", "0", "0", "--moons", "true"},
+		{"flag on alone", "", "unset", "--moons", "true"},
+	}
+	for _, c := range cases {
+		r := newRig(t)
+		r.setenv("FAKE_DOCKER_IMAGE", "absent")
+		if c.file != "" {
+			r.writeMoons(moonsHeader + "moons=" + c.file + "\n")
+		}
+		if c.env != "unset" {
+			r.setenv("SEXTILE_MOONS", c.env)
+		}
+		args := []string{"--charts-dir", r.mkdir("c")}
+		if c.flag != "" {
+			args = append([]string{c.flag}, args...)
+		}
+		r.mustSucceed(r.run(args...))
+		if got := buildMoons(t, r); got != c.want {
+			t.Fatalf("%s: built with SEXTILE_MOONS=%s, want %s", c.name, got, c.want)
+		}
+		if c.flag == "" {
+			after, err := os.ReadFile(r.moonsPath())
+			switch {
+			case c.file == "" && err == nil:
+				t.Fatalf("%s: the variable must never be written down: %q", c.name, after)
+			case c.file != "" && string(after) != moonsHeader+"moons="+c.file+"\n":
+				t.Fatalf("%s: the file changed: %q", c.name, after)
+			}
+		}
+	}
+}
+
+func TestMoonsRefusals(t *testing.T) {
+	bad := "the file %s is not valid: its line must be moons=1 or moons=0. Fix it or delete it"
+	cases := []struct {
+		name string
+		args []string
+		file string // content to write first, "" for none
+		link bool   // make the file a symlink instead
+		want string
+	}{
+		{"both flags", []string{"--moons", "--no-moons"}, "", false, "--moons and --no-moons cannot be given together"},
+		{"both flags, other order", []string{"--no-moons", "--moons"}, "", false, "--moons and --no-moons cannot be given together"},
+		{"--moons twice", []string{"--moons", "--moons"}, "", false, "--moons was given twice"},
+		{"--no-moons twice", []string{"--no-moons", "--no-moons"}, "", false, "--no-moons was given twice"},
+		{"after doctor", []string{"doctor", "--moons"}, "", false, "doctor takes only --port N and --charts-dir DIR (not '--moons')"},
+		{"--no-moons after doctor", []string{"doctor", "--no-moons"}, "", false, "doctor takes only --port N and --charts-dir DIR (not '--no-moons')"},
+		{"bad line", nil, "moons=yes\n", false, bad},
+		{"two lines", nil, "moons=1\nmoons=0\n", false, bad},
+		{"empty file", nil, "# only a comment\n", false, bad},
+		{"bad line, flag given", []string{"--moons"}, "moons=maybe\n", false, bad},
+		{"symlink", nil, "", true, bad},
+	}
+	for _, c := range cases {
+		r := newRig(t)
+		r.setenv("FAKE_DOCKER_IMAGE", "absent")
+		if c.file != "" {
+			r.writeMoons(c.file)
+		}
+		if c.link {
+			target := filepath.Join(r.mkdir("elsewhere"), "m.conf")
+			mustWrite(t, target, "moons=1\n", 0o600)
+			if err := os.MkdirAll(filepath.Dir(r.moonsPath()), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, r.moonsPath()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		args := append([]string{}, c.args...)
+		args = append(args, "--charts-dir", r.mkdir("c"))
+		if len(c.args) > 0 && c.args[0] == "doctor" {
+			args = append([]string{"doctor"}, append(c.args[1:], "--charts-dir", r.mkdir("c"))...)
+		}
+		before := snapshot(t, r.xdg)
+		res := r.run(args...)
+		r.mustExit2(res)
+		want := c.want
+		if strings.Contains(want, "%s") {
+			want = fmt.Sprintf(want, r.moonsPath())
+		}
+		if strings.TrimSpace(res.stderr) != want {
+			t.Fatalf("%s: want exactly %q, got %q", c.name, want, res.stderr)
+		}
+		r.noBuildOrRun()
+		if d := diffSnapshots(before, snapshot(t, r.xdg)); len(d) != 0 {
+			t.Fatalf("%s: a refusal writes nothing: %v", c.name, d)
+		}
+	}
+}
+
+// With --no-docker the choice is remembered too, both lines are printed, and
+// no docker verb runs.
+func TestMoonsWithNoDocker(t *testing.T) {
+	r := newRig(t)
+	r.withGo()
+	r.withAstrolog(true)
+	res := r.run("--no-docker", "--moons", "--charts-dir", r.mkdir("c"), "--no-open")
+	r.mustSucceed(res)
+	b, err := os.ReadFile(r.moonsPath())
+	if err != nil || string(b) != moonsHeader+"moons=1\n" {
+		t.Fatalf("--no-docker --moons remembers: %q %v", b, err)
+	}
+	contains(t, res.stderr, "planetary moons: on from now on (remembered in "+r.moonsPath()+"). sextile --no-moons turns them off")
+	contains(t, res.stderr, "--no-docker reads the files in your Astrolog folder. scripts/build-astrolog --moons installs them there")
+	if len(r.calls()) != 0 {
+		t.Fatalf("no docker verb with --no-docker: %q", r.verbs())
+	}
+}
+
+// doctor says where the moons setting comes from, and writes nothing.
+func TestMoonsDoctorLines(t *testing.T) {
+	cases := []struct {
+		name, file, env, want string
+	}{
+		{"on, remembered", "1", "unset", "ok    moons: on, remembered in %s. sextile --no-moons turns them off"},
+		{"on, environment", "", "1", "ok    moons: on, from SEXTILE_MOONS=1 in the environment (this run only)"},
+		{"off, environment", "1", "0", "ok    moons: off, from SEXTILE_MOONS=0 in the environment (this run only)"},
+		{"off, remembered", "0", "unset", "ok    moons: off, remembered in %s"},
+		{"off, default", "", "unset", "ok    moons: off. sextile --moons puts the planetary moons' files (about 240 MB) in the image and remembers it"},
+		{"bad file", "x", "unset", "FAIL  moons: the file %s is not valid: its line must be moons=1 or moons=0. Fix it or delete it"},
+	}
+	for _, c := range cases {
+		r := newRig(t)
+		if c.file == "x" {
+			r.writeMoons("moons=x\n")
+		} else if c.file != "" {
+			r.writeMoons(moonsHeader + "moons=" + c.file + "\n")
+		}
+		if c.env != "unset" {
+			r.setenv("SEXTILE_MOONS", c.env)
+		}
+		before := snapshot(t, r.xdg)
+		res := r.run("doctor", "--charts-dir", r.mkdir("c"))
+		want := c.want
+		if strings.Contains(want, "%s") {
+			want = fmt.Sprintf(want, r.moonsPath())
+		}
+		contains(t, res.stdout, want+"\n")
+		if (c.file == "x") != (res.code == 1) {
+			t.Fatalf("%s: exit %d", c.name, res.code)
+		}
+		if d := diffSnapshots(before, snapshot(t, r.xdg)); len(d) != 0 {
+			t.Fatalf("%s: doctor writes nothing: %v", c.name, d)
+		}
+		// The moons line follows the image line.
+		lines := strings.Split(res.stdout, "\n")
+		for i, l := range lines {
+			if strings.Contains(l, " image: ") && !strings.Contains(lines[i+1], " moons: ") {
+				t.Fatalf("%s: the moons line comes right after image:\n%s", c.name, res.stdout)
+			}
+		}
+	}
+	// The stale-image line no longer names the variable.
+	r := newRig(t)
+	r.writeMoons(moonsHeader + "moons=1\n")
+	r.setenv("FAKE_DOCKER_MOONS", "0")
+	res := r.run("doctor", "--charts-dir", r.mkdir("c"))
+	contains(t, res.stdout, "was built without the planetary moons' files and they are switched on")
+	if strings.Contains(res.stdout, "SEXTILE_MOONS asks") {
+		t.Fatalf("doctor must not say the variable asks: %s", res.stdout)
+	}
+	r2 := newRig(t)
+	r2.setenv("FAKE_DOCKER_MOONS", "1")
+	res = r2.run("doctor", "--charts-dir", r2.mkdir("c"))
+	contains(t, res.stdout, "was built with the planetary moons' files and they are switched off")
+}
+
+func TestMoonsUsageText(t *testing.T) {
+	r := newRig(t)
+	res := r.run("--help")
+	contains(t, res.stdout, "[--moons | --no-moons]")
+	contains(t, res.stdout, "--moons           put the planetary moons' files, about 240 MB, in the image from now on")
+	contains(t, res.stdout, "--no-moons        leave them out from now on")
+	contains(t, res.stdout, "SEXTILE_MOONS=1   (environment) for one run, the same as --moons. It is not remembered")
 }

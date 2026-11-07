@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"math"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -42,13 +44,16 @@ func shiftOf(when time.Time) float64 { return math.Mod(float64(when.Year()%360)*
 // positions the full body list shifted differently.
 func columnsModel(t *testing.T, cfg Config, cursor int) Model {
 	t.Helper()
+	freshModels(t)
 	stubColumnLookups(t, nil)
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Commands: []string{"astrolog natal"}}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Commands: []string{"astrolog transit"}}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Commands: []string{"astrolog natal"}}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Commands: []string{"astrolog transit"}}, nil
+		}
+	})
 	m := settledComparing(t, cursor)
 	m.cfg = cfg
 	return m
@@ -57,18 +62,18 @@ func columnsModel(t *testing.T, cfg Config, cursor int) Model {
 // columnRowParts is what a row must read, written from the spec rather than
 // from the renderer: for one body, each chart's 12 cells.
 func expectedColumn(sep string, p aspect.Position) string {
-	signIdx, deg, min := splitLongitude(p.Longitude)
+	signIdx, deg, min := panel.SplitLongitude(p.Longitude)
 	retro := " "
 	if p.Retrograde() {
 		retro = "℞"
 	}
 	// The ℞ (or a space) is the cell right after the minute mark.
-	return fmt.Sprintf("%s%s %2d°%02d'%s", sep, signAbbrevString(signIdx), deg, min, retro)
+	return fmt.Sprintf("%s%s %2d°%02d'%s", sep, panel.SignAbbrevString(signIdx), deg, min, retro)
 }
 
-func positionOf(ps []aspect.Position, b aspect.Body) aspect.Position {
+func positionOf(ps []aspect.Position, b aspect.Object) aspect.Position {
 	for _, p := range ps {
-		if p.Body == b {
+		if p.Object == b {
 			return p
 		}
 	}
@@ -85,14 +90,14 @@ func TestBodiesRowHasOneColumnPerShownChart(t *testing.T) {
 		t.Fatalf("fixture: columns = %d (ok=%v), want 4", len(cols), ok)
 	}
 	view := ansi.Strip(m.View())
-	for _, b := range []aspect.Body{aspect.Sun, aspect.Saturn, aspect.Midheaven} {
+	for _, b := range []aspect.Object{objSun, objSaturn, objMidheaven} {
 		own := positionOf(m.chart.positions, b)
 		// The cursor is ②: its column is bracketed, ③'s separating cell is the
 		// closing bracket (colours off).
-		want := fmt.Sprintf("%s %-9s", positionGlyph(own), bodyName(b))
+		want := fmt.Sprintf("%s %-9s", panel.PositionGlyph(own), panel.BodyName(b))
 		for i, c := range cols {
-			q := positionOf(c.positions, b)
-			if q.Body != b {
+			q := positionOf(c.Positions, b)
+			if q.Object != b {
 				t.Fatalf("fixture: chart %d lacks %v", i+1, b)
 			}
 			sep := " "
@@ -112,13 +117,13 @@ func TestBodiesRowHasOneColumnPerShownChart(t *testing.T) {
 
 	// The speed bar is the cursor chart's, three cells (the ℞ sits in each
 	// column), and an angle has none.
-	sun := positionOf(m.chart.positions, aspect.Sun)
-	row := formatColumnRow(sun, astrologStyleZero, cols, 1, wholeWindow(len(cols)), m.cfg, houseOverlay{})
-	bar := dropFirstCell(velocityBar(sun.Speed, false, false))
+	sun := positionOf(m.chart.positions, objSun)
+	row := panel.FormatColumnRow(sun, astrologStyleZero, cols, 1, panel.WholeWindow(len(cols)), m.cfg, panel.HouseOverlay{})
+	bar := panel.DropFirstCell(panel.VelocityBar(sun.Speed, false, false))
 	// body 11 + four columns of 12 + the closing cell + the bar + " " and the
 	// 18-cell house frame: the ℞ cell is not repeated before the bar.
-	if w := ansi.StringWidth(row); w != 11+4*bodiesColumnWidth+1+3+1+18 {
-		t.Errorf("Sun row is %d cells wide, want %d", w, 11+4*bodiesColumnWidth+1+3+1+18)
+	if w := ansi.StringWidth(row); w != 11+4*panel.BodiesColumnWidth+1+3+1+18 {
+		t.Errorf("Sun row is %d cells wide, want %d", w, 11+4*panel.BodiesColumnWidth+1+3+1+18)
 	}
 	if ansi.StringWidth(bar) != 3 || !strings.Contains(ansi.Strip(row), " "+bar) {
 		t.Errorf("Sun row %q lacks the cursor chart's 3-cell bar %q", ansi.Strip(row), bar)
@@ -126,14 +131,14 @@ func TestBodiesRowHasOneColumnPerShownChart(t *testing.T) {
 
 	// Matched by body, never by position in the list: ③ lacks the Sun, so its
 	// cells are blank and ④ still shows its own.
-	partial := append([]bodyColumn(nil), cols...)
-	partial[2].positions = []aspect.Position{positionOf(cols[2].positions, aspect.Moon)}
-	got := ansi.Strip(formatColumnRow(sun, astrologStyleZero, partial, 1, wholeWindow(len(partial)), m.cfg, houseOverlay{}))
-	prefix := fmt.Sprintf("%s %-9s", positionGlyph(sun), bodyName(aspect.Sun))
-	wantPartial := prefix + expectedColumn(" ", positionOf(cols[0].positions, aspect.Sun)) +
-		expectedColumn("[", positionOf(cols[1].positions, aspect.Sun)) +
-		"]" + strings.Repeat(" ", bodiesColumnWidth-1) +
-		expectedColumn(" ", positionOf(cols[3].positions, aspect.Sun)) + " "
+	partial := append([]panel.BodyColumn(nil), cols...)
+	partial[2].Positions = []aspect.Position{positionOf(cols[2].Positions, objMoon)}
+	got := ansi.Strip(panel.FormatColumnRow(sun, astrologStyleZero, partial, 1, panel.WholeWindow(len(partial)), m.cfg, panel.HouseOverlay{}))
+	prefix := fmt.Sprintf("%s %-9s", panel.PositionGlyph(sun), panel.BodyName(objSun))
+	wantPartial := prefix + expectedColumn(" ", positionOf(cols[0].Positions, objSun)) +
+		expectedColumn("[", positionOf(cols[1].Positions, objSun)) +
+		"]" + strings.Repeat(" ", panel.BodiesColumnWidth-1) +
+		expectedColumn(" ", positionOf(cols[3].Positions, objSun)) + " "
 	if !strings.HasPrefix(got, wantPartial) {
 		t.Errorf("a chart without the Sun:\n got %q\nwant %q", got, wantPartial)
 	}
@@ -157,20 +162,20 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 	forceColor(t)
 	m := columnsModel(t, Config{Color: ColorNever}, 1)
 	cols, _ := m.bodyColumnsForScene()
-	sun := positionOf(m.chart.positions, aspect.Sun)
+	sun := positionOf(m.chart.positions, objSun)
 	for _, mode := range []struct {
 		name string
 		cfg  Config
 	}{{"colours on", Config{Color: ColorAlways}}, {"colours off", Config{Color: ColorNever}}} {
 		var baseline []int
 		for focus := range cols {
-			raw := formatColumnRow(sun, sunStyle, cols, focus, wholeWindow(len(cols)), mode.cfg, houseOverlay{})
+			raw := panel.FormatColumnRow(sun, sunStyle, cols, focus, panel.WholeWindow(len(cols)), mode.cfg, panel.HouseOverlay{})
 			plain := ansi.Strip(raw)
 			var starts []int
 			for i, c := range cols {
-				q := positionOf(c.positions, aspect.Sun)
-				signIdx, deg, min := splitLongitude(q.Longitude)
-				cell := fmt.Sprintf("%s %2d°%02d'", signAbbrevString(signIdx), deg, min)
+				q := positionOf(c.Positions, objSun)
+				signIdx, deg, min := panel.SplitLongitude(q.Longitude)
+				cell := fmt.Sprintf("%s %2d°%02d'", panel.SignAbbrevString(signIdx), deg, min)
 				at := strings.Index(plain, cell)
 				if at < 0 {
 					t.Fatalf("%s focus %d: column %d (%q) not in %q", mode.name, focus, i+1, cell, plain)
@@ -178,7 +183,7 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 				starts = append(starts, ansi.StringWidth(plain[:at]))
 			}
 			// The speed bar starts after the reserved closing cell.
-			bar := dropFirstCell(velocityBar(sun.Speed, false, false))
+			bar := panel.DropFirstCell(panel.VelocityBar(sun.Speed, false, false))
 			barAt := strings.Index(plain, bar)
 			if barAt < 0 {
 				t.Fatalf("%s focus %d: no speed bar %q in %q", mode.name, focus, bar, plain)
@@ -187,11 +192,11 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 			if focus == 0 {
 				baseline = starts
 				for i := range cols {
-					if want := 11 + bodiesColumnWidth*i + 1; starts[i] != want {
+					if want := 11 + panel.BodiesColumnWidth*i + 1; starts[i] != want {
 						t.Errorf("%s: column %d starts at %d, want %d (body 11 cells, 12 per column, one separator cell before the text)", mode.name, i+1, starts[i], want)
 					}
 				}
-				if want := 11 + bodiesColumnWidth*len(cols) + 1; starts[len(cols)] != want {
+				if want := 11 + panel.BodiesColumnWidth*len(cols) + 1; starts[len(cols)] != want {
 					t.Errorf("%s: the speed bar starts at %d, want %d (after the columns and the reserved closing cell)", mode.name, starts[len(cols)], want)
 				}
 			} else if fmt.Sprint(starts) != fmt.Sprint(baseline) {
@@ -199,17 +204,17 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 			}
 
 			opens, closes := strings.Count(plain, "["), strings.Count(plain, "]")
-			if mode.cfg.useColor() {
+			if mode.cfg.UseColor() {
 				if opens+closes != 0 {
 					t.Errorf("%s focus %d: brackets with colours on: %q", mode.name, focus+1, plain)
 				}
 				for i, c := range cols {
-					style := columnStyle(t, raw, positionOf(c.positions, aspect.Sun))
-					faint := strings.Contains(style, sgrFaint)
+					style := columnStyle(t, raw, positionOf(c.Positions, objSun))
+					faint := strings.Contains(style, term.SGRFaint)
 					if faint == (i == focus) {
 						t.Errorf("colours on focus %d: column %d faint=%v, want only the others faint", focus+1, i+1, faint)
 					}
-					want := strings.TrimSuffix(renderSGR(sunStyle.Position, "x"), "x"+sgrReset)
+					want := strings.TrimSuffix(panel.RenderSGR(sunStyle.Position, "x"), "x"+term.SGRReset)
 					if i == focus && !strings.Contains(style, want) {
 						t.Errorf("colours on focus %d: the focused column opens with %q, want Astrolog's position colour %q", focus+1, style, want)
 					}
@@ -221,8 +226,8 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 			}
 			open := ansi.StringWidth(plain[:strings.Index(plain, "[")])
 			closeAt := ansi.StringWidth(plain[:strings.Index(plain, "]")])
-			if open != 11+bodiesColumnWidth*focus || closeAt != open+bodiesColumnWidth {
-				t.Errorf("colours off focus %d: [ at %d and ] at %d, want %d and %d (the separating cells either side of the column)", focus+1, open, closeAt, 11+bodiesColumnWidth*focus, 11+bodiesColumnWidth*(focus+1))
+			if open != 11+panel.BodiesColumnWidth*focus || closeAt != open+panel.BodiesColumnWidth {
+				t.Errorf("colours off focus %d: [ at %d and ] at %d, want %d and %d (the separating cells either side of the column)", focus+1, open, closeAt, 11+panel.BodiesColumnWidth*focus, 11+panel.BodiesColumnWidth*(focus+1))
 			}
 		}
 	}
@@ -232,14 +237,14 @@ func TestBodiesColumnsNeverMove(t *testing.T) {
 // whatever stands between the previous reset and the column's own text.
 func columnStyle(t *testing.T, raw string, p aspect.Position) string {
 	t.Helper()
-	signIdx, deg, min := splitLongitude(p.Longitude)
-	cell := fmt.Sprintf("%s %2d°%02d'", signAbbrevString(signIdx), deg, min)
+	signIdx, deg, min := panel.SplitLongitude(p.Longitude)
+	cell := fmt.Sprintf("%s %2d°%02d'", panel.SignAbbrevString(signIdx), deg, min)
 	at := strings.Index(raw, cell)
 	if at < 0 {
 		t.Fatalf("%q not in %q", cell, raw)
 	}
 	before := raw[:at]
-	return before[strings.LastIndex(before, sgrReset)+1:]
+	return before[strings.LastIndex(before, term.SGRReset)+1:]
 }
 
 // C4: alone, the row is exactly today's.
@@ -247,27 +252,27 @@ func TestBodiesAloneRowUnchanged(t *testing.T) {
 	forceColor(t)
 	ps := fullChartPositions()
 	for _, overlay := range []bool{false, true} {
-		ov := houseOverlay{}
+		ov := panel.HouseOverlay{}
 		if overlay {
-			ov = houseOverlay{cusps: wholeSignLeoRising, positions: shiftedChart(40)}
-			if !ov.active() {
+			ov = panel.HouseOverlay{Cusps: wholeSignLeoRising, Positions: shiftedChart(40)}
+			if !ov.Active() {
 				t.Fatal("fixture: the overlay is not active")
 			}
 		}
 		for _, cfg := range []Config{{Color: ColorAlways}, {Color: ColorNever}} {
-			state := chartViewState{positions: ps, natalCusps: ov.cusps, natalPositions: ov.positions}
+			state := chartViewState{positions: ps, natalCusps: ov.Cusps, natalPositions: ov.Positions}
 			alone := bodiesView{shown: 1}
 			got, _, _ := renderBodiesFor(alone, state, nil, 0, 0, 100, 40, false, cfg)
 			want, _, _ := renderBodiesBody(state, nil, 0, 0, 100, 40, false, cfg)
 			if got != want {
-				t.Errorf("overlay=%v color=%v: the alone panel differs from renderBodiesBody", overlay, cfg.useColor())
+				t.Errorf("overlay=%v color=%v: the alone panel differs from renderBodiesBody", overlay, cfg.UseColor())
 			}
 			// And every row in it is formatPositionRowStyled's, byte for byte.
-			planets, _ := partitionAngles(ps)
+			planets, _ := panel.PartitionAngles(ps)
 			for _, p := range planets[1:] { // the first row carries the cursor
-				row := formatPositionRowStyled(p, state.bodyStyles[p.Body], cfg.useColor(), ov)
+				row := panel.FormatPositionRowStyled(p, state.bodyStyles[p.Object], cfg, ov)
 				if !strings.Contains(got, row) {
-					t.Errorf("overlay=%v color=%v: %v row is not today's %q", overlay, cfg.useColor(), p.Body, row)
+					t.Errorf("overlay=%v color=%v: %v row is not today's %q", overlay, cfg.UseColor(), p.Object.Name, row)
 				}
 			}
 		}
@@ -368,9 +373,9 @@ func TestBodiesColumnsFrames(t *testing.T) {
 // sixColumns is a comparing view of six charts, each with its own shift.
 func sixColumns(focus int) (bodiesView, chartViewState) {
 	state := chartViewState{positions: fullChartPositions(), cusps: fullChartCusps()}
-	var cols []bodyColumn
+	var cols []panel.BodyColumn
 	for i := 0; i < 6; i++ {
-		cols = append(cols, bodyColumn{positions: shiftedChart(float64(i) * 17), cusps: fullChartCusps()})
+		cols = append(cols, panel.BodyColumn{Positions: shiftedChart(float64(i) * 17), Cusps: fullChartCusps()})
 	}
 	return bodiesView{shown: 6, comparing: true, ok: true, cols: cols, focus: focus}, state
 }
@@ -380,8 +385,8 @@ func sixColumns(focus int) (bodiesView, chartViewState) {
 func TestColumnWindowAllFitIsUnchanged(t *testing.T) {
 	for n := 1; n <= 6; n++ {
 		for focus := 0; focus < n; focus++ {
-			avail := n * bodiesColumnWidth
-			lo, hi, hl, hr := columnWindow(n, focus, avail, 0)
+			avail := n * panel.BodiesColumnWidth
+			lo, hi, hl, hr := panel.ColumnWindow(n, focus, avail, 0)
 			if lo != 0 || hi != n || hl != 0 || hr != 0 {
 				t.Errorf("n %d focus %d avail %d: window %d..%d hidden %d/%d, want all", n, focus, avail, lo, hi, hl, hr)
 			}
@@ -389,9 +394,9 @@ func TestColumnWindowAllFitIsUnchanged(t *testing.T) {
 	}
 	view, state := sixColumns(2)
 	cfg := Config{Color: ColorNever}
-	body, _, _ := renderBodiesFor(view, state, nil, 0, 0, 100+6*bodiesColumnWidth, 40, false, cfg)
-	sun := positionOf(state.positions, aspect.Sun)
-	want := formatColumnRow(sun, astrologStyleZero, view.cols, 2, wholeWindow(6), cfg, houseOverlay{})
+	body, _, _ := renderBodiesFor(view, state, nil, 0, 0, 100+6*panel.BodiesColumnWidth, 40, false, cfg)
+	sun := positionOf(state.positions, objSun)
+	want := panel.FormatColumnRow(sun, astrologStyleZero, view.cols, 2, panel.WholeWindow(6), cfg, panel.HouseOverlay{})
 	if !strings.Contains(body, strings.TrimRight(want, " ")) {
 		t.Errorf("an all-fit Sun row differs from the whole-list row %q:\n%s", want, body)
 	}
@@ -405,7 +410,7 @@ func TestColumnWindowKeepsFocus(t *testing.T) {
 	for n := 2; n <= 6; n++ {
 		for focus := 0; focus < n; focus++ {
 			for avail := 12; avail <= 80; avail++ {
-				lo, hi, hl, hr := columnWindow(n, focus, avail, 0)
+				lo, hi, hl, hr := panel.ColumnWindow(n, focus, avail, 0)
 				if lo > focus || focus >= hi {
 					t.Errorf("n %d focus %d avail %d: window %d..%d lost the focus", n, focus, avail, lo, hi)
 				}
@@ -422,8 +427,8 @@ func TestColumnWindowNeverHalf(t *testing.T) {
 	for n := 2; n <= 6; n++ {
 		for focus := 0; focus < n; focus++ {
 			for avail := 12; avail <= 80; avail++ {
-				lo, hi, hl, hr := columnWindow(n, focus, avail, 0)
-				used := (hi-lo)*bodiesColumnWidth + hintCost(hl, false) + hintCost(hr, true)
+				lo, hi, hl, hr := panel.ColumnWindow(n, focus, avail, 0)
+				used := (hi-lo)*panel.BodiesColumnWidth + panel.HintCost(hl, false) + panel.HintCost(hr, true)
 				if used > avail && hi-lo > 1 {
 					t.Errorf("n %d focus %d avail %d: window %d..%d uses %d cells", n, focus, avail, lo, hi, used)
 				}
@@ -439,7 +444,7 @@ func TestBodiesHintsCountHiddenColumns(t *testing.T) {
 		view, state := sixColumns(focus)
 		body, rule, _ := renderBodiesFor(view, state, nil, 0, 0, 78, 40, false, cfg)
 		lines := strings.Split(body, "\n")
-		_, hi, hl, hr := columnWindow(6, focus, 78-bodiesRowFixedWidth, 0)
+		_, hi, hl, hr := panel.ColumnWindow(6, focus, 78-panel.BodiesRowFixedWidth, 0)
 		lo := hi - (6 - hl - hr)
 		if hl+(hi-lo)+hr != 6 {
 			t.Fatalf("focus %d: %d + %d + %d != 6", focus, hl, hi-lo, hr)
@@ -477,13 +482,16 @@ func TestBodiesHintsCountHiddenColumns(t *testing.T) {
 // every focus, and no line is cut or padded off the terminal's width.
 func TestBodiesFocusedColumnVisibleAt80x24(t *testing.T) {
 	for focus := 0; focus < 6; focus++ {
+		freshModels(t)
 		stubColumnLookups(t, nil)
-		firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-			return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Commands: []string{"astrolog natal"}}, nil
-		}
-		firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-			return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Commands: []string{"astrolog transit"}}, nil
-		}
+		stubSpawns(t, func(sp *rowSpawns) {
+			sp.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Commands: []string{"astrolog natal"}}, nil
+			}
+			sp.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+				return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Commands: []string{"astrolog transit"}}, nil
+			}
+		})
 		m := selectedSet(t, 5, true, focus)
 		m.cfg = Config{Color: ColorNever}
 		m.focused = PanelChart
@@ -496,7 +504,7 @@ func TestBodiesFocusedColumnVisibleAt80x24(t *testing.T) {
 		}
 		m.width, m.height = 80, 24
 		screen := ansi.Strip(m.View())
-		want := expectedColumn("", positionOf(cols[m.bodiesView().focus].positions, aspect.Sun))
+		want := expectedColumn("", positionOf(cols[m.bodiesView().focus].Positions, objSun))
 		if !strings.Contains(screen, strings.TrimRight(want, " ")) {
 			t.Errorf("focus %d: the focused chart's Sun %q is not on the 80x24 screen:\n%s", focus, want, screen)
 		}
@@ -513,11 +521,11 @@ func TestBodiesFocusedColumnVisibleAt80x24(t *testing.T) {
 }
 
 // avail41 holds three whole columns with both hints (36 + 2 + 3).
-const avail41 = 3*bodiesColumnWidth + 5
+const avail41 = 3*panel.BodiesColumnWidth + 5
 
 func TestColumnWindowEdgeTravelRight(t *testing.T) {
 	for focus, want := range []int{0, 0, 0, 1, 2, 3} {
-		if lo, _, _, _ := columnWindow(6, focus, avail41, 0); lo != want {
+		if lo, _, _, _ := panel.ColumnWindow(6, focus, avail41, 0); lo != want {
 			t.Errorf("focus %d from start 0: lo %d, want %d", focus, lo, want)
 		}
 	}
@@ -525,14 +533,14 @@ func TestColumnWindowEdgeTravelRight(t *testing.T) {
 
 func TestColumnWindowEdgeTravelLeft(t *testing.T) {
 	for _, c := range []struct{ focus, want int }{{5, 3}, {4, 3}, {3, 3}, {2, 2}, {0, 0}} {
-		if lo, _, _, _ := columnWindow(6, c.focus, avail41, 3); lo != c.want {
+		if lo, _, _, _ := panel.ColumnWindow(6, c.focus, avail41, 3); lo != c.want {
 			t.Errorf("focus %d from start 3: lo %d, want %d", c.focus, lo, c.want)
 		}
 	}
 	// A middle window (1..4, hints on both sides) is held while the focus is in
 	// it; the right-end re-expansion cannot produce this.
 	for _, c := range []struct{ focus, want int }{{3, 1}, {2, 1}, {1, 1}, {0, 0}} {
-		if lo, _, _, _ := columnWindow(6, c.focus, avail41, 1); lo != c.want {
+		if lo, _, _, _ := panel.ColumnWindow(6, c.focus, avail41, 1); lo != c.want {
 			t.Errorf("focus %d from start 1: lo %d, want %d", c.focus, lo, c.want)
 		}
 	}
@@ -543,11 +551,11 @@ func TestColumnWindowAlwaysHoldsFocus(t *testing.T) {
 		for focus := 0; focus < n; focus++ {
 			for start := 0; start <= n; start++ {
 				for avail := 12; avail <= 80; avail++ {
-					lo, hi, hl, hr := columnWindow(n, focus, avail, start)
+					lo, hi, hl, hr := panel.ColumnWindow(n, focus, avail, start)
 					if lo > focus || focus >= hi || hl != lo || hr != n-hi {
 						t.Fatalf("n %d focus %d start %d avail %d: window %d..%d hidden %d/%d", n, focus, start, avail, lo, hi, hl, hr)
 					}
-					used := (hi-lo)*bodiesColumnWidth + hintCost(hl, false) + hintCost(hr, true)
+					used := (hi-lo)*panel.BodiesColumnWidth + panel.HintCost(hl, false) + panel.HintCost(hr, true)
 					if used > avail && hi-lo > 1 {
 						t.Fatalf("n %d focus %d start %d avail %d: window %d..%d uses %d cells", n, focus, start, avail, lo, hi, used)
 					}
@@ -651,5 +659,128 @@ func TestBodiesColumnStartSurvivesResize(t *testing.T) {
 	shown := 6 - hr - lo
 	if focus := m.deriveScene().focus; focus < lo || focus >= lo+shown {
 		t.Fatalf("after 132 and back to 80: focus %d outside shown columns %d..%d", focus, lo, lo+shown)
+	}
+}
+
+// unnamedCusps are the points Astrolog prints that Sextile has no glyph for:
+// a label each, at distinct longitudes (the parser's output for the three of
+// them on arch, 2026-11-02).
+func unnamedCusps() []aspect.Position {
+	obj := func(n int) aspect.Object {
+		o, err := fixtureObjectNumbered(n)
+		if err != nil {
+			panic(err)
+		}
+		return o
+	}
+	return []aspect.Position{
+		{Object: obj(19), Longitude: 136.05},
+		{Object: obj(20), Longitude: 200.5},
+		{Object: obj(21), Longitude: 301.25},
+	}
+}
+
+// Bug 20261102T1814Z: columnCell matched by the typed body alone, so every
+// unnamed body answered with the first unnamed position's cell.
+func TestColumnCellTellsUnnamedBodiesApart(t *testing.T) {
+	cfg := Config{Color: ColorNever}
+	col := panel.BodyColumn{Positions: unnamedCusps()}
+	seen := map[string]string{}
+	for _, p := range unnamedCusps() {
+		cell := panel.ColumnCell(col, p, 0, 0, "", cfg)
+		want := expectedColumn("[", p)
+		if cell != want {
+			t.Errorf("%s cell = %q, want %q", p.Object.Name, cell, want)
+		}
+		if other, dup := seen[cell]; dup {
+			t.Errorf("%s and %s answer with the same cell %q", p.Object.Name, other, cell)
+		}
+		seen[cell] = p.Object.Name
+	}
+}
+
+// The houses overlay looked the framed position up by the typed body alone as
+// well.
+func TestHouseOverlayTellsUnnamedBodiesApart(t *testing.T) {
+	cusps := unnamedCusps()
+	ov := panel.HouseOverlay{
+		Cusps:     wholeSignLeoRising,
+		Positions: []aspect.Position{{Object: cusps[0].Object, Longitude: 10, House: 9}, {Object: cusps[1].Object, Longitude: 40, House: 10}, {Object: cusps[2].Object, Longitude: 70, House: 11}},
+		Framed:    cusps,
+	}
+	var lives, natals []aspect.House
+	for _, p := range cusps {
+		natal, live := ov.Houses(p)
+		natals = append(natals, natal)
+		lives = append(lives, live)
+	}
+	// 136.05 is Virgo (house 1 in Leo-rising whole sign is Leo: 120-150).
+	wantLive := []aspect.House{wholeSignLeoRising.HouseFor(136.05), wholeSignLeoRising.HouseFor(200.5), wholeSignLeoRising.HouseFor(301.25)}
+	for i := range cusps {
+		if lives[i] != wantLive[i] {
+			t.Errorf("%s live house = %d, want %d", cusps[i].Object.Name, lives[i], wantLive[i])
+		}
+	}
+	if natals[0] != 9 || natals[1] != 10 || natals[2] != 11 {
+		t.Errorf("natal houses = %v, want [9 10 11] (natalHouseOf has the same shape)", natals)
+	}
+}
+
+// Panel level: two or more charts shown, the three unnamed points come from
+// the parser with their own Objects, and each row reads its own degree in every column.
+func TestBodiesColumnsShowUnnamedBodiesApart(t *testing.T) {
+	stubColumnLookups(t, nil)
+	withCusps := func(shift float64) []aspect.Position {
+		ps := shiftedChart(shift)
+		for _, u := range unnamedCusps() {
+			u.Longitude = math.Mod(u.Longitude+shift, 360)
+			ps = append(ps, u)
+		}
+		return ps
+	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: withCusps(shiftOf(c.When)), Commands: []string{"astrolog natal"}}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: withCusps(shiftOf(when) + 11), Commands: []string{"astrolog transit"}}, nil
+		}
+	})
+	m := settledComparing(t, 1)
+	m.cfg = Config{Color: ColorNever}
+	cols, _ := m.bodyColumnsForScene()
+	view := ansi.Strip(m.View())
+	for _, u := range unnamedCusps() {
+		// The row names the object as the panel prints it: the full name, cut
+		// to the nine-cell column and marked when it does not fit (East Poi…).
+		printed := term.CutRight(u.Object.Name, 9, m.cfg)
+		var line string
+		for _, l := range strings.Split(view, "\n") {
+			if strings.Contains(l, printed+" ") {
+				line = l
+				break
+			}
+		}
+		if line == "" {
+			t.Fatalf("no %s row in the panel:\n%s", printed, view)
+		}
+		for i, c := range cols {
+			var q aspect.Position
+			for _, p := range c.Positions {
+				if p.Object == u.Object {
+					q = p
+				}
+			}
+			sep := " "
+			switch i {
+			case 1:
+				sep = "["
+			case 2:
+				sep = "]"
+			}
+			if want := expectedColumn(sep, q); !strings.Contains(line, want) {
+				t.Errorf("%s row, chart %d: want %q in %q", u.Object.Name, i+1, want, line)
+			}
+		}
 	}
 }

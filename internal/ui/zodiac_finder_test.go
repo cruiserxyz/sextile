@@ -5,6 +5,7 @@ package ui
 // synthetic test inputs.
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"regexp"
 	"strings"
@@ -31,7 +32,7 @@ func openZodiacFinderOn(t *testing.T, m Model) Model {
 
 func zodiacRowNames(m Model) []string {
 	var out []string
-	for _, z := range m.zodiacFinder.matches {
+	for _, z := range m.zodiacFinder.Matches {
 		out = append(out, z.Name())
 	}
 	return out
@@ -52,8 +53,8 @@ func zodiacTopEdge(t *testing.T, m Model) string {
 func TestZodiacFinderKeys(t *testing.T) {
 	t.Run("ctrl+z opens it for the focused chart, esc closes", func(t *testing.T) {
 		m := openZodiacFinderOn(t, finderModel(t, 2, 1))
-		if m.zodiacFinder.slotIdx != 1 {
-			t.Errorf("the finder is for slot %d, want the focused 1", m.zodiacFinder.slotIdx)
+		if m.zodiacFinder.SlotIdx != 1 {
+			t.Errorf("the finder is for slot %d, want the focused 1", m.zodiacFinder.SlotIdx)
 		}
 		m, _ = tpress(t, m, keyEsc)
 		if m.startup != startupReady {
@@ -87,16 +88,16 @@ func TestZodiacFinderKeys(t *testing.T) {
 		m := finderModel(t, 2, 0)
 		var key, seq bool
 		for _, l := range m.helpLines() {
-			if strings.Contains(l.text, "Choose zodiac") {
-				key = key || strings.Contains(l.text, "⌃z")
-				seq = seq || strings.Contains(l.text, ",z")
+			if strings.Contains(l.Text, "Choose zodiac") {
+				key = key || strings.Contains(l.Text, "⌃z")
+				seq = seq || strings.Contains(l.Text, ",z")
 			}
 		}
 		if !key || !seq {
 			t.Errorf("Help lists ctrl+z = %v and the leader sequence = %v", key, seq)
 		}
 		for _, e := range m.keyBarEntries() {
-			if e.Bar && (e.ID == BindingZodiac || e.Binding.Help().Desc == "Choose zodiac") {
+			if e.Bar && (e.ID == keys.BindingZodiac || e.Binding.Help().Desc == "Choose zodiac") {
 				t.Errorf("the key bar lists the zodiac finder: %+v", e)
 			}
 		}
@@ -105,17 +106,17 @@ func TestZodiacFinderKeys(t *testing.T) {
 
 // C8: the cursor opens on the focused chart's own zodiac, selected or not.
 func TestZodiacFinderOpensOnOwnZodiac(t *testing.T) {
-	m := selectedSet(t, 3, true, 2)
-	m.cfg = Config{Accessible: true, Color: ColorNever}
 	sessionSandbox(t)
 	stubFrameLookups(t)
+	m := selectedSet(t, 3, true, 2)
+	m.cfg = Config{Accessible: true, Color: ColorNever}
 	m.slots.SetSlotSelected(2, false)
 	m.frames.records = append(m.frames.records, chosenZ(m, 2, recipe.Lahiri))
 	if got := m.ownZodiac(m.focusedSlot()); got != recipe.Lahiri {
 		t.Fatalf("setup: the unselected chart should show its own Lahiri, got %v", got)
 	}
 	m = openZodiacFinderOn(t, m)
-	if got := m.zodiacFinder.matches[m.zodiacFinder.cursor]; got != recipe.Lahiri {
+	if got := m.zodiacFinder.Matches[m.zodiacFinder.Cursor]; got != recipe.Lahiri {
 		t.Errorf("cursor opened on %s, want the chart's own Lahiri", got.Name())
 	}
 	if got := visibleCursorRow(t, m); got != "Lahiri" {
@@ -129,7 +130,7 @@ func TestZodiacFinderOpensOnOwnZodiac(t *testing.T) {
 	g.cfg = Config{Accessible: true, Color: ColorNever}
 	g.frames.records = []store.FrameRecord{chosenZ(g, 0, recipe.Deluce), chosenZ(g, 1, recipe.Raman)}
 	g = openZodiacFinderOn(t, g)
-	if got := g.zodiacFinder.matches[g.zodiacFinder.cursor]; got != recipe.Raman {
+	if got := g.zodiacFinder.Matches[g.zodiacFinder.Cursor]; got != recipe.Raman {
 		t.Errorf("a selected second chart: cursor opened on %s, want its own Raman", got.Name())
 	}
 }
@@ -225,20 +226,20 @@ func TestZodiacFinderTitleNamesItsChart(t *testing.T) {
 		}
 	})
 	t.Run("a selected chart that is not the first names itself", func(t *testing.T) {
-		m := selectedSet(t, 2, false, 1)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubFrameLookups(t)
+		m := selectedSet(t, 2, false, 1)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m = openZodiacFinderOn(t, m)
 		if e := zodiacTopEdge(t, m); !strings.Contains(e, "Zodiac · Synthetic 2") || strings.Contains(e, "comparison") {
 			t.Errorf("title = %q", e)
 		}
 	})
 	t.Run("the first selected chart decides for itself", func(t *testing.T) {
-		m := selectedSet(t, 2, false, 0)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubFrameLookups(t)
+		m := selectedSet(t, 2, false, 0)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m = openZodiacFinderOn(t, m)
 		if e := zodiacTopEdge(t, m); !strings.Contains(e, "Zodiac · Synthetic 1") || strings.Contains(e, "comparison") {
 			t.Errorf("title = %q", e)
@@ -246,10 +247,10 @@ func TestZodiacFinderTitleNamesItsChart(t *testing.T) {
 	})
 	t.Run("a long name never hides the chart it changes at 80x24", func(t *testing.T) {
 		long := "A Considerably Longer Constructed Subject Name Than Any Box Holds"
-		m := selectedSet(t, 2, false, 1)
-		m.cfg = Config{Accessible: true, Color: ColorNever}
 		sessionSandbox(t)
 		stubFrameLookups(t)
+		m := selectedSet(t, 2, false, 1)
+		m.cfg = Config{Accessible: true, Color: ColorNever}
 		m.slots.All()[1].Chart.Name = long
 		m.slots.All()[0].Chart.Name = long + " Two"
 		m.width, m.height = 80, 24
@@ -279,7 +280,7 @@ func TestZodiacFinderDoesNotStealOtherOwners(t *testing.T) {
 	})
 	t.Run("console", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		if !m.console.open {
 			t.Fatal("setup: console did not open")
 		}
@@ -307,8 +308,8 @@ func TestZodiacFinderDoesNotStealOtherOwners(t *testing.T) {
 		m := openZodiacFinderOn(t, finderModel(t, 1, 0))
 		m = typeInFinder(t, m, "ra")
 		m, _ = tpress(t, m, keyCtrlHMain)
-		if m.startup != startupZodiacOpen || m.zodiacFinder.filterText != "r" {
-			t.Errorf("ctrl+h in the zodiac finder: startup %q filter %q, want a backspace", m.startup, m.zodiacFinder.filterText)
+		if m.startup != startupZodiacOpen || m.zodiacFinder.FilterText != "r" {
+			t.Errorf("ctrl+h in the zodiac finder: startup %q filter %q, want a backspace", m.startup, m.zodiacFinder.FilterText)
 		}
 	})
 	t.Run("a pending leader", func(t *testing.T) {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cruiserxyz/sextile/internal/lookup"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // the specification: the tab on screen keeps up with the
@@ -19,8 +19,13 @@ import (
 // detailsPanelText is the rendered Details panel, escapes and all.
 func detailsPanelText(m Model) string { return renderDetails(m) }
 
-// isDimmed says the rendered panel carries the faint attribute.
-func isDimmed(m Model) bool { return strings.Contains(detailsPanelText(m), sgrFaint) }
+// isDimmed says the rendered panel draws content faint: the faint attribute
+// is there and it is not just the one faint `…` of a pane with nothing to show
+// (C5), which is not content.
+func isDimmed(m Model) bool {
+	text := detailsPanelText(m)
+	return strings.Contains(text, term.SGRFaint) && !strings.Contains(text, term.SGRFaint+emptyPaneLine)
+}
 
 // stripTitle is the active Details tab's title as the strip prints it.
 func stripTitle(m Model) string {
@@ -83,6 +88,7 @@ func TestAttachedReportTabRefreshesLikeDetached(t *testing.T) {
 // moment starts no report; choosing the report tab then requests one, once.
 func TestHiddenReportAsksOnlyWhenChosen(t *testing.T) {
 	for _, attached := range []bool{true, false} {
+		freshModels(t)
 		spawns := reportSpawns(t)
 		m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 		if !attached {
@@ -208,7 +214,8 @@ func TestTemplateTabKeepsItsLinesDimmedForANewMoment(t *testing.T) {
 		t.Errorf("after the commit the tab still waits or dims")
 	}
 	// Another body: the lines go at once, and a first load shows no dimming.
-	m.tpl.key.body = aspect.Mercury
+	m = m.forgetMemory() // a body never seen: nothing is remembered for it
+	m.tpl.key.object = objMercury.Number
 	m, _ = m.syncTemplate()
 	if len(m.tpl.lines) != 0 || isDimmed(m) {
 		t.Errorf("another body: lines=%d dimmed=%v, want none and undimmed", len(m.tpl.lines), isDimmed(m))
@@ -224,38 +231,58 @@ func TestWaitingActiveTabTitleEndsInAnEllipsis(t *testing.T) {
 	if strings.HasSuffix(stripTitle(m), detailsPendingMark) {
 		t.Fatalf("a settled report is marked: %q", stripTitle(m))
 	}
-	m.details.pending = true
+	m.details.title, m.details.body = "[0] Chart", "an older report"
+	m = m.withReportWaiting(false)
+	if strings.HasSuffix(stripTitle(m), detailsPendingMark) {
+		t.Fatalf("a current report is marked: %q", stripTitle(m))
+	}
+	m = m.withReportWaiting(true) // the same subject at another moment
 	if !strings.HasSuffix(stripTitle(m), detailsPendingMark) {
 		t.Errorf("a waiting report is not marked: %q", stripTitle(m))
 	}
 	// Timeline.
+	freshModels(t)
 	stubTimeline(t, nil)
 	tm := timelineModel(t, Config{Accessible: true}).withDetailsTab(PanelChart, TabDetailsTimeline)
-	if !strings.HasSuffix(stripTitle(tm), detailsPendingMark) {
-		t.Errorf("a timeline owed its search is not marked: %q", stripTitle(tm))
+	if strings.HasSuffix(stripTitle(tm), detailsPendingMark) {
+		t.Errorf("a timeline with nothing shown is marked (C5: one `…` in the body, an unmarked caption): %q", stripTitle(tm))
 	}
 	tm, cmd := tm.syncTimeline()
 	tm = pump(t, tm, cmd)
 	if strings.HasSuffix(stripTitle(tm), detailsPendingMark) {
 		t.Errorf("a settled timeline is marked: %q", stripTitle(tm))
 	}
+
 	// A waiting report is not marked while another tab is the active one.
 	tm.details.pending = true
 	if strings.HasSuffix(stripTitle(tm), detailsPendingMark) {
 		t.Errorf("a hidden waiting report marked the active timeline tab: %q", stripTitle(tm))
 	}
+	// The same compared charts in another month: the list stays, faint, and
+	// the caption is marked (C4).
+	moved, _ := nextMonth(tm)
+	if !strings.HasSuffix(stripTitle(moved), detailsPendingMark) {
+		t.Errorf("a timeline owed another month's search is not marked: %q", stripTitle(moved))
+	}
 	// Template.
+	freshModels(t)
 	stubBodyFacts(t, nil)
 	pm := templateTestModel(t)
 	pm.cfg = Config{Accessible: true}
 	pm = activeOnTemplate(pm)
 	pm, _ = pm.syncTemplate()
-	if !strings.HasSuffix(stripTitle(pm), detailsPendingMark) {
-		t.Errorf("a template tab awaiting its first run is not marked: %q", stripTitle(pm))
+	if strings.HasSuffix(stripTitle(pm), detailsPendingMark) {
+		t.Errorf("a template tab awaiting its first run is marked (C5: one `…`, an unmarked caption): %q", stripTitle(pm))
 	}
 	pm = runTemplate(t, pm)
 	if strings.HasSuffix(stripTitle(pm), detailsPendingMark) {
 		t.Errorf("a settled template tab is marked: %q", stripTitle(pm))
+	}
+	// A new moment of the same body: the lines stay, faint, caption marked (C4).
+	pm.slots.SetFloatingTime(pm.slots.Floating().Time.Add(time.Hour))
+	pm, _ = pm.syncTemplate()
+	if !strings.HasSuffix(stripTitle(pm), detailsPendingMark) {
+		t.Errorf("a template tab owed another moment is not marked: %q", stripTitle(pm))
 	}
 }
 
@@ -267,6 +294,10 @@ func TestWaitingTimelineIgnoresItsRowKeys(t *testing.T) {
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	// A new month: the list is waiting, attached, the cursor on row 0.
 	m, cmd := nextMonth(m)
+	// nextMonth applies the commit without an Update; the Update that delivers it
+	// in the program also arms the loading overlay's timer, so the test does that
+	// part here and the keys below are judged on their own.
+	m, _ = m.syncLoading()
 	if !m.detailsTabWaiting(TabDetailsTimeline) || !m.details.attached {
 		t.Fatalf("fixture: waiting=%v attached=%v", m.detailsTabWaiting(TabDetailsTimeline), m.details.attached)
 	}

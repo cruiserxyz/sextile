@@ -13,15 +13,26 @@ type SGR string
 const Reset SGR = "\x1b[0m"
 
 type BodyRow struct{ Body, Position, House SGR }
-type Rows map[string]BodyRow
-type Bodies map[aspect.Body]BodyRow
 
-// AspectIdentity keys the Astrolog-owned presentation spans for one typed
-// relationship. First/Second preserve the order chosen by the producer: single
-// chart callers canonicalize them to aspect.Aspect A/B; comparison callers keep
-// Astrolog's primary/secondary chart roles.
+// Rows are the `-k` body rows of one positions chart, in the order Astrolog
+// printed them. A row's identity is its place among the objects the call
+// asked for (the astrolog package zips them), never its four-cell label: Titan
+// and Titania both print `Tita`.
+type Rows []BodyRow
+
+// Bodies are the body styles of one chart by Astrolog's object. The key is the
+// Object a resolved row carries, so Earth (object 0, named) is a key and the
+// zero Object, which stands for "no object", never is.
+type Bodies map[aspect.Object]BodyRow
+
+// AspectIdentity keys the Astrolog-owned presentation spans for one
+// relationship between two resolved objects. First/Second preserve the order
+// chosen by the producer: single chart callers canonicalize them to
+// aspect.Aspect AObject/BObject; comparison callers keep Astrolog's
+// primary/secondary chart roles. The zero Object (an unresolved side) is
+// never a side of a key.
 type AspectIdentity struct {
-	First, Second aspect.Body
+	First, Second aspect.Object
 	Kind          aspect.AspectKind
 }
 
@@ -53,15 +64,16 @@ var houseRE = regexp.MustCompile(`\[\s*\d+(?:st|nd|rd|th)\s+house\]`)
 var aspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(.+?)\s*-\s+orb:`)
 var crossAspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:`)
 
+// ParseBodies reads the colored body rows of a `-v -k` positions chart, in
+// the order they print.
 func ParseBodies(stdout string) (Rows, error) {
-	out := make(Rows)
+	var out Rows
 	for _, line := range strings.Split(stdout, "\n") {
 		plain, runs := styledLine(line)
 		m := rowRE.FindStringSubmatch(plain)
 		if m == nil {
 			continue
 		}
-		body := strings.TrimSpace(strings.TrimSuffix(m[1], ":"))
 		bodyStyle, okBody := styleFor(runs, 0, len(m[1]))
 		pos, house := positionRE.FindStringIndex(plain), houseRE.FindStringIndex(plain)
 		var posStyle, houseStyle SGR
@@ -75,7 +87,7 @@ func ParseBodies(stdout string) (Rows, error) {
 		if !okBody || !okPos || !okHouse {
 			return nil, fmt.Errorf("astrologstyle: uncolored body row %q", plain)
 		}
-		out[body] = BodyRow{Body: bodyStyle, Position: posStyle, House: houseStyle}
+		out = append(out, BodyRow{Body: bodyStyle, Position: posStyle, House: houseStyle})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("astrologstyle: no colored body rows found")

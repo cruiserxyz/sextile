@@ -3,8 +3,9 @@
 // public package in the module; internal/ packages may import it, but it
 // must never import any internal/ package.
 //
-// The vocabulary here mirrors astrolog's semantic terms — bodies, signs,
-// houses, aspect kinds. Each enum names its astrolog truth source in its
-// godoc. Values and structs only; no behaviour beyond accessors and the
-// handful of constructors that enforce an invariant.
+// An object is Astrolog's number and name (Object). A Registry holds the
+// objects read from the Astrolog binary in use. Comparing two Objects with ==
+// or as map keys compares both fields, so callers take Objects from the
+// Registry and do not build them. Values and structs only; no behaviour
+// beyond accessors and the handful of constructors that enforce an invariant.
 package aspect

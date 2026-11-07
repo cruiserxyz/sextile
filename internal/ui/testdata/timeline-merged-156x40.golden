@@ -1,4 +1,4 @@
-╭─▸[1] Chart───────────────────────────────────────────────────────────────╮╭─[0] Chart - [Timeline]───────────────────────────────────────────────────────╮
+╭─▸[1] Chart───────────────────────────────────────────────────────────────╮╭─[0] Synthetic 2 - [Timeline]─────────────────────────────────────────────────╮
 │  ① Synthetic 1  Wed Jan 11, 1961  1:01 EST  Testford 1, TS           WhTr││Wed 10/14/2026    2:59          Moon (Sco) --> Sagittarius                    │
 │[1m[7m▶ ② Synthetic 2  Mon Feb 12, 1962  1:02 EST  Testford 2, TS           WhTr[0m││ 1  10/14/2026   23:26 trans     Sun (Lib) Opp natal (Ari) Midheaven          │
 │  ③ ~ Now        Sat Oct 17, 2026 12:00 CEST Berlin, DE               WhTr││ 1  10/14/2026   23:26 trans    Mars (Leo) Con natal (Leo) Ascendant          │
@@ -37,4 +37,4 @@
 │                                                                          ││                                                                              │
 │                                                                          ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Timeline: enter | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Remove: del | Focus: 1/2/3 | Help: ? | Quit: q                 
+ Switch panel: ←→ | Timeline: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Remove: del | Focus panel: 1/2/3 | Help: ? | Quit: q     

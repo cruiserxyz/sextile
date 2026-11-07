@@ -26,7 +26,7 @@ func f4Model(t *testing.T, width, height int) Model {
 	bremen := location.PlaceInfo{Name: "Bremen", Country: "DE", Lat: 53.07, Lon: 8.8, TZ: "Europe/Berlin"}
 	tromso := location.PlaceInfo{Name: "Tromsø", Country: "NO", Lat: 69.65, Lon: 18.96, TZ: "Europe/Oslo"}
 	graz := location.PlaceInfo{Name: "Graz", Country: "AT", Lat: 47.07, Lon: 15.44, TZ: "Europe/Vienna"}
-	m := NewModelWithClock(Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 8, 11, 5, 0, 0, time.UTC)))
+	m := newTestModel(t, Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 8, 11, 5, 0, 0, time.UTC)))
 	m.startup = startupReady
 	m.place = amsterdam
 	slots, err := store.NewSlots(time.Date(2026, 10, 8, 11, 5, 0, 0, time.UTC), amsterdam)

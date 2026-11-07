@@ -64,7 +64,7 @@ func screenshotScene(t *testing.T) string {
 	const file = "Eclipse-2026-08-12.as"
 	titleLibrary(t, []string{file}, nil)
 
-	m := NewModelWithClock(Config{Color: ColorAlways}, FrozenClock(screenshotAnchor))
+	m := newTestModel(t, Config{Color: ColorAlways}, FrozenClock(screenshotAnchor))
 	m.startup = startupReady
 	m.place = screenshotHamburg
 	slots, err := store.NewSlots(screenshotAnchor, screenshotHamburg)
@@ -113,7 +113,7 @@ func TestReadmeScreenshotScene(t *testing.T) {
 	for _, want := range []string{
 		"① Eclipse-2026-08-12  Wed Aug 12, 2026 19:37 CEST",
 		"② ~                   Sun Oct 25, 2026 10:09 CET",
-		"[0] Chart - Timeline",
+		"[0] Now - Timeline",
 		"Sun 10/25/2026   10:09         Venus [Sco] <-- Libra",
 	} {
 		if !strings.Contains(plain, want) {

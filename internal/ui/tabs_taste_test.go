@@ -22,38 +22,38 @@ import (
 // tasteOwnAspects / tasteCrossAspects give the panel enough rows to show the
 // waterfall shape at both widths.
 func tasteOwnAspects() []aspect.Aspect {
-	mk := func(a, b aspect.Body, k aspect.AspectKind, orb, power float64, applying bool) aspect.Aspect {
-		asp := aspect.NewAspect(a, b, k, aspect.Orb(orb))
+	mk := func(a, b aspect.Object, k aspect.AspectKind, orb, power float64, applying bool) aspect.Aspect {
+		asp := aspect.NewObjectAspect(a, b, k, aspect.Orb(orb))
 		asp.Power = power
 		asp.Applying = applying
 		return asp
 	}
 	return []aspect.Aspect{
-		mk(aspect.Sun, aspect.Moon, aspect.Square, 0.5, 22.0, true),
-		mk(aspect.Moon, aspect.Saturn, aspect.Opposition, 1.8, 14.5, false),
-		mk(aspect.Sun, aspect.Mars, aspect.Trine, 2.1, 11.2, true),
-		mk(aspect.Venus, aspect.Jupiter, aspect.Sextile, 3.0, 8.4, false),
-		mk(aspect.Mercury, aspect.Neptune, aspect.Square, 4.2, 6.1, true),
-		mk(aspect.Mars, aspect.Pluto, aspect.Trine, 5.5, 4.3, false),
+		mk(objSun, objMoon, aspect.Square, 0.5, 22.0, true),
+		mk(objMoon, objSaturn, aspect.Opposition, 1.8, 14.5, false),
+		mk(objSun, objMars, aspect.Trine, 2.1, 11.2, true),
+		mk(objVenus, objJupiter, aspect.Sextile, 3.0, 8.4, false),
+		mk(objMercury, objNeptune, aspect.Square, 4.2, 6.1, true),
+		mk(objMars, objPluto, aspect.Trine, 5.5, 4.3, false),
 	}
 }
 
 func tasteCrossAspects() []lookup.OverlayAspect {
 	return []lookup.OverlayAspect{
-		{Transit: aspect.Saturn, Natal: aspect.Sun, Kind: aspect.Square, Orb: 0.5, Power: 9.5, Applying: true},
-		{Transit: aspect.Jupiter, Natal: aspect.Moon, Kind: aspect.Trine, Orb: 1.4, Power: 7.2},
-		{Transit: aspect.Mars, Natal: aspect.Mercury, Kind: aspect.Sextile, Orb: 2.2, Power: 5.1, Applying: true},
-		{Transit: aspect.Venus, Natal: aspect.Venus, Kind: aspect.Conjunction, Orb: 3.1, Power: 3.8},
+		{TransitObject: objSaturn, NatalObject: objSun, Kind: aspect.Square, Orb: 0.5, Power: 9.5, Applying: true},
+		{TransitObject: objJupiter, NatalObject: objMoon, Kind: aspect.Trine, Orb: 1.4, Power: 7.2},
+		{TransitObject: objMars, NatalObject: objMercury, Kind: aspect.Sextile, Orb: 2.2, Power: 5.1, Applying: true},
+		{TransitObject: objVenus, NatalObject: objVenus, Kind: aspect.Conjunction, Orb: 3.1, Power: 3.8},
 	}
 }
 
 func tastePositions() []aspect.Position {
 	return []aspect.Position{
-		{Body: aspect.Sun, Longitude: 35.5, Speed: 0.97, House: 10},
-		{Body: aspect.Moon, Longitude: 136.18, Speed: 1.05, House: 1},
-		{Body: aspect.Mercury, Longitude: 15.3, Speed: -1.1, House: 9},
-		{Body: aspect.Midheaven, Longitude: 52.0, House: 10},
-		{Body: aspect.Ascendant, Longitude: 142.0, House: 1},
+		{Object: objSun, Longitude: 35.5, Speed: 0.97, House: 10},
+		{Object: objMoon, Longitude: 136.18, Speed: 1.05, House: 1},
+		{Object: objMercury, Longitude: 15.3, Speed: -1.1, House: 9},
+		{Object: objMidheaven, Longitude: 52.0, House: 10},
+		{Object: objAscendant, Longitude: 142.0, House: 1},
 	}
 }
 
@@ -105,7 +105,7 @@ func renderPairSequence(t *testing.T) map[string]string {
 	t.Helper()
 	berlin := location.PlaceInfo{Name: "Berlin", Country: "DE", Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin"}
 	birth := location.RawPlace{Name: "Berlin", Country: "DE", Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin", LatPresent: true, LonPresent: true}
-	var tm tea.Model = NewModelWithClock(Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
+	var tm tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(frozenInstantForGolden()))
 	step := func(msg tea.Msg) {
 		tm, _ = tm.Update(msg)
 	}

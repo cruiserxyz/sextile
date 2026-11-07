@@ -44,7 +44,7 @@ const skyTail = "Moon (Gem) --> Cancer"
 func TestTimelineClockBounds(t *testing.T) {
 	ok := func(c Clock, line string, h, m int) {
 		t.Helper()
-		rows, err := ParseTimeline(line+"\n", time.UTC)
+		rows, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t))
 		if err != nil || len(rows) != 1 {
 			t.Errorf("[%s] %q refused: %v", clockName(c), line, err)
 			return
@@ -55,7 +55,7 @@ func TestTimelineClockBounds(t *testing.T) {
 	}
 	bad := func(c Clock, line string) {
 		t.Helper()
-		_, err := ParseTimeline(line+"\n", time.UTC)
+		_, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t))
 		var le *TimelineLineError
 		if !errors.As(err, &le) {
 			t.Errorf("[%s] %q: err = %v, want a timeline-line error", clockName(c), line, err)
@@ -223,7 +223,7 @@ func TestTimelineRowsKeepTheirInstantsInEveryForm(t *testing.T) {
 			}
 			withClock(t, c)
 			line := runs[other].lines[0]
-			_, err := ParseTimeline(line+"\n", req.Zone)
+			_, err := ParseTimeline(line+"\n", req.Zone, testRegistry(t))
 			var le *TimelineLineError
 			if !errors.As(err, &le) {
 				t.Errorf("[%s] parsed %q from [%s]: err = %v, want a timeline-line error", clockName(c), line, clockName(other), err)

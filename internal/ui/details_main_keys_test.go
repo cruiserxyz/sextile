@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 
@@ -37,7 +38,7 @@ func detailsKeyStates(t *testing.T) []Model {
 }
 
 // mainKeyName is how a failure names a main binding: its help words and key.
-func mainKeyName(e BindingEntry) string {
+func mainKeyName(e keys.BindingEntry) string {
 	h := e.Binding.Help()
 	return fmt.Sprintf("%q (%s, binding %d)", h.Desc, h.Key, e.ID)
 }
@@ -53,7 +54,7 @@ func TestEveryMainKeyWorksInDetailsOrIsRefused(t *testing.T) {
 	changed := func(before, after Model, cmd tea.Cmd) bool {
 		return cmd != nil || before.View() != after.View() || fmt.Sprintf("%+v", before) != fmt.Sprintf("%+v", after)
 	}
-	for _, e := range defaultKeys().mainBindings() {
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		if _, refused := detailsRefused[e.ID]; refused {
 			continue
 		}
@@ -61,17 +62,17 @@ func TestEveryMainKeyWorksInDetailsOrIsRefused(t *testing.T) {
 		// The leader's own entries are typed after the leader. A sequence the
 		// leader does not know only clears it, so that is the baseline they must
 		// beat; Esc's whole job is clearing it.
-		leaderEntry := e.When != nil && e.When(Model{leader: leaderState{pending: true}}) && !e.When(Model{})
+		leaderEntry := e.When != nil && e.When(keys.Context{Leader: keys.LeaderFacts{Pending: true}}) && !e.When(keys.Context{})
 		acted := false
 		for _, s := range states {
 			before := s
 			if leaderEntry {
 				s, _ = tpress(t, s, runes(","))
 				before = s
-				if e.ID != BindingCancelLeader {
+				if e.ID != keys.BindingCancelLeader {
 					before = s.clearLeader()
 				}
-			} else if e.When != nil && !e.When(s) {
+			} else if e.When != nil && !e.When(s.keysFacts(ownerMain)) {
 				continue
 			}
 			tm, cmd := s.Update(keyMsgFor(t, k))
@@ -92,14 +93,14 @@ func TestRefusedKeysDoNothingInDetails(t *testing.T) {
 	stubTextCompute(t)
 	stubRawReports(t)
 	pressed := 0
-	for _, e := range defaultKeys().mainBindings() {
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		if _, refused := detailsRefused[e.ID]; !refused {
 			continue
 		}
 		for _, k := range e.Binding.Keys() {
 			for i, s := range detailsKeyStates(t) {
 				msg := keyMsgFor(t, k)
-				if matchBinding(msg, s.available(s.ownerBindings(ownerDetails))) != BindingNone {
+				if keys.MatchBinding(msg, s.available(ownerDetails, s.ownerBindings(ownerDetails))) != keys.BindingNone {
 					continue // Details answers this key here; it is not the refused one
 				}
 				want := snapshotForEsc(s)
@@ -154,4 +155,28 @@ func TestLeaderWorksFromDetails(t *testing.T) {
 			t.Error("`, c d` detached Details")
 		}
 	})
+}
+
+// Rule pinned (operator, 2026-11-07): Ctrl+P refused by attached Details shows
+// the footer notice "Actions: leave Details first (Esc)"; every other refused
+// key stays silent, as the 2026-10-24 list has them.
+func TestRefusedActionsKeyInDetailsSaysSo(t *testing.T) {
+	stubTextCompute(t)
+	stubRawReports(t)
+	s := detailsKeyStates(t)[0]
+	got, _ := tpress(t, s, tea.KeyMsg{Type: tea.KeyCtrlP})
+	if got.currentOwner() != ownerDetails {
+		t.Fatalf("Ctrl+P in Details: owner %v, want Details (no popup)", got.currentOwner())
+	}
+	if want := "Actions: leave Details first (Esc)"; got.footerIndicator() != want {
+		t.Errorf("notice %q, want %q", got.footerIndicator(), want)
+	}
+	// Another refused key: no notice.
+	other, _ := tpress(t, s, tea.KeyMsg{Type: tea.KeyTab})
+	if keys.MatchBinding(tea.KeyMsg{Type: tea.KeyTab}, s.available(ownerDetails, s.ownerBindings(ownerDetails))) != keys.BindingNone {
+		t.Skip("Tab is answered by Details here")
+	}
+	if other.yank.active {
+		t.Errorf("Tab (refused) showed a notice: %q", other.footerIndicator())
+	}
 }

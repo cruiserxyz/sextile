@@ -14,7 +14,7 @@ import (
 // are constructed (cold-start, pre-resolution) is a silent no-op. The
 // handler must not panic on a nil m.slots.
 func TestCycleSlotCursor_NoSlots_NoOp(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 
 	if got := m.cycleSlotCursor(+1); got.cursorIdx != 0 {
 		t.Errorf("nil slots: cycleSlotCursor(+1) moved cursor to %d, want 0", got.cursorIdx)
@@ -31,7 +31,7 @@ func TestCycleSlotCursor_NoSlots_NoOp(t *testing.T) {
 // workspace (floating only, no anchor) ↑/↓ does nothing — there is no
 // other slot to move to.
 func TestCycleSlotCursor_FloatingOnly_NoOp(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -57,7 +57,7 @@ func TestCycleSlotCursor_FloatingOnly_NoOp(t *testing.T) {
 // instead of wrapping (the specification C12): from floating
 // (index 1) ↓ stays 1, ↑ -> 0, ↑ stays 0, ↓ -> 1.
 func TestCycleSlotCursor_TwoSlots_StopsAtBothEnds(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -106,7 +106,7 @@ func TestCycleSlotCursor_TwoSlots_StopsAtBothEnds(t *testing.T) {
 // wiring, not just the helper). Uses a two-slot workspace so the cursor
 // actually moves and we can observe it.
 func TestSlotCycleKeyBindings_DispatchToHandler(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	{
 		updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 		m = updated.(Model)

@@ -20,6 +20,7 @@ var pickMoment = time.Date(2001, 3, 14, 11, 30, 0, 0, time.UTC)
 // its stubs feed.
 func pickModel(t *testing.T) (Model, *swapSpawns) {
 	t.Helper()
+	freshModels(t)
 	spawns := stubSwapLookups(t)
 	m := settledComparing(t, 1)
 	m.width, m.height = 132, 40
@@ -52,9 +53,11 @@ func inked(s string) string {
 	return strings.Join(keep, "\n")
 }
 
-// Rules 1 and 2: Bodies and Aspects keep painting the previous committed frame
-// after a library pick (an added chart, a chart already open) and an atlas
-// pick, then switch in whole; the chart list already shows the picked chart.
+// Rules 1 and 2: after a library pick (an added chart, a chart already open)
+// Bodies and Aspects draw nothing of the old chart under the picked one: `…` in
+// both (C5); after an atlas pick, the same floating chart in another place, the
+// old frame stays faint (C4). Either way they switch in whole, together, when
+// the frame lands; the chart list already shows the picked chart.
 func TestPickHoldsTheOldChart(t *testing.T) {
 	munich := location.PlaceInfo{Name: "Munich", Country: "DE", Lat: 48.1374, Lon: 11.5761, TZ: "Europe/Berlin"}
 	for _, tc := range []struct {
@@ -89,8 +92,15 @@ func TestPickHoldsTheOldChart(t *testing.T) {
 				t.Fatalf("the live chart was not cleared: %d positions", len(m1.chart.positions))
 			}
 			list1, mid := leftColumn(t, m1.View())
-			if inked(mid) != inked(before) {
-				t.Fatalf("Bodies and Aspects changed before the picked chart's frame landed:\n--- before\n%s\n--- mid-pick\n%s", before, mid)
+			switch state := m1.textPaneState(PanelBodies); {
+			case state != m1.textPaneState(PanelAspects):
+				t.Fatalf("Bodies is %v and Aspects %v mid-pick, want the same", state, m1.textPaneState(PanelAspects))
+			case state == paneUpdating && inked(mid) != inked(before):
+				t.Fatalf("the same chart in another place changed Bodies and Aspects before its frame landed:\n--- before\n%s\n--- mid-pick\n%s", before, mid)
+			case state == paneEmpty && strings.Count(mid, emptyPaneLine) < 2:
+				t.Fatalf("another chart's frame owed, and Bodies and Aspects do not read `…` in both:\n%s", mid)
+			case state == paneCurrent:
+				t.Fatalf("mid-pick, Bodies and Aspects are drawn as current")
 			}
 			if tc.listName != "" {
 				if list1 == list0 || !strings.Contains(list1, tc.listName) {
@@ -114,7 +124,7 @@ func TestPickHoldsTheOldChart(t *testing.T) {
 				t.Fatalf("the pick never reached Bodies and Aspects:\n%s", after)
 			}
 			for i, v := range views {
-				if _, got := leftColumn(t, v); inked(got) != inked(before) && inked(got) != inked(after) {
+				if _, got := leftColumn(t, v); inked(got) != inked(before) && inked(got) != inked(mid) && inked(got) != inked(after) {
 					t.Fatalf("view %d of %d shows a mixture of the two charts:\n--- before\n%s\n--- after\n%s\n--- got\n%s", i+1, len(views), before, after, got)
 				}
 			}

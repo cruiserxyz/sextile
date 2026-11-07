@@ -86,3 +86,16 @@ func TestPumpAwaitsSlowWorkInProcess(t *testing.T) {
 		t.Fatalf("in-process work was abandoned: size %dx%d, want 77x31", m.width, m.height)
 	}
 }
+
+// An abandoned long timer ends at once: a test that raised a notice (a 3 s
+// timer) does not pay the 3 s in its cleanup.
+func TestAbandonedLongTimerDoesNotCostItsDuration(t *testing.T) {
+	start := time.Now()
+	t.Run("raise", func(t *testing.T) {
+		m := probeModel(t)
+		pump(t, m, longTimer(3*time.Second, func(time.Time) tea.Msg { return nil }))
+	})
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Fatalf("an abandoned 3 s timer cost %v, want under 1.5 s", d)
+	}
+}

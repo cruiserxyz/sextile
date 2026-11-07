@@ -61,6 +61,18 @@ func (e *WarnedError) Is(target error) bool { return target == ErrAstrologWarned
 // Warnings are the non-empty stderr lines that are not wheel progress.
 func (e *WarnedError) Warnings() []string { return warningLines(e.Stderr) }
 
+// MissingEphemeris reports whether any warning of the refused call is
+// Astrolog's missing-ephemeris line (an object it placed at 0 Aries): the one
+// refusal that makes a composite result untrustworthy as a whole.
+func (e *WarnedError) MissingEphemeris() bool {
+	for _, l := range e.Warnings() {
+		if missingEphemeris.MatchString(l) {
+			return true
+		}
+	}
+	return false
+}
+
 // The two lines a wheel image writes to stderr on success (measured on 8.00).
 var progressLines = map[string]bool{
 	"Creating graphics chart in memory.": true,
@@ -68,19 +80,26 @@ var progressLines = map[string]bool{
 }
 
 // missingEphemeris is Astrolog's line for an object whose Swiss Ephemeris file
-// is absent, anchored over the whole line. It is expected, not a warning: the
-// object is dropped and named unavailable (sanity.go, the body selector), so
-// the rest of the chart stands. A line that merely contains "SwissEph" is not
-// exempt.
-var missingEphemeris = regexp.MustCompile(`^SwissEph file '([^']+\.se1)' not found in PATH '.*'$`)
+// is absent, anchored over the whole line. Only a caller that collects it on
+// purpose (the availability probe) treats it as expected; for every other call
+// it is a warning and refuses the result. A line that merely contains
+// "SwissEph" is not this line.
+var missingEphemeris = regexp.MustCompile(`^SwissEph file '([^']+)' not found in PATH '.*'$`)
 
-// warningLines is stderr minus empty lines, the two progress lines and
-// missing-ephemeris lines, each with trailing whitespace trimmed.
-func warningLines(stderr string) []string {
+// warningLines is stderr minus empty lines and the two progress lines, each
+// with trailing whitespace trimmed. A missing-ephemeris line IS a warning: the
+// object it names was placed at 0 Aries, and a result that carries it cannot
+// be trusted.
+func warningLines(stderr string) []string { return warningLinesFor(stderr, false) }
+
+// warningLinesFor is warningLines for a caller that collects the
+// missing-ephemeris lines itself (the availability probe, which casts an object
+// on purpose to learn its file): they are not warnings to it.
+func warningLinesFor(stderr string, collecting bool) []string {
 	var out []string
 	for _, line := range strings.Split(stderr, "\n") {
 		line = strings.TrimRight(line, " \t\r")
-		if line == "" || progressLines[line] || missingEphemeris.MatchString(line) {
+		if line == "" || progressLines[line] || (collecting && missingEphemeris.MatchString(line)) {
 			continue
 		}
 		out = append(out, line)
@@ -102,3 +121,39 @@ func missingEphemerisFiles(stderr string) []string {
 	}
 	return out
 }
+
+// firstSaidLine is the line to keep of what Astrolog wrote on stderr: the
+// first missing-ephemeris line when there is one, else the first line that is
+// not wheel progress, with escape sequences and other control bytes removed
+// and the ends trimmed. "" when Astrolog wrote nothing worth keeping.
+func firstSaidLine(stderr string) string {
+	first := ""
+	for _, line := range strings.Split(stderr, "\n") {
+		line = cleanSaid(line)
+		if line == "" || progressLines[line] {
+			continue
+		}
+		if missingEphemeris.MatchString(line) {
+			return line
+		}
+		if first == "" {
+			first = line
+		}
+	}
+	return first
+}
+
+// cleanSaid removes escape sequences and control bytes from one line.
+func cleanSaid(line string) string {
+	line = ansiSequence.ReplaceAllString(line, "")
+	line = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, line)
+	return strings.TrimSpace(line)
+}
+
+// ansiSequence matches CSI and OSC escape sequences.
+var ansiSequence = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]`)

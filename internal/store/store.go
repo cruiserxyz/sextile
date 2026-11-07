@@ -410,6 +410,11 @@ func writePreferencesOnce(path string, merge func(existing string) (string, erro
 	if merr != nil {
 		return false, merr
 	}
+	// Nothing to change, nothing written: no temporary file, no rename, and the
+	// file keeps its modification time (a missing file stays missing).
+	if merged == string(existing) {
+		return false, nil
+	}
 	if err := mkdirAllSynced(filepath.Dir(path), 0o755); err != nil {
 		return false, fmt.Errorf("store: mkdir: %w", err)
 	}

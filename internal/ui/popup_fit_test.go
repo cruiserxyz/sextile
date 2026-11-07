@@ -2,6 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -36,7 +39,7 @@ import (
 // "No wider than its content" cannot be read off the picture: a list row pads
 // itself out to the width it is given, so a box that is too wide still has
 // rows that reach its edge. The guard instead takes ONE cell off the box
-// (modalFitProbe) and asks whether anything was cut or pushed out of its row.
+// (dialog.FitProbe) and asks whether anything was cut or pushed out of its row.
 // If nothing was, the cell was spare. Rows are asked the same way.
 
 // fitSizes are the two terminal sizes the program supports.
@@ -57,7 +60,7 @@ type fitStep struct {
 // fitCase is one popup in one state.
 type fitCase struct {
 	// popup is the renderer's own name: the function in the program that
-	// calls renderModalBox or renderForm for it. The enumeration test holds
+	// calls dialog.Render or dialog.RenderForm for it. The enumeration test holds
 	// the table to the calls the program actually has.
 	popup string
 	state string
@@ -78,7 +81,7 @@ type fitCase struct {
 	title string
 	// typing is the cells a search line or a form's field asks for beyond
 	// its content: zero for a popup with neither. It is the documented floor
-	// (modalSearchRoom, modalFieldRoom, modalRefusalRoom), written out here in
+	// (dialog.SearchRoom, dialog.FieldRoom, dialog.RefusalRoom), written out here in
 	// cells so a change to the constants has to change this table too.
 	typing int
 	// inputs is how many input lines the popup has: 1 for a search line, the
@@ -95,7 +98,11 @@ type fitCase struct {
 	// step of a popup sized for a larger one, or the content is a document with
 	// blank lines of its own (Help).
 	blanks int
-	// zone is whether the popup keeps the message zone (modalBox.Zone): a
+	// taller is the rows the popup adds to the list area every popup gets
+	// (dialog.Box.Taller): seven group rows against the five the list area was
+	// sized for, so the Bodies box is two rows taller and its list keeps its rows.
+	taller int
+	// zone is whether the popup keeps the message zone (dialog.Box.Zone): a
 	// blank row and a row for a message, on top of the rows the terminal gives.
 	zone bool
 	// endsBlank is whether the last content row is the blank line kept for
@@ -163,11 +170,11 @@ func fitEquinox() store.NamedChart {
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Equinox-2026-09.as"}}
 }
 
-func fitBodyState(filter string) bodyModalState {
+func fitBodyState(filter string) popup.Body {
 	st := listRowsBodyState()
-	st.filterText = filter
-	st.refilter()
-	st.cursor = groupRows()
+	st.FilterText = filter
+	st.Refilter()
+	st.Cursor = popup.GroupRows()
 	return st
 }
 
@@ -219,16 +226,16 @@ func fitCases() []fitCase {
 	const searchPrompt, bodiesPrompt = "Search: ", "Search bodies: "
 	search := len(searchPrompt) + 24 + 1
 	// A form is the width of the line kept for a refusal.
-	form := modalProseWidth
+	form := dialog.ProseWidth
 
 	atlas := func(state string, filter string) fitCase {
 		return fitCase{popup: "renderAtlasModal", state: state, group: "atlas", title: "City", typing: search, inputs: 1, blanks: -1,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupAtlasOpen
-				m.atlas.index = location.NewIndex(append(fitPlaces(), syntheticPlaces(80)...))
-				m.atlas.filterText = filter
-				m.atlas.refilter()
+				m.atlas.Index = location.NewIndex(append(fitPlaces(), syntheticPlaces(80)...))
+				m.atlas.FilterText = filter
+				m.atlas.Refilter()
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderAtlasModal(m.atlas, cfg, w, h) },
@@ -254,10 +261,10 @@ func fitCases() []fitCase {
 		}
 	}
 	bodies := func(state string) fitCase {
-		// The tag bar: its count at its widest, a space and room for a few names.
-		n := len(fitBodyState("").registry)
-		tagBar := ansi.StringWidth(fmt.Sprintf("%d of %d selected · ● all ◐ some ○ none", n, n)) + 1 + 12
-		return fitCase{popup: "renderBodyModal", state: state, title: "Bodies", typing: max(len(bodiesPrompt)+24+1, tagBar, modalProseWidth), inputs: 1, fill: " selected ", blanks: 2, endsBlank: true, zone: true,
+		// The bottom line: the count at its widest.
+		n := len(fitBodyState("").Registry)
+		tagBar := ansi.StringWidth(fmt.Sprintf("%d of %d selected · ● all ◐ some ○ none", n, n))
+		return fitCase{popup: "renderBodyModal", state: state, title: "Bodies", typing: max(len(bodiesPrompt)+24+1, tagBar, dialog.ProseWidth), inputs: 1, fill: " selected ", blanks: 1, zone: true, taller: 2,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupBodyOpen
@@ -266,9 +273,9 @@ func fitCases() []fitCase {
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderBodyModal(m.bodyModal, cfg, w, h) },
 			steps: listSteps("mo", fitStep{"tick", fitKeys(" ")}, fitStep{"a note of several rows", func(t *testing.T, m Model) Model {
-				m.bodyModal.cursor = groupRows()
-				if o, ok := m.bodyModal.objectUnderCursor(); ok {
-					m.bodyModal.setProbe(o.Number, m.bodyModal.inputs, lookup.BodyProbe{MissingFiles: []string{"seas_18.se1", "sepl_18.se1", "semo_18.se1", "s136108s.se1", "s136199s.se1", "s136472s.se1"}})
+				m.bodyModal.Cursor = popup.GroupRows()
+				if o, ok := m.bodyModal.ObjectUnderCursor(); ok {
+					m.bodyModal.SetProbe(o.Number, m.bodyModal.Inputs, lookup.BodyProbe{MissingFiles: []string{"seas_18.se1", "sepl_18.se1", "semo_18.se1", "s136108s.se1", "s136199s.se1", "s136472s.se1"}, Said: longSaid})
 				}
 				return m
 			}}),
@@ -306,12 +313,27 @@ func fitCases() []fitCase {
 			steps:  listSteps("fa"),
 		}
 	}
+	// The Actions palette: a search line over the commands. Its rows read the
+	// model, and the box is the size of the widest row it showed when it opened.
+	actions := func(state string) fitCase {
+		return fitCase{popup: "renderActions", state: state, title: "Actions", typing: search, inputs: 1,
+			model: func(t *testing.T, cfg Config, w, h int) Model {
+				next, _ := openActions(fitBase(t, cfg, w, h))
+				return next.(Model)
+			},
+			render: func(m Model, cfg Config, w, h int) string { return renderActions(m.actions, m.blocked, cfg, w, h) },
+			steps: listSteps("ch", fitStep{"a refused Enter says why", func(t *testing.T, m Model) Model {
+				m.actions.Notice = "Back to the previous time: no earlier time to go back to"
+				return m
+			}}),
+		}
+	}
 	display := func(form int) fitCase {
 		c := fitCase{popup: "renderHouseDisplay", state: fmt.Sprintf("form %d", form), group: "display", title: "House display", blanks: -1,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				next, _ := openHouseDisplay(fitBase(t, cfg, w, h))
 				m := next.(Model)
-				m.houseDisplayPopup.list.cursor = form
+				m.houseDisplayPopup.List.Cursor = form
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderHouseDisplay(m.houseDisplayPopup, cfg, w, h) },
@@ -323,21 +345,34 @@ func fitCases() []fitCase {
 		}
 		return c
 	}
+	// The hidden Experiments popup: one row per switch and a foot line; its size
+	// is the table's, whatever a flip does.
+	experimentsCase := fitCase{popup: "renderExperiments", state: "enter-colour", title: "Experiments", blanks: -1,
+		model: func(t *testing.T, cfg Config, w, h int) Model {
+			next, _ := fitBase(t, cfg, w, h).openExperiments()
+			return next.(Model)
+		},
+		render: func(m Model, cfg Config, w, h int) string { return renderExperiments(m.experimentsPopup, cfg, w, h) },
+		steps: []fitStep{{"cursor down", fitKeys("down")}, {"cursor up", fitKeys("up")}, {"a failed flip says why", func(t *testing.T, m Model) Model {
+			m.experimentsPopup.Foot = "Not saved: preferences.yaml could not be written"
+			return m
+		}}},
+	}
 	sessions := func(state string, rows []store.NamedSession) fitCase {
 		return fitCase{popup: "renderSessions", state: state, title: "Sessions",
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSessionsOpen
-				m.sessions = sessionsPopupState{rows: rows, prior: startupReady}
-				m.sessions.fit = sessionsFit(m)
+				m.sessions = sessionsPopupState{Sessions: popup.Sessions{Rows: rows}, prior: startupReady}
+				m.sessions.Fit = sessionsFit(m)
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderSessions(m, w, h) },
 			steps: []fitStep{{"cursor down", fitKeys("down", "down")}, {"cursor to the bottom", fitKeys("end")}, {"cursor to the top", fitKeys("home", "up")},
 				{"a session is saved", func(t *testing.T, m Model) Model {
-					m.sessions.rows = append(append([]store.NamedSession(nil), m.sessions.rows...), store.NamedSession{Name: "Saved just now, under a rather long name", File: "saved.yaml"})
+					m.sessions.Rows = append(append([]store.NamedSession(nil), m.sessions.Rows...), store.NamedSession{Name: "Saved just now, under a rather long name", File: "saved.yaml"})
 					for i := 0; i < 20; i++ {
-						m.sessions.rows = append(m.sessions.rows, store.NamedSession{Name: fmt.Sprintf("More %02d", i), File: fmt.Sprintf("more-%02d.yaml", i)})
+						m.sessions.Rows = append(m.sessions.Rows, store.NamedSession{Name: fmt.Sprintf("More %02d", i), File: fmt.Sprintf("more-%02d.yaml", i)})
 					}
 					return m
 				}}},
@@ -371,35 +406,39 @@ func fitCases() []fitCase {
 				m, _ := press(t, fitBase(t, cfg, w, h), "?")
 				return m
 			},
-			render: func(m Model, cfg Config, w, h int) string { return renderHelpModal(m.helpLines(), cfg, m.help, w, h) },
-			steps:  []fitStep{{"scroll down", fitKeys("down", "down", "pgdown")}, {"to the bottom", fitKeys("end")}, {"to the top", fitKeys("home")}},
+			render: func(m Model, cfg Config, w, h int) string {
+				c := m.keysContextFor(ownerHelp)
+				c.Style = cfg
+				return keys.RenderHelp(c, popupChrome(cfg), w, h)
+			},
+			steps: []fitStep{{"scroll down", fitKeys("down", "down", "pgdown")}, {"to the bottom", fitKeys("end")}, {"to the top", fitKeys("home")}},
 		},
-		houses("all"), zodiacs("all"),
-		display(0), display(1), display(2), display(3),
+		houses("all"), zodiacs("all"), actions("all"),
+		display(0), display(1), display(2), display(3), experimentsCase,
 		sessions("rows", fitSessions()), sessions("none", nil),
 		{popup: "renderSaveModal", state: "empty", title: "Save chart", typing: form, inputs: 1, blanks: 2, endsBlank: true, zone: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSaveOpen
-				m.save = saveModalState{form: newSaveForm(), dest: "/data/op/Clients", prior: startupReady}
+				m.save = saveModalState{Form: popup.Form{Fields: newSaveForm()}, dest: "/data/op/Clients", prior: startupReady}
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderSaveModal(m.save, cfg, w, h) },
-			steps:  formSteps(`"jane-doe" is taken — try another name.`, func(m Model, r string) Model { m.save.refusal = r; return m }),
+			steps:  formSteps(`"jane-doe" is taken — try another name.`, func(m Model, r string) Model { m.save.Refusal = r; return m }),
 		},
 		{popup: "renderTitleForm", state: "ask", group: "title", title: "Chart title", typing: max(form, len("Place: ")+40+1), inputs: 2, blanks: -1, zone: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				c := fitEquinox()
 				m.startup = startupTitleOpen
-				m.title = titleFormState{form: newTitleForm(c), chart: c}
+				m.title = titleFormState{Form: popup.Form{Fields: newTitleForm(c)}, chart: c}
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderTitleForm(m.title, cfg, w, h) },
-			steps: append(formSteps("Add a place to save this title.", func(m Model, r string) Model { m.title.refusal = r; return m }),
+			steps: append(formSteps("Add a place to save this title.", func(m Model, r string) Model { m.title.Refusal = r; return m }),
 				fitStep{"the second field", fitKeys("tab")},
 				fitStep{"the second step", func(t *testing.T, m Model) Model {
-					m.title.confirming, m.title.dir = true, store.ChartsDir()
+					m.title.Confirming, m.title.dir = true, store.ChartsDir()
 					return m
 				}},
 				fitStep{"the second step, its backup already kept", func(t *testing.T, m Model) Model {
@@ -412,8 +451,8 @@ func fitCases() []fitCase {
 				m := fitBase(t, cfg, w, h)
 				c := fitEquinox()
 				m.startup = startupTitleOpen
-				m.title = titleFormState{form: newTitleForm(c), chart: c, confirming: true, dir: store.ChartsDir()}
-				m.title.form.fields[0].value = "Constructed One"
+				m.title = titleFormState{Form: popup.Form{Fields: newTitleForm(c), Confirming: true}, chart: c, dir: store.ChartsDir()}
+				m.title.Fields.Fields[0].Value = "Constructed One"
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderTitleForm(m.title, cfg, w, h) },
@@ -422,21 +461,21 @@ func fitCases() []fitCase {
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSessionNameOpen
-				m.sessions = sessionsPopupState{form: newForm(formField{label: "Save as: "}), prior: startupReady}
+				m.sessions = sessionsPopupState{Sessions: popup.Sessions{Form: dialog.NewForm(dialog.Field{Label: "Save as: "})}, prior: startupReady}
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderSessionName(m, w, h) },
-			steps:  formSteps("That name is taken. Try another.", func(m Model, r string) Model { m.sessions.refusal = r; return m }),
+			steps:  formSteps("That name is taken. Try another.", func(m Model, r string) Model { m.sessions.Refusal = r; return m }),
 		},
 		{popup: "renderSessionName", state: "rename", title: "Rename session", typing: form, inputs: 1, blanks: 2, endsBlank: true, zone: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSessionNameOpen
-				m.sessions = sessionsPopupState{form: newForm(formField{label: "Rename to: "}), prior: startupReady, renaming: "monday.yaml"}
+				m.sessions = sessionsPopupState{Sessions: popup.Sessions{Form: dialog.NewForm(dialog.Field{Label: "Rename to: "}), Renaming: "monday.yaml"}, prior: startupReady}
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderSessionName(m, w, h) },
-			steps:  formSteps("That name is taken. Try another.", func(m Model, r string) Model { m.sessions.refusal = r; return m }),
+			steps:  formSteps("That name is taken. Try another.", func(m Model, r string) Model { m.sessions.Refusal = r; return m }),
 		},
 	}
 }
@@ -492,9 +531,9 @@ func fitContent(rows []string, c fitCase) string {
 }
 
 func fitProbe(narrow int, uncapped bool) func() {
-	prev := modalFitProbe
-	modalFitProbe.narrowBy, modalFitProbe.uncapped = narrow, uncapped
-	return func() { modalFitProbe = prev }
+	prev := dialog.FitProbe
+	dialog.FitProbe.NarrowBy, dialog.FitProbe.Uncapped = narrow, uncapped
+	return func() { dialog.FitProbe = prev }
 }
 
 // fitResult is what one state of a group showed.
@@ -534,7 +573,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 					// bottom one.
 					floor := c.typing
 					mark := 0
-					if !mode.cfg.useColor() {
+					if !mode.cfg.UseColor() {
 						mark = 1
 					}
 					floor = max(floor, ansi.StringWidth(c.title)+mark+4-6)
@@ -572,7 +611,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 					// in the terminal is that, or as much of it as the
 					// terminal gives.
 					chrome := 2 + c.inputs // the padding rows and the input lines
-					capRows := modalListHeight(size.h)
+					capRows := dialog.ListHeight(size.h) + c.taller
 					if c.inputs > 0 {
 						chrome++ // the rule under the inputs
 					} else {
@@ -582,7 +621,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 						capRows -= c.inputs - 1
 					}
 					if c.zone {
-						capRows += modalZoneRows
+						capRows += dialog.ZoneRows
 					}
 					if c.blanks >= 0 {
 						blank := 0
@@ -617,12 +656,12 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 
 	// A group is one width, and that width is needed by one of its states or
 	// is the floor.
-	keys := make([]string, 0, len(groups))
+	kmap := make([]string, 0, len(groups))
 	for k := range groups {
-		keys = append(keys, k)
+		kmap = append(kmap, k)
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	sort.Strings(kmap)
+	for _, k := range kmap {
 		rs := groups[k]
 		lost, floor := false, 0
 		for _, r := range rs {
@@ -647,9 +686,11 @@ var fitStartups = map[string]string{
 	"renderBodyModal":    "startupBodyOpen",
 	"renderAspectModal":  "startupAspectOpen",
 	"renderHelpModal":    "",
+	"renderActions":      "", // a flag beside Help's, never a startup state
 	"renderHouseFinder":  "startupHouseOpen",
 	"renderZodiacFinder": "startupZodiacOpen",
 	"renderHouseDisplay": "startupDisplayOpen",
+	"renderExperiments":  "startupExperimentsOpen",
 	"renderSessions":     "startupSessionsOpen",
 	"renderSaveModal":    "startupSaveOpen",
 	"renderTitleForm":    "startupTitleOpen",
@@ -684,8 +725,10 @@ func callersOf(files map[string]*ast.File, name string) map[string]bool {
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if call, ok := n.(*ast.CallExpr); ok {
-					if id, ok := call.Fun.(*ast.Ident); ok && id.Name == name {
-						out[fn.Name.Name] = true
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == name {
+						if id, ok := sel.X.(*ast.Ident); ok && id.Name == "dialog" {
+							out[fn.Name.Name] = true
+						}
 					}
 				}
 				return true
@@ -698,7 +741,7 @@ func callersOf(files map[string]*ast.File, name string) map[string]bool {
 // TestEveryPopupIsInTheFitGuard holds the table above to the program, by
 // reading the source: a popup added without a row in fitCases fails here, so
 // the rule cannot be skipped by forgetting it. Three ways to add a popup are
-// closed: calling the box (renderModalBox, or renderForm which calls it),
+// closed: calling the box (dialog.Render, or dialog.RenderForm which calls it),
 // being shown by a startup state, and drawing a frame of its own.
 func TestEveryPopupIsInTheFitGuard(t *testing.T) {
 	files := sourceFiles(t)
@@ -709,9 +752,65 @@ func TestEveryPopupIsInTheFitGuard(t *testing.T) {
 	}
 
 	// 1. Whoever calls the box, or the form that calls the box, is a row.
-	drawn := callersOf(files, "renderModalBox")
-	delete(drawn, "renderForm")
-	for f := range callersOf(files, "renderForm") {
+	drawn := callersOf(files, "Render")
+	// The popups draw their boxes inside internal/ui/popup: the method that calls
+	// the box is the caller there, and the row it answers to is named below.
+	popupFiles := map[string]*ast.File{}
+	// The Keys popup is drawn by internal/ui/keys: its function is the caller.
+	for _, dir := range []string{"popup", "keys"} {
+		pkgs, err := parser.ParseDir(token.NewFileSet(), dir, func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range pkgs {
+			for name, f := range p.Files {
+				popupFiles[name] = f
+			}
+		}
+	}
+	// A popup's box is drawn by a method of its type; type and method name the row.
+	popupRows := map[string][]string{
+		"Body.Render": {"renderBodyModal"}, "Aspects.Render": {"renderAspectModal"},
+		"Atlas.Render":    {"renderAtlasModal"},
+		"Finder.Render":   {"renderHouseFinder", "renderZodiacFinder"},
+		"Sessions.Render": {"renderSessions"}, "Sessions.RenderName": {"renderSessionName"},
+		"HouseDisplay.Render": {"renderHouseDisplay"},
+		"Experiments.Render":  {"renderExperiments"},
+		"Form.Render":         {"renderSaveModal", "renderTitleForm"},
+		".RenderHelp":         {"renderHelpModal"},
+	}
+	for _, f := range popupFiles {
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			one := map[string]*ast.File{"": {Decls: []ast.Decl{fn}}}
+			if len(callersOf(one, "Render")) == 0 && len(callersOf(one, "RenderForm")) == 0 {
+				continue
+			}
+			recv := ""
+			if fn.Recv != nil {
+				t := fn.Recv.List[0].Type
+				if ix, ok := t.(*ast.IndexExpr); ok { // a generic receiver: Finder[T]
+					t = ix.X
+				}
+				if id, ok := t.(*ast.Ident); ok {
+					recv = id.Name
+				}
+			}
+			rows, ok := popupRows[recv+"."+fn.Name.Name]
+			if !ok {
+				t.Errorf("popup.%s calls the box: name its row here", fn.Name.Name)
+				continue
+			}
+			for _, row := range rows {
+				drawn[row] = true
+			}
+		}
+	}
+	delete(drawn, "RenderForm")
+	for f := range callersOf(files, "RenderForm") {
 		drawn[f] = true
 	}
 	if got, want := sortedKeys(drawn), sortedKeys(table); fmt.Sprint(got) != fmt.Sprint(want) {
@@ -755,7 +854,7 @@ func TestEveryPopupIsInTheFitGuard(t *testing.T) {
 
 	// 3. Only the box and the panels draw a border: a popup that drew its own
 	// frame would not be held to the rule by either of the above.
-	allowed := map[string]bool{"panels.go": true, "modal_box.go": true, "layout.go": true}
+	allowed := map[string]bool{"panels.go": true, "layout.go": true}
 	for name, f := range files {
 		ast.Inspect(f, func(n ast.Node) bool {
 			if sel, ok := n.(*ast.SelectorExpr); ok && (sel.Sel.Name == "RoundedBorder" || sel.Sel.Name == "NormalBorder") && !allowed[filepath.Base(name)] {
@@ -824,7 +923,7 @@ func TestCursorStaysVisibleWhenAMessageTakesRows(t *testing.T) {
 			m := fitBase(t, cfg, size.w, size.h)
 			m.startup = startupBodyOpen
 			m.objectRegistry = syntheticObjects(80)
-			m.bodyModal = openBodyModal(m.objectRegistry, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+			m.bodyModal = popup.Open(m.objectRegistry, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 			cursorRow := func(box string) string {
 				for _, l := range strings.Split(box, "\n") {
 					if strings.Contains(l, "|  > [") {
@@ -847,14 +946,14 @@ func TestCursorStaysVisibleWhenAMessageTakesRows(t *testing.T) {
 				if row == "" {
 					t.Fatalf("%s: no cursor row to begin with:\n%s", where, plain)
 				}
-				obj, ok := m.bodyModal.objectUnderCursor()
+				obj, ok := m.bodyModal.ObjectUnderCursor()
 				if !ok {
 					// still in the group block: step into the list
-					m.bodyModal.cursor = groupRows() + 3
-					obj, _ = m.bodyModal.objectUnderCursor()
+					m.bodyModal.Cursor = popup.GroupRows() + 3
+					obj, _ = m.bodyModal.ObjectUnderCursor()
 				}
 				noted := m
-				noted.bodyModal.setProbe(obj.Number, noted.bodyModal.inputs, lookup.BodyProbe{MissingFiles: []string{"seas_18.se1", "sepl_18.se1", "semo_18.se1", "s136108s.se1", "s136199s.se1", "s136472s.se1"}})
+				noted.bodyModal.SetProbe(obj.Number, noted.bodyModal.Inputs, lookup.BodyProbe{MissingFiles: []string{"seas_18.se1", "sepl_18.se1", "semo_18.se1", "s136108s.se1", "s136199s.se1", "s136472s.se1"}, Said: longSaid})
 				box, h2 := at(noted)
 				if h2 != height {
 					t.Errorf("%s: a message of several rows changed the box from %d to %d lines", where, height+1, h2+1)
@@ -867,7 +966,7 @@ func TestCursorStaysVisibleWhenAMessageTakesRows(t *testing.T) {
 				}
 				// The message clears: the rows come back.
 				cleared := noted
-				cleared.bodyModal.probes = nil
+				cleared.bodyModal.Probes = nil
 				back, h3 := at(cleared)
 				if h3 != height || listed(back) != listed(plain) {
 					t.Errorf("%s: the list did not get its rows back when the message cleared:\n%s", where, back)
@@ -884,9 +983,9 @@ func TestMessageOnTheSmallestTerminal(t *testing.T) {
 	cfg := Config{Accessible: true, Color: ColorNever}
 	long := store.NamedChart{ID: "x", Name: "x", Untitled: true, PlaceLabel: "Munich",
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Constructed Client With A Long Name.as"}}
-	st := titleFormState{form: newTitleForm(long), chart: long, confirming: true}
+	st := titleFormState{Form: popup.Form{Fields: newTitleForm(long), Confirming: true}, chart: long}
 	quiet := strings.Split(renderTitleForm(st, cfg, MinPanelWidth, MinTerminalHeight), "\n")
-	st.refusal = "Couldn't write the file."
+	st.Refusal = "Couldn't write the file."
 	said := strings.Split(renderTitleForm(st, cfg, MinPanelWidth, MinTerminalHeight), "\n")
 	if len(quiet) > MinTerminalHeight || len(said) != len(quiet) || ansi.StringWidth(said[0]) != ansi.StringWidth(quiet[0]) {
 		t.Errorf("the box moved: %dx%d quiet, %dx%d with a message (terminal %d rows)", ansi.StringWidth(quiet[0]), len(quiet), ansi.StringWidth(said[0]), len(said), MinTerminalHeight)
@@ -908,8 +1007,11 @@ func TestKnownRefusalsFitOneRow(t *testing.T) {
 	}
 	for _, s := range append(labels, backupRefusal, emptyPlaceRefusal, nameRefusal(store.ErrSessionNameTaken),
 		nameRefusal(store.ErrSessionNameEmpty), nameRefusal(store.ErrSessionOpenElsewhere), "That name has no letters or digits to save under.") {
-		if w := ansi.StringWidth(s); w > modalRefusalRoom {
-			t.Errorf("%q is %d cells, the message zone's row holds %d", s, w, modalRefusalRoom)
+		if w := ansi.StringWidth(s); w > dialog.RefusalRoom {
+			t.Errorf("%q is %d cells, the message zone's row holds %d", s, w, dialog.RefusalRoom)
 		}
 	}
 }
+
+// longSaid is a line of Astrolog's that needs more than one row of the Bodies box.
+const longSaid = "SwissEph file 'seas_18.se1' not found in PATH '/usr/local/share/astrolog/ephemerides/swiss/'"

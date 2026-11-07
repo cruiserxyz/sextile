@@ -14,7 +14,7 @@ import (
 
 func modelWithSlot(t *testing.T) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -30,36 +30,36 @@ func modelWithSlot(t *testing.T) Model {
 func stubShowWheel(t *testing.T) *int {
 	t.Helper()
 	calls := 0
-	prev := showWheel
-	showWheel = func([]byte) (string, error) {
-		calls++
-		return "/tmp/stub.png", nil
-	}
-	t.Cleanup(func() { showWheel = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func([]byte) (string, error) {
+			calls++
+			return "/tmp/stub.png", nil
+		}
+	})
 	return &calls
 }
 
 func stubRenderWheelImage(t *testing.T) *[]time.Time {
 	t.Helper()
 	calls := []time.Time{}
-	prev := renderWheelImage
-	renderWheelImage = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		calls = append(calls, when)
-		return []byte("BM-wheel"), nil
-	}
-	t.Cleanup(func() { renderWheelImage = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			calls = append(calls, when)
+			return []byte("BM-wheel"), nil
+		}
+	})
 	return &calls
 }
 
 func stubRenderOverlayWheelImage(t *testing.T) *[]time.Time {
 	t.Helper()
 	calls := []time.Time{}
-	prev := renderOverlayWheelImage
-	renderOverlayWheelImage = func(_ context.Context, _ store.AnchorChart, transitWhen time.Time, _ location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
-		calls = append(calls, transitWhen)
-		return []byte("BM-overlay"), nil
-	}
-	t.Cleanup(func() { renderOverlayWheelImage = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.renderOverlay = func(_ context.Context, _ store.AnchorChart, transitWhen time.Time, _ location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
+			calls = append(calls, transitWhen)
+			return []byte("BM-overlay"), nil
+		}
+	})
 	return &calls
 }
 
@@ -68,7 +68,7 @@ func imageState(m Model) refreshState { return m.refresh[surfaceImage] }
 // TestDispatchRenderWheel: Ctrl+X with a focused slot activates the preview and
 // starts an image run immediately; before any slot exists it is a no-op.
 func TestDispatchRenderWheel(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	got, cmd := m.dispatchRenderWheel()
 	if got.previewActive || cmd != nil {
 		t.Error("dispatchRenderWheel before slots must be a no-op")
@@ -615,12 +615,12 @@ func TestImageError_PendingTickDoesNotRevive(t *testing.T) {
 // follow quietly — no error line — so the next Ctrl+X opens it again.
 func TestClosedViewerStopsFollowingAndCtrlXReopens(t *testing.T) {
 	asks := 0
-	prevAsk := requestViewerOpen
-	requestViewerOpen = func() { asks++ }
-	t.Cleanup(func() { requestViewerOpen = prevAsk })
-	prevShow := showWheel
-	showWheel = func([]byte) (string, error) { return "", preview.ErrViewerClosed }
-	t.Cleanup(func() { showWheel = prevShow })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.requestOpen = func() { asks++ }
+	})
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func([]byte) (string, error) { return "", preview.ErrViewerClosed }
+	})
 
 	m, _ := modelWithSlot(t).dispatchRenderWheel()
 	if asks != 1 {
@@ -655,9 +655,9 @@ func TestClosedViewerStopsFollowingAndCtrlXReopens(t *testing.T) {
 // "viewer closed" answer from a publish started before the newest Ctrl+X
 // leaves that press's reopen alone.
 func TestStaleViewerClosedCannotCancelANewerCtrlX(t *testing.T) {
-	prevAsk := requestViewerOpen
-	requestViewerOpen = func() {}
-	t.Cleanup(func() { requestViewerOpen = prevAsk })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.requestOpen = func() {}
+	})
 
 	m, _ := modelWithSlot(t).dispatchRenderWheel()
 	staleSeq := m.wheelOpenSeq

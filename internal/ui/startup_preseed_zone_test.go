@@ -40,8 +40,8 @@ func TestStartupPreseedCarriesTheHostZone(t *testing.T) {
 		{Name: name, Country: wanted, Lat: 2, Lon: 2, TZ: host},
 	})
 
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(time.Now().UTC()))
-	m.atlas.index = atlas
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(time.Now().UTC()))
+	m.atlas.Index = atlas
 	stashed := ingest.StartupPerimeterReadMsg{IANAPreseed: name}
 	m.pendingPerimeter = &stashed
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
@@ -18,12 +19,12 @@ const wheelURLStub = "http://localhost:5307/"
 func stubShowWheelURL(t *testing.T, url string) *int {
 	t.Helper()
 	calls := 0
-	prev := showWheel
-	showWheel = func([]byte) (string, error) {
-		calls++
-		return url, nil
-	}
-	t.Cleanup(func() { showWheel = prev })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.show = func([]byte) (string, error) {
+			calls++
+			return url, nil
+		}
+	})
 	return &calls
 }
 
@@ -73,6 +74,7 @@ func TestWheelNoticeOncePerSession(t *testing.T) {
 	}
 
 	// Not an address: nothing to name.
+	freshModels(t)
 	stubShowWheel(t)
 	if got := wheelOpenLines(publishOnce(t, modelWithSlot(t))); len(got) != 0 {
 		t.Errorf("a file path produced the notice %q", got)
@@ -128,7 +130,7 @@ func TestWheelNoticeFrames(t *testing.T) {
 		})
 		t.Run("console-80x24-"+md.label, func(t *testing.T) {
 			m := wheelNoticeModel(t, md.cfg, 80, 24, false)
-			m, _ = press(t, m, ",", "l")
+			m, _ = press(t, m, ",", "l", "l")
 			r, ok := m.consoleRect()
 			if !ok {
 				t.Fatal("no console")
@@ -146,7 +148,7 @@ func TestWheelNoticeFrames(t *testing.T) {
 		if y < 0 {
 			t.Fatal("the notice is not on screen")
 		}
-		want, green, red := styleFG(t, wheelOpenColour), styleFG(t, focusColour), styleFG(t, errorColour)
+		want, green, red := styleFG(t, term.WheelOpenColour), styleFG(t, term.DefaultFocusColour), styleFG(t, term.ErrorColour)
 		if want == green || want == red {
 			t.Fatalf("the notice colour %q collides with the focus green %q or the error red %q", want, green, red)
 		}
@@ -175,7 +177,7 @@ func TestWheelClosedFrames(t *testing.T) {
 		})
 		t.Run("console-80x24-"+md.label, func(t *testing.T) {
 			m := wheelNoticeModel(t, md.cfg, 80, 24, true)
-			m, _ = press(t, m, ",", "l")
+			m, _ = press(t, m, ",", "l", "l")
 			r, ok := m.consoleRect()
 			if !ok {
 				t.Fatal("no console")
@@ -193,7 +195,7 @@ func TestWheelClosedFrames(t *testing.T) {
 		if y < 0 {
 			t.Fatal("the closing line is not on screen")
 		}
-		want := styleFG(t, wheelClosedColour)
+		want := styleFG(t, term.WheelClosedColour)
 		for _, c := range cellsOf(s, y, text) {
 			if c.r != ' ' && c.fg != want {
 				t.Errorf("cell %q is fg %q, want the red %q", c.r, c.fg, want)

@@ -7,13 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/location"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // All chart values in this file are constructed synthetic test inputs.
@@ -31,7 +31,7 @@ func sessionSandbox(t *testing.T) string {
 
 // oneSlot is the session shape every test below used to build by hand: one
 // anchored chart, with the selection and bodies it carried.
-func oneSlot(c SessionChart, selected bool, bodies ...aspect.Body) []SessionSlot {
+func oneSlot(c SessionChart, selected bool, bodies ...string) []SessionSlot {
 	return []SessionSlot{{Chart: c, Usable: true, Selected: selected, Bodies: bodies}}
 }
 
@@ -105,9 +105,9 @@ func TestSessionWrittenText(t *testing.T) {
 	dir := sessionSandbox(t)
 	c := fixtureChart()
 	err := SaveSession(Session{
-		Slots:            oneSlot(c, true, aspect.Sun, aspect.Moon),
+		Slots:            oneSlot(c, true, "Sun", "Moon"),
 		FloatingSelected: true,
-		FloatingBodies:   []aspect.Body{aspect.Mars},
+		FloatingBodies:   []string{"Mars"},
 	})
 	if err != nil {
 		t.Fatalf("SaveSession: %v", err)
@@ -116,7 +116,7 @@ func TestSessionWrittenText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read back: %v", err)
 	}
-	want := `version: 3
+	want := `version: 4
 charts:
   - id: fixture-one
     name: Constructed One
@@ -127,10 +127,10 @@ charts:
     lon: 56.78
     tz: Etc/UTC
     selected: true
-    bodies: sun,moon
+    bodies: Sun,Moon
 floating:
   selected: true
-  bodies: mars
+  bodies: Mars
 `
 	if string(got) != want {
 		t.Errorf("session file =\n%s\nwant\n%s", got, want)
@@ -201,14 +201,14 @@ func TestSessionSaveAtomic(t *testing.T) {
 		if err := os.WriteFile(path, []byte("version: 1\nselection:\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := SaveSession(Session{FloatingBodies: []aspect.Body{aspect.Mars}}); err != nil {
+		if err := SaveSession(Session{FloatingBodies: []string{"Mars"}}); err != nil {
 			t.Fatalf("SaveSession: %v", err)
 		}
 		got, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read back: %v", err)
 		}
-		if want := "version: 3\nfloating:\n  selected: false\n  bodies: mars\n"; string(got) != want {
+		if want := "version: 4\nfloating:\n  selected: false\n  bodies: Mars\n"; string(got) != want {
 			t.Errorf("session file = %q, want %q", got, want)
 		}
 		assertNoTmpFiles(t, dir)
@@ -239,7 +239,7 @@ func assertNoTmpFiles(t *testing.T, dir string) {
 }
 
 // C3.1: every value SaveSession accepts comes back equal, with the
-// read-side diagnostics (Usable, UnknownBodies) rebuilt rather than
+// read-side diagnostics (Usable) rebuilt rather than
 // carried, and moments compared in UTC at the second precision the file has.
 func TestSessionRoundTrip(t *testing.T) {
 	awkward := SessionChart{
@@ -258,21 +258,21 @@ func TestSessionRoundTrip(t *testing.T) {
 		in   Session
 	}{
 		{"anchored with an id", Session{
-			Slots:            oneSlot(plain, true, aspect.Sun, aspect.Moon),
+			Slots:            oneSlot(plain, true, "Sun", "Moon"),
 			FloatingSelected: true,
-			FloatingBodies:   []aspect.Body{aspect.Mars},
+			FloatingBodies:   []string{"Mars"},
 		}},
 		{"anchored with an empty id and awkward strings", Session{
-			Slots: oneSlot(awkward, false, aspect.ImumCoeli),
+			Slots: oneSlot(awkward, false, "Nadir"),
 		}},
 		{"anchored with no selections at all", Session{Slots: oneSlot(empty, false)}},
 		{"unanchored with a floating selection", Session{
-			FloatingBodies: []aspect.Body{aspect.Pluto, aspect.Chiron},
+			FloatingBodies: []string{"Pluto", "Chiron"},
 		}},
 		{"unanchored with nothing selected", Session{}},
 		{"a floating selection with nothing anchored", Session{
 			FloatingSelected: true,
-			FloatingBodies:   []aspect.Body{aspect.Mars},
+			FloatingBodies:   []string{"Mars"},
 		}},
 	}
 
@@ -287,9 +287,6 @@ func TestSessionRoundTrip(t *testing.T) {
 				t.Fatalf("LoadSession() = _, %v, %v; want a session", ok, err)
 			}
 			assertSessionEqual(t, got, tc.in)
-			if len(got.UnknownBodies) != 0 {
-				t.Errorf("a written session read back with unknown bodies %v", got.UnknownBodies)
-			}
 			for i, slot := range got.Slots {
 				if !slot.Usable {
 					t.Errorf("slot %d read back unusable; a written chart is always usable", i)
@@ -307,7 +304,7 @@ func TestSessionSelectionSurvivesWithoutAChartBlock(t *testing.T) {
 	sessionSandbox(t)
 	err := SaveSession(Session{
 		FloatingSelected: true,
-		FloatingBodies:   []aspect.Body{aspect.Mars},
+		FloatingBodies:   []string{"Mars"},
 	})
 	if err != nil {
 		t.Fatalf("SaveSession: %v", err)
@@ -322,7 +319,7 @@ func TestSessionSelectionSurvivesWithoutAChartBlock(t *testing.T) {
 	if !got.FloatingSelected {
 		t.Error("the floating selection did not survive a quit with no chart")
 	}
-	if !reflect.DeepEqual(got.FloatingBodies, []aspect.Body{aspect.Mars}) {
+	if !reflect.DeepEqual(got.FloatingBodies, []string{"Mars"}) {
 		t.Errorf("floating bodies = %v, want [mars]", got.FloatingBodies)
 	}
 }
@@ -383,7 +380,7 @@ func assertSessionEqual(t *testing.T, got, want Session) {
 	}
 }
 
-func sameBodies(a, b []aspect.Body) bool {
+func sameBodies(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -435,7 +432,7 @@ func TestSessionLoadReadsPastTextItCannotParse(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("LoadSession() = _, %v, %v; C26 requires reading past an unknown block", ok, err)
 	}
-	if !sameBodies(got.FloatingBodies, []aspect.Body{aspect.Mars}) {
+	if !sameBodies(got.FloatingBodies, []string{"mars"}) {
 		t.Errorf("FloatingBodies = %v, want [mars]", got.FloatingBodies)
 	}
 }
@@ -445,7 +442,7 @@ func TestSessionLoadMissingVersion(t *testing.T) {
 }
 
 func TestSessionLoadUnknownVersion(t *testing.T) {
-	assertRefused(t, "version: 4\nselection:\n  floating_bodies: mars\n")
+	assertRefused(t, "version: 5\nselection:\n  floating_bodies: mars\n")
 	assertRefused(t, "version: nonsense\nselection:\n")
 }
 
@@ -507,7 +504,7 @@ whatever:
 	if len(got.Slots) != 1 || got.Slots[0].Chart.Name != "Constructed One" || !got.Slots[0].Usable {
 		t.Fatalf("the known keys did not survive the unknown ones: %+v", got.Slots)
 	}
-	if !got.Slots[0].Selected || !got.FloatingSelected || !sameBodies(got.FloatingBodies, []aspect.Body{aspect.Mars}) {
+	if !got.Slots[0].Selected || !got.FloatingSelected || !sameBodies(got.FloatingBodies, []string{"mars"}) {
 		t.Errorf("selection = %v / %v / %v, want the pair selected and [mars]", got.Slots[0].Selected, got.FloatingSelected, got.FloatingBodies)
 	}
 
@@ -634,8 +631,9 @@ func TestSessionChartUsableIsTheOneBar(t *testing.T) {
 	}
 }
 
-// The names no body answers to are named, once each, anchored before floating
-// however the file ordered its keys.
+// A name this build cannot resolve is not the store's to judge: the reader
+// hands every name over verbatim, in file order, duplicates included, and the
+// workspace decides which are objects and keeps the rest.
 func TestSessionUnknownBodyNames(t *testing.T) {
 	dir := sessionSandbox(t)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -649,14 +647,11 @@ func TestSessionUnknownBodyNames(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("LoadSession() = _, %v, %v", ok, err)
 	}
-	if want := []string{"sedna", "eris"}; !reflect.DeepEqual(got.UnknownBodies, want) {
-		t.Errorf("UnknownBodies = %v, want %v", got.UnknownBodies, want)
+	if len(got.Slots) != 1 || !sameBodies(got.Slots[0].Bodies, []string{"sedna", "moon", "eris"}) {
+		t.Errorf("anchored names = %+v, want [sedna moon eris] verbatim", got.Slots)
 	}
-	if len(got.Slots) != 1 || !sameBodies(got.Slots[0].Bodies, []aspect.Body{aspect.Moon}) {
-		t.Errorf("anchored bodies = %+v, want [moon]", got.Slots)
-	}
-	if !sameBodies(got.FloatingBodies, []aspect.Body{aspect.Sun}) {
-		t.Errorf("FloatingBodies = %v, want [sun]", got.FloatingBodies)
+	if !sameBodies(got.FloatingBodies, []string{"eris", "sun", "eris"}) {
+		t.Errorf("FloatingBodies = %v, want [eris sun eris] verbatim", got.FloatingBodies)
 	}
 }
 
@@ -831,12 +826,12 @@ func listSession() Session {
 	first.When = time.Date(100000, 1, 2, 3, 4, 5, 0, time.UTC) // six digits: the writer has no year bound
 	return Session{
 		Slots: []SessionSlot{
-			{Chart: first, Usable: true, Selected: true, Bodies: []aspect.Body{aspect.Sun}},
-			{Chart: bc, Usable: true, Bodies: []aspect.Body{aspect.Moon, aspect.Mars}},
+			{Chart: first, Usable: true, Selected: true, Bodies: []string{"Sun"}},
+			{Chart: bc, Usable: true, Bodies: []string{"Moon", "Mars"}},
 			{Chart: far, Usable: true, Selected: true},
 		},
 		FloatingSelected: true,
-		FloatingBodies:   []aspect.Body{aspect.Venus},
+		FloatingBodies:   []string{"Venus"},
 	}
 }
 
@@ -860,14 +855,14 @@ func TestSessionRoundTripsTheList(t *testing.T) {
 			t.Errorf("slot %d came back as %+v, want %+v", i, slot.Chart, w)
 		}
 	}
-	if got.DroppedSelections != 0 || len(got.UnknownBodies) != 0 {
-		t.Errorf("a written session read back with dropped selections %d / unknown bodies %v", got.DroppedSelections, got.UnknownBodies)
+	if got.DroppedSelections != 0 {
+		t.Errorf("a written session read back with dropped selections %d", got.DroppedSelections)
 	}
 }
 
-// C14 (as amended by the specification C11): the file declares version 3
+// C14 (as amended by the specification C11): the file declares version 4
 // and carries one `charts:` sequence.
-func TestSessionVersionIsThree(t *testing.T) {
+func TestSessionVersionIsFour(t *testing.T) {
 	dir := sessionSandbox(t)
 	if err := SaveSession(listSession()); err != nil {
 		t.Fatalf("SaveSession: %v", err)
@@ -877,8 +872,8 @@ func TestSessionVersionIsThree(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	if !strings.HasPrefix(text, "version: 3\n") {
-		t.Errorf("the file does not open with `version: 3`:\n%s", text)
+	if !strings.HasPrefix(text, "version: 4\n") {
+		t.Errorf("the file does not open with `version: 4`:\n%s", text)
 	}
 	if n := strings.Count(text, "\ncharts:\n"); n != 1 {
 		t.Errorf("%d `charts:` blocks, want exactly one:\n%s", n, text)
@@ -923,20 +918,20 @@ func TestSessionReadsVersionOne(t *testing.T) {
 	if !slot.Selected || !got.FloatingSelected {
 		t.Errorf("selection = anchored %v / floating %v, want both (comparison: true)", slot.Selected, got.FloatingSelected)
 	}
-	if !sameBodies(slot.Bodies, []aspect.Body{aspect.Sun, aspect.Moon}) || !sameBodies(got.FloatingBodies, []aspect.Body{aspect.Mars}) {
+	if !sameBodies(slot.Bodies, []string{"sun", "moon"}) || !sameBodies(got.FloatingBodies, []string{"mars"}) {
 		t.Errorf("marks = %v / %v, want [sun moon] / [mars]", slot.Bodies, got.FloatingBodies)
 	}
 }
 
-// C16: only the integers 1 and 2 are read; anything else restores no slot and
+// C16: only the integers 1 to 4 are read; anything else restores no slot and
 // comes back as an error the caller can put on the Log.
 func TestSessionRejectsUnknownVersion(t *testing.T) {
 	body := "charts:\n  - id: x\n    name: n\n    when: \"2001-02-03T04:05:00Z\"\n    place: p\n    lat: 1\n    lon: 2\n    tz: UTC\n"
-	for _, v := range []string{"version: 0", "version: -1", "version: 4", "version: 99", "version: two", "version: 2.5", "version:", "# no version line"} {
+	for _, v := range []string{"version: 0", "version: -1", "version: 5", "version: 99", "version: two", "version: 2.5", "version:", "# no version line"} {
 		assertRefused(t, v+"\n"+body)
 	}
 	// And the two it does read are not refused by the same rule.
-	for _, v := range []string{"version: 1", "version: 2", "version: 3"} {
+	for _, v := range []string{"version: 1", "version: 2", "version: 3", "version: 4"} {
 		dir := sessionSandbox(t)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -1171,11 +1166,11 @@ func TestSessionMutationsNeverMixCharts(t *testing.T) {
 	c2.When = time.Date(-43, 3, 15, 12, 0, 0, 0, time.UTC)
 	c3.When = time.Date(12345, 6, 7, 8, 9, 10, 0, time.UTC)
 	originals := []SessionSlot{
-		{Chart: c1, Selected: true, Bodies: []aspect.Body{aspect.Sun, aspect.Moon}},
+		{Chart: c1, Selected: true, Bodies: []string{"Sun", "Moon"}},
 		{Chart: c2},
-		{Chart: c3, Selected: true, Bodies: []aspect.Body{aspect.Mars}},
+		{Chart: c3, Selected: true, Bodies: []string{"Mars"}},
 	}
-	text := formatSession(Session{Slots: originals, FloatingSelected: true, FloatingBodies: []aspect.Body{aspect.Venus}})
+	text := formatSession(Session{Slots: originals, FloatingSelected: true, FloatingBodies: []string{"Venus"}})
 	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	join := func(ls []string) string { return strings.Join(ls, "\n") + "\n" }
 
@@ -1437,5 +1432,54 @@ func TestSessionLineLimitIsInclusive(t *testing.T) {
 				t.Errorf("a line of exactly the limit: ok %v err %v slots %+v, want it read", ok, err, got.Slots)
 			}
 		})
+	}
+}
+
+// Generation 4 is what 0.1.3 writes: the marks and the drawn set under
+// Astrolog's registry names. A reader of this build reads it with everything
+// a generation-3 file carried (frames included) and the drawn: line.
+func TestSessionGeneration4IsRead(t *testing.T) {
+	dir := sessionSandbox(t)
+	text := "version: 4\n" +
+		"drawn: Sun,Moon,Fortune\n" +
+		"charts:\n" +
+		"  - id: fixture-one\n" +
+		"    name: Constructed One\n" +
+		"    when: \"2001-02-03T04:05:00Z\"\n" +
+		"    place: Test Bay\n" +
+		"    country: TS\n" +
+		"    lat: 12.34\n" +
+		"    lon: 56.78\n" +
+		"    tz: Etc/UTC\n" +
+		"    selected: true\n" +
+		"    bodies: Sun,Fortune\n" +
+		"floating:\n" +
+		"  selected: false\n" +
+		"frames:\n" +
+		"  - file: good.as\n" +
+		"    when: \"1995-03-20T10:00:00Z\"\n" +
+		"    houses: Koch\n" +
+		"    from: chosen\n"
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "session.yaml"), []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, ok, err := LoadSession()
+	if err != nil || !ok {
+		t.Fatalf("a generation-4 session: ok %v err %v, want it read", ok, err)
+	}
+	if s.Version != 4 {
+		t.Errorf("Version = %d, want 4", s.Version)
+	}
+	if !slices.Equal(s.Drawn, []string{"Sun", "Moon", "Fortune"}) {
+		t.Errorf("Drawn = %v, want the drawn: line", s.Drawn)
+	}
+	if len(s.Slots) != 1 || !s.Slots[0].Usable || !slices.Equal(s.Slots[0].Bodies, []string{"Sun", "Fortune"}) {
+		t.Errorf("slots = %+v, want one usable slot marking Sun and Fortune", s.Slots)
+	}
+	if len(s.Frames) != 1 || s.DroppedFrames != 0 {
+		t.Errorf("frames = %+v (dropped %d), want the one entry", s.Frames, s.DroppedFrames)
 	}
 }

@@ -8,22 +8,23 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // TestAspectWaterfall_PowerSortColumnMajor: aspects are sorted by power
 // descending and laid out column-major (highest power fills column 0 top-down).
 func TestAspectWaterfall_PowerSortColumnMajor(t *testing.T) {
-	mk := func(b aspect.Body, k aspect.AspectKind, pow float64) aspect.Aspect {
-		a := aspect.NewAspect(aspect.Sun, b, k, aspect.Orb(1))
+	mk := func(b aspect.Object, k aspect.AspectKind, pow float64) aspect.Aspect {
+		a := aspect.NewObjectAspect(objSun, b, k, aspect.Orb(1))
 		a.Power = pow
 		return a
 	}
 	aspects := []aspect.Aspect{
-		mk(aspect.Jupiter, aspect.Sextile, 1),  // ☉ ⚹ ♃  (lowest)
-		mk(aspect.Moon, aspect.Conjunction, 4), // ☉ ☌ ☽  (highest)
-		mk(aspect.Venus, aspect.Trine, 2),      // ☉ △ ♀
-		mk(aspect.Mars, aspect.Square, 3),      // ☉ □ ♂
+		mk(objJupiter, aspect.Sextile, 1),  // ☉ ⚹ ♃  (lowest)
+		mk(objMoon, aspect.Conjunction, 4), // ☉ ☌ ☽  (highest)
+		mk(objVenus, aspect.Trine, 2),      // ☉ △ ♀
+		mk(objMars, aspect.Square, 3),      // ☉ □ ♂
 	}
 	// innerWidth 31 → 2 columns; innerHeight 2 → 2 rows. Column-major fill:
 	// col0 = [pow4, pow3], col1 = [pow2, pow1].
@@ -46,14 +47,14 @@ func TestAspectWaterfall_PowerSortColumnMajor(t *testing.T) {
 // TestFormatAspectEntry_Width: every entry is exactly aspectColWidth display
 // cells; orb >= 10° drops the space before "(" yet still fits.
 func TestFormatAspectEntry_Width(t *testing.T) {
-	small := aspect.NewAspect(aspect.Sun, aspect.Saturn, aspect.Square, aspect.Orb(1.55))
-	if w := ansi.StringWidth(formatAspectEntry(small)); w != aspectColWidth {
-		t.Errorf("entry width = %d, want %d", w, aspectColWidth)
+	small := aspect.NewObjectAspect(objSun, objSaturn, aspect.Square, aspect.Orb(1.55))
+	if w := ansi.StringWidth(formatAspectEntry(small)); w != panel.AspectColWidth {
+		t.Errorf("entry width = %d, want %d", w, panel.AspectColWidth)
 	}
-	big := aspect.NewAspect(aspect.Sun, aspect.Saturn, aspect.Square, aspect.Orb(12.5))
+	big := aspect.NewObjectAspect(objSun, objSaturn, aspect.Square, aspect.Orb(12.5))
 	eb := formatAspectEntry(big)
-	if w := ansi.StringWidth(eb); w != aspectColWidth {
-		t.Errorf("wide-orb entry width = %d, want %d (%q)", w, aspectColWidth, eb)
+	if w := ansi.StringWidth(eb); w != panel.AspectColWidth {
+		t.Errorf("wide-orb entry width = %d, want %d (%q)", w, panel.AspectColWidth, eb)
 	}
 	if strings.Contains(eb, " (") {
 		t.Errorf("orb>=10 entry should drop the space before '(', got %q", eb)
@@ -63,12 +64,12 @@ func TestFormatAspectEntry_Width(t *testing.T) {
 // TestFormatAspectEntry_ApplyingSuffix: the in-paren A/S suffix reflects the
 // Applying flag (D2).
 func TestFormatAspectEntry_ApplyingSuffix(t *testing.T) {
-	applying := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Square, aspect.Orb(1))
+	applying := aspect.NewObjectAspect(objSun, objMoon, aspect.Square, aspect.Orb(1))
 	applying.Applying = true
 	if e := formatAspectEntry(applying); !strings.Contains(e, "'A)") {
 		t.Errorf("applying aspect should show \"'A)\", got %q", e)
 	}
-	if e := formatAspectEntry(aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Square, aspect.Orb(1))); !strings.Contains(e, "'S)") {
+	if e := formatAspectEntry(aspect.NewObjectAspect(objSun, objMoon, aspect.Square, aspect.Orb(1))); !strings.Contains(e, "'S)") {
 		t.Errorf("separating aspect should show \"'S)\", got %q", e)
 	}
 }
@@ -78,7 +79,7 @@ func TestFormatAspectEntry_ApplyingSuffix(t *testing.T) {
 func TestAspectWaterfall_WidthDegradationAndOverflow(t *testing.T) {
 	var aspects []aspect.Aspect
 	for i := 0; i < 20; i++ {
-		a := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Conjunction, aspect.Orb(1))
+		a := aspect.NewObjectAspect(objSun, objMoon, aspect.Conjunction, aspect.Orb(1))
 		a.Power = float64(20 - i)
 		aspects = append(aspects, a)
 	}
@@ -95,15 +96,15 @@ func TestAspectWaterfall_WidthDegradationAndOverflow(t *testing.T) {
 }
 
 func TestAspectWaterfallUsesAstrologSpansWithoutChangingWidth(t *testing.T) {
-	a := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Square, aspect.Orb(1.5))
+	a := aspect.NewObjectAspect(objSun, objMoon, aspect.Square, aspect.Orb(1.5))
 	styles := astrologstyle.Aspects{
-		{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Square}: {
+		{First: objSun, Second: objMoon, Kind: aspect.Square}: {
 			First: "\x1b[1;31m", Kind: "\x1b[1;34m", Second: "\x1b[1;32m",
 		},
 	}
-	style := styles[astrologstyle.AspectIdentity{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Square}]
-	plain := formatAspectEntryStyled(a, style, Config{Color: ColorNever})
-	colored := formatAspectEntryStyled(a, style, Config{Color: ColorAlways})
+	style := styles[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Square}]
+	plain := panel.FormatAspectEntryStyled(a, style, Config{Color: ColorNever})
+	colored := panel.FormatAspectEntryStyled(a, style, Config{Color: ColorAlways})
 
 	if strings.Contains(plain, "\x1b[") {
 		t.Fatalf("no-color waterfall emitted ANSI: %q", plain)
@@ -116,41 +117,42 @@ func TestAspectWaterfallUsesAstrologSpansWithoutChangingWidth(t *testing.T) {
 	if astrologstyle.StripSGR(colored) != plain {
 		t.Fatalf("color changed aspect text/alignment: colored=%q plain=%q", colored, plain)
 	}
-	if ansi.StringWidth(colored) != aspectColWidth {
-		t.Fatalf("colored width = %d, want %d", ansi.StringWidth(colored), aspectColWidth)
+	if ansi.StringWidth(colored) != panel.AspectColWidth {
+		t.Fatalf("colored width = %d, want %d", ansi.StringWidth(colored), panel.AspectColWidth)
 	}
 }
 
 func TestCrossAspectWaterfallMapsPrimarySecondaryStylesToDisplayRoles(t *testing.T) {
-	a := lookup.OverlayAspect{Transit: aspect.Mars, Natal: aspect.Moon, Kind: aspect.Sextile, Orb: 1}
+	a := lookup.OverlayAspect{TransitObject: objMars, NatalObject: objMoon, Kind: aspect.Sextile, Orb: 1}
 	styles := astrologstyle.Aspects{
 		// Astrolog -r0 order is primary/natal Moon, secondary/transit Mars.
-		{First: aspect.Moon, Second: aspect.Mars, Kind: aspect.Sextile}: {
+		{First: objMoon, Second: objMars, Kind: aspect.Sextile}: {
 			First: "\x1b[1;34m", Kind: "\x1b[1;36m", Second: "\x1b[1;31m",
 		},
 	}
-	got := renderCrossAspectWaterfallStyled([]lookup.OverlayAspect{a}, styles, aspectColWidth, 1, Config{Color: ColorAlways})
+	got := panel.RenderCrossAspectWaterfallStyled([]lookup.OverlayAspect{a}, styles, panel.AspectColWidth, 1, Config{Color: ColorAlways})
 	for _, want := range []string{"\x1b[91m♂\x1b[0m", "\x1b[96m⚹\x1b[0m", "\x1b[94m☽\x1b[0m"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("cross waterfall %q missing role-mapped span %q", got, want)
 		}
 	}
-	// the cell keeps Astrolog's order — natal (primary) left, transit
-	// (secondary) right — so the natal Moon span precedes the transit Mars span.
-	if strings.Index(got, "\x1b[94m☽") > strings.Index(got, "\x1b[91m♂") {
-		t.Errorf("cross cell prints transit before natal: %q", got)
+	// The cell reads like the tab and the Timeline's transit row: the transit
+	// side (the chart under the cursor) left, the natal side right, each in its
+	// own colour (operator, 2026-11-06: "make it consistent").
+	if strings.Index(got, "\x1b[91m♂") > strings.Index(got, "\x1b[94m☽") {
+		t.Errorf("cross cell prints natal before transit: %q", got)
 	}
-	if plain := renderCrossAspectWaterfall([]lookup.OverlayAspect{a}, aspectColWidth, 1); !strings.HasPrefix(plain, "☽ ⚹ ♂") {
-		t.Errorf("plain cross cell = %q, want natal-left %q", plain, "☽ ⚹ ♂")
+	if plain := renderCrossAspectWaterfall([]lookup.OverlayAspect{a}, panel.AspectColWidth, 1); !strings.HasPrefix(plain, "♂ ⚹ ☽") {
+		t.Errorf("plain cross cell = %q, want transit-left %q", plain, "♂ ⚹ ☽")
 	}
 }
 
 func TestAspectsSuppressColorInAccessibleAndNoColorModes(t *testing.T) {
-	a := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Trine, 1)
+	a := aspect.NewObjectAspect(objSun, objMoon, aspect.Trine, 1)
 	state := chartViewState{
 		aspects: []aspect.Aspect{a},
 		aspectStyles: astrologstyle.Aspects{
-			{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Trine}: {
+			{First: objSun, Second: objMoon, Kind: aspect.Trine}: {
 				First: "\x1b[1;31m", Kind: "\x1b[1;32m", Second: "\x1b[1;34m",
 			},
 		},
@@ -169,8 +171,8 @@ func TestAspectsSuppressColorInAccessibleAndNoColorModes(t *testing.T) {
 }
 
 func TestApplyTextCommitCarriesSingleAndCrossAspectStyles(t *testing.T) {
-	singleID := astrologstyle.AspectIdentity{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Trine}
-	crossID := astrologstyle.AspectIdentity{First: aspect.Moon, Second: aspect.Mars, Kind: aspect.Sextile}
+	singleID := astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Trine}
+	crossID := astrologstyle.AspectIdentity{First: objMoon, Second: objMars, Kind: aspect.Sextile}
 	m, _ := applyTextCommit(Model{}, FirstFrameReadyMsg{
 		AspectStyles:      astrologstyle.Aspects{singleID: {Kind: "single"}},
 		CrossAspectStyles: astrologstyle.Aspects{crossID: {Kind: "cross"}},
@@ -183,42 +185,62 @@ func TestApplyTextCommitCarriesSingleAndCrossAspectStyles(t *testing.T) {
 	}
 }
 
-// TestAspectCellDrawsAPlaceholderForGlyphlessBodies: a side the enum cannot name
+// TestAspectCellDrawsAPlaceholderForGlyphlessBodies: a side with no glyph
 // is drawn as the placeholder in both cells, never as a question mark.
 func TestAspectCellDrawsAPlaceholderForGlyphlessBodies(t *testing.T) {
-	single := aspect.NewLabelledAspect(aspect.BodyUnknown, "Ceres", aspect.Sun, "", aspect.Trine, aspect.Orb(1.5))
+	single := aspect.NewObjectAspect(fixtureObject(t, 12), fixtureObject(t, 1), aspect.Trine, aspect.Orb(1.5))
 	cell := formatAspectEntry(single)
-	if !strings.HasPrefix(cell, "· △ ☉") || strings.Contains(cell, "?") {
-		t.Errorf("single cell = %q, want placeholder trine Sun and no question mark", cell)
+	// Astrolog's number order puts the Sun (1) before object 12.
+	if !strings.HasPrefix(cell, "☉ △ ·") || strings.Contains(cell, "?") {
+		t.Errorf("single cell = %q, want Sun trine placeholder and no question mark", cell)
 	}
-	both := formatAspectEntry(aspect.NewLabelledAspect(aspect.BodyUnknown, "Ceres", aspect.BodyUnknown, "Vertex", aspect.Square, aspect.Orb(2)))
+	both := formatAspectEntry(aspect.NewObjectAspect(fixtureObject(t, 12), fixtureObject(t, 20), aspect.Square, aspect.Orb(2)))
 	if !strings.HasPrefix(both, "· □ ·") || strings.Contains(both, "?") {
 		t.Errorf("two-placeholder cell = %q, want '· □ ·'", both)
 	}
 	cross := formatCrossAspectEntry(lookup.OverlayAspect{
-		Natal: aspect.BodyUnknown, NatalLabel: "Vertex", Transit: aspect.Moon,
+		NatalObject: fixtureObject(t, 20), TransitObject: objMoon,
 		Kind: aspect.Opposition, Orb: aspect.Orb(1),
 	})
-	if !strings.HasPrefix(cross, "· ☍ ☽") || strings.Contains(cross, "?") {
-		t.Errorf("cross cell = %q, want placeholder opposition Moon and no question mark", cross)
+	if !strings.HasPrefix(cross, "☽ ☍ ·") || strings.Contains(cross, "?") {
+		t.Errorf("cross cell = %q, want the transiting Moon opposition placeholder and no question mark", cross)
 	}
 }
 
 // TestAspectsPanelShowsAngles: the Aspects panel body draws the angles as
 // A/M/D/I, which it could not while the parser dropped every angle line.
 func TestAspectsPanelShowsAngles(t *testing.T) {
-	mk := func(b aspect.Body, pow float64) aspect.Aspect {
-		a := aspect.NewAspect(aspect.Sun, b, aspect.Square, aspect.Orb(1))
+	mk := func(b aspect.Object, pow float64) aspect.Aspect {
+		a := aspect.NewObjectAspect(objSun, b, aspect.Square, aspect.Orb(1))
 		a.Power = pow
 		return a
 	}
-	bag := aspectsBag{Settled: true, Rows: []aspect.Aspect{
-		mk(aspect.Ascendant, 4), mk(aspect.Midheaven, 3), mk(aspect.Descendant, 2), mk(aspect.ImumCoeli, 1),
+	bag := panel.AspectsBag{Settled: true, Rows: []aspect.Aspect{
+		mk(objAscendant, 4), mk(objMidheaven, 3), mk(objDescendant, 2), mk(objNadir, 1),
 	}}
-	out := renderAspectsTabRows(bag, 40, 4, Config{Color: ColorNever})
+	out := panel.RenderAspectsTabRows(bag, 40, 4, Config{Color: ColorNever})
 	for _, want := range []string{"☉ □ A", "☉ □ M", "☉ □ D", "☉ □ I"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Aspects panel lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+// A glyph a terminal may draw wide keeps its room before a 10° orb: on the
+// right of a cell it is not glued to "(", and its list's columns grow by one
+// cell (glyph_room.go). Next to any other glyph the orb still sits flush.
+func TestATenDegreeOrbLeavesRoomAfterAWideGlyph(t *testing.T) {
+	orb := aspect.Orb(10 + 11.0/60)
+	cross := renderCrossAspectWaterfall([]lookup.OverlayAspect{{TransitObject: objSaturn, NatalObject: objMars, Kind: aspect.Opposition, Orb: orb}}, 40, 1)
+	if !strings.HasPrefix(cross, "♄ ☍ ♂ (10°11'") {
+		t.Errorf("cross cell = %q, want Mars keeping its space before the 10° orb", cross)
+	}
+	own := renderAspectWaterfall([]aspect.Aspect{aspect.NewObjectAspect(objSun, objVenus, aspect.Opposition, orb)}, 40, 1)
+	if !strings.HasPrefix(own, "☉ ☍ ♀ (10°11'") {
+		t.Errorf("own cell = %q, want Venus keeping its space before the 10° orb", own)
+	}
+	flush := renderCrossAspectWaterfall([]lookup.OverlayAspect{{TransitObject: objMars, NatalObject: objSaturn, Kind: aspect.Opposition, Orb: orb}}, 40, 1)
+	if !strings.HasPrefix(flush, "♂ ☍ ♄(10°11'") {
+		t.Errorf("cross cell = %q, want the orb flush on Saturn as before", flush)
 	}
 }

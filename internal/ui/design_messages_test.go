@@ -3,6 +3,8 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // the specification Part A: two forms for a Log line, errors that look
@@ -83,7 +86,7 @@ func rowWith(s designScreen, r panelRect, sub string) int {
 // stored.
 func TestErrorLinesStandOut(t *testing.T) {
 	forceColor(t)
-	red := styleFG(t, errorColour)
+	red := styleFG(t, term.ErrorColour)
 
 	t.Run("colour", func(t *testing.T) {
 		m := messagesModel(t, Config{Color: ColorAlways})
@@ -117,7 +120,7 @@ func TestErrorLinesStandOut(t *testing.T) {
 
 		// The console opens with its cursor on the newest line, an error;
 		// the other error is off the cursor row.
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		r, ok := m.consoleRect()
 		if !ok {
 			t.Fatal("no console")
@@ -150,7 +153,7 @@ func TestErrorLinesStandOut(t *testing.T) {
 
 		last, _, restore := stubYankRecording(t, nil)
 		defer restore()
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		body := strings.Join(consoleBodyLines(t, m), "\n")
 		if !strings.Contains(body, "! "+messagesErrTwo) || strings.Contains(body, "! "+messagesNote) {
 			t.Errorf("console rows:\n%s", body)
@@ -247,8 +250,8 @@ func TestSettledEmptyStatesSayWhy(t *testing.T) {
 		m.width, m.height = 144, 40
 		m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: fullChartPositions()})
 		m = withSceneColumns(m)
-		if got := aspectsPanelText(t, m); got != ownEmptyLine {
-			t.Errorf("Aspects shows %q, want %q", got, ownEmptyLine)
+		if got := aspectsPanelText(t, m); got != panel.OwnEmptyLine {
+			t.Errorf("Aspects shows %q, want %q", got, panel.OwnEmptyLine)
 		}
 	})
 	t.Run("cross tab", func(t *testing.T) {
@@ -260,21 +263,21 @@ func TestSettledEmptyStatesSayWhy(t *testing.T) {
 		if m.activeTabID(PanelAspects) != TabAspectsCross {
 			t.Fatalf("the cross tab is not active")
 		}
-		if got := aspectsPanelText(t, m); got != crossEmptyLine {
-			t.Errorf("the cross tab shows %q, want %q", got, crossEmptyLine)
+		if got := aspectsPanelText(t, m); got != panel.CrossEmptyLine {
+			t.Errorf("the cross tab shows %q, want %q", got, panel.CrossEmptyLine)
 		}
 	})
 	t.Run("console", func(t *testing.T) {
 		m := base(t)
 		m.logLines = nil
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		if got := strings.TrimSpace(strings.Join(consoleBodyLines(t, m), "\n")); got != consoleEmptyLine {
 			t.Errorf("the empty console shows %q, want %q", got, consoleEmptyLine)
 		}
 	})
 	t.Run("before the first frame", func(t *testing.T) {
-		if got := aspectsPanelText(t, base(t)); got != "" {
-			t.Errorf("Aspects shows %q before any frame", got)
+		if got := aspectsPanelText(t, base(t)); got != emptyPaneLine {
+			t.Errorf("Aspects shows %q before any frame, want the one faint %q (C5)", got, emptyPaneLine)
 		}
 	})
 	for _, overlay := range []bool{false, true} {
@@ -343,7 +346,7 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m, _ = escSend(t, m, escKey(tea.KeyCtrlS), escRunes("Constructed"))
 		var cmd tea.Cmd
 		m, cmd = escSend(t, m, escKey(tea.KeyEnter))
-		if cmd == nil || !m.save.saving {
+		if cmd == nil || !m.save.Saving {
 			t.Fatal("the save did not start")
 		}
 		return m
@@ -399,7 +402,7 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m, _ = escSend(t, m, escKey(tea.KeyEnter)) // the second step
 		var cmd tea.Cmd
 		m, cmd = escSend(t, m, escKey(tea.KeyEnter))
-		if cmd == nil || !m.title.saving {
+		if cmd == nil || !m.title.Saving {
 			t.Fatalf("the title write did not start (startup %s)", m.startup)
 		}
 		return m
@@ -446,13 +449,13 @@ func reportFailed(t *testing.T) Model {
 func TestReportFailureMarkSaysViewUnchanged(t *testing.T) {
 	m := reportFailed(t)
 	got := m.footerIndicator()
-	if want := errorMarkTextView(",", m.cfg, true); got != want {
+	if want := keys.ErrorMarkTextView(",", m.cfg, true); got != want {
 		t.Fatalf("footer = %q, want %q", got, want)
 	}
-	if !isErrorMark(got) || !strings.Contains(ansi.Strip(got), "view unchanged") {
+	if !keys.IsErrorMark(got) || !strings.Contains(ansi.Strip(got), "view unchanged") {
 		t.Errorf("mark %q is not the kept-view error mark", got)
 	}
-	if a := ansi.Strip(errorMarkTextView(",", Config{Accessible: true}, true)); a != "! error - view unchanged - ,l" {
+	if a := ansi.Strip(keys.ErrorMarkTextView(",", Config{Accessible: true}, true)); a != "! error - view unchanged - ,l" {
 		t.Errorf("ASCII mark = %q", a)
 	}
 }

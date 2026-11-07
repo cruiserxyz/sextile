@@ -52,7 +52,7 @@ func chartBoxState(filter string, charts []store.NamedChart, drops []store.Chart
 		charts: charts,
 		drops:  drops,
 	}
-	st.filterText = filter
+	st.FilterText = filter
 	st.refilter()
 	return st
 }

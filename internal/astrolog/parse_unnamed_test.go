@@ -1,13 +1,14 @@
 package astrolog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// parse_unnamed_test.go covers the positions parser carrying bodies the enum
-// cannot name.
+// parse_unnamed_test.go covers the positions parser carrying objects Sextile
+// has no glyph for.
 //
 // It exists because of a live failure, not a hypothetical: with the body
 // selector wired but the parser unchanged, ticking Ceres logged "bodies: 19
@@ -19,35 +20,27 @@ const unnamedPositionsFixture = `Astrolog 8.00 chart for Sat Jun 15, 1985 12:00p
 Body  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Whole Houses
 
 Sun : 24Gem19   - 0:00' (-) [ 9th house] [-] +0.969  -  House cusp  1:  0Lib00
-Cere:  2Can23   + 2:00' (-) [10th house] [-] +2.009  -  House cusp  2:  0Sco00
-Moon: 20Tau38   + 0:15' (X) [ 8th house] [f] +0.905  -  House cusp  3:  0Sag00
+Moon: 20Tau38   + 0:15' (X) [ 8th house] [f] +0.905  -  House cusp  2:  0Sco00
+Cere:  2Can23   + 2:00' (-) [10th house] [-] +2.009  -  House cusp  3:  0Sag00
 Vert:  9Ari22   + 0:00' (d) [ 7th house] [R] +1.764
 `
 
-func TestParsePositions_KeepsBodiesTheEnumCannotName(t *testing.T) {
-	ps := parsePositions(unnamedPositionsFixture)
+func TestParsePositions_KeepsCeresAndTheVertex(t *testing.T) {
+	ps := mustPositions(t, unnamedPositionsFixture, 1, 2, 12, 20)
 	if len(ps) != 4 {
-		t.Fatalf("parsed %d positions, want 4 — an unnameable body must be kept, not dropped", len(ps))
+		t.Fatalf("parsed %d positions, want 4 — an object with no glyph must be kept, not dropped", len(ps))
 	}
 
-	byLabel := map[string]aspect.Position{}
+	byName := map[string]aspect.Position{}
 	for _, p := range ps {
-		if !p.Named() {
-			byLabel[p.Label] = p
-		}
+		byName[p.Object.Name] = p
 	}
-	ceres, ok := byLabel["Cere"]
+	ceres, ok := byName["Ceres"]
 	if !ok {
 		t.Fatal("Ceres was dropped; this is the exact failure the body selector exposed")
 	}
-	if ceres.Body != aspect.BodyUnknown {
-		t.Errorf("Ceres Body = %v, want BodyUnknown — the enum stays authoritative and must not gain a fake value", ceres.Body)
-	}
-	if ceres.Named() {
-		t.Error("an unnameable body must report Named() false, so nothing offers it where a typed body is required")
-	}
-	// The position itself must be real: an unnamed row that renders in the
-	// wrong place is worse than one that does not render.
+	// The position itself must be real: a row that renders in the wrong place
+	// is worse than one that does not render.
 	if want := 90.0 + 2 + 23.0/60; ceres.Longitude < want-0.01 || ceres.Longitude > want+0.01 {
 		t.Errorf("Ceres longitude = %v, want ~%v (2Can23)", ceres.Longitude, want)
 	}
@@ -57,31 +50,38 @@ func TestParsePositions_KeepsBodiesTheEnumCannotName(t *testing.T) {
 	if ceres.Speed <= 0 {
 		t.Errorf("Ceres speed = %v, want the printed +2.009", ceres.Speed)
 	}
-	if _, ok := byLabel["Vert"]; !ok {
-		t.Error("the Vertex was dropped; it is another object the enum does not name")
+	if _, ok := byName["Vertex"]; !ok {
+		t.Error("the Vertex was dropped; it is another object Sextile has no glyph for")
 	}
 }
 
-// A body the enum DOES name carries no label, so nothing downstream has two
-// sources of truth for its name.
-func TestParsePositions_NamedBodiesCarryNoLabel(t *testing.T) {
-	for _, p := range parsePositions(unnamedPositionsFixture) {
-		if p.Named() && p.Label != "" {
-			t.Errorf("%v carries label %q; the enum is authoritative for a named body", p.Body, p.Label)
+// Every parsed row, whatever the object, carries Astrolog's Object: the one
+// source of truth for who a row is.
+func TestParsePositions_EveryRowCarriesItsObject(t *testing.T) {
+	want := []aspect.Object{{Number: 1, Name: "Sun"}, {Number: 2, Name: "Moon"}, {Number: 12, Name: "Ceres"}, {Number: 20, Name: "Vertex"}}
+	ps := mustPositions(t, unnamedPositionsFixture, 1, 2, 12, 20)
+	if len(ps) != len(want) {
+		t.Fatalf("parsed %d rows, want %d", len(ps), len(want))
+	}
+	for i, p := range ps {
+		if p.Object != want[i] {
+			t.Errorf("row %d Object = %+v, want %+v", i, p.Object, want[i])
 		}
 	}
 }
 
-// DisplayName picks the caller's name for a typed body and Astrolog's label
-// otherwise — the one place the two naming schemes meet.
-func TestPositionDisplayName(t *testing.T) {
-	named := aspect.Position{Body: aspect.Sun}
-	if got := named.DisplayName("Sun"); got != "Sun" {
-		t.Errorf("DisplayName = %q, want the caller's own name", got)
+// A number the registry does not list is the call's error: the row has no
+// identity to carry.
+func TestPositionsRefuseANumberOffTheList(t *testing.T) {
+	var short aspect.Registry
+	for _, o := range testRegistry(t) {
+		if o.Number != 12 {
+			short = append(short, o)
+		}
 	}
-	unnamed := aspect.Position{Label: "Cere"}
-	if got := unnamed.DisplayName("?"); got != "Cere" {
-		t.Errorf("DisplayName = %q, want the registry label", got)
+	_, err := parsePositions(unnamedPositionsFixture, []int{1, 2, 12, 20}, short)
+	if err == nil || !strings.Contains(err.Error(), "object 12 is not in Astrolog's object list") {
+		t.Fatalf("err = %v, want object 12 is not in Astrolog's object list", err)
 	}
 }
 
@@ -94,22 +94,22 @@ const noDataFixture = `Astrolog 8.00 chart for Sat Jun 15, 1985 12:00pm (ST Zone
 Body  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Whole Houses
 
 Sun : 24Gem19   - 0:00' (-) [ 9th house] [-] +0.969  -  House cusp  1:  0Lib00
-Eris:  0Ari00   + 0:00' (d) [ 7th house] [R] +0.000  -  House cusp  7:  0Ari00
-Io  :  0Ari00   + 0:00' (-) [ 7th house] [-] +0.000  -  House cusp  8:  0Tau00
-Asce:  3Lib52   + 0:00'     [ 1st house]     +0.734
+Asce:  3Lib52   + 0:00'     [ 1st house]     +0.734  -  House cusp  7:  0Ari00
+Eris:  0Ari00   + 0:00' (d) [ 7th house] [R] +0.000  -  House cusp  8:  0Tau00
+Io  :  0Ari00   + 0:00' (-) [ 7th house] [-] +0.000
 `
 
 // An object with no ephemeris is DROPPED, not drawn at 0° Aries. Operator
 // decision, 2026-09-17: a row reading `Eris Ari 0°00'` is read by an
 // astrologer as a real position, and it is not one.
 func TestParsePositions_DropsObjectsWithNoEphemeris(t *testing.T) {
-	ps := parsePositions(noDataFixture)
+	ps := mustPositions(t, noDataFixture, 1, 22, 45, 56)
 	if len(ps) != 2 {
 		t.Fatalf("parsed %d positions, want 2 — Eris and Io have no ephemeris and must be dropped", len(ps))
 	}
 	for _, p := range ps {
 		if p.Longitude == 0 && p.Speed == 0 && p.Latitude == 0 {
-			t.Errorf("%q survived at the no-data sentinel", p.DisplayName(p.Body.String()))
+			t.Errorf("%q survived at the no-data sentinel", p.Object.Name)
 		}
 	}
 }
@@ -118,8 +118,8 @@ func TestParsePositions_DropsObjectsWithNoEphemeris(t *testing.T) {
 // take it. This is the row a looser predicate loses first.
 func TestParsePositions_KeepsAnglesWithZeroLatitude(t *testing.T) {
 	var found bool
-	for _, p := range parsePositions(noDataFixture) {
-		if p.Body == aspect.Ascendant {
+	for _, p := range mustPositions(t, noDataFixture, 1, 22, 45, 56) {
+		if p.Object == objAscendant {
 			found = true
 		}
 	}

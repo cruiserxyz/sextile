@@ -2,6 +2,8 @@ package ui
 
 import (
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,8 +21,8 @@ func captureYank(t *testing.T) *[]string {
 	t.Helper()
 	var copied []string
 	old := yankLine
-	yankLine = func(s string) error { copied = append(copied, s); return nil }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(s string) error { copied = append(copied, s); return nil }
 	return &copied
 }
 
@@ -30,7 +32,7 @@ func captureYank(t *testing.T) *[]string {
 func displayed(rows ...lookup.TimelineRow) string {
 	lines := make([]string, len(rows))
 	for i, r := range rows {
-		lines[i] = displayTimelineRow(r, Config{Accessible: true})
+		lines[i] = panel.DisplayRow(r, Config{Accessible: true})
 	}
 	return strings.Join(lines, "\n")
 }
@@ -46,6 +48,7 @@ func lastNote(m Model) string {
 // on the timeline tab and on the Report tab alike.
 func TestTimelineTabForwardsEveryStepKey(t *testing.T) {
 	for _, k := range []string{"y", "Y", "w", "W", "d", "D", "h", "H", "m", "M"} {
+		freshModels(t)
 		stubTextCompute(t)
 		m := onTimeline(t, Config{Accessible: true})
 		start := m.targetFloatingTime
@@ -167,16 +170,18 @@ func TestLeaderTimesOutInsideDetails(t *testing.T) {
 	}
 }
 
-// `,y` is Details'. On the main screen it stays a mistyped leader sequence.
-func TestLeaderYOnTheMainScreenDoesNothing(t *testing.T) {
+// `,y` copies the whole content of whatever has the keyboard: on the main
+// screen that is the focused panel, and it steps nothing.
+func TestLeaderYOnTheMainScreenCopiesThePanel(t *testing.T) {
 	copied := captureYank(t)
 	stubTextCompute(t)
 	m := loadedTimeline(t, Config{Accessible: true})
+	m.focused = PanelChart
 	target := m.targetFloatingTime
 	m, _ = tpress(t, m, runes(","))
 	m, _ = tpress(t, m, runes("y"))
-	if len(*copied) != 0 || !m.targetFloatingTime.Equal(target) || m.leader.pending {
-		t.Fatalf("main ,y: copied %d, target moved %v, pending %v; want nothing", len(*copied), !m.targetFloatingTime.Equal(target), m.leader.pending)
+	if len(*copied) != 1 || !m.targetFloatingTime.Equal(target) || m.leader.pending {
+		t.Fatalf("main ,y: copied %d, target moved %v, pending %v; want one copy and no step", len(*copied), !m.targetFloatingTime.Equal(target), m.leader.pending)
 	}
 }
 
@@ -248,10 +253,10 @@ func TestMarkedRowsAreDrawnWithTheSelectionMarkerAndClearOnANewMonth(t *testing.
 	m := onTimeline(t, Config{Accessible: true})
 	m, _ = tpress(t, m, runes(" "))
 	shown := detailsBodyRows(renderDetails(m))
-	if !strings.Contains(shown[0], selectionMarker(true, m.cfg)) {
+	if !strings.Contains(shown[0], menu.SelectionMarker(true, m.cfg)) {
 		t.Errorf("the marked row reads %q, want it to start with the chart slots' marker", shown[0])
 	}
-	if strings.Contains(shown[1], selectionMarker(true, m.cfg)) {
+	if strings.Contains(shown[1], menu.SelectionMarker(true, m.cfg)) {
 		t.Errorf("an unmarked row carries the marker: %q", shown[1])
 	}
 	m.targetFloatingTime = m.targetFloatingTime.AddDate(0, 1, 0)
@@ -307,8 +312,8 @@ func TestLeaderYWithNothingToCopySaysSo(t *testing.T) {
 // lines as they were.
 func TestCopyFailureShowsANotice(t *testing.T) {
 	old := yankLine
-	yankLine = func(string) error { return errors.New("no clipboard") }
 	t.Cleanup(func() { yankLine = old })
+	yankLine = func(string) error { return errors.New("no clipboard") }
 
 	m := onTimeline(t, Config{Accessible: true})
 	m, _ = tpress(t, m, runes(","))

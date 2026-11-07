@@ -26,7 +26,7 @@ func TestParseAspectRegistry(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	if len(reg) != 24 {
-		t.Fatalf("parsed %d aspects, want 24 — the registry runs well past the eleven the enum names", len(reg))
+		t.Fatalf("parsed %d aspects, want 24 — the registry runs well past the eleven aspect kinds Sextile names", len(reg))
 	}
 
 	if got := reg[0]; got.Index != 1 || got.Name != "Conjunct" || got.Abbrev != "Con" || got.Angle != 0 || got.Orb != 7 {

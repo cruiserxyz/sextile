@@ -17,7 +17,7 @@ import (
 
 func TestParsePositions(t *testing.T) {
 	data := readFixture(t, "natal_1985_positions.txt")
-	positions := parsePositions(data)
+	positions := mustPositions(t, data, defaultSet...)
 
 	// Default astrolog output: the classical ten + North Node + the two
 	// angles emitted by default (Ascendant, Midheaven) — thirteen bodies.
@@ -28,17 +28,17 @@ func TestParsePositions(t *testing.T) {
 
 	// Angles are now first-class (Slice B1): Ascendant in the 1st house,
 	// Midheaven in the 10th, per the fixture.
-	asc := findPosition(t, positions, aspect.Ascendant)
+	asc := findPosition(t, positions, objAscendant)
 	if asc.House != 1 {
 		t.Errorf("Ascendant.House = %d, want 1", asc.House)
 	}
-	mc := findPosition(t, positions, aspect.Midheaven)
+	mc := findPosition(t, positions, objMidheaven)
 	if mc.House != 10 {
 		t.Errorf("Midheaven.House = %d, want 10", mc.House)
 	}
 
 	// Sun at 0°Ari55' — vernal-equinox baseline, non-retrograde.
-	sun := findPosition(t, positions, aspect.Sun)
+	sun := findPosition(t, positions, objSun)
 	const sunWant = 0.0 + 55.0/60.0
 	if math.Abs(sun.Longitude-sunWant) > 0.02 {
 		t.Errorf("Sun longitude = %v, want ~%v", sun.Longitude, sunWant)
@@ -48,13 +48,13 @@ func TestParsePositions(t *testing.T) {
 	}
 
 	// Venus: signed velocity -0.320 — retrograde.
-	venus := findPosition(t, positions, aspect.Venus)
+	venus := findPosition(t, positions, objVenus)
 	if !venus.Retrograde() {
 		t.Errorf("Venus retrograde = false, want true (velocity %v)", venus.Speed)
 	}
 
 	// Jupiter in Aquarius — longitude between 300° and 330°.
-	jupiter := findPosition(t, positions, aspect.Jupiter)
+	jupiter := findPosition(t, positions, objJupiter)
 	if jupiter.Longitude < 300 || jupiter.Longitude >= 330 {
 		t.Errorf("Jupiter longitude %v, expected in [300, 330) for Aquarius", jupiter.Longitude)
 	}
@@ -66,11 +66,11 @@ func TestParsePositions(t *testing.T) {
 	if sun.House != 8 {
 		t.Errorf("Sun.House = %d, want 8 (fixture reports '[ 8th house]')", sun.House)
 	}
-	moon := findPosition(t, positions, aspect.Moon)
+	moon := findPosition(t, positions, objMoon)
 	if moon.House != 8 {
 		t.Errorf("Moon.House = %d, want 8 (fixture reports '[ 8th house]')", moon.House)
 	}
-	merc := findPosition(t, positions, aspect.Mercury)
+	merc := findPosition(t, positions, objMercury)
 	if merc.House != 9 {
 		t.Errorf("Mercury.House = %d, want 9 (fixture reports '[ 9th house]')", merc.House)
 	}
@@ -87,26 +87,27 @@ func TestParsePositions_HouseNumberOrdinals(t *testing.T) {
 		"Venu: 21Ari02 R + 7:55' (-) [11th house] [-] -0.320  -  House cusp  4:  0Can00",
 		"Mars: 15Ari13   - 0:53' (R) [12th house] [-] +1.463  -  House cusp  5:  0Leo00",
 	}, "\n")
-	positions := parsePositions(fixture)
+	positions := mustPositions(t, fixture, 1, 2, 3, 4, 5)
 	if len(positions) != 5 {
 		t.Fatalf("parsed %d positions, want 5", len(positions))
 	}
-	want := map[aspect.Body]aspect.House{
-		aspect.Sun:     1,
-		aspect.Moon:    2,
-		aspect.Mercury: 3,
-		aspect.Venus:   11,
-		aspect.Mars:    12,
+	want := map[aspect.Object]aspect.House{
+		objSun:     1,
+		objMoon:    2,
+		objMercury: 3,
+		objVenus:   11,
+		objMars:    12,
 	}
 	for _, p := range positions {
-		if p.House != want[p.Body] {
-			t.Errorf("%v.House = %d, want %d", p.Body, p.House, want[p.Body])
+		if p.House != want[p.Object] {
+			t.Errorf("%v.House = %d, want %d", p.Object.Name, p.House, want[p.Object])
 		}
 	}
 }
 
 // the specification rule 2: the Bodies panel recognises a ticked
-// plain cusp by the label Astrolog prints for its object row. Rows captured
+// plain cusp by its Object (aspect.CuspHouse), whose four-cell cut is the label
+// Astrolog prints for the row. Rows captured
 // from Astrolog 8.00 (-R0 with the cusp objects toggled on).
 func TestParsePositions_PlainCuspObjectLabels(t *testing.T) {
 	fixture := strings.Join([]string{
@@ -119,37 +120,40 @@ func TestParsePositions_PlainCuspObjectLabels(t *testing.T) {
 		"11th: 19Sco38   + 0:00'     [11th house]     +380.1  -  House cusp  7:  4Can47",
 		"12th: 11Sag11   + 0:00'     [12th house]     +297.5  -  House cusp  8:  3Leo58",
 	}, "\n")
-	positions := parsePositions(fixture)
+	positions := mustPositions(t, fixture, 23, 24, 26, 27, 29, 30, 32, 33)
 	want := []string{"2nd", "3rd", "5th", "6th", "8th", "9th", "11th", "12th"}
 	if len(positions) != len(want) {
 		t.Fatalf("parsed %d rows, want %d", len(positions), len(want))
 	}
 	for i, p := range positions {
-		if p.Body != aspect.BodyUnknown || p.Label != want[i] {
-			t.Errorf("row %d = (%v, %q), want (BodyUnknown, %q)", i, p.Body, p.Label, want[i])
+		if p.Object.Cut(4) != want[i] {
+			t.Errorf("row %d = %q, want %q", i, p.Object.Cut(4), want[i])
+		}
+		if _, ok := aspect.CuspHouse(p.Object); !ok {
+			t.Errorf("row %d (%+v) is not a house cusp object", i, p.Object)
 		}
 	}
 }
 
 func TestParseAspects(t *testing.T) {
 	data := readFixture(t, "natal_1985_positions_aspects.txt")
-	aspects := parseAspects(data)
+	aspects := parseAspects(data, testRegistry(t))
 
 	// The fixture reports 22 aspects; several involve Ascendant or Midheaven
 	// and drop out. Expect at least ten retained aspects between
-	// enum-recognised bodies.
+	// the bodies the fixture's registry lists.
 	if got := len(aspects); got < 10 {
 		t.Fatalf("parseAspects returned %d aspects, want >= 10", got)
 	}
 
 	// The fixture's top-ranked aspect is a Sun-Moon conjunction — the
 	// chart was captured at a New Moon by design. Verify it survives
-	// canonicalisation through aspect.NewAspect.
-	want := aspect.NewAspect(aspect.Sun, aspect.Moon, aspect.Conjunction, 0)
+	// canonicalisation through aspect.NewObjectAspect.
+	want := aspect.NewObjectAspect(objSun, objMoon, aspect.Conjunction, 0)
 	var found aspect.Aspect
 	var ok bool
 	for _, a := range aspects {
-		if a.A == want.A && a.B == want.B && a.Kind == want.Kind {
+		if a.AObject == want.AObject && a.BObject == want.BObject && a.Kind == want.Kind {
 			found, ok = a, true
 			break
 		}
@@ -173,14 +177,14 @@ func readFixture(t *testing.T, name string) string {
 	return string(data)
 }
 
-func findPosition(t *testing.T, ps []aspect.Position, body aspect.Body) aspect.Position {
+func findPosition(t *testing.T, ps []aspect.Position, object aspect.Object) aspect.Position {
 	t.Helper()
 	for _, p := range ps {
-		if p.Body == body {
+		if p.Object == object {
 			return p
 		}
 	}
-	t.Fatalf("no Position for body %v in %d parsed positions", body, len(ps))
+	t.Fatalf("no Position for %v in %d parsed positions", object.Name, len(ps))
 	return aspect.Position{}
 }
 
@@ -192,7 +196,7 @@ func TestParseAspects_PhaseMarkers(t *testing.T) {
   1:   Venus (Tau) Squ (Leo) Midheaven  - orb: a0:20' - power:  9.51
   2:    Moon (Pis) Tri (Can) Jupiter    - orb: s1:23' - power:  8.68
   3:    Moon (Pis) Sex (Tau) Venus      - orb: +1:38' - power:  8.04
-`)
+`, testRegistry(t))
 	if len(out) != 3 {
 		t.Fatalf("parsed %d aspects, want 3 (Midheaven is kept since 2026-10-05)", len(out))
 	}
@@ -200,7 +204,7 @@ func TestParseAspects_PhaseMarkers(t *testing.T) {
 	for _, a := range out {
 		byKind[a.Kind] = a
 	}
-	if a := byKind[aspect.Square]; !a.Applying || a.A != aspect.Venus || a.B != aspect.Midheaven {
+	if a := byKind[aspect.Square]; !a.Applying || a.AObject != objVenus || a.BObject != objMidheaven {
 		t.Errorf("Venus Squ Midheaven marked `a` = %+v, want applying Venus/Midheaven", a)
 	}
 	if a := byKind[aspect.Trine]; a.Applying {
@@ -209,7 +213,7 @@ func TestParseAspects_PhaseMarkers(t *testing.T) {
 	if a := byKind[aspect.Sextile]; a.Applying {
 		t.Errorf("plain +orb line parsed as applying: %+v", a)
 	}
-	single := parseAspects("  6:     Sun (Gem) Squ (Pis) Moon       - orb: a6:57' - power:  4.99 (Half Moon)\n")
+	single := parseAspects("  6:     Sun (Gem) Squ (Pis) Moon       - orb: a6:57' - power:  4.99 (Half Moon)\n", testRegistry(t))
 	if len(single) != 1 || !single[0].Applying {
 		t.Errorf("Sun Squ Moon marked `a` = %+v, want applying", single)
 	}
@@ -224,17 +228,17 @@ Chart #2 comparison for Mon Aug 24, 2026 12:00pm (ST Zone 0W)  13:24E 52:31N
   1:    Moon (Pis) Opp with (Vir) Midheaven - orb: a2:18' - power: 11.37
   2:    Moon (Pis) Sex with (Cap) Moon      - orb: s2:05' - power: 11.07
   4: Mercury (Gem) Con with (Gem) Uranus    - orb: a0:22' - power:  8.52
-`)
+`, testRegistry(t))
 	if len(out) != 3 {
 		t.Fatalf("parsed %d cross-aspects, want 3", len(out))
 	}
-	if !out[0].Applying || out[0].Primary != aspect.Moon || out[0].Secondary != aspect.Midheaven {
+	if !out[0].Applying || out[0].PrimaryObject != objMoon || out[0].SecondaryObject != objMidheaven {
 		t.Errorf("row 1 = %+v, want natal Moon / transit Midheaven applying", out[0])
 	}
 	if out[1].Applying {
 		t.Errorf("row 2 = %+v, want separating", out[1])
 	}
-	if !out[2].Applying || out[2].Primary != aspect.Mercury || out[2].Secondary != aspect.Uranus || out[2].Power != 8.52 {
+	if !out[2].Applying || out[2].PrimaryObject != objMercury || out[2].SecondaryObject != objUranus || out[2].Power != 8.52 {
 		t.Errorf("row 4 = %+v, want natal Mercury / transit Uranus applying, power 8.52", out[2])
 	}
 }
@@ -264,7 +268,7 @@ func TestParseCusps_ReproducesAstrologHouseColumn(t *testing.T) {
 	if !cusps.Valid() {
 		t.Fatal("parseCusps returned an invalid frame")
 	}
-	positions := parsePositions(out)
+	positions := mustPositions(t, out, defaultSet...)
 	if len(positions) == 0 {
 		t.Fatal("no positions parsed")
 	}
@@ -275,8 +279,8 @@ func TestParseCusps_ReproducesAstrologHouseColumn(t *testing.T) {
 		}
 		checked++
 		if got := cusps.HouseFor(p.Longitude); got != p.House {
-			t.Errorf("body %d at %.4f: HouseFor = %d, Astrolog printed %d",
-				p.Body, p.Longitude, got, p.House)
+			t.Errorf("object %d at %.4f: HouseFor = %d, Astrolog printed %d",
+				p.Object.Number, p.Longitude, got, p.House)
 		}
 	}
 	if checked == 0 {
@@ -293,16 +297,16 @@ func TestParseCusps_PartialFrameRefused(t *testing.T) {
 }
 
 // findAspect returns the parsed aspect pairing a and b (either order, since
-// NewAspect canonicalises) with the given kind.
-func findAspect(t *testing.T, got []aspect.Aspect, a, b aspect.Body, kind aspect.AspectKind) aspect.Aspect {
+// NewObjectAspect canonicalises by object number) with the given kind.
+func findAspect(t *testing.T, got []aspect.Aspect, a, b aspect.Object, kind aspect.AspectKind) aspect.Aspect {
 	t.Helper()
-	want := aspect.NewAspect(a, b, kind, 0)
+	want := aspect.NewObjectAspect(a, b, kind, 0)
 	for _, g := range got {
-		if g.A == want.A && g.B == want.B && g.Kind == kind {
+		if g.AObject == want.AObject && g.BObject == want.BObject && g.Kind == kind {
 			return g
 		}
 	}
-	t.Fatalf("no %v %v %v aspect in %d parsed aspects", a, kind, b, len(got))
+	t.Fatalf("no %v %v %v aspect in %d parsed aspects", a.Name, kind, b.Name, len(got))
 	return aspect.Aspect{}
 }
 
@@ -311,93 +315,97 @@ func findAspect(t *testing.T, got []aspect.Aspect, a, b aspect.Body, kind aspect
 // such line used to be dropped, so the Aspects panel never showed an angle.
 // Fixture: constructed moment 2461156.0 JD at 13:25E 52:31N, no person.
 func TestParseAspectsKeepsAnglesLilithAndNodes(t *testing.T) {
-	got := parseAspects(readFixture(t, "aspects_angles_lilith_nodes.txt"))
+	got := parseAspects(readFixture(t, "aspects_angles_lilith_nodes.txt"), testRegistry(t))
 	if len(got) != 26 {
 		t.Fatalf("parsed %d aspects, want all 26 lines of the fixture", len(got))
 	}
 	cases := []struct {
-		a, b     aspect.Body
+		a, b     aspect.Object
 		kind     aspect.AspectKind
 		orb      float64
 		applying bool
 	}{
-		{aspect.Uranus, aspect.Ascendant, aspect.Square, 9.0 / 60, false},
-		{aspect.Moon, aspect.Midheaven, aspect.Square, 3 + 24.0/60, true},
-		{aspect.Lilith, aspect.ImumCoeli, aspect.Conjunction, 23.0 / 60, false},
-		{aspect.Sun, aspect.SouthNode, aspect.Trine, 2 + 3.0/60, true},
-		{aspect.Jupiter, aspect.Lilith, aspect.Trine, 48.0 / 60, false},
+		{objUranus, objAscendant, aspect.Square, 9.0 / 60, false},
+		{objMoon, objMidheaven, aspect.Square, 3 + 24.0/60, true},
+		{objLilith, objNadir, aspect.Conjunction, 23.0 / 60, false},
+		{objSun, objSouthNode, aspect.Trine, 2 + 3.0/60, true},
+		{objJupiter, objLilith, aspect.Trine, 48.0 / 60, false},
 	}
 	for _, c := range cases {
 		g := findAspect(t, got, c.a, c.b, c.kind)
 		if math.Abs(float64(g.Orb)-c.orb) > 1e-9 || g.Applying != c.applying {
 			t.Errorf("%v %v %v = orb %v applying %v, want orb %v applying %v",
-				c.a, c.kind, c.b, g.Orb, g.Applying, c.orb, c.applying)
-		}
-		if g.ALabel != "" || g.BLabel != "" {
-			t.Errorf("%v %v %v carries labels %q/%q, want none for typed bodies", c.a, c.kind, c.b, g.ALabel, g.BLabel)
+				c.a.Name, c.kind, c.b.Name, g.Orb, g.Applying, c.orb, c.applying)
 		}
 	}
 }
 
-// TestParseAspectsKeepsGlyphlessBodies: a body the enum cannot name (Ceres,
-// Vertex, East Point) is kept as BodyUnknown with the printed name, on the side
-// it was printed. Fixture adds objects 12, 20 and 21 to the same moment.
+// TestParseAspectsKeepsGlyphlessBodies: an object Sextile has no glyph for
+// (Ceres, Vertex, East Point) is kept with its own Object, on the side it was
+// printed. Fixture adds objects 12, 20 and 21 to the same moment.
 func TestParseAspectsKeepsGlyphlessBodies(t *testing.T) {
-	got := parseAspects(readFixture(t, "aspects_glyphless.txt"))
+	got := parseAspects(readFixture(t, "aspects_glyphless.txt"), testRegistry(t))
 	byPair := func(a, b string) (aspect.Aspect, bool) {
 		for _, g := range got {
-			if (g.ALabel == a && g.BLabel == b) || (g.ALabel == b && g.BLabel == a) {
+			if (g.AObject.Name == a && g.BObject.Name == b) || (g.AObject.Name == b && g.BObject.Name == a) {
 				return g, true
 			}
 		}
 		return aspect.Aspect{}, false
 	}
-	// Ceres (Tau) Con (Tau) Midheaven: BodyUnknown is the zero Body, so it sorts
-	// first; the label stays with the body that was printed as Ceres.
-	g := findAspect(t, got, aspect.Midheaven, aspect.BodyUnknown, aspect.Conjunction)
-	if g.A != aspect.BodyUnknown || g.ALabel != "Ceres" || g.B != aspect.Midheaven || g.BLabel != "" {
-		t.Errorf("Ceres/Midheaven = %+v, want A unknown labelled Ceres, B Midheaven (no label)", g)
+	// Ceres (Tau) Con (Tau) Midheaven: Ceres (12) comes before the Midheaven
+	// (31), as printed; the label stays with the body that was printed as Ceres.
+	withKind := func(a, b string, kind aspect.AspectKind) aspect.Aspect {
+		t.Helper()
+		for _, g := range got {
+			if g.Kind == kind && ((g.AObject.Name == a && g.BObject.Name == b) || (g.AObject.Name == b && g.BObject.Name == a)) {
+				return g
+			}
+		}
+		t.Fatalf("no %s %v %s aspect in %d parsed aspects", a, kind, b, len(got))
+		return aspect.Aspect{}
+	}
+	g := withKind("Ceres", "Midheaven", aspect.Conjunction)
+	if g.AObject.Name != "Ceres" || g.BObject != objMidheaven {
+		t.Errorf("Ceres/Midheaven = %+v, want A the Ceres object, B Midheaven", g)
 	}
 	if g.Orb < 3 || g.Orb > 3.1 || g.Applying {
 		t.Errorf("Ceres/Midheaven orb %v applying %v, want 3:05 separating", g.Orb, g.Applying)
 	}
-	// Chiron (Ari) Squ (Cap) Vertex: printed Chiron first, but the reorder
-	// moves Vertex to A; its label must move with it.
-	g = findAspect(t, got, aspect.Chiron, aspect.BodyUnknown, aspect.Square)
-	if g.A != aspect.BodyUnknown || g.ALabel != "Vertex" || g.B != aspect.Chiron || g.BLabel != "" {
-		t.Errorf("Chiron/Vertex = %+v, want Vertex label on A and typed Chiron on B", g)
+	// Chiron (Ari) Squ (Cap) Vertex: Chiron (11) comes before Vertex (20), as
+	// printed; each side keeps its own Object.
+	g = withKind("Chiron", "Vertex", aspect.Square)
+	if g.AObject != objChiron || g.BObject.Name != "Vertex" {
+		t.Errorf("Chiron/Vertex = %+v, want Chiron on A and the Vertex object on B", g)
 	}
 	// Two glyphless bodies, one a two-word name that abuts nothing.
 	g, ok := byPair("Ceres", "East Point")
-	if !ok || g.A != aspect.BodyUnknown || g.B != aspect.BodyUnknown {
-		t.Fatalf("Ceres/East Point missing or typed: %+v ok=%v", g, ok)
+	if !ok {
+		t.Fatalf("Ceres/East Point missing: %+v ok=%v", g, ok)
 	}
-	if g.ALabel != "Ceres" || g.BLabel != "East Point" {
-		t.Errorf("both-unknown sides = %q/%q, want printed order Ceres/East Point", g.ALabel, g.BLabel)
+	if g.AObject.Name != "Ceres" || g.BObject.Name != "East Point" {
+		t.Errorf("both-unknown sides = %q/%q, want printed order Ceres/East Point", g.AObject.Name, g.BObject.Name)
 	}
 	if len(got) != 36 {
 		t.Errorf("parsed %d aspects, want every line of the fixture (36)", len(got))
 	}
 }
 
-// TestCrossAspectsKeepGlyphlessBodies: the -r0 parser keeps an unnameable body
-// by its printed name, left (Primary) and right (Secondary) as printed.
+// TestCrossAspectsKeepGlyphlessBodies: the -r0 parser keeps an object with no
+// glyph by its printed name, left (Primary) and right (Secondary) as printed.
 func TestCrossAspectsKeepGlyphlessBodies(t *testing.T) {
-	got := parseCrossAspects(readFixture(t, "cross_glyphless.txt"))
+	got := parseCrossAspects(readFixture(t, "cross_glyphless.txt"), testRegistry(t))
 	var vertexLeft, ceresRight, ceresLeft, eastRight bool
 	for _, c := range got {
 		switch {
-		case c.PrimaryLabel == "Vertex" && c.Primary == aspect.BodyUnknown && c.Secondary == aspect.Sun && c.Kind == aspect.Trine:
+		case c.PrimaryObject.Name == "Vertex" && c.SecondaryObject == objSun && c.Kind == aspect.Trine:
 			vertexLeft = true
-		case c.SecondaryLabel == "Ceres" && c.Secondary == aspect.BodyUnknown && c.Primary == aspect.Mars && c.Kind == aspect.Square:
+		case c.SecondaryObject.Name == "Ceres" && c.PrimaryObject == objMars && c.Kind == aspect.Square:
 			ceresRight = true
-		case c.PrimaryLabel == "Ceres" && c.Primary == aspect.BodyUnknown && c.Secondary == aspect.Jupiter && c.Kind == aspect.Square:
+		case c.PrimaryObject.Name == "Ceres" && c.SecondaryObject == objJupiter && c.Kind == aspect.Square:
 			ceresLeft = true
-		case c.SecondaryLabel == "East Point" && c.Primary == aspect.Saturn && c.Kind == aspect.Square:
+		case c.SecondaryObject.Name == "East Point" && c.PrimaryObject == objSaturn && c.Kind == aspect.Square:
 			eastRight = true
-		}
-		if c.Primary != aspect.BodyUnknown && c.PrimaryLabel != "" || c.Secondary != aspect.BodyUnknown && c.SecondaryLabel != "" {
-			t.Errorf("typed side carries a label: %+v", c)
 		}
 	}
 	if !vertexLeft || !ceresRight || !ceresLeft || !eastRight {
@@ -425,14 +433,14 @@ func TestPositionsKeepNegativeZero(t *testing.T) {
 		"Merc: 17Sco22 R - 3:07' (-) [ 3rd house] [R] -0.000  -  House cusp  3:  5Sco49",
 		"Venu:  5Sco18   - 7:26' (d) [ 2nd house] [R] +0.000  -  House cusp  4: 11Sag06",
 	}, "\n")
-	positions := parsePositions(fixture)
+	positions := mustPositions(t, fixture, 3, 4)
 	if len(positions) != 2 {
 		t.Fatalf("parsed %d positions, want 2", len(positions))
 	}
-	if !findPosition(t, positions, aspect.Mercury).Retrograde() {
+	if !findPosition(t, positions, objMercury).Retrograde() {
 		t.Error("Mercury at -0.000 is not retrograde; Astrolog printed R")
 	}
-	if findPosition(t, positions, aspect.Venus).Retrograde() {
+	if findPosition(t, positions, objVenus).Retrograde() {
 		t.Error("Venus at +0.000 is retrograde; Astrolog printed no R")
 	}
 }

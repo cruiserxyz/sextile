@@ -9,6 +9,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -19,15 +20,15 @@ import (
 // zodiacFinderFrame is the zodiac finder on a chart whose own zodiac is current,
 // the cursor on it when the search is empty.
 func zodiacFinderFrame(name, filter string, current recipe.Zodiac, termH int) zodiacFinderState {
-	st := zodiacFinderState{name: name, current: current}
-	st.filterText = filter
-	st.refilter()
-	for i, z := range st.matches {
+	st := newZodiacFinder(name, current, 0)
+	st.FilterText = filter
+	st.Refilter()
+	for i, z := range st.Matches {
 		if z == current {
-			st.cursor = i
+			st.Cursor = i
 		}
 	}
-	st.scrollTo(st.cursor, modalListHeight(termH))
+	st.ScrollTo(st.Cursor, dialog.ListHeight(termH))
 	return st
 }
 

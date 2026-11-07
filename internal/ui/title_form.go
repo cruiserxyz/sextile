@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"path/filepath"
 	"strings"
 
@@ -38,15 +42,16 @@ import (
 //	    ──Esc, Enter with no title, or nothing changed──▶ the picker as it was
 //	    TitleWrittenMsg{Err: nil} ──▶ the picker, reloaded, cursor on the chart;
 //	                                  nothing anchors (C4.3)
+//
+// The typed fields, the refusal (the last submit was refused; the form stays
+// open), the write in flight (only Esc acts until it lands) and the second step
+// (Enter on a filled form showed it; nothing is written yet) are popup.Form's.
 type titleFormState struct {
-	form    form
-	chart   store.NamedChart // the row being titled, as the picker listed it
-	seen    string           // the listing's fingerprint of its file
-	refusal string           // the last submit was refused; the form stays open
-	saving  bool             // a write is in flight; only Esc acts until it lands
-	rename  bool             // opened by Ctrl+R: a write returns to the picker
+	popup.Form
+	chart  store.NamedChart // the row being titled, as the picker listed it
+	seen   string           // the listing's fingerprint of its file
+	rename bool             // opened by Ctrl+R: a write returns to the picker
 
-	confirming bool   // Enter on a filled form showed the second step; nothing is written yet
 	dir        string // the charts directory captured when the second step opened
 	backupHeld bool   // the chart's backup was already kept when the second step opened
 }
@@ -63,9 +68,9 @@ func currentTitle(c store.NamedChart) string {
 // newRenameForm is the form for renaming c (C4.1): both fields hold what the
 // file states now, as values the operator edits. An untitled chart's Title is
 // empty and hints its current name, as the pick's form does.
-func newRenameForm(c store.NamedChart) form {
+func newRenameForm(c store.NamedChart) dialog.Form {
 	f := newTitleForm(c)
-	f.fields[0].value = currentTitle(c)
+	f.Fields[0].Value = currentTitle(c)
 	return f
 }
 
@@ -82,7 +87,7 @@ func openRenameForm(m Model, c store.NamedChart) Model {
 	// As a pick's form does, it supersedes any resolve still in flight.
 	m.pickGen++
 	m.picker.resolving = false
-	m.title = titleFormState{form: newRenameForm(c), chart: c, seen: m.picker.seen[c.Source.File], rename: true}
+	m.title = titleFormState{Form: popup.Form{Fields: newRenameForm(c)}, chart: c, seen: m.picker.seen[c.Source.File], rename: true}
 	m.startup = startupTitleOpen
 	return m
 }
@@ -114,12 +119,12 @@ func needsTitle(c store.NamedChart) bool {
 // current name as its hint (no autofill, by the operator's decision), and the
 // Place field holding the file's own place label, or hinting the atlas place
 // when the file states none.
-func newTitleForm(c store.NamedChart) form {
-	place := formField{label: "Place: ", value: c.PlaceLabel}
+func newTitleForm(c store.NamedChart) dialog.Form {
+	place := dialog.Field{Label: "Place: ", Value: c.PlaceLabel}
 	if c.PlaceLabel == "" {
-		place.placeholder = c.Place.Display()
+		place.Placeholder = c.Place.Display()
 	}
-	return newForm(formField{label: "Title: ", placeholder: c.Name}, place)
+	return dialog.NewForm(dialog.Field{Label: "Title: ", Placeholder: c.Name}, place)
 }
 
 // openTitleForm replaces the pick with the form. The picker's own state is
@@ -129,46 +134,63 @@ func newTitleForm(c store.NamedChart) form {
 // flight from an earlier pick must not land and anchor behind the form.
 func openTitleForm(m Model, c store.NamedChart) Model {
 	m.pickGen++
-	m.title = titleFormState{form: newTitleForm(c), chart: c, seen: m.picker.seen[c.Source.File]}
+	m.title = titleFormState{Form: popup.Form{Fields: newTitleForm(c)}, chart: c, seen: m.picker.seen[c.Source.File]}
 	m.startup = startupTitleOpen
 	return m
+}
+
+// chartTitleBindings is the Chart title popup's table. Esc goes back to the
+// chart list; Enter with an empty title opens the chart without one.
+func chartTitleBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{
+		{ID: keys.BindingNextField, Binding: key.NewBinding(key.WithKeys("tab")), Title: "Next field", BarKey: "tab", Bar: true},
+		{ID: keys.BindingPrevField, Folded: true, Binding: key.NewBinding(key.WithKeys("shift+tab")), BarKey: "⇧ tab"},
+		confirm("Save title"),
+		closeOn("Back"),
+	})
+}
+
+// titleConfirmBindings is the Chart title popup's second step: Enter writes,
+// Esc goes back to the form with nothing written.
+func titleConfirmBindings() []keys.BindingEntry {
+	return keys.Titled([]keys.BindingEntry{confirm("Save title"), closeOn("Cancel")})
 }
 
 // updateTitleFormKey handles one keystroke. The caller in model.go has gated
 // on m.startup == startupTitleOpen.
 func updateTitleFormKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.title.confirming {
+	if m.title.Confirming {
 		// The second step: only Save title and Cancel act. Cancel is back to
 		// the form with the typed values, and nothing was written.
-		switch matchBinding(msg, titleConfirmBindings()) {
-		case BindingClose:
-			m.title.confirming = false
+		switch keys.MatchBinding(msg, titleConfirmBindings()) {
+		case keys.BindingClose:
+			m.title.Confirming = false
 			return m, nil
-		case BindingConfirm:
+		case keys.BindingConfirm:
 			return startTitleWrite(m)
 		}
 		return m, nil
 	}
-	id := matchBinding(msg, chartTitleBindings())
-	if id == BindingClose {
+	id := keys.MatchBinding(msg, chartTitleBindings())
+	if id == keys.BindingClose {
 		return titleBack(m)
 	}
-	if m.title.saving {
+	if m.title.Saving {
 		// A write is in flight. Only Esc acts: the name on screen must stay
 		// the name being written.
 		return m, nil
 	}
 	switch id {
-	case BindingNextField:
-		m.title.form = m.title.form.nextField()
+	case keys.BindingNextField:
+		m.title.Apply(popup.NextField, msg)
 		return m, nil
-	case BindingPrevField:
-		m.title.form = m.title.form.prevField()
+	case keys.BindingPrevField:
+		m.title.Apply(popup.PrevField, msg)
 		return m, nil
-	case BindingConfirm:
+	case keys.BindingConfirm:
 		return confirmTitle(m)
 	}
-	m.title.form, _ = m.title.form.updateKey(msg)
+	m.title.Apply(popup.Type, msg)
 	return m, nil
 }
 
@@ -176,11 +198,11 @@ func updateTitleFormKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // the form; a filled form of a pick opens the second step, which names the
 // file and its backup and writes nothing. A rename keeps its direct write.
 func confirmTitle(m Model) (tea.Model, tea.Cmd) {
-	title := strings.TrimSpace(m.title.form.value(0))
+	title := strings.TrimSpace(m.title.Fields.Value(0))
 	if title == "" {
 		return skipTitle(m)
 	}
-	place := strings.TrimSpace(m.title.form.value(1))
+	place := strings.TrimSpace(m.title.Fields.Value(1))
 	if place == "" {
 		place = m.title.chart.PlaceLabel
 	}
@@ -189,8 +211,8 @@ func confirmTitle(m Model) (tea.Model, tea.Cmd) {
 		return titleBack(m)
 	}
 	if place == "" {
-		m.title.refusal = emptyPlaceRefusal
-		m.title.form.focus = titlePlaceField
+		m.title.Refusal = emptyPlaceRefusal
+		m.title.Fields.Focus = titlePlaceField
 		return m, nil
 	}
 	for _, l := range []struct {
@@ -199,12 +221,12 @@ func confirmTitle(m Model) (tea.Model, tea.Cmd) {
 		field int
 	}{{"title", title, 0}, {"place", place, titlePlaceField}} {
 		if err := lookup.CheckLabelLength(l.what, l.s); err != nil {
-			m.title.refusal = err.Error()
-			m.title.form.focus = l.field
+			m.title.Refusal = err.Error()
+			m.title.Fields.Focus = l.field
 			return m, nil
 		}
 	}
-	m.title.refusal = ""
+	m.title.Refusal = ""
 	if m.title.rename {
 		m.title.dir = store.ChartsDir()
 		return startTitleWrite(m)
@@ -214,10 +236,10 @@ func confirmTitle(m Model) (tea.Model, tea.Cmd) {
 	dir := store.ChartsDir()
 	held, err := store.ChartBackupState(dir, m.title.chart.Source.File)
 	if err != nil {
-		m.title.refusal = backupRefusal
+		m.title.Refusal = backupRefusal
 		return m, nil
 	}
-	m.title.dir, m.title.backupHeld, m.title.confirming = dir, held, true
+	m.title.dir, m.title.backupHeld, m.title.Confirming = dir, held, true
 	return m, nil
 }
 
@@ -225,13 +247,13 @@ func confirmTitle(m Model) (tea.Model, tea.Cmd) {
 // captured when the form was submitted. The checks ran before the second
 // step; the values are read again from the same unchanged form.
 func startTitleWrite(m Model) (tea.Model, tea.Cmd) {
-	title := strings.TrimSpace(m.title.form.value(0))
-	place := strings.TrimSpace(m.title.form.value(1))
+	title := strings.TrimSpace(m.title.Fields.Value(0))
+	place := strings.TrimSpace(m.title.Fields.Value(1))
 	if place == "" {
 		place = m.title.chart.PlaceLabel
 	}
-	m.title.confirming = false
-	m.title.saving = true
+	m.title.Confirming = false
+	m.title.Saving = true
 	m.titleGen++
 	// Astrolog rewrites the file, and the rewrite can change the house system
 	// its line names. What the file names now is read first, so a chart with
@@ -244,7 +266,7 @@ func startTitleWrite(m Model) (tea.Model, tea.Cmd) {
 // Astrolog cannot be called back, so it finishes; bumping the generation is
 // what keeps its result from anchoring a chart the operator walked away from.
 func titleBack(m Model) (tea.Model, tea.Cmd) {
-	if m.title.saving {
+	if m.title.Saving {
 		// Its result is still logged when it lands (A8).
 		m.abandonedTitles = abandon(m.abandonedTitles, m.titleGen)
 	}
@@ -305,13 +327,13 @@ func applyTitleWritten(m Model, msg TitleWrittenMsg) (Model, tea.Cmd) {
 		}
 		return m.logTitled(msg.Result), nil
 	}
-	m.title.saving = false
+	m.title.Saving = false
 	if msg.Err != nil {
 		switch {
 		case errors.Is(msg.Err, store.ErrChartChanged):
-			m.title.refusal = fmt.Sprintf("%s changed since the list was read — reopen the picker", msg.Chart.Source.File)
+			m.title.Refusal = fmt.Sprintf("%s changed since the list was read — reopen the picker", msg.Chart.Source.File)
 		default:
-			m.title.refusal = firstLine(msg.Err.Error())
+			m.title.Refusal = firstLine(msg.Err.Error())
 		}
 		return m.noteEphemeris(msg.Err).logError("Couldn't title that chart. %s", m.failureReason(msg.Err, firstLine(msg.Err.Error()))), nil
 	}
@@ -383,9 +405,9 @@ func applyRenamed(m Model, r lookup.Retitled) (Model, tea.Cmd) {
 	}
 	m.title = titleFormState{}
 	m.startup = startupChartOpen
-	m.picker.resetFilter()
+	m.picker.ResetFilter()
 	m.picker.loaded = false
-	m.picker.clear()
+	m.picker.Clear()
 	m.picker.land = r.File
 	m.pickerGen++
 	if !relabelled {
@@ -423,7 +445,7 @@ func titleInfo(c store.NamedChart, rename bool, cfg Config) []string {
 	case !c.Untitled:
 		what = "a place"
 	}
-	if cfg.useColor() {
+	if cfg.UseColor() {
 		return []string{"Please enter " + what + "."}
 	}
 	return []string{"Please enter " + what + " for " + c.Source.File + "."}
@@ -432,13 +454,13 @@ func titleInfo(c store.NamedChart, rename bool, cfg Config) []string {
 // renderTitleForm draws the form.
 func renderTitleForm(state titleFormState, cfg Config, termW, termH int) string {
 	info := titleInfo(state.chart, state.rename, cfg)
-	if state.confirming {
+	if state.Confirming {
 		info = confirmInfo(state)
 	}
 	// The box holds for both steps, whichever is showing: the second step's
 	// text is sized with the directory it will name.
 	later := state
-	later.confirming = true
+	later.Confirming = true
 	if later.dir == "" {
 		later.dir = store.ChartsDir()
 	}
@@ -447,13 +469,12 @@ func renderTitleForm(state titleFormState, cfg Config, termW, termH int) string 
 		later.backupHeld = held
 		alt = append(alt, confirmInfo(later))
 	}
-	return renderForm(state.form, formView{
-		Title:    popupTitleChartTitle,
+	return state.Render(dialog.FormView{
+		Title:    dialog.TitleChartTitle,
 		Info:     info,
 		Alt:      alt,
 		WrapInfo: true,
-		Refusal:  state.refusal,
-	}, cfg, termW, termH)
+	}, cfg, termW, termH, popupChrome(cfg))
 }
 
 // confirmInfo is the second step's text: the file it will rewrite, the backup

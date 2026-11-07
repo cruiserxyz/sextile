@@ -24,13 +24,11 @@ type rawReportCall struct {
 func stubRawReports(t *testing.T) *[]rawReportCall {
 	t.Helper()
 	singleCalls := []rawReportCall{}
-	oldSingle := computeRawReport
-	computeRawReport = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, request lookup.RawReportRequest) (string, string, error) {
-		singleCalls = append(singleCalls, rawReportCall{when: when, request: request})
-		return "single raw", "", nil
-	}
-	t.Cleanup(func() {
-		computeRawReport = oldSingle
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, request lookup.RawReportRequest) (string, string, error) {
+			singleCalls = append(singleCalls, rawReportCall{when: when, request: request})
+			return "single raw", "", nil
+		}
 	})
 	return &singleCalls
 }
@@ -39,7 +37,7 @@ type crossBodyCall struct {
 	natal store.AnchorChart
 	when  time.Time
 	place location.PlaceInfo
-	body  aspect.Body
+	body  aspect.Object
 }
 
 // stubCrossBodyReports records calls to the comparison body report
@@ -47,12 +45,12 @@ type crossBodyCall struct {
 func stubCrossBodyReports(t *testing.T) *[]crossBodyCall {
 	t.Helper()
 	calls := []crossBodyCall{}
-	old := computeCrossBodyReport
-	computeCrossBodyReport = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, place location.PlaceInfo, body aspect.Body) (string, string, error) {
-		calls = append(calls, crossBodyCall{natal: natal, when: when, place: place, body: body})
-		return "cross raw", "", nil
-	}
-	t.Cleanup(func() { computeCrossBodyReport = old })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.cross = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, place location.PlaceInfo, body aspect.Object) (string, string, error) {
+			calls = append(calls, crossBodyCall{natal: natal, when: when, place: place, body: body})
+			return "cross raw", "", nil
+		}
+	})
 	return &calls
 }
 
@@ -66,7 +64,7 @@ func TestBodyDetailsFollowsComparisonPair(t *testing.T) {
 	arrival := tabsPairModel(t, Config{Accessible: true})
 	arrival.width, arrival.height = 144, 40
 	arrival.focused = PanelBodies
-	arrival.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+	arrival.chart.positions = []aspect.Position{{Object: objMoon}}
 	arrival.bodyCursorIdx = 0
 	if r, ok := arrival.detailsRequestFor(); !ok || r.cross {
 		t.Fatalf("arrival at now: ok=%v cross=%v, want a single-chart request", ok, r.cross)
@@ -76,7 +74,7 @@ func TestBodyDetailsFollowsComparisonPair(t *testing.T) {
 	m := tabsOnPair(t, Config{Accessible: true})
 	m.width, m.height = 144, 40
 	m.focused = PanelBodies
-	m.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+	m.chart.positions = []aspect.Position{{Object: objMoon}}
 	m.bodyCursorIdx = 0
 
 	req, ok := m.detailsRequestFor()
@@ -97,13 +95,14 @@ func TestBodyDetailsFollowsComparisonPair(t *testing.T) {
 		t.Errorf("transit end = %v, want the committed floating time %v", req.when, m.slots.Floating().Time)
 	}
 
-	single := stubRawReports(t)
-	cross := stubCrossBodyReports(t)
+	var single *[]rawReportCall
+	var cross *[]crossBodyCall
+	m = withNewStubs(t, m, func() { single, cross = stubRawReports(t), stubCrossBodyReports(t) })
 	msg := runDetailsCmd(t, m)
 	if len(*cross) != 1 || len(*single) != 0 {
 		t.Fatalf("spawns: cross=%d single=%d, want exactly one cross report", len(*cross), len(*single))
 	}
-	if (*cross)[0].body != aspect.Moon || !(*cross)[0].when.Equal(m.slots.Floating().Time) {
+	if (*cross)[0].body != objMoon || !(*cross)[0].when.Equal(m.slots.Floating().Time) {
 		t.Errorf("cross call = %+v", (*cross)[0])
 	}
 	if msg.payload.(detailsPayload).body != "cross raw" {
@@ -135,7 +134,7 @@ func detailsTestModel(t *testing.T) Model {
 	m.height = 40
 	m.startup = startupReady
 	m.place = testPlaceBerlin()
-	m.chart.positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}}
+	m.chart.positions = []aspect.Position{{Object: objSun}, {Object: objMoon}}
 	return m
 }
 
@@ -173,7 +172,7 @@ func TestDetailsRoutesFocusedContext(t *testing.T) {
 		t.Errorf("body title = %q", got)
 	}
 	bodyCall := (*singleCalls)[1].request
-	if bodyCall.Kind != lookup.RawReportBody || bodyCall.Body != aspect.Moon {
+	if bodyCall.Kind != lookup.RawReportBody || bodyCall.Object != objMoon {
 		t.Errorf("body request = %+v, want Moon body report", bodyCall)
 	}
 
@@ -247,7 +246,7 @@ func TestDetailsFocusChangeAndResizeDropStaleResults(t *testing.T) {
 	}
 	m, _ = m.onRefreshResult(refreshResultMsg{
 		surface: surfaceDetails, runID: bodyRun.runningRunID, wantID: bodyRun.wantID,
-		payload: detailsPayload{title: "[0] Moon", body: "latest body"},
+		payload: detailsPayload{title: "[0] Moon", body: "latest body", key: keyNow(m)},
 	})
 	if m.details.body != "latest body" {
 		t.Fatalf("latest Details result did not commit: %+v", m.details)
@@ -343,28 +342,38 @@ func TestDetailsWaitsForFinalTextCommit(t *testing.T) {
 	}
 }
 
+// A failed replacement is not a frame (C6): the last complete report does not
+// stay under the new caption; the pane reads one line saying so, and nothing is
+// left pending.
 func TestDetailsFailureRetainsLastCompleteFrame(t *testing.T) {
 	m := detailsTestModel(t)
+	m.focused = PanelBodies
+	m.bodyCursorIdx = 1 // Moon
+	want := m.detailsWanted().key
 	m.details = detailsViewState{
-		title:       "[0] Moon",
+		title:       "[0] Sun",
 		body:        "last complete raw report",
 		pending:     true,
 		waitForText: true,
 		timerArmed:  true,
 	}
-	want := renderDetailsPanel(64, 18, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details))
+	m.details.key, m.details.keyed = contentKey{kind: reportRaw, raw: detailsKey{panel: PanelBodies, object: objSun.Number, chart: want.raw.chart}}, true
 
 	m, _ = m.commitRefresh(surfaceDetails, refreshResultMsg{
 		surface: surfaceDetails,
-		payload: detailsPayload{title: "[0] Mars"},
+		payload: detailsPayload{title: "[0] Moon", key: want.raw},
 		err:     errors.New("report failed"),
 	})
 
 	if m.details.pending || m.details.waitForText || m.details.timerArmed {
 		t.Fatalf("failed replacement left Details pending: %+v", m.details)
 	}
-	if got := renderDetailsPanel(64, 18, (detailsFrameOf(m.details)).state.attached, Config{Accessible: true}, detailsFrameOf(m.details)); got != want {
-		t.Fatalf("failed replacement visibly changed Details:\nBEFORE:\n%s\nAFTER:\n%s", want, got)
+	got := renderDetailsPanel(64, 18, m.detailsFrame().state.attached, Config{Accessible: true}, m.detailsFrame())
+	if strings.Contains(got, "last complete raw report") {
+		t.Fatalf("the failed replacement left the old report under the new caption:\n%s", got)
+	}
+	if !strings.Contains(got, "Couldn't read the Moon's report.") {
+		t.Fatalf("the failed replacement reads no failure line:\n%s", got)
 	}
 }
 
@@ -387,13 +396,21 @@ func TestRenderDetailsPanelStartsAtReportTop(t *testing.T) {
 // detailsFrameOf renders a bare view state the way the Model would: the
 // strip derived from that state, no timeline rows.
 func detailsFrameOf(state detailsViewState) detailsFrame {
+	return detailsFrameFocused(state, PanelChart)
+}
+
+// detailsFrameFocused is detailsFrameOf with the focus named. The Aspects
+// panel's caption is the committed report's own title, which is what a test
+// of an arbitrary stored title needs; the Chart panel's caption follows the
+// cursor (detailsWanted).
+func detailsFrameFocused(state detailsViewState, focused PanelID) detailsFrame {
 	// A workspace with the cursor on the floating slot: the Timeline tab is
 	// offered for that cursor, which these strips are drawn for.
 	slots, err := store.NewSlots(tlFloatingTime, testPlaceAmsterdam())
 	if err != nil {
 		panic(err)
 	}
-	m := Model{details: state, focused: PanelChart, slots: slots}
+	m := Model{details: state, focused: focused, slots: slots}
 	return detailsFrame{state: state, strip: m.tabStrips()[PanelDetails]}
 }
 

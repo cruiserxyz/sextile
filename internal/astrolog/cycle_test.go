@@ -17,7 +17,7 @@ func TestParseCycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := ParseCycleEvents(string(b))
+	events, err := ParseCycleEvents(string(b), testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,8 @@ func TestParseCycleEvents(t *testing.T) {
 	}
 	// 2017-03-25 10:17:07 UT, Sun ( 4Ari57) Con [ 4Ari57] Venus: Venus in
 	// brackets, retrograde.
-	want := CycleEvent{Instant: time.Date(2017, 3, 25, 10, 17, 7, 0, time.UTC), Kind: CycleConjunction, Body: aspect.Sun, Other: aspect.Venus,
+	want := CycleEvent{Instant: time.Date(2017, 3, 25, 10, 17, 7, 0, time.UTC), Kind: CycleConjunction,
+		Object: aspect.Object{Number: 1, Name: "Sun"}, OtherObject: aspect.Object{Number: 4, Name: "Venus"},
 		At: CyclePoint{Deg: 4, Min: 57, Sign: "Ari", Bracket: '('}, OtherAt: CyclePoint{Deg: 4, Min: 57, Sign: "Ari", Bracket: '['}}
 	found := false
 	for _, e := range events {
@@ -60,12 +61,12 @@ func TestParseCycleEvents(t *testing.T) {
 		t.Error("no 2017-03-25 conjunction")
 	}
 	// The occultation suffix is read, not refused.
-	occ, err := ParseCycleEvents("Mon  6/ 6/2016 21:49:20     Sun (16Gem35) Con (16Gem35) Venus (Total Solar Occultation 98%)\n")
-	if err != nil || occ[0].Other != aspect.Venus || occ[0].OtherAt.Bracket != '(' || occ[0].Instant.Hour() != 21 {
+	occ, err := ParseCycleEvents("Mon  6/ 6/2016 21:49:20     Sun (16Gem35) Con (16Gem35) Venus (Total Solar Occultation 98%)\n", testRegistry(t))
+	if err != nil || occ[0].OtherObject != objVenus || occ[0].OtherAt.Bracket != '(' || occ[0].Instant.Hour() != 21 {
 		t.Errorf("occultation line: %+v, %v", occ, err)
 	}
 	// The clock is pinned to 24 hours: midnight is 0:00.
-	mid, err := ParseCycleEvents("Thu  1/ 1/2026  0:00:05   Venus (10Cap00) --> Capricorn\nThu  1/ 1/2026 12:00:05   Venus <10Cap00> S/D\n")
+	mid, err := ParseCycleEvents("Thu  1/ 1/2026  0:00:05   Venus (10Cap00) --> Capricorn\nThu  1/ 1/2026 12:00:05   Venus <10Cap00> S/D\n", testRegistry(t))
 	if err != nil || mid[0].Instant.Hour() != 0 || mid[1].Instant.Hour() != 12 || mid[1].Station != "S/D" {
 		t.Errorf("24-hour clock: %+v, %v", mid, err)
 	}
@@ -78,7 +79,7 @@ func TestParseCycleEventsRefusesUnknownLines(t *testing.T) {
 		"another aspect":      "Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Opp [ 4Lib57] Venus\n",
 		"no seconds":          "Sat  3/25/2017 10:17     Sun ( 4Ari57) Con [ 4Ari57] Venus\n",
 		"mismatched bracket":  "Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57) Venus\n",
-		"unknown body":        "Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57] Vulcan\n",
+		"unknown body":        "Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57] Nibiru\n",
 		"impossible date":     "Sat  2/30/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57] Venus\n",
 		"degree 30":           "Sat  3/25/2017 10:17:07     Sun (30Ari57) Con [ 4Ari57] Venus\n",
 		"trailing words":      "Sat  3/25/2017 10:17:07     Sun ( 4Ari57) Con [ 4Ari57] Venus and more\n",
@@ -87,7 +88,7 @@ func TestParseCycleEventsRefusesUnknownLines(t *testing.T) {
 		"an ingress and more": "Sat  3/ 4/2017  9:08:52   Venus (13Ari08) --> Taurus later\n",
 		"a 12-hour time":      "Sat  3/25/2017 10:17:07am     Sun ( 4Ari57) Con [ 4Ari57] Venus\n",
 	} {
-		if _, err := ParseCycleEvents(good + bad); err == nil {
+		if _, err := ParseCycleEvents(good+bad, testRegistry(t)); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
 	}
@@ -97,7 +98,7 @@ func TestParseCycleEventsRefusesUnknownLines(t *testing.T) {
 // reform pin, the clock pins and the band of the Sun, the body and the
 // conjunction.
 func TestCycleCallArgv(t *testing.T) {
-	call, err := CycleCall(CycleRequest{StartYear: 2016, Years: 13, Other: aspect.Venus})
+	call, err := CycleCall(CycleRequest{StartYear: 2016, Years: 13, Other: objVenus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func TestCycleCallArgv(t *testing.T) {
 	if !strings.HasPrefix(got, "-z 0 -qy 2016 -dY 13 -b0 ") || !strings.HasSuffix(got, " =Yt _Yd -R0 1 4 -RA0 1") {
 		t.Errorf("argv %q", got)
 	}
-	for _, bad := range []CycleRequest{{StartYear: 1500, Years: 13, Other: aspect.Venus}, {StartYear: 2016, Years: 0, Other: aspect.Venus}, {StartYear: 2016, Years: 13, Other: aspect.Sun}} {
+	for _, bad := range []CycleRequest{{StartYear: 1500, Years: 13, Other: objVenus}, {StartYear: 2016, Years: 0, Other: objVenus}, {StartYear: 2016, Years: 13, Other: objSun}} {
 		if _, err := CycleCall(bad); err == nil {
 			t.Errorf("%+v: no error", bad)
 		}
@@ -114,7 +115,7 @@ func TestCycleCallArgv(t *testing.T) {
 
 // The live binary prints what the parser reads.
 func TestCycleSearchAgainstAstrolog(t *testing.T) {
-	call, err := CycleCall(CycleRequest{StartYear: 2016, Years: 13, Other: aspect.Venus})
+	call, err := CycleCall(CycleRequest{StartYear: 2016, Years: 13, Other: objVenus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ func TestCycleSearchAgainstAstrolog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := ParseCycleEvents(out)
+	events, err := ParseCycleEvents(out, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +148,7 @@ func TestSunPairToTheSecond(t *testing.T) {
 		"Body   Altitude    Azimuth    Azi. Vector    Magn. Full(Area,Time)  Diameter\n" +
 		"Sun : +30:40'03\" 265:58'28\" (1.000s 0.070w) -26.87 100.00% 100.00%  0:32'04.086\"\n" +
 		"Venu: +18:02'22\" 277:53'36\" (1.000s 0.139e)  -4.32   4.03%  12.87%  0:00'57.784\"\n"
-	sun, ven, err := ParseSunPair(sample, aspect.Venus)
+	sun, ven, err := ParseSunPair(sample, []int{1, 4}, testRegistry(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,17 +170,17 @@ func TestSunPairToTheSecond(t *testing.T) {
 		"minutes only":   strings.Replace(sample, "21Lib09'41\"", "21Lib09", 1),
 		"stray line":     sample + "  House cusp 1: 21Sag50\n",
 	} {
-		if _, _, err := ParseSunPair(bad, aspect.Venus); err == nil {
+		if _, _, err := ParseSunPair(bad, []int{1, 4}, testRegistry(t)); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
 	}
 	// Below the horizon the altitude prints a space after its sign.
 	night := strings.Replace(sample, "Sun : +30:40'03\" 265:58'28\" (1.000s 0.070w)", "Sun : - 3:03'28\" 190:55'25\" (0.193s 1.000w)", 1)
-	if _, _, err := ParseSunPair(night, aspect.Venus); err != nil {
+	if _, _, err := ParseSunPair(night, []int{1, 4}, testRegistry(t)); err != nil {
 		t.Errorf("the Sun below the horizon: %v", err)
 	}
 	// And the live binary at midnight UT, the Sun far below the horizon.
-	midnight, err := SunPairCall(SunPairRequest{When: time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), Lat: 51, Other: aspect.Venus})
+	midnight, err := SunPairCall(SunPairRequest{When: time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), Lat: 51, Other: objVenus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,10 +188,10 @@ func TestSunPairToTheSecond(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := ParseSunPair(out, aspect.Venus); err != nil {
+	if _, _, err := ParseSunPair(out, []int{1, 4}, testRegistry(t)); err != nil {
 		t.Errorf("live at midnight: %v\n%s", err, out)
 	}
-	call, err := SunPairCall(SunPairRequest{When: time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), Lat: 51, Other: aspect.Venus})
+	call, err := SunPairCall(SunPairRequest{When: time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), Lat: 51, Other: objVenus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +202,7 @@ func TestSunPairToTheSecond(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	live, liveVen, err := ParseSunPair(out, aspect.Venus)
+	live, liveVen, err := ParseSunPair(out, []int{1, 4}, testRegistry(t))
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

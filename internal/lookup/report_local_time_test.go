@@ -12,7 +12,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // the specification § Fixtures. The oracle for "everything after
@@ -75,7 +74,7 @@ func singleReport(t *testing.T, f reportFixture) string {
 func pairReport(t *testing.T, natal, transit reportFixture) string {
 	t.Helper()
 	raw, _, err := CrossBodyRawReport(context.Background(), Hellenistic,
-		store.AnchorChart{When: natal.when, Place: natal.place}, transit.when, transit.place, aspect.Sun)
+		store.AnchorChart{When: natal.when, Place: natal.place}, transit.when, transit.place, objSun)
 	if err != nil {
 		t.Fatalf("pair %s x %s: %v", natal.name, transit.name, err)
 	}
@@ -111,7 +110,7 @@ func utPairReport(t *testing.T, natal, transit reportFixture) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _, err := astrolog.ComputeRawReport(context.Background(), spec, recipe.BodyRawReport(aspect.Sun))
+	raw, _, err := astrolog.ComputeRawReport(context.Background(), spec, recipe.BodyRawReport(objSun))
 	if err != nil {
 		t.Fatalf("UT pair oracle: %v", err)
 	}
@@ -227,7 +226,7 @@ func TestPairReportLocalTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := astrolog.Compile(spec, recipe.BodyRawReport(aspect.Sun))
+	plan, err := astrolog.Compile(spec, recipe.BodyRawReport(objSun))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +262,7 @@ func TestComparisonSpecAtStaysInUT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.BodyRawReport(aspect.Sun)} {
+	for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.BodyRawReport(objSun)} {
 		plan, err := astrolog.Compile(spec, p)
 		if err != nil {
 			t.Fatal(err)
@@ -289,7 +288,7 @@ func TestReportRefusesAnUnknownZoneBeforeAstrolog(t *testing.T) {
 	natal, transit := fixtureByName(t, "F1"), fixtureByName(t, "F3")
 	natal.place.TZ = "Mars/Olympus_Mons"
 	_, command, err := CrossBodyRawReport(context.Background(), Hellenistic,
-		store.AnchorChart{When: natal.when, Place: natal.place}, transit.when, transit.place, aspect.Sun)
+		store.AnchorChart{When: natal.when, Place: natal.place}, transit.when, transit.place, objSun)
 	if err == nil {
 		t.Error("an unloadable natal zone was accepted by the pair report")
 	}

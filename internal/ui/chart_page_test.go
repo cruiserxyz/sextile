@@ -15,7 +15,7 @@ func chartPageModel(t *testing.T) Model {
 	m.width = dualColumnMinWidth(2) // two charts are selected, so Details needs the wider layout
 	m.focused = PanelChart
 	m.cursorIdx, m.chartTop = 0, 0
-	m.chart.positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}}
+	m.chart.positions = []aspect.Position{{Object: objSun}, {Object: objMoon}}
 	if n := len(m.slots.All()); n != 12 {
 		t.Fatalf("fixture: %d slots, want 12", n)
 	}

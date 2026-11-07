@@ -4,6 +4,7 @@
 !cmd/
 !internal/
 !pkg/
+!scripts/ephemeris-moons.sha256
 **/.env
 # No blanket exclude of *.as: Astrolog's own data files end in .as. These seven
 # fixtures are synthetic charts the tests read.

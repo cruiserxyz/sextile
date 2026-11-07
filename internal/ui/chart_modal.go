@@ -2,7 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,7 +17,7 @@ import (
 )
 
 // chart_modal.go is the saved-chart library picker — the visible
-// consumer of the earlier change chart-library substrate. It mirrors atlas_modal.go: a
+// consumer of the earlier change chart-library substrate. It mirrors atlas_modal_model.go: a
 // filter buffer + cursor over store.FilterCharts results. Enter sets the chosen
 // chart as the natal anchor (applyChartPicked); Esc restores the view it opened
 // from. The library is loaded lazily on open (loadChartsCmd → ChartsLoadedMsg →
@@ -24,9 +30,9 @@ import (
 //	                      └─Esc──▶ prior state
 //
 // Invariants (mirror atlasModalState):
-//   - matches derives from filterText via refilter(); never set directly.
+//   - matches derives from FilterText via refilter(); never set directly.
 //   - cursor stays in [0, len(matches)); clamped on every refilter.
-//   - the window scrolls with the cursor (fuzzyList.scrollTo), over the rows
+//   - the window scrolls with the cursor (menu.FuzzyList.scrollTo), over the rows
 //     the chart block actually gets — chartBlockHeight — so the row Enter
 //     picks is always the marked row on screen.
 //   - charts is nil and loaded=false until ChartsLoadedMsg arrives; the modal
@@ -40,7 +46,7 @@ type chartPickerState struct {
 	// as for the place picker. Before it was embedded here the picker kept
 	// its own cursor and no window, and the cursor walked off the bottom of
 	// the list into rows nobody could see.
-	fuzzyList[store.NamedChart]
+	menu.FuzzyList[store.NamedChart]
 
 	charts     []store.NamedChart // full library; nil until loaded
 	drops      []store.ChartDrop  // files the library could not read
@@ -60,66 +66,97 @@ type chartPickerState struct {
 	// appears later does not resize the box; the list scrolls, and the next
 	// opening sizes for it. Zero until then (the loading line has no size to
 	// keep).
-	fit modalFit
+	fit dialog.Fit
 }
 
 // maxChartResults caps a filtered result set. A curated chart library is small,
 // so this is a generous ceiling, matching the atlas modal's posture.
 const maxChartResults = 200
 
-// refilter recomputes matches from filterText. An empty filter browses the
+// refilter recomputes matches from FilterText. An empty filter browses the
 // whole (sorted) library — unlike the 40k-row atlas, a chart library is small
 // enough to show in full. A non-empty filter runs the three-tier FilterCharts.
 func (p *chartPickerState) refilter() {
 	if !p.loaded {
-		p.clear()
+		p.Clear()
 		return
 	}
-	if p.filterText == "" {
-		p.setMatches(p.charts, false)
+	if p.FilterText == "" {
+		p.SetMatches(p.charts, false)
 		return
 	}
-	p.setMatches(store.FilterCharts(p.charts, p.filterText, maxChartResults))
+	p.SetMatches(store.FilterCharts(p.charts, p.FilterText, maxChartResults))
+}
+
+// openChartPicker is Ctrl+O: the picker sets the NATAL ANCHOR for a
+// transit-over-natal overlay, so it needs a resolved transit workspace first
+// (blocked says when it has none). Before location resolution Ctrl+O is a no-op
+// -- the user resolves their location via the atlas (Ctrl+L) first. Without
+// this gate, picking a chart pre-resolution would dispatch an overlay compute
+// against an empty place (the reviewer a review).
+func (m Model) openChartPicker() (Model, tea.Cmd) {
+	if m.blocked(keys.BindingOpenCharts) != "" {
+		return m, nil
+	}
+	// Open the picker: capture the current view to restore on Esc, reset the
+	// buffer, bump the picker generation (so a stale load from a prior open is
+	// dropped), and lazily load the library -- the modal shows a loading line
+	// until ChartsLoadedMsg lands.
+	m.pickerGen++
+	m.picker = chartPickerState{prior: m.startup}
+	m.startup = startupChartOpen
+	return m, loadChartsCmd(m.pickerGen)
+}
+
+// openChartBindings is the Open chart popup's table. Ctrl+R renames the
+// highlighted chart; it is this table's alone, so it does nothing anywhere
+// else (the specification C4.5).
+func openChartBindings() []keys.BindingEntry {
+	return keys.Titled(append([]keys.BindingEntry{
+		listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), confirm("Open").ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 }),
+		{ID: keys.BindingRename, Binding: key.NewBinding(key.WithKeys("ctrl+r")), Title: "Rename", BarKey: "⌃r", Bar: true, When: func(c keys.Context) bool { return c.Picker.Renames }},
+		closeOn("Cancel"),
+	}, pageEntries()...))
 }
 
 // updateChartModalKey handles one keystroke for the chart picker. The caller in
 // model.go has already gated on m.startup == startupChartOpen.
 func updateChartModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch matchBinding(msg, openChartBindings()) {
-	case BindingConfirm:
-		if m.picker.loadErr != nil || len(m.picker.matches) == 0 {
+	switch keys.MatchBinding(msg, openChartBindings()) {
+	case keys.BindingConfirm:
+		if m.picker.loadErr != nil || len(m.picker.Matches) == 0 {
 			return m, nil
 		}
-		picked := m.picker.matches[m.picker.cursor]
+		picked := m.picker.Matches[m.picker.Cursor]
 		var cmd tea.Cmd
 		m, cmd = applyChartPicked(m, ChartPickedMsg{Chart: picked})
 		return m, cmd
-	case BindingRename:
-		if m.picker.loadErr != nil || len(m.picker.matches) == 0 {
+	case keys.BindingRename:
+		if m.picker.loadErr != nil || len(m.picker.Matches) == 0 {
 			return m, nil
 		}
-		return openRenameForm(m, m.picker.matches[m.picker.cursor]), nil
-	case BindingListUp:
-		m.picker.moveUp()
-		m.picker.scrollTo(m.picker.cursor, chartBlockHeight(m.picker, modalListHeight(m.height)))
+		return openRenameForm(m, m.picker.Matches[m.picker.Cursor]), nil
+	case keys.BindingListUp:
+		m.picker.MoveUp()
+		m.picker.ScrollTo(m.picker.Cursor, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingListDown:
-		m.picker.moveDown()
-		m.picker.scrollTo(m.picker.cursor, chartBlockHeight(m.picker, modalListHeight(m.height)))
+	case keys.BindingListDown:
+		m.picker.MoveDown()
+		m.picker.ScrollTo(m.picker.Cursor, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingPageUp:
-		m.picker.page(pageUp, chartBlockHeight(m.picker, modalListHeight(m.height)))
+	case keys.BindingPageUp:
+		m.picker.Page(menu.PageUp, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingPageDown:
-		m.picker.page(pageDown, chartBlockHeight(m.picker, modalListHeight(m.height)))
+	case keys.BindingPageDown:
+		m.picker.Page(menu.PageDown, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingPageHome:
-		m.picker.page(pageHome, chartBlockHeight(m.picker, modalListHeight(m.height)))
+	case keys.BindingPageHome:
+		m.picker.Page(menu.PageHome, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingPageEnd:
-		m.picker.page(pageEnd, chartBlockHeight(m.picker, modalListHeight(m.height)))
+	case keys.BindingPageEnd:
+		m.picker.Page(menu.PageEnd, chartBlockHeight(m.picker, dialog.ListHeight(m.height)))
 		return m, nil
-	case BindingClose:
+	case keys.BindingClose:
 		// Esc closes the picker without changing the anchor, restoring the
 		// view it opened from.
 		//
@@ -130,42 +167,42 @@ func updateChartModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.startup = m.picker.prior
 		return m, nil
 	}
-	if m.picker.typeKey(msg) {
+	if m.picker.TypeKey(msg) {
 		m.picker.refilter()
-		m.picker.cursor = 0
-		m.picker.offset = 0
+		m.picker.Cursor = 0
+		m.picker.Offset = 0
 	}
 	return m, nil
 }
 
 // renderChartModal renders the centered picker: search line + result list +
-// state line. The chrome is the shared modalBox — the box math here was
+// state line. The chrome is the shared dialog.Box — the box math here was
 // character-identical to the atlas modal's and is no longer duplicated.
 func renderChartModal(state chartPickerState, cfg Config, termW, termH int) string {
 	// The cursor walks the readable charts only; an unreadable file is listed
 	// but cannot be picked, so it is not a position.
-	pos := listPosition{Cursor: state.cursor}
+	pos := listPosition{Cursor: state.Cursor}
 	if state.loaded && state.loadErr == nil {
-		pos.Total = len(state.matches)
+		pos.Total = len(state.Matches)
 	}
-	return renderModalBox(modalBox{
-		Title:    popupTitleOpenChart,
+	return dialog.Render(dialog.Box{
+		Title:    dialog.TitleOpenChart,
 		Fit:      state.fitOrNow(cfg),
-		Position: &pos,
-		Scroll: func(height int) (viewport, int) {
+		Position: popupCounter(&pos, cfg),
+		Scroll: func(height int) (pane.Viewport, int) {
 			block := chartBlockHeight(state, height)
-			_, offset := state.windowAt(state.cursor, block)
-			return viewport{Total: pos.Total, Visible: block, Offset: offset}, 0
+			_, offset := state.WindowAt(state.Cursor, block)
+			return pane.Viewport{Total: pos.Total, Visible: block, Offset: offset}, 0
 		},
-		FilterText: state.filterText,
-	}, cfg, termW, termH, func(width, height int) string {
+		FilterText: state.FilterText,
+	}, cfg, termW, termH, popupChrome(cfg), func(width, height int) string {
 		return renderChartResultList(state, cfg, width, height)
 	})
 }
 
 // fitOrNow is the size the picker was given when it opened, or, before the
 // first load has given it one, the size of what it shows now.
-func (s chartPickerState) fitOrNow(cfg Config) modalFit {
+func (s chartPickerState) fitOrNow(cfg Config) dialog.Fit {
 	if s.fit.Width > 0 {
 		return s.fit
 	}
@@ -177,21 +214,21 @@ func (s chartPickerState) fitOrNow(cfg Config) modalFit {
 // as tall as every chart and the unreadable files' block. The block keeps no
 // more rows than the charts have, so a long list of unreadable files does not
 // stretch the box (chartBlockHeight reserves them by the same rule).
-func chartFit(state chartPickerState, cfg Config) modalFit {
+func chartFit(state chartPickerState, cfg Config) dialog.Fit {
 	switch {
 	case state.loadErr != nil:
-		w, rows := fitMessage(fmt.Sprintf("(charts unavailable: %v)", state.loadErr), searchLineWidth("Search: "))
-		return modalFit{Width: w, Rows: rows}
+		w, rows := menu.FitMessage(fmt.Sprintf("(charts unavailable: %v)", state.loadErr), dialog.SearchLineWidth("Search: "), dialog.ProseWidth)
+		return dialog.Fit{Width: w, Rows: rows}
 	case !state.loaded:
-		return modalFit{Width: 1, Rows: 1} // "(loading charts…)"
+		return dialog.Fit{Width: 1, Rows: 1} // "(loading charts…)"
 	}
-	fit := modalFit{Width: 1}
+	fit := dialog.Fit{Width: 1}
 	for _, c := range state.charts {
-		fit.Width = max(fit.Width, listRowWidth(chartRow(c, false, state.now), cfg))
+		fit.Width = max(fit.Width, menu.RowWidth(chartRow(c, false, state.now), cfg))
 	}
 	drops := chartDropLines(state.drops)
 	for _, l := range drops {
-		fit.Width = max(fit.Width, min(ansi.StringWidth(l), modalProseWidth))
+		fit.Width = max(fit.Width, min(ansi.StringWidth(l), dialog.ProseWidth))
 	}
 	block := 1 // the charts, or the one line that says there are none
 	switch {
@@ -215,10 +252,10 @@ func chartFit(state chartPickerState, cfg Config) modalFit {
 // must never be told they have no charts.
 func renderChartResultList(state chartPickerState, cfg Config, width, height int) string {
 	if state.loadErr != nil {
-		return listMessage(fmt.Sprintf("(charts unavailable: %v)", state.loadErr), width, height)
+		return menu.Message(fmt.Sprintf("(charts unavailable: %v)", state.loadErr), width, height)
 	}
 	if !state.loaded {
-		return listMessage("(loading charts…)", width, height)
+		return menu.Message("(loading charts…)", width, height)
 	}
 
 	block := chartBlockHeight(state, height)
@@ -226,10 +263,10 @@ func renderChartResultList(state chartPickerState, cfg Config, width, height int
 	lines = append(lines, chartRows(state, cfg, width, block)...)
 	// The unreadable files keep the foot of the list, whatever the filter left.
 	for len(lines) < block {
-		lines = append(lines, listNote("", width, cfg))
+		lines = append(lines, menu.Note("", width, cfg))
 	}
 	lines = append(lines, chartDropBlock(fitDropLines(chartDropLines(state.drops), height-block), cfg, width)...)
-	return listBlock(lines, width, height)
+	return menu.Block(lines, width, height)
 }
 
 // chartBlockHeight is how many of the list's rows the pickable charts get: the
@@ -268,18 +305,18 @@ func chartRows(state chartPickerState, cfg Config, width, height int) []string {
 		if len(state.drops) > 0 {
 			return nil
 		}
-		return []string{listNote("(no saved charts yet)", width, cfg)}
+		return []string{menu.Note("(no saved charts yet)", width, cfg)}
 	}
-	if len(state.matches) == 0 {
-		return []string{listNote("(no matches)", width, cfg)}
+	if len(state.Matches) == 0 {
+		return []string{menu.Note("(no matches)", width, cfg)}
 	}
 
 	// The window scrolls to follow the cursor; without it the cursor walks
 	// past the bottom of the list and Enter picks a chart nobody can see.
-	visible, offset := state.windowAt(state.cursor, height)
+	visible, offset := state.WindowAt(state.Cursor, height)
 	lines := make([]string, 0, height)
 	for i, c := range visible {
-		lines = append(lines, listRow(chartRow(c, offset+i == state.cursor, state.now), cfg, width))
+		lines = append(lines, menu.Row(chartRow(c, offset+i == state.Cursor, state.now), cfg, width))
 	}
 	return lines
 }
@@ -316,9 +353,9 @@ func fitDropLines(lines []string, budget int) []string {
 func chartDropBlock(lines []string, cfg Config, width int) []string {
 	out := make([]string, 0, len(lines))
 	for _, row := range lines {
-		row = listNote(row, width, cfg)
-		if cfg.useColor() {
-			row = chartDropStyle.Render(row)
+		row = menu.Note(row, width, cfg)
+		if cfg.UseColor() {
+			row = term.ChartDropStyle.Render(row)
 		}
 		out = append(out, row)
 	}
@@ -328,12 +365,12 @@ func chartDropBlock(lines []string, cfg Config, width int) []string {
 // chartRow is one library entry: the chart's name on the left, and its place
 // and birth date pinned to the right edge so the dates line up down the list
 // (the specification C7). A missing place or date is simply absent.
-func chartRow(c store.NamedChart, cursor bool, now time.Time) listRowSpec {
+func chartRow(c store.NamedChart, cursor bool, now time.Time) menu.RowSpec {
 	tail := ""
 	if age, ok := chartAge(c, now); ok {
 		tail = fmt.Sprintf(" (%d)", age)
 	}
-	return listRowSpec{
+	return menu.RowSpec{
 		Left:     c.Name,
 		LeftTail: tail,
 		Right:    []string{c.Place.Display(), chartDate(c)},

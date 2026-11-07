@@ -22,6 +22,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -130,12 +131,13 @@ func TestOneTabTitleBorderIdentity(t *testing.T) {
 		// Details is no longer a one-tab panel (the specification
 		// C11): its report title is the report tab of a two-tab strip, so
 		// here it is checked for its prefix and its title, not for identity.
+		// The caption is the wanted key's, not the stored report's
+		// (specs/details-follows-its-tab.md C2): on the Aspects panel, `Aspects`.
 		if strings.HasPrefix(tc.title, "[0] Details:") && tc.width >= 40 {
-			box = renderDetailsPanel(tc.width, 3, (detailsFrameOf(detailsViewState{title: tc.title})).state.attached, cfg, detailsFrameOf(detailsViewState{title: tc.title}))
+			box = renderDetailsPanel(tc.width, 3, false, cfg, detailsFrameFocused(detailsViewState{title: tc.title}, PanelAspects))
 			top := ansi.Strip(strings.SplitN(box, "\n", 2)[0])
-			report := strings.TrimPrefix(tc.title, "[0] ")
-			if !strings.Contains(top, "[0] "+report) && !strings.Contains(top, "[0] ["+report+"]") {
-				t.Errorf("details panel %s w=%d: border %q does not carry %q", tc.mode, tc.width, top, tc.title)
+			if !strings.Contains(top, "[0] Aspects") && !strings.Contains(top, "[0] [Aspects]") {
+				t.Errorf("details panel %s w=%d: border %q does not carry the caption Aspects", tc.mode, tc.width, top)
 			}
 		}
 	}
@@ -145,7 +147,7 @@ func TestOneTabTitleBorderIdentity(t *testing.T) {
 // selected and Aspects focused; nothing committed yet.
 func tabsPairModel(t *testing.T, cfg Config) Model {
 	t.Helper()
-	m := NewModelWithClock(cfg, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, cfg, FrozenClock(testFrozenTime()))
 	slots, err := store.NewSlots(testFrozenTime(), testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -183,28 +185,28 @@ func tabsOnPair(t *testing.T, cfg Config) Model {
 }
 
 func tabsOwnAspects() []aspect.Aspect {
-	mk := func(a, b aspect.Body, k aspect.AspectKind, orb, power float64) aspect.Aspect {
-		asp := aspect.NewAspect(a, b, k, aspect.Orb(orb))
+	mk := func(a, b aspect.Object, k aspect.AspectKind, orb, power float64) aspect.Aspect {
+		asp := aspect.NewObjectAspect(a, b, k, aspect.Orb(orb))
 		asp.Power = power
 		return asp
 	}
 	return []aspect.Aspect{
-		mk(aspect.Sun, aspect.Moon, aspect.Square, 0.5, 22),
-		mk(aspect.Venus, aspect.Jupiter, aspect.Sextile, 3.0, 8.4),
+		mk(objSun, objMoon, aspect.Square, 0.5, 22),
+		mk(objVenus, objJupiter, aspect.Sextile, 3.0, 8.4),
 	}
 }
 
 func tabsCrossAspects() []lookup.OverlayAspect {
 	return []lookup.OverlayAspect{
-		{Transit: aspect.Saturn, Natal: aspect.Sun, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
-		{Transit: aspect.Jupiter, Natal: aspect.Moon, Kind: aspect.Trine, Orb: 1.4, Power: 6},
+		{TransitObject: objSaturn, NatalObject: objSun, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
+		{TransitObject: objJupiter, NatalObject: objMoon, Kind: aspect.Trine, Orb: 1.4, Power: 6},
 	}
 }
 
 func tabsOverlayFrame() FirstFrameReadyMsg {
 	return FirstFrameReadyMsg{
 		Overlay:      true,
-		Positions:    []aspect.Position{{Body: aspect.Sun, Longitude: 35.5}, {Body: aspect.Moon, Longitude: 136.18}},
+		Positions:    []aspect.Position{{Object: objSun, Longitude: 35.5}, {Object: objMoon, Longitude: 136.18}},
 		Aspects:      tabsOwnAspects(),
 		CrossAspects: tabsCrossAspects(),
 	}
@@ -331,7 +333,7 @@ func TestJumpDigitFocusesOnly(t *testing.T) {
 	one.slots.SetComparisonSelected(false)
 	before := one
 	m, cmd = pressKey(t, one, '3')
-	if cmd != nil || !reflect.DeepEqual(m, before) {
+	if cmd != nil || !sameModel(m, before) {
 		t.Error("re-pressing the digit of a one-tab panel changed something")
 	}
 }
@@ -354,6 +356,11 @@ func TestRetiredTabKeysAreInert(t *testing.T) {
 			if paired && focus == PanelChart {
 				continue
 			}
+			// Amended by the 0.1.3 walk, 2026-11-06 (operator: "Everywhere but
+			// Details"): from Bodies too (TestBracketsFromBodiesWriteTheBase).
+			if paired && focus == PanelBodies {
+				continue
+			}
 			base := tabsPairModel(t, Config{Accessible: true})
 			base.focused = focus
 			base.slots.SetComparisonSelected(paired)
@@ -362,7 +369,7 @@ func TestRetiredTabKeysAreInert(t *testing.T) {
 				if cmd != nil {
 					t.Errorf("paired=%v %s: %q returned a Cmd", paired, focus, r)
 				}
-				if !reflect.DeepEqual(m, base) {
+				if !sameModel(m, base) {
 					t.Errorf("paired=%v %s: %q changed the model", paired, focus, r)
 				}
 			}
@@ -380,8 +387,10 @@ func TestRetiredTabKeysStartNoCompute(t *testing.T) {
 	// Aspects' tabs while a pair is selected and so do recompute; the inert
 	// keys are the ones with no second tab to reach (focus on Bodies; from
 	// Chart the brackets reach Aspects since the view rule's amendment (a)).
+	// Amended by the 0.1.3 walk, 2026-11-06 ("Everywhere but Details"): from
+	// Bodies the brackets reach Aspects too, so only `0` and `2` stay here.
 	m.focused = PanelBodies
-	for _, r := range []rune{']', '[', '0', '2'} {
+	for _, r := range []rune{'0', '2'} {
 		m, _ = pressKey(t, m, r)
 		if got := m.refresh[surfaceText].wantID; got != textWant {
 			t.Errorf("%q bumped text wantID to %d", r, got)
@@ -403,11 +412,11 @@ func TestRetiredTabKeysStartNoCompute(t *testing.T) {
 func TestAspectsTabRendersSingleWaterfall(t *testing.T) {
 	state := chartViewState{aspects: tabsOwnAspects(), crossAspects: tabsCrossAspects(), overlay: true}
 	got := renderAspectsBody(state, TabAspects, 64, 4, Config{Accessible: true})
-	want := renderAspectWaterfallStyled(state.aspects, nil, 64, 4, Config{Accessible: true})
+	want := panel.RenderAspectWaterfallStyled(state.aspects, nil, 64, 4, Config{Accessible: true})
 	if got != want {
 		t.Errorf("aspects tab body:\n got %q\nwant %q", got, want)
 	}
-	if strings.Contains(got, bodyGlyph(aspect.Saturn)) {
+	if strings.Contains(got, panel.BodyGlyph(objSaturn)) {
 		t.Errorf("aspects tab leaked a cross-aspect body: %q", got)
 	}
 }
@@ -416,7 +425,7 @@ func TestAspectsTabRendersSingleWaterfall(t *testing.T) {
 func TestCrossTabRendersFullHeightNoHeader(t *testing.T) {
 	state := chartViewState{aspects: tabsOwnAspects(), crossAspects: tabsCrossAspects(), overlay: true}
 	got := renderAspectsBody(state, TabAspectsCross, 64, 4, Config{Accessible: true})
-	want := renderCrossAspectWaterfallStyled(state.crossAspects, nil, 64, 4, Config{Accessible: true})
+	want := panel.RenderCrossAspectWaterfallStyled(state.crossAspects, nil, 64, 4, Config{Accessible: true})
 	if got != want {
 		t.Errorf("cross tab body:\n got %q\nwant %q", got, want)
 	}
@@ -438,23 +447,21 @@ func TestCrossTabEmptyLine(t *testing.T) {
 
 // C16
 func TestOverlayFrameCarriesFocusedAspects(t *testing.T) {
-	natalRows := []aspect.Aspect{aspect.NewAspect(aspect.Sun, aspect.Mars, aspect.Trine, 1)}
-	transitRows := []aspect.Aspect{aspect.NewAspect(aspect.Moon, aspect.Venus, aspect.Square, 2)}
-	natalStyles := astrologstyle.Aspects{{First: aspect.Sun, Second: aspect.Mars, Kind: aspect.Trine}: {Kind: "natal"}}
-	transitStyles := astrologstyle.Aspects{{First: aspect.Moon, Second: aspect.Venus, Kind: aspect.Square}: {Kind: "transit"}}
-	oldNatal, oldTransit, oldCross := firstCallNatalPositions, firstCallTransits, overlayCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects = oldNatal, oldTransit, oldCross
+	natalRows := []aspect.Aspect{aspect.NewObjectAspect(objSun, objMars, aspect.Trine, 1)}
+	transitRows := []aspect.Aspect{aspect.NewObjectAspect(objMoon, objVenus, aspect.Square, 2)}
+	natalStyles := astrologstyle.Aspects{{First: objSun, Second: objMars, Kind: aspect.Trine}: {Kind: "natal"}}
+	transitStyles := astrologstyle.Aspects{{First: objMoon, Second: objVenus, Kind: aspect.Square}: {Kind: "transit"}}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 250}}, Aspects: natalRows, AspectStyles: natalStyles}, nil
+		}
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 35}}, Aspects: transitRows, AspectStyles: transitStyles}, nil
+		}
+		s.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
+			return lookup.OverlayAspects{Aspects: tabsCrossAspects()}, nil
+		}
 	})
-	firstCallNatalPositions = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 250}}, Aspects: natalRows, AspectStyles: natalStyles}, nil
-	}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 35}}, Aspects: transitRows, AspectStyles: transitStyles}, nil
-	}
-	overlayCrossAspects = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-		return lookup.OverlayAspects{Aspects: tabsCrossAspects()}, nil
-	}
 	chart := store.AnchorChart{When: testFrozenTime().AddDate(-30, 0, 0), Place: testPlaceAmsterdam()}
 	for _, tc := range []struct {
 		focusedNatal bool
@@ -464,7 +471,7 @@ func TestOverlayFrameCarriesFocusedAspects(t *testing.T) {
 		{false, transitRows, transitStyles},
 		{true, natalRows, natalStyles},
 	} {
-		msg := computeOverlayCmd(context.Background(), 1, 1, nil, chart, store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), tc.focusedNatal, lookup.Hellenistic)().(FirstFrameReadyMsg)
+		msg := computeOverlayCmd(context.Background(), 1, 1, testCast(t), nil, chart, store.AnchorChart{}, testFrozenTime(), testPlaceBerlin(), tc.focusedNatal, lookup.Hellenistic)().(FirstFrameReadyMsg)
 		if !msg.Overlay || msg.Err != nil {
 			t.Fatalf("focusedNatal=%v: overlay=%v err=%v", tc.focusedNatal, msg.Overlay, msg.Err)
 		}
@@ -488,7 +495,7 @@ func TestDetailsFollowsComparisonState(t *testing.T) {
 	m.chart.crossAspectsReport = "-rt -aa report"
 	// On arrival at now the panel shows `Aspects`, so Details is the own report
 	// (the specification C1); the pair's report follows a `]`.
-	if title, body, ok := m.aspectsDetailsFromFrame(); !ok || title != "[0] Aspects" || body != "own -aa report" {
+	if title, body, _, ok := m.aspectsDetailsFromFrame(); !ok || title != "[0] Aspects" || body != "own -aa report" {
 		t.Errorf("arrival: %q / %q / %v, want the own -aa report", title, body, ok)
 	}
 	m, _ = tpress(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
@@ -496,12 +503,12 @@ func TestDetailsFollowsComparisonState(t *testing.T) {
 	if _, ok := m.detailsRequestFor(); ok {
 		t.Error("Aspects focus must not produce a spawnable Details request")
 	}
-	title, body, ok := m.aspectsDetailsFromFrame()
+	title, body, _, ok := m.aspectsDetailsFromFrame()
 	if !ok || title != "[0] 2 in 1" || body != "-rt -aa report" {
 		t.Errorf("pair selected: %q / %q / %v, want the -rt -aa report", title, body, ok)
 	}
 	m.slots.SetComparisonSelected(false)
-	title, body, ok = m.aspectsDetailsFromFrame()
+	title, body, _, ok = m.aspectsDetailsFromFrame()
 	if !ok || title != "[0] Aspects" || body != "own -aa report" {
 		t.Errorf("pair deselected: %q / %q / %v, want the own -aa report", title, body, ok)
 	}
@@ -732,25 +739,36 @@ func receiverName(e ast.Expr) (string, bool) {
 	return "", false
 }
 
-// C26
-func TestAspectsRenderersAreBagOnly(t *testing.T) {
+// aspectsRendererProblems reads the two sources of the Aspects tabs and says
+// what breaks the bag-only rule: ui's aspects_tabs.go holds the one resolver
+// (the only function allowed to see Model or chartViewState) and the table that
+// names a panel renderer per tab; panel/aspects_tabs.go holds the renderers,
+// each func(AspectsBag, int, int, term.Style) string.
+func aspectsRendererProblems(uiSrc, panelSrc string) []string {
+	var problems []string
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "aspects_tabs.go", nil, parser.SkipObjectResolution)
+	file, err := parser.ParseFile(fset, "aspects_tabs.go", uiSrc, parser.SkipObjectResolution)
 	if err != nil {
-		t.Fatal(err)
+		return []string{err.Error()}
+	}
+	pfile, err := parser.ParseFile(fset, "panel/aspects_tabs.go", panelSrc, parser.SkipObjectResolution)
+	if err != nil {
+		return []string{err.Error()}
 	}
 	funcs := map[string]*ast.FuncDecl{}
-	var resolveParams *ast.FieldList
-	for _, d := range file.Decls {
+	for _, d := range pfile.Decls {
 		if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil {
 			funcs[fd.Name.Name] = fd
-			if fd.Name.Name == "resolveAspectsBag" {
-				resolveParams = fd.Type.Params
-			}
+		}
+	}
+	var resolveParams *ast.FieldList
+	for _, d := range file.Decls {
+		if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == "resolveAspectsBag" {
+			resolveParams = fd.Type.Params
 		}
 	}
 	if resolveParams == nil {
-		t.Fatal("resolveAspectsBag not declared in aspects_tabs.go")
+		problems = append(problems, "resolveAspectsBag not declared in aspects_tabs.go")
 	}
 	wantSig := func(fd *ast.FuncDecl) bool {
 		var params []string
@@ -763,7 +781,7 @@ func TestAspectsRenderersAreBagOnly(t *testing.T) {
 				params = append(params, ts)
 			}
 		}
-		return reflect.DeepEqual(params, []string{"aspectsBag", "int", "int", "Config"}) &&
+		return reflect.DeepEqual(params, []string{"AspectsBag", "int", "int", "term.Style"}) &&
 			fd.Type.Results != nil && len(fd.Type.Results.List) == 1 && typeString(fd.Type.Results.List[0].Type) == "string"
 	}
 	tableSeen := false
@@ -775,46 +793,85 @@ func TestAspectsRenderersAreBagOnly(t *testing.T) {
 		tableSeen = true
 		lit, ok := vs.Values[0].(*ast.CompositeLit)
 		if !ok {
-			t.Fatal("aspectsRenderers is not a composite literal")
+			problems = append(problems, "aspectsRenderers is not a composite literal")
+			return false
 		}
 		if typeString(lit.Type.(*ast.MapType).Key) != "TabID" {
-			t.Errorf("aspectsRenderers keyed by %s, want TabID", typeString(lit.Type.(*ast.MapType).Key))
+			problems = append(problems, "aspectsRenderers is not keyed by TabID")
 		}
 		if len(lit.Elts) == 0 {
-			t.Error("aspectsRenderers is empty")
+			problems = append(problems, "aspectsRenderers is empty")
 		}
 		for _, elt := range lit.Elts {
 			kv := elt.(*ast.KeyValueExpr)
-			id, ok := kv.Value.(*ast.Ident)
-			if !ok {
-				t.Errorf("renderer for %s is not a plain identifier", typeString(kv.Key))
+			sel, ok := kv.Value.(*ast.SelectorExpr)
+			if !ok || typeString(sel.X) != "panel" {
+				problems = append(problems, "renderer for "+typeString(kv.Key)+" is not a panel.<Renderer> selector")
 				continue
 			}
-			fd, ok := funcs[id.Name]
+			fd, ok := funcs[sel.Sel.Name]
 			if !ok {
-				t.Errorf("renderer %s is not declared in aspects_tabs.go", id.Name)
+				problems = append(problems, "renderer "+sel.Sel.Name+" is not declared in panel/aspects_tabs.go")
 				continue
 			}
 			if !wantSig(fd) {
-				t.Errorf("renderer %s does not have signature func(aspectsBag, int, int, Config) string", id.Name)
+				problems = append(problems, "renderer "+sel.Sel.Name+" does not have signature func(AspectsBag, int, int, term.Style) string")
 			}
 		}
 		return false
 	})
 	if !tableSeen {
-		t.Fatal("aspectsRenderers table not found")
+		problems = append(problems, "aspectsRenderers table not found")
 	}
-	ast.Inspect(file, func(n ast.Node) bool {
-		id, ok := n.(*ast.Ident)
-		if !ok || (id.Name != "Model" && id.Name != "chartViewState") {
+	if resolveParams != nil {
+		ast.Inspect(file, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || (id.Name != "Model" && id.Name != "chartViewState") {
+				return true
+			}
+			if id.Pos() >= resolveParams.Pos() && id.End() <= resolveParams.End() {
+				return true
+			}
+			problems = append(problems, "aspects_tabs.go references "+id.Name+" at "+fset.Position(id.Pos()).String()+" outside resolveAspectsBag's parameters")
 			return true
+		})
+	}
+	// The panel package has no Model and no frame type to see; a mention would
+	// mean the renderers had reached back into ui's side.
+	ast.Inspect(pfile, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && (id.Name == "Model" || id.Name == "chartViewState") {
+			problems = append(problems, "panel/aspects_tabs.go references "+id.Name+" at "+fset.Position(id.Pos()).String())
 		}
-		if id.Pos() >= resolveParams.Pos() && id.End() <= resolveParams.End() {
-			return true
-		}
-		t.Errorf("aspects_tabs.go references %s at %s outside resolveAspectsBag's parameters", id.Name, fset.Position(id.Pos()))
 		return true
 	})
+	return problems
+}
+
+// C26
+func TestAspectsRenderersAreBagOnly(t *testing.T) {
+	uiSrc, err := os.ReadFile("aspects_tabs.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	panelSrc, err := os.ReadFile("panel/aspects_tabs.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range aspectsRendererProblems(string(uiSrc), string(panelSrc)) {
+		t.Error(p)
+	}
+	// Controls: the check must fail by name when the table names a renderer the
+	// panel does not declare, when a renderer's signature drifts, and when the
+	// panel side reaches for the Model.
+	if got := aspectsRendererProblems(strings.Replace(string(uiSrc), "panel.RenderAspectsTabRows", "panel.RenderNoSuchTab", 1), string(panelSrc)); len(got) == 0 {
+		t.Error("control: a renderer name the panel does not declare passed")
+	}
+	if got := aspectsRendererProblems(string(uiSrc), strings.Replace(string(panelSrc), "func RenderAspectsTabRows(bag AspectsBag, innerWidth, innerHeight int,", "func RenderAspectsTabRows(bag AspectsBag, innerWidth int,", 1)); len(got) == 0 {
+		t.Error("control: a renderer with a changed signature passed")
+	}
+	if got := aspectsRendererProblems(string(uiSrc), string(panelSrc)+"\nfunc leak(m Model) {}\n"); len(got) == 0 {
+		t.Error("control: a renderer file that names Model passed")
+	}
 }
 
 // C30
@@ -829,7 +886,7 @@ func TestTabKeysNoopBeforeReady(t *testing.T) {
 			if cmd != nil {
 				t.Errorf("%s: %q returned a Cmd", name, r)
 			}
-			if !reflect.DeepEqual(m, base) {
+			if !sameModel(m, base) {
 				t.Errorf("%s: %q changed the model", name, r)
 			}
 		}
@@ -867,6 +924,12 @@ func TestPairDeselectFallsBackWithoutBlank(t *testing.T) {
 	if got := m.activeTabID(PanelAspects); got != TabAspects {
 		t.Errorf("effective tab after deselect = %q, want aspects", got)
 	}
+	// The deselect recomputes in the program; the frame it asks for is the
+	// chart's own (the pair is gone), and until it lands the panel reads `…`.
+	if view := m.View(); !strings.Contains(view, emptyPaneLine) {
+		t.Errorf("before the chart's own frame lands the Aspects panel reads no `…`")
+	}
+	m, _ = applyTextCommit(m, tabsOverlayFrame())
 	view := m.View()
 	if !strings.Contains(view, "[3] Aspects----") {
 		t.Errorf("Aspects did not fall back to its one-tab title: %q", aspectsTopBorder(t, m))
@@ -875,7 +938,7 @@ func TestPairDeselectFallsBackWithoutBlank(t *testing.T) {
 	if strings.TrimSpace(body) == "" {
 		t.Error("Aspects body went blank after the pair was deselected")
 	}
-	if !strings.Contains(view, bodyGlyph(aspect.Venus)+" "+aspectGlyph(aspect.Sextile)) {
+	if !strings.Contains(view, panel.BodyGlyph(objVenus)+" "+panel.AspectGlyph(aspect.Sextile)) {
 		t.Errorf("last frame's own aspects not rendered after deselect")
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -83,9 +84,9 @@ func bodyLine(t *testing.T, m Model, name string) string {
 // sunCell is a Sun position as a Bodies column prints it.
 func sunCell(ps []aspect.Position) string {
 	for _, p := range ps {
-		if p.Body == aspect.Sun {
-			signIdx, deg, min := splitLongitude(p.Longitude)
-			return fmt.Sprintf("%s %2d°%02d'", signAbbrevString(signIdx), deg, min)
+		if p.Object == objSun {
+			signIdx, deg, min := panel.SplitLongitude(p.Longitude)
+			return fmt.Sprintf("%s %2d°%02d'", panel.SignAbbrevString(signIdx), deg, min)
 		}
 	}
 	return ""
@@ -93,7 +94,8 @@ func sunCell(ps []aspect.Position) string {
 
 // Amendment (a): with the Chart panel focused, `]` and `[` step the Aspects
 // tab exactly as they do with Aspects focused, and focus stays on the rows.
-// Bodies keeps its own meaning (one tab: nothing), Details attached its own.
+// Since the 0.1.3 walk (2026-11-06, "Everywhere but Details") Bodies does the
+// same; Details attached keeps its own tabs.
 func TestBracketKeysFromChartChangeTheAspectsTab(t *testing.T) {
 	m := framesFixture(t, 3, 0)
 	want := bracket(t, m, "]") // the same press with Aspects focused
@@ -111,11 +113,11 @@ func TestBracketKeysFromChartChangeTheAspectsTab(t *testing.T) {
 		t.Fatalf("[ from Chart: focus %s base %v, want Chart and no base", m.focused, m.base)
 	}
 
-	// Bodies has one tab: the keys leave the base alone there.
+	// From Bodies the keys step the same tabs, and focus stays on Bodies.
 	m.focused = PanelBodies
 	m = send(t, m, runes("]"))
-	if m.base != nil || m.focused != PanelBodies {
-		t.Errorf("] from Bodies: base %v focus %s, want no change", m.base, m.focused)
+	if m.base != slotAt(m, 1) || m.focused != PanelBodies {
+		t.Errorf("] from Bodies: base %v focus %s, want Ben and Bodies", m.base, m.focused)
 	}
 }
 
@@ -208,15 +210,17 @@ func TestBoldIsTheCursorFaintIsTheBase(t *testing.T) {
 	annaCusps := aspect.Cusps{120, 150, 180, 210, 240, 270, 300, 330, 0, 30, 60, 90} // Leo rising, whole sign
 	benCusps := aspect.Cusps{0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330}  // Aries rising
 	stubColumnLookups(t, nil)
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		if c.When.Year() == 1961 { // Anna
-			return lookup.Result{Positions: []aspect.Position{{Body: aspect.Venus, Longitude: venusAnna, House: 9}}, Cusps: annaCusps}, nil
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			if c.When.Year() == 1961 { // Anna
+				return lookup.Result{Positions: []aspect.Position{{Object: objVenus, Longitude: venusAnna, House: 9}}, Cusps: annaCusps}, nil
+			}
+			return lookup.Result{Positions: []aspect.Position{{Object: objVenus, Longitude: venusBen, House: 6}}, Cusps: benCusps}, nil
 		}
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Venus, Longitude: venusBen, House: 6}}, Cusps: benCusps}, nil
-	}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Venus, Longitude: 5, House: 4}}, Cusps: benCusps}, nil
-	}
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: []aspect.Position{{Object: objVenus, Longitude: 5, House: 4}}, Cusps: benCusps}, nil
+		}
+	})
 	for _, tc := range []struct {
 		name         string
 		cursor, base int
@@ -227,12 +231,12 @@ func TestBoldIsTheCursorFaintIsTheBase(t *testing.T) {
 		{"③ in ①: now's Venus in Anna's houses, Anna's own Venus house", 2, 0, 9, 9},
 	} {
 		m := viewFrame(t, 2, tc.cursor, tc.base)
-		ov := houseOverlay{cusps: m.chart.natalCusps, positions: m.chart.natalPositions, framed: m.chart.framedPositions}
-		faint, bold := ov.houses(m.chart.positions[0])
+		ov := panel.HouseOverlay{Cusps: m.chart.natalCusps, Positions: m.chart.natalPositions, Framed: m.chart.framedPositions}
+		faint, bold := ov.Houses(m.chart.positions[0])
 		if bold != tc.bold || faint != tc.faint {
 			t.Errorf("%s: bold %d faint %d, want bold %d faint %d", tc.name, bold, faint, tc.bold, tc.faint)
 		}
-		if want := ansi.Strip(houseColumn(m.houseDisplay, tc.faint, tc.bold, true, astrologstyle.SGR(""), false)); !strings.Contains(bodyLine(t, m, "Venus"), want) {
+		if want := ansi.Strip(panel.HouseColumn(m.houseDisplay, tc.faint, tc.bold, true, astrologstyle.SGR(""), false)); !strings.Contains(bodyLine(t, m, "Venus"), want) {
 			t.Errorf("%s: the Venus row %q does not draw %q", tc.name, bodyLine(t, m, "Venus"), want)
 		}
 	}
@@ -244,13 +248,15 @@ func TestBoldIsTheCursorFaintIsTheBase(t *testing.T) {
 func TestPairViewInTheBasesZodiac(t *testing.T) {
 	const venus, ayanamsa = 153.2, 24.0 // 3 Vir tropical, 9 Leo sidereal
 	stubColumnLookups(t, nil)
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
-		lon := venus
-		if l.Zodiac != recipe.Tropical {
-			lon -= ayanamsa
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, _ store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
+			lon := venus
+			if l.Zodiac != recipe.Tropical {
+				lon -= ayanamsa
+			}
+			return lookup.Result{Positions: []aspect.Position{{Object: objVenus, Longitude: lon}}}, nil
 		}
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Venus, Longitude: lon}}}, nil
-	}
+	})
 	for _, tc := range []struct {
 		cursor, base int
 		title, want  string
@@ -365,9 +371,9 @@ func TestSpaceMarksTheCursorChartsBody(t *testing.T) {
 	m.bodyCursorIdx = 0
 	m, cmd := tpress(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	m = pump(t, m, cmd)
-	body := m.chart.positions[0].Body
-	if !m.slots.BodySelected(0, body) || m.slots.HasBodySelections(1) {
-		t.Fatalf("Space on %s in 1 in 2: Anna's marked %v, Ben's any %v; want Anna's alone", bodyName(body), m.slots.BodySelected(0, body), m.slots.HasBodySelections(1))
+	body := m.chart.positions[0].Object
+	if !m.slots.ObjectSelected(0, body.Number) || m.slots.HasMarks(1) {
+		t.Fatalf("Space on %s in 1 in 2: Anna's marked %v, Ben's any %v; want Anna's alone", panel.BodyName(body), m.slots.ObjectSelected(0, body.Number), m.slots.HasMarks(1))
 	}
 }
 

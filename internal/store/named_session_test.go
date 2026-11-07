@@ -69,7 +69,7 @@ func TestSaveSessionAsWritesANamedFile(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	text := string(b)
 	lines := strings.SplitN(text, "\n", 3)
-	if lines[0] != "version: 3" || lines[1] != `name: "Client Ann: second look"` {
+	if lines[0] != "version: 4" || lines[1] != `name: "Client Ann: second look"` {
 		t.Errorf("the file opens %q, %q; want the version then name:", lines[0], lines[1])
 	}
 	if !strings.Contains(text, "\nfolder: "+FolderID(charts)+"\n") {
@@ -409,7 +409,7 @@ func TestNamedSessionStrictLoaderRefusesIndentedContent(t *testing.T) {
 	known, _ := os.ReadFile(NamedSessionPath("known.yaml"))
 	for i, extra := range []string{"  # client note\n", "  future_key: value\n"} {
 		file := fmt.Sprintf("odd-%d.yaml", i)
-		text := strings.Replace(strings.Replace(string(known), "name: Known\n", fmt.Sprintf("name: Odd %d\n", i), 1), "version: 3\n", "version: 3\n"+extra, 1)
+		text := strings.Replace(strings.Replace(string(known), "name: Known\n", fmt.Sprintf("name: Odd %d\n", i), 1), "version: 4\n", "version: 4\n"+extra, 1)
 		writeFile(t, NamedSessionPath(file), text)
 		if _, _, lock, err := OpenNamedSession(file, id); err == nil {
 			lock.Release()

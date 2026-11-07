@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -264,34 +265,32 @@ func (c *pairCalls) reset() {
 func stubPairCompute(t *testing.T) *pairCalls {
 	t.Helper()
 	calls := &pairCalls{}
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			calls.mu.Lock()
+			calls.natal = append(calls.natal, c)
+			calls.mu.Unlock()
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: float64(c.When.Year() % 360)}}}, nil
+		}
+		s.cast.transit = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
+			calls.mu.Lock()
+			calls.transit++
+			calls.mu.Unlock()
+			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 1}}}, nil
+		}
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			calls.mu.Lock()
+			calls.cross = append(calls.cross, c)
+			calls.mu.Unlock()
+			return lookup.OverlayAspects{Report: fmt.Sprintf("transit %d x now", c.When.Year())}, nil
+		}
+		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			calls.mu.Lock()
+			calls.synastry = append(calls.synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
+			calls.mu.Unlock()
+			return lookup.OverlayAspects{Report: fmt.Sprintf("synastry %d x %d", c.When.Year(), when.Year())}, nil
+		}
 	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		calls.mu.Lock()
-		calls.natal = append(calls.natal, c)
-		calls.mu.Unlock()
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: float64(c.When.Year() % 360)}}}, nil
-	}
-	firstCallTransits = func(context.Context, *lookup.Probers, time.Time, location.PlaceInfo, lookup.Lens) (lookup.Result, error) {
-		calls.mu.Lock()
-		calls.transit++
-		calls.mu.Unlock()
-		return lookup.Result{Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 1}}}, nil
-	}
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		calls.mu.Lock()
-		calls.cross = append(calls.cross, c)
-		calls.mu.Unlock()
-		return lookup.OverlayAspects{Report: fmt.Sprintf("transit %d x now", c.When.Year())}, nil
-	}
-	synastryCrossAspects = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		calls.mu.Lock()
-		calls.synastry = append(calls.synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
-		calls.mu.Unlock()
-		return lookup.OverlayAspects{Report: fmt.Sprintf("synastry %d x %d", c.When.Year(), when.Year())}, nil
-	}
 	return calls
 }
 
@@ -307,24 +306,32 @@ func TestAspectsTabIsTheCursorsChart(t *testing.T) {
 	calls := stubPairCompute(t)
 	// ① must show ITS OWN aspects: the stubbed natal compute returns a report
 	// that names the chart it was computed for.
-	oldN := firstCallNatalPositions
-	firstCallNatalPositions = func(ctx context.Context, p *lookup.Probers, c store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
-		res, err := oldN(ctx, p, c, l)
-		res.Aspects = tabsOwnAspects()
-		res.AspectsReport = fmt.Sprintf("own %d", c.When.Year())
-		return res, err
-	}
-	t.Cleanup(func() { firstCallNatalPositions = oldN })
+	stubSpawns(t, func(s *rowSpawns) {
+		oldN := s.cast.natal
+		if oldN == nil {
+			return
+		}
+		s.cast.natal = func(ctx context.Context, p *lookup.Probers, c store.AnchorChart, l lookup.Lens) (lookup.Result, error) {
+			res, err := oldN(ctx, p, c, l)
+			res.Aspects = tabsOwnAspects()
+			res.AspectsReport = fmt.Sprintf("own %d", c.When.Year())
+			return res, err
+		}
+	})
 	// On now the `Aspects` tab is the floating chart's own list, from the
 	// transit compute (the specification C1).
-	oldT := firstCallTransits
-	firstCallTransits = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
-		res, err := oldT(ctx, p, when, place, l)
-		res.Aspects = tabsOwnAspects()
-		res.AspectsReport = "own now"
-		return res, err
-	}
-	t.Cleanup(func() { firstCallTransits = oldT })
+	stubSpawns(t, func(s *rowSpawns) {
+		oldT := s.cast.transit
+		if oldT == nil {
+			return
+		}
+		s.cast.transit = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, l lookup.Lens) (lookup.Result, error) {
+			res, err := oldT(ctx, p, when, place, l)
+			res.Aspects = tabsOwnAspects()
+			res.AspectsReport = "own now"
+			return res, err
+		}
+	})
 
 	build := func(t *testing.T) Model {
 		m := selectedSet(t, 5, true, 0)
@@ -500,6 +507,7 @@ func TestBracketsCycleAspectPairs(t *testing.T) {
 				t.Fatalf("on the baseline: %q, want %q", got, tc.start)
 			}
 			for _, step := range tc.steps {
+				m = m.forgetMemory() // the test reads the compute a key asks for: a pair seen before is answered from memory
 				calls.reset()
 				var cmd tea.Cmd
 				m, cmd = press(step.key)
@@ -576,7 +584,7 @@ func chartFileCapturingAstrolog(t *testing.T) func() []spawnRecord {
 		"prev=; for a in \"$@\"; do if [ \"$prev\" = -Xo ]; then printf IMG > \"$a\"; fi; prev=$a; done\n" +
 		"case \" $* \" in\n" +
 		"  *\" -aa \"*) exec /bin/cat " + strconv.Quote(aspectsPath) + " ;;\n" +
-		"  *) exec /bin/cat " + strconv.Quote(positionsPath) + " ;;\n" +
+		"  *) exec /usr/bin/python3 -I " + strconv.Quote(replayFilter(t)) + " " + strconv.Quote(positionsPath) + " \"$@\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(filepath.Join(dir, "astrolog"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -810,12 +818,12 @@ func TestAspectsAloneWhenSingle(t *testing.T) {
 func stubSynastryBodyReports(t *testing.T) *[]crossBodyCall {
 	t.Helper()
 	calls := []crossBodyCall{}
-	old := computeSynastryBodyReport
-	computeSynastryBodyReport = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel, body aspect.Body) (string, string, error) {
-		calls = append(calls, crossBodyCall{natal: natal, when: when, place: place, body: body})
-		return "synastry raw", "", nil
-	}
-	t.Cleanup(func() { computeSynastryBodyReport = old })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel, body aspect.Object) (string, string, error) {
+			calls = append(calls, crossBodyCall{natal: natal, when: when, place: place, body: body})
+			return "synastry raw", "", nil
+		}
+	})
 	return &calls
 }
 
@@ -835,7 +843,7 @@ func TestDetailsFollowsThePair(t *testing.T) {
 		// Details needs 80 beside it.
 		m.width, m.height = dualColumnMinWidth(4), 40
 		m.focused = PanelBodies
-		m.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+		m.chart.positions = []aspect.Position{{Object: objMoon}}
 		m.bodyCursorIdx = 0
 		return m
 	}
@@ -857,7 +865,7 @@ func TestDetailsFollowsThePair(t *testing.T) {
 		t.Fatalf("anchored pair: spawns single/cross/synastry = %v, want one synastry", counts())
 	}
 	call := (*synastry)[0]
-	if call.natal != anchorOf(slotsOf(m)[2]) || !call.when.Equal(slotsOf(m)[0].Time) || call.body != aspect.Moon {
+	if call.natal != anchorOf(slotsOf(m)[2]) || !call.when.Equal(slotsOf(m)[0].Time) || call.body != objMoon {
 		t.Errorf("synastry call = %+v, want ③ x chart ①'s moment, body Moon", call)
 	}
 	if m.details.title != "[0] Moon 1 in 3" || m.details.body != "synastry raw" {
@@ -871,7 +879,7 @@ func TestDetailsFollowsThePair(t *testing.T) {
 	m = send(t, m, keyDown)
 	m.base = slotsOf(m)[0]
 	m.focused = PanelBodies
-	m.chart.positions = []aspect.Position{{Body: aspect.Moon}}
+	m.chart.positions = []aspect.Position{{Object: objMoon}}
 	m = run(m)
 	if m.details.title != "[0] Moon 2 in 1" || counts() != [3]int{0, 0, 1} {
 		t.Errorf("cursor on B: Details %q, spawns %v; want 2 in 1 by synastry", m.details.title, counts())
@@ -916,7 +924,7 @@ func TestDetailsFollowsThePair(t *testing.T) {
 	m.focused = PanelAspects
 	m.base = slotsOf(m)[2]
 	m.chart.crossAspectsReport = "pair report"
-	if title, body, ok := m.aspectsDetailsFromFrame(); !ok || title != "[0] 1 in 3" || body != "pair report" {
+	if title, body, _, ok := m.aspectsDetailsFromFrame(); !ok || title != "[0] 1 in 3" || body != "pair report" {
 		t.Errorf("Aspects Details = %q / %q / %v, want the active pair's title", title, body, ok)
 	}
 }
@@ -969,7 +977,7 @@ func TestSelectedRowsShowTheirNumeral(t *testing.T) {
 		t.Errorf("after ⌃k: markers %q, want %q (the 3rd and the 1st swapped)", got, want)
 	}
 	// And the selection mark ● never appears on a Chart row.
-	if body := chartSlotsBody(m.slots, 0, true, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, 100, Config{Color: ColorNever}); strings.Contains(body, rowSelectionUnicode) || strings.Contains(body, rowSelectionASCII) {
+	if body := chartSlotsBody(m.slots, 0, true, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, 100, Config{Color: ColorNever}); strings.Contains(body, menu.RowSelectionUnicode) || strings.Contains(body, menu.RowSelectionASCII) {
 		t.Errorf("a Chart row still carries the selection mark: %q", body)
 	}
 }
@@ -1019,9 +1027,9 @@ func TestAspectsPairTabsFrames(t *testing.T) {
 				Positions:     fullChartPositions(),
 				CrossSynastry: true,
 				CrossAspects: []lookup.OverlayAspect{
-					{Natal: aspect.Sun, Transit: aspect.Moon, Kind: aspect.Square, Orb: 0.5, Power: 9},
-					{Natal: aspect.Venus, Transit: aspect.Jupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
-					{Natal: aspect.Mars, Transit: aspect.Saturn, Kind: aspect.Opposition, Orb: 10.2, Power: 3},
+					{NatalObject: objSun, TransitObject: objMoon, Kind: aspect.Square, Orb: 0.5, Power: 9},
+					{NatalObject: objVenus, TransitObject: objJupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
+					{NatalObject: objMars, TransitObject: objSaturn, Kind: aspect.Opposition, Orb: 10.2, Power: 3},
 				},
 			})
 			m = withSceneColumns(m)

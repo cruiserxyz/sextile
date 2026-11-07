@@ -97,14 +97,14 @@ func TestPrefillIsFirstSelectedElseFirstChart(t *testing.T) {
 	prefill := func(m Model) string {
 		t.Helper()
 		m = openSessions(t, m)
-		if m.sessions.cursor != 0 {
-			t.Fatalf("the list opens on row %d, want the save row", m.sessions.cursor)
+		if m.sessions.Cursor != 0 {
+			t.Fatalf("the list opens on row %d, want the save row", m.sessions.Cursor)
 		}
 		m, _ = press(t, m, "enter")
 		if m.startup != startupSessionNameOpen {
 			t.Fatalf("Enter on the first row did not open the name field (startup %q)", m.startup)
 		}
-		return m.sessions.form.value(0)
+		return m.sessions.Form.Value(0)
 	}
 	if got := prefill(m); got != "Synthetic 2" {
 		t.Errorf("prefill = %q, want the first selected chart in panel order, Synthetic 2", got)
@@ -124,11 +124,11 @@ func TestPrefillIsFirstSelectedElseFirstChart(t *testing.T) {
 // one instead -- a house choice at once, the quit -- and the general session
 // stays as it was at that moment.
 func TestWindowKeepsUpdatingItsNamedSession(t *testing.T) {
-	m := sessionsModel(t, 2)
 	stubHouseLookups(t)
+	m := sessionsModel(t, 2)
 	m = saveAs(t, m, "Client work")
 	if m.startup != startupReady {
-		t.Fatalf("the save did not close the popup (startup %q, refusal %q)", m.startup, m.sessions.refusal)
+		t.Fatalf("the save did not close the popup (startup %q, refusal %q)", m.startup, m.sessions.Refusal)
 	}
 	named := store.NamedSessionPath("client-work.yaml")
 	if _, err := os.Stat(named); err != nil {
@@ -162,8 +162,8 @@ func TestOpenNamedSessionReplacesCharts(t *testing.T) {
 	m := sessionsModel(t, 2)
 	file := otherSession(t, "Other work", "Client Zed")
 	m = openSessions(t, m)
-	if len(m.sessions.rows) != 1 || m.sessions.rows[0].File != file {
-		t.Fatalf("listed %+v, want %s", m.sessions.rows, file)
+	if len(m.sessions.Rows) != 1 || m.sessions.Rows[0].File != file {
+		t.Fatalf("listed %+v, want %s", m.sessions.Rows, file)
 	}
 	m, _ = press(t, m, "down")
 	m, cmd := press(t, m, "enter")
@@ -210,8 +210,8 @@ func TestNamedSessionOpenElsewhereIsRefused(t *testing.T) {
 	before := fileText(t, store.NamedSessionPath(file))
 
 	m = openSessions(t, m)
-	if len(m.sessions.rows) != 1 || !m.sessions.rows[0].OpenElsewhere {
-		t.Fatalf("rows = %+v, want Busy marked open elsewhere", m.sessions.rows)
+	if len(m.sessions.Rows) != 1 || !m.sessions.Rows[0].OpenElsewhere {
+		t.Fatalf("rows = %+v, want Busy marked open elsewhere", m.sessions.Rows)
 	}
 	m.width, m.height = 80, 24
 	if view := csText(m.View()); !strings.Contains(view, "in another window") {
@@ -250,23 +250,23 @@ func TestSessionsListRenamesAndTrashes(t *testing.T) {
 	m = openSessions(t, m)
 	row := func(file string) {
 		t.Helper()
-		for i, r := range m.sessions.rows {
+		for i, r := range m.sessions.Rows {
 			if r.File == file {
-				m.sessions.cursor = i + 1
+				m.sessions.Cursor = i + 1
 				return
 			}
 		}
-		t.Fatalf("%s is not listed: %+v", file, m.sessions.rows)
+		t.Fatalf("%s is not listed: %+v", file, m.sessions.Rows)
 	}
 	row("old.yaml")
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-	if m.startup != startupSessionNameOpen || m.sessions.form.value(0) != "Old" {
-		t.Fatalf("Ctrl+R: startup %q, field %q", m.startup, m.sessions.form.value(0))
+	if m.startup != startupSessionNameOpen || m.sessions.Form.Value(0) != "Old" {
+		t.Fatalf("Ctrl+R: startup %q, field %q", m.startup, m.sessions.Form.Value(0))
 	}
 	m = clearField(t, m, 10)
 	m = typeText(t, m, "taken")
 	m, _ = press(t, m, "enter")
-	if m.startup != startupSessionNameOpen || m.sessions.refusal == "" {
+	if m.startup != startupSessionNameOpen || m.sessions.Refusal == "" {
 		t.Errorf("a taken name was not refused in the field (startup %q)", m.startup)
 	}
 	m = clearField(t, m, 10)
@@ -297,7 +297,7 @@ func TestSessionsListRenamesAndTrashes(t *testing.T) {
 	if logHas(m, trash[0]) != 1 {
 		t.Errorf("no Log line names %s: %v", trash[0], m.logLines)
 	}
-	for _, r := range m.sessions.rows {
+	for _, r := range m.sessions.Rows {
 		if r.File == "older.yaml" {
 			t.Error("the trashed session is still listed")
 		}
@@ -319,7 +319,7 @@ func TestSecondWindowStartsEmptyThenSaveAsPersists(t *testing.T) {
 		t.Fatalf("a second window read the general session: has %v err %v", p.HasSession, p.SessionErr)
 	}
 	p.LocationCandidate = location.Candidate{Source: "stored-location", Place: berlinRaw}
-	var tm tea.Model = NewModelWithClock(Config{Accessible: true, SecondWindow: true}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Accessible: true, SecondWindow: true}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	tm, _ = tm.Update(p)
 	m := tm.(Model)
@@ -352,7 +352,7 @@ func TestSecondWindowStartsEmptyThenSaveAsPersists(t *testing.T) {
 
 	m = saveAs(t, m, "Second desk")
 	if m.startup != startupReady {
-		t.Fatalf("save as did not close (startup %q, refusal %q)", m.startup, m.sessions.refusal)
+		t.Fatalf("save as did not close (startup %q, refusal %q)", m.startup, m.sessions.Refusal)
 	}
 	m.cursorIdx = 0
 	m = send(t, m, keySpace)
@@ -370,13 +370,13 @@ func TestSecondWindowStartsEmptyThenSaveAsPersists(t *testing.T) {
 func TestHelpListsSessions(t *testing.T) {
 	m := sessionsModel(t, 1)
 	for _, l := range m.helpLines() {
-		if strings.Contains(l.text, "Sessions") && strings.Contains(l.text, ",o") {
+		if strings.Contains(l.Text, "Sessions") && strings.Contains(l.Text, ",o") {
 			return
 		}
 	}
 	var texts []string
 	for _, l := range m.helpLines() {
-		texts = append(texts, l.text)
+		texts = append(texts, l.Text)
 	}
 	t.Errorf("the Keys popup does not list `,o` Sessions:\n%s", strings.Join(texts, "\n"))
 }
@@ -395,7 +395,7 @@ func TestSessionFlagStartsTheNamedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lock.Release()
-	m := NewModelWithClock(Config{Accessible: true, NamedSession: lock, NamedSessionName: name}, FrozenClock(sessionFrozen))
+	m := newTestModel(t, Config{Accessible: true, NamedSession: lock, NamedSessionName: name}, FrozenClock(sessionFrozen))
 	p := m.perimeterCmd()().(ingest.StartupPerimeterReadMsg)
 	if !p.HasSession || len(p.Session.Slots) != 1 || p.Session.Slots[0].Chart.Name != "Client Zed" {
 		t.Fatalf("the launch read %+v, want the named session", p.Session)
@@ -421,7 +421,7 @@ func TestSessionFlagRereadRefusedLeavesTheFile(t *testing.T) {
 	if err := os.WriteFile(store.NamedSessionPath(file), []byte(later), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var tm tea.Model = NewModelWithClock(Config{Accessible: true, NamedSession: lock, NamedSessionName: name}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Accessible: true, NamedSession: lock, NamedSessionName: name}, FrozenClock(sessionFrozen))
 	p := tm.(Model).perimeterCmd()().(ingest.StartupPerimeterReadMsg)
 	if p.SessionErr == nil {
 		t.Fatal("premise: the startup read did not refuse the file")
@@ -446,8 +446,8 @@ func TestSessionFlagRereadRefusedLeavesTheFile(t *testing.T) {
 // is: neither an autosave nor the quit writes over it, one Log line says so,
 // and Save as still works.
 func TestNamedSessionChangedOutsideIsLeftAlone(t *testing.T) {
-	m := sessionsModel(t, 1)
 	stubHouseLookups(t)
+	m := sessionsModel(t, 1)
 	l, err := store.SaveNamedSessionAs("Other work", store.Session{
 		Folder: store.FolderID(store.ChartsDir()),
 		Slots: []store.SessionSlot{{

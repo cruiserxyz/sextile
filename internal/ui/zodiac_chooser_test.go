@@ -7,6 +7,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,40 +85,38 @@ func zodiacLongitude(year int, z recipe.Zodiac) float64 {
 func stubFrameLookups(t *testing.T) *frameSpy {
 	t.Helper()
 	spy := &frameSpy{}
-	oldN, oldT, oldO, oldS := firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects
-	t.Cleanup(func() {
-		firstCallNatalPositions, firstCallTransits, overlayCrossAspects, synastryCrossAspects = oldN, oldT, oldO, oldS
-	})
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
-		label := natalLabel(c)
-		spy.record(label, lens)
-		used := ""
-		if spy.used != nil {
-			used = spy.used(label, lens.Houses)
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, lens lookup.Lens) (lookup.Result, error) {
+			label := natalLabel(c)
+			spy.record(label, lens)
+			used := ""
+			if spy.used != nil {
+				used = spy.used(label, lens.Houses)
+			}
+			return lookup.Result{
+				Positions:  []aspect.Position{{Object: objSun, Longitude: zodiacLongitude(c.When.Year(), lens.Zodiac)}},
+				Cusps:      aspect.Cusps{100 + float64(lens.Houses)},
+				HousesUsed: used,
+				Commands:   []string{fmt.Sprintf("astrolog natal %s -c %d zodiac %s", label, int(lens.Houses), lens.Zodiac.Name())},
+			}, nil
 		}
-		return lookup.Result{
-			Positions:  []aspect.Position{{Body: aspect.Sun, Longitude: zodiacLongitude(c.When.Year(), lens.Zodiac)}},
-			Cusps:      aspect.Cusps{100 + float64(lens.Houses)},
-			HousesUsed: used,
-			Commands:   []string{fmt.Sprintf("astrolog natal %s -c %d zodiac %s", label, int(lens.Houses), lens.Zodiac.Name())},
-		}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
-		spy.record("now", lens)
-		return lookup.Result{
-			Positions: []aspect.Position{{Body: aspect.Sun, Longitude: zodiacLongitude(when.Year(), lens.Zodiac) + 0.5}},
-			Cusps:     aspect.Cusps{200 + float64(lens.Houses)},
-			Commands:  []string{fmt.Sprintf("astrolog transit -c %d zodiac %s", int(lens.Houses), lens.Zodiac.Name())},
-		}, nil
-	}
-	overlayCrossAspects = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		spy.record("cross", lens)
-		return lookup.OverlayAspects{Report: "transit cross"}, nil
-	}
-	synastryCrossAspects = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
-		spy.record("synastry", lens)
-		return lookup.OverlayAspects{Report: "synastry cross"}, nil
-	}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+			spy.record("now", lens)
+			return lookup.Result{
+				Positions: []aspect.Position{{Object: objSun, Longitude: zodiacLongitude(when.Year(), lens.Zodiac) + 0.5}},
+				Cusps:     aspect.Cusps{200 + float64(lens.Houses)},
+				Commands:  []string{fmt.Sprintf("astrolog transit -c %d zodiac %s", int(lens.Houses), lens.Zodiac.Name())},
+			}, nil
+		}
+		s.cast.overlay = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			spy.record("cross", lens)
+			return lookup.OverlayAspects{Report: "transit cross"}, nil
+		}
+		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+			spy.record("synastry", lens)
+			return lookup.OverlayAspects{Report: "synastry cross"}, nil
+		}
+	})
 	return spy
 }
 
@@ -603,9 +602,6 @@ func TestSelectedZodiacTimelineLiveResultDiffers(t *testing.T) {
 		t.Skip("astrolog not on PATH; skipping live-binary test")
 	}
 	sessionSandbox(t)
-	old := computeTimeline
-	computeTimeline = lookup.Timeline
-	t.Cleanup(func() { computeTimeline = old })
 	rows := func(z recipe.Zodiac) []string {
 		m := timelineModel(t, Config{Accessible: true})
 		// The fixture's cursor is on the floating slot, and its natal may be the
@@ -692,20 +688,20 @@ func TestUnselectedZodiacDoesNotLeakIntoTheComparison(t *testing.T) {
 	var raw []recipe.Zodiac
 	var cross []recipe.Zodiac
 	var mu sync.Mutex
-	oldRaw, oldCross := computeRawReport, computeCrossBodyReport
-	computeRawReport = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
-		mu.Lock()
-		raw = append(raw, lens.Zodiac)
-		mu.Unlock()
-		return "report", "astrolog report", nil
-	}
-	computeCrossBodyReport = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ aspect.Body) (string, string, error) {
-		mu.Lock()
-		cross = append(cross, lens.Zodiac)
-		mu.Unlock()
-		return "report", "astrolog cross report", nil
-	}
-	t.Cleanup(func() { computeRawReport, computeCrossBodyReport = oldRaw, oldCross })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
+			mu.Lock()
+			raw = append(raw, lens.Zodiac)
+			mu.Unlock()
+			return "report", "astrolog report", nil
+		}
+		s.reports.cross = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ aspect.Object) (string, string, error) {
+			mu.Lock()
+			cross = append(cross, lens.Zodiac)
+			mu.Unlock()
+			return "report", "astrolog cross report", nil
+		}
+	})
 
 	m := selectedSet(t, 3, true, 2)
 	m.slots.SetSlotSelected(2, false)
@@ -771,14 +767,14 @@ func TestFocusedRawDetailsUsesOwnZodiac(t *testing.T) {
 	stubFrameLookups(t)
 	var got []recipe.Zodiac
 	var mu sync.Mutex
-	old := computeRawReport
-	computeRawReport = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
-		mu.Lock()
-		got = append(got, lens.Zodiac)
-		mu.Unlock()
-		return "report", "astrolog report", nil
-	}
-	t.Cleanup(func() { computeRawReport = old })
+	stubSpawns(t, func(s *rowSpawns) {
+		s.reports.raw = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.RawReportRequest) (string, string, error) {
+			mu.Lock()
+			got = append(got, lens.Zodiac)
+			mu.Unlock()
+			return "report", "astrolog report", nil
+		}
+	})
 	m := selectedSet(t, 2, true, 1)
 	m.slots.SetSlotSelected(1, false)
 	m.frames.records = []store.FrameRecord{chosenZ(m, 0, recipe.Raman), chosenZ(m, 1, recipe.Lahiri)}
@@ -821,15 +817,15 @@ func TestChangingAyanamsaInvalidatesPositionsAndWheel(t *testing.T) {
 	spy := stubFrameLookups(t)
 	var mu sync.Mutex
 	var drawn []recipe.Zodiac
-	oldS, oldShow := renderWheelImage, showWheel
-	t.Cleanup(func() { renderWheelImage, showWheel = oldS, oldShow })
-	renderWheelImage = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
-		mu.Lock()
-		drawn = append(drawn, lens.Zodiac)
-		mu.Unlock()
-		return []byte("wheel"), nil
-	}
-	showWheel = func([]byte) (string, error) { return "/tmp/stub.png", nil }
+	stubSpawns(t, func(s *rowSpawns) {
+		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			mu.Lock()
+			drawn = append(drawn, lens.Zodiac)
+			mu.Unlock()
+			return []byte("wheel"), nil
+		}
+		s.wheel.show = func([]byte) (string, error) { return "/tmp/stub.png", nil }
+	})
 
 	m := listModel(t, 1, 0)
 	m.slots.SetSlotSelected(0, false)
@@ -971,7 +967,7 @@ func TestFinderLahiriMatchesAstrologsLahiri(t *testing.T) {
 func sunLongitude(t *testing.T, m Model) float64 {
 	t.Helper()
 	for _, p := range m.chart.positions {
-		if p.Body == aspect.Sun {
+		if p.Object == objSun {
 			return p.Longitude
 		}
 	}
@@ -1040,14 +1036,15 @@ func TestHelpExplainsAyanamsas(t *testing.T) {
 		m = tm.(Model)
 	}
 	view := ansi.Strip(m.View())
+	helpCol := -1
 	// Every line of the note is on the last page, whole: none is cut.
-	for _, line := range helpZodiacNote {
+	for _, line := range keys.HelpZodiacNote {
 		if !strings.Contains(view, line) {
 			t.Errorf("the rendered Help frame lacks the whole line %q:\n%s", line, view)
 		}
 	}
 	// And what the lines say, read from the frame itself.
-	popup := ansi.Strip(renderHelpModal(m.helpLines(), m.cfg, m.help, 80, 24))
+	popup := ansi.Strip(keys.RenderHelp(m.keysContextFor(ownerHelp), popupChrome(m.cfg), 80, 24))
 	var words []string
 	for _, l := range strings.Split(popup, "\n") {
 		l = strings.Trim(strings.TrimSpace(l), "|+-#")
@@ -1064,8 +1061,16 @@ func TestHelpExplainsAyanamsas(t *testing.T) {
 			t.Errorf("the rendered Help frame does not say %q:\n%s", want, popup)
 		}
 	}
-	if strings.Contains(view, "…") {
-		t.Errorf("the Help frame clips a line:\n%s", view)
+	// A clipped line ends in `…` inside the Help box; the panels behind it may
+	// carry their own faint `…` (an empty pane, C5), which is not a clip.
+	for _, l := range strings.Split(view, "\n") {
+		if at := strings.Index(l, "->Help"); at >= 0 {
+			helpCol = ansi.StringWidth(l[:at])
+		}
+		if helpCol >= 0 && ansi.StringWidth(l) > helpCol && strings.Contains(ansi.Cut(l, helpCol, ansi.StringWidth(l)), "…") {
+			t.Errorf("the Help frame clips a line:\n%s", view)
+			break
+		}
 	}
 }
 

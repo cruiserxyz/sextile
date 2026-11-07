@@ -1,0 +1,24 @@
+[0m[1;31m[0m[1;37mAstrolog 8.00 chart for Sun Jan  2, 2000  0:00 (ST Zone 0W)   0ø00W 52ø00N
+[0m[1;30mBody  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Placidus Houses
+
+[1;31mSun : [1;33m10Cap52[0m   + 0ø00' (-)[1;34m [ 4th house] [0m[-] +1.019  -  [1;31mHouse cusp  1: [1;32m 7Lib40[0m[0m
+[1;34mMoon: [1;34m19Sco19[0m   + 5ø03' (f)[1;33m [ 2nd house] [0m[X] +11.95  -  [1;33mHouse cusp  2: [1;34m 2Sco20[0m[0m
+[1;35mPall: [1;31m13Leo56[0m R -48ø21' (d)[1;33m [10th house] [0m[X] -0.201  -  [1;32mHouse cusp  3: [1;31m 3Sag16[0m[0m
+[0;36mFort: [1;34m29Sco14[0m   + 0ø00' (-)[1;33m [ 2nd house] [0m[-] +263.7  -  [1;34mHouse cusp  4: [1;33m10Cap03[0m[0m
+[1;31mAsce: [1;32m 7Lib40[0m   + 0ø00'    [1;31m [ 1st house] [0m    +252.8  -  [1;31mHouse cusp  5: [1;32m15Aqu43[0m[0m
+[0;33mTita: [1;31m 0Ari00[0m   + 0ø00' (-)[1;33m [ 6th house] [0m[-] +0.000  -  [1;33mHouse cusp  6: [1;34m14Pis52[0m[0m
+[0;32mTita: [1;31m 0Ari00[0m   + 0ø00' (-)[1;33m [ 6th house] [0m[-] +0.000  -  [1;32mHouse cusp  7: [1;31m 7Ari40[0m[0m
+                                                     -  [1;34mHouse cusp  8: [1;33m 2Tau20[0m[0m
+                                                     -  [1;31mHouse cusp  9: [1;32m 3Gem16[0m[0m
+                                                     -  [1;33mHouse cusp 10: [1;34m10Can03[0m[0m
+                                                     -  [1;32mHouse cusp 11: [1;31m15Leo43[0m[0m
+                                                     -  [1;34mHouse cusp 12: [1;33m14Vir52[0m[0m
+                                                   [0m
+                                                        Car Fix Mut TOT[0m   +: 4
+                                                   [1;31m  Fir  2   1   0   3[0m[0m   -: 3
+                                                   [1;33m  Ear  1   0   0   1[0m[1;33m   M: 1
+                                                   [1;32m  Air  1   0   0   1[0m[1;34m   N: 5
+                                                   [1;34m  Wat  0   2   0   2[0m[1;31m   A: 3
+                                                   [0m  TOT  4   3   0   7[1;32m   D: 3
+                                                                          [0m<: 3
+[0m

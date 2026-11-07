@@ -2,37 +2,37 @@
 │                                                  ││                                                                              │
 ╰───────────────────────────────────────────0 of 0─╯│                                                                              │
 ╭─[2] Bodies───────────────────────────────────────╮│                                                                              │
-│                                                  ││                                                                              │
+│[2m…[0m                                                 ││                                                                              │
 │                                   ╭─Help─────────────────────────────────────────────────────╮                                   │
 │                                   │                                                          │                                   │
-│                                   │  Start here                                              ┃                                   │
-│                                   │  Next panel                 tab/→                        ┃                                   │
-│                                   │  Previous row               ↑/k                          ┃                                   │
-│                                   │  Next row                   ↓/j                          ┃                                   │
-│                                   │  Into Details               enter                        ┃                                   │
+│                                   │  [1mStart here[0m                                              ┃[0m[1m[0m[0m                                   │
+│                                   │  Switch panel               tab/→ ⇧ tab/←                ┃                                   │
+│                                   │  Move row                   ↑/↓ (j/k)                    ┃                                   │
+│                                   │  Report                     enter                        ┃                                   │
 │                                   │  Open chart                 ⌃o                           ┃                                   │
-│                                   │  Choose city                ⌃l                           ┃                                   │
-│                                   │  Quit from anywhere         ⌃c                           ┃                                   │
-│                                   │                                                          ┃                                   │
-│                                   │  Move                                                    ┃                                   │
-│                                   │  Previous panel             ⇧ tab/←                      ┃                                   │
-│                                   │  Focus Chart                1                            ┃                                   │
-│                                   │  Focus Bodies               2                            │                                   │
-│                                   │  Focus Aspects              3                            │                                   │
+│                                   │  Choose city                ⌃l                           │                                   │
+│                                   │  Actions                    ⌃p                           │                                   │
+│                                   │  Quit from anywhere         ⌃c                           │                                   │
+│                                   │                                                          │                                   │
+│                                   │  [1mMove[0m                                                    │[0m                                   │
+│                                   │  Focus panel                1/2/3                        │                                   │
 │                                   │  Select                     space                        │                                   │
-│                                   │  Page the list up           ⇞                            │                                   │
-│                                   │  Page the list down         ⇟                            │                                   │
+│                                   │  Page list                  ⇞/⇟                          │                                   │
 │                                   │  First row                  home/g                       │                                   │
 │                                   │  Last row                   end/G                        │                                   │
 │                                   │                                                          │                                   │
-│                                   │  Time (lowercase forward, uppercase back)                │                                   │
+│                                   │  [1mTime (lowercase forward, uppercase back)[0m                │[0m                                   │
 │                                   │  Step a year                y/Y                          │                                   │
 │                                   │  Step a month               o/O                          │                                   │
 │                                   │  Step a week                w/W                          │                                   │
 │                                   │  Step a day                 d/D                          │                                   │
-╰───────────────────────────────────│  Step an hour               h/H                          │───────────────────────────────────╯
+│                                   │  Step an hour               h/H                          │                                   │
+│                                   │  Step a minute              m/M                          │                                   │
+│                                   │  Now                        n                            │                                   │
+│                                   │  Back to the previous time  N                            │                                   │
+╰───────────────────────────────────│                                                          │───────────────────────────────────╯
 ╭─[3] Aspects───────────────────────│                                                          │───────────────────────────────────╮
-│                                   ╰──────────────────────────────────────────────────────────╯                                   │
+│[2m…[0m                                  ╰──────────────────────────────────────────────────────────╯[0m[2m[0m                                   │
 │                                                  ││                                                                              │
 │                                                  ││                                                                              │
 │                                                  ││                                                                              │

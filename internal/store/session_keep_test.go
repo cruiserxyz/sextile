@@ -66,7 +66,7 @@ func refusedCases() map[string]string {
 	long := strictChart(3)
 	long.Name = strings.Repeat("N", sessionMaxLine+1024)
 	return map[string]string{
-		"a later version":                 "version: 4\ncharts:\n  - id: x\n",
+		"a later version":                 "version: 5\ncharts:\n  - id: x\n",
 		"no version line":                 "charts:\n  - id: x\n",
 		"an empty file":                   "",
 		"an overlong line":                chartsText(SessionSlot{Chart: long}),
@@ -168,7 +168,7 @@ func TestRefusedSessionCopiesDoNotCollide(t *testing.T) {
 	dir := sessionSandbox(t)
 	freezeKeepClock(t, time.Date(2026, 10, 8, 12, 30, 45, 0, time.UTC))
 	seen := map[string]string{}
-	for i, text := range []string{"version: 4\na\n", "version: 5\nb\n", "version: 6\nc\n"} {
+	for i, text := range []string{"version: 5\na\n", "version: 6\nb\n", "version: 7\nc\n"} {
 		writeSessionText(t, dir, text, 0o600)
 		_, _, keep, _ := LoadSessionKeepingRefused()
 		if keep.Kept == "" {
@@ -193,7 +193,7 @@ func TestRefusedSessionCopiesDoNotCollide(t *testing.T) {
 func TestRefusedBackupDestinationIsNeverReplaced(t *testing.T) {
 	dir := sessionSandbox(t)
 	freezeKeepClock(t, time.Date(2026, 10, 8, 12, 30, 45, 0, time.UTC))
-	writeSessionText(t, dir, "version: 4\nnew\n", 0o600)
+	writeSessionText(t, dir, "version: 5\nnew\n", 0o600)
 	base := filepath.Join(dir, "session.yaml.refused-20261008T123045Z")
 	outside := filepath.Join(t.TempDir(), "outside")
 	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
@@ -232,7 +232,7 @@ func TestRefusedBackupDestinationIsNeverReplaced(t *testing.T) {
 // pass 3: bytes changed between the refused read and the rename.
 func TestRefusedSessionChangedBeforeRenameIsLeftAlone(t *testing.T) {
 	dir := sessionSandbox(t)
-	path := writeSessionText(t, dir, "version: 4\nbefore\n", 0o600)
+	path := writeSessionText(t, dir, "version: 5\nbefore\n", 0o600)
 	setKeepHook(t, func() {
 		if err := os.WriteFile(path, []byte("version: 2\nfloating:\n  selected: true\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -253,9 +253,9 @@ func TestRefusedSessionChangedBeforeRenameIsLeftAlone(t *testing.T) {
 // pass 7: swapped to a symlink after the refused read.
 func TestRefusedSessionSwappedToSymlinkIsLeftAlone(t *testing.T) {
 	dir := sessionSandbox(t)
-	path := writeSessionText(t, dir, "version: 4\nbefore\n", 0o600)
+	path := writeSessionText(t, dir, "version: 5\nbefore\n", 0o600)
 	target := filepath.Join(t.TempDir(), "target.yaml")
-	if err := os.WriteFile(target, []byte("version: 4\nbefore\n"), 0o600); err != nil {
+	if err := os.WriteFile(target, []byte("version: 5\nbefore\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setKeepHook(t, func() {
@@ -273,7 +273,7 @@ func TestRefusedSessionSwappedToSymlinkIsLeftAlone(t *testing.T) {
 	if l, err := os.Readlink(path); err != nil || l != target {
 		t.Errorf("the link changed: %q %v", l, err)
 	}
-	if b, _ := os.ReadFile(target); string(b) != "version: 4\nbefore\n" {
+	if b, _ := os.ReadFile(target); string(b) != "version: 5\nbefore\n" {
 		t.Errorf("the target changed: %q", b)
 	}
 	if got := refusedFiles(t, dir); len(got) != 0 {
@@ -284,7 +284,7 @@ func TestRefusedSessionSwappedToSymlinkIsLeftAlone(t *testing.T) {
 // pass 6: the kept copy keeps its mode and the new session is written 0600.
 func TestBackupLeavesNewSessionPrivate(t *testing.T) {
 	dir := sessionSandbox(t)
-	writeSessionText(t, dir, "version: 4\nx\n", 0o644)
+	writeSessionText(t, dir, "version: 5\nx\n", 0o644)
 	_, _, keep, _ := LoadSessionKeepingRefused()
 	if keep.Kept == "" {
 		t.Fatalf("keep = %+v", keep)
@@ -304,7 +304,7 @@ func TestBackupLeavesNewSessionPrivate(t *testing.T) {
 // never deleted; the judged bytes are in the kept copy.
 func TestRefusedSessionSwappedDuringMoveIsNeverDeleted(t *testing.T) {
 	dir := sessionSandbox(t)
-	path := writeSessionText(t, dir, "version: 4\njudged\n", 0o600)
+	path := writeSessionText(t, dir, "version: 5\njudged\n", 0o600)
 	const other = "version: 2\nfloating:\n  selected: true\n"
 	setSeam(t, &keepAfterLink, func() {
 		if err := os.Remove(path); err != nil {
@@ -321,7 +321,7 @@ func TestRefusedSessionSwappedDuringMoveIsNeverDeleted(t *testing.T) {
 	if b, err := os.ReadFile(path); err != nil || string(b) != other {
 		t.Errorf("the swapped-in file was lost: %q %v", b, err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dir, keep.Kept)); string(b) != "version: 4\njudged\n" {
+	if b, _ := os.ReadFile(filepath.Join(dir, keep.Kept)); string(b) != "version: 5\njudged\n" {
 		t.Errorf("kept copy = %q, want the judged bytes", b)
 	}
 	if left, _ := filepath.Glob(filepath.Join(dir, "session.yaml.keep-*")); len(left) != 0 {
@@ -335,7 +335,7 @@ func TestUncheckableSessionSuppressesWrites(t *testing.T) {
 		t.Skip("running as root: mode bits do not deny the stat")
 	}
 	dir := sessionSandbox(t)
-	writeSessionText(t, dir, "version: 4\nx\n", 0o600)
+	writeSessionText(t, dir, "version: 5\nx\n", 0o600)
 	if err := os.Chmod(dir, 0o000); err != nil {
 		t.Fatal(err)
 	}
@@ -388,16 +388,16 @@ func TestAcceptedSessionSymlinkIsLeftAlone(t *testing.T) {
 // F4: once the kept name exists it is reported, even if the move then fails.
 func TestKeptCopyIsNamedEvenWhenTheMoveFails(t *testing.T) {
 	dir := sessionSandbox(t)
-	path := writeSessionText(t, dir, "version: 4\nx\n", 0o600)
+	path := writeSessionText(t, dir, "version: 5\nx\n", 0o600)
 	setSeam(t, &keepRename, func(string, string) error { return os.ErrPermission })
 	_, _, keep, _ := LoadSessionKeepingRefused()
 	if keep.Kept == "" || keep.Problem == "" {
 		t.Fatalf("keep = %+v, want both the kept name and the problem", keep)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dir, keep.Kept)); string(b) != "version: 4\nx\n" {
+	if b, _ := os.ReadFile(filepath.Join(dir, keep.Kept)); string(b) != "version: 5\nx\n" {
 		t.Errorf("kept copy = %q", b)
 	}
-	if b, err := os.ReadFile(path); err != nil || string(b) != "version: 4\nx\n" {
+	if b, err := os.ReadFile(path); err != nil || string(b) != "version: 5\nx\n" {
 		t.Errorf("the original was disturbed: %q %v", b, err)
 	}
 }

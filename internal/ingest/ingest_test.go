@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // All chart values in this file are constructed synthetic test inputs.
@@ -106,15 +104,15 @@ selection:
 	})
 }
 
-// C5, guarded from below: the perimeter's own body vocabulary is the enum's,
-// so a session written by the UI reads back as the same bodies.
-func TestReadStartupPerimeterBodyNamesAreTheEnums(t *testing.T) {
+// C5, guarded from below: the perimeter hands the file's names over verbatim
+// (a 0.1.2 wire name such as imum_coeli), and resolving them is the workspace's.
+func TestReadStartupPerimeterBodyNamesAreVerbatim(t *testing.T) {
 	_, sessionDir := perimeterSandbox(t)
 	writeFile(t, filepath.Join(sessionDir, "session.yaml"),
-		"version: 1\nselection:\n  floating_bodies: "+aspect.ImumCoeli.String()+"\n")
+		"version: 1\nselection:\n  floating_bodies: imum_coeli\n")
 	got := readPerimeter(t)
-	if len(got.Session.FloatingBodies) != 1 || got.Session.FloatingBodies[0] != aspect.ImumCoeli {
-		t.Errorf("FloatingBodies = %v, want [%v]", got.Session.FloatingBodies, aspect.ImumCoeli)
+	if len(got.Session.FloatingBodies) != 1 || got.Session.FloatingBodies[0] != "imum_coeli" {
+		t.Errorf("FloatingBodies = %v, want [imum_coeli]", got.Session.FloatingBodies)
 	}
 }
 

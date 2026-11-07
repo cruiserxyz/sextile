@@ -130,6 +130,7 @@ func fixtureSpec(t *testing.T, src recipe.Source, houses recipe.HouseSystem, z r
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
+	spec.Registry = testRegistry(t)
 	return spec
 }
 
@@ -165,7 +166,7 @@ func castStaged(t *testing.T, spec recipe.ChartSpec, content string) castResult 
 	if err != nil {
 		t.Fatalf("spawn: %v (%.300s)", err, out)
 	}
-	return castResult{parsePositions(out), parseCusps(out)}
+	return castResult{mustPositions(t, out, defaultSet...), parseCusps(out)}
 }
 
 // runInvocation stages and spawns one compiled invocation and returns the text
@@ -368,7 +369,7 @@ func TestHostAstrologAsCannotMoveTheFrame(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					return castResult{parsePositions(out), parseCusps(out)}
+					return castResult{printedPositions(t, out), parseCusps(out)}
 				}
 				cleanDir, oneDir := dataDirWith(t), dataDirWith(t, n.line)
 				useDataDir(t, cleanDir)
@@ -602,7 +603,7 @@ func TestCrossDetailsReportUsesPinnedFrame(t *testing.T) {
 	for _, c := range frameCases() {
 		t.Run(c.name, func(t *testing.T) {
 			spec := fixtureSpec(t, recipe.Comparison{Primary: fixLondon, Secondary: fixTromso}, c.houses, c.zodiac)
-			for _, rep := range []recipe.RawReport{recipe.AspectsRawReport(), recipe.BodyRawReport(aspect.Moon)} {
+			for _, rep := range []recipe.RawReport{recipe.AspectsRawReport(), recipe.BodyRawReport(objMoon)} {
 				inv := compileOne(t, spec, rep)
 				if !containsRun(inv.Argv, wantFrame(c.code, c.zodiac)) {
 					t.Fatalf("%s argv lacks the band: %q", rep.Label(), inv.Argv)
@@ -651,7 +652,7 @@ func TestTimelineCallCarriesFrameBand(t *testing.T) {
 				if at < 0 {
 					t.Fatalf("no frame band %q in %q", frame, argv)
 				}
-				mode := slices.IndexFunc(argv, func(s string) bool { return s == "-dm" || s == "-t" || s == "-tr" })
+				mode := slices.IndexFunc(argv, func(s string) bool { return s == "-d" || s == "-t" || s == "-tr" })
 				if mode < 0 || at < mode {
 					t.Errorf("frame band at %d precedes the mode switch at %d: %q", at, mode, argv)
 				}

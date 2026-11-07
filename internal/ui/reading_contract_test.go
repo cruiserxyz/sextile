@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"regexp"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func TestTabBodyHasTwoIntensities(t *testing.T) {
 		{Blank: true},
 		{Label: "inner conjunction", Value: "Mar 23, 2025   2°39′ Ari"},
 	}
-	body := strings.Join(templateBodyLines(lines, 54, Config{Color: ColorAlways}), "\n")
+	body := strings.Join(panel.TemplateBodyLines(lines, 54, Config{Color: ColorAlways}), "\n")
 	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	seen := map[string]bool{}
 	for _, code := range sgr.FindAllString(body, -1) {
@@ -36,7 +37,7 @@ func TestTabBodyHasTwoIntensities(t *testing.T) {
 			t.Errorf("a third intensity in the body: %q", code)
 		}
 	}
-	plain := strings.Join(templateBodyLines(lines, 54, Config{Color: ColorNever}), "\n")
+	plain := strings.Join(panel.TemplateBodyLines(lines, 54, Config{Color: ColorNever}), "\n")
 	if sgr.MatchString(plain) {
 		t.Errorf("colours off still styles: %q", plain)
 	}

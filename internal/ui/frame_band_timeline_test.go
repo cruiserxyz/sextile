@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/testenv/astrodir"
 )
 
@@ -57,9 +56,6 @@ func TestDisplayedTimelineUsesPinnedFrame(t *testing.T) {
 	if _, err := exec.LookPath("astrolog"); err != nil {
 		t.Skip("astrolog not on PATH; skipping live-binary test")
 	}
-	old := computeTimeline
-	computeTimeline = lookup.Timeline
-	t.Cleanup(func() { computeTimeline = old })
 
 	clean, hostile := copyAstrologDir(t), copyAstrologDir(t, "=s", ":s Lahiri", "=Ys", "=sr0", ":sd", "-c Koch", "=Yp")
 	// display drives the model's own path end to end: syncTimeline keys the

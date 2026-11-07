@@ -114,15 +114,15 @@ func openedPicker(t *testing.T) Model {
 func pick(t *testing.T, m Model, name string) (Model, tea.Cmd) {
 	t.Helper()
 	idx := -1
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Name == name {
 			idx = i
 		}
 	}
 	if idx < 0 {
-		t.Fatalf("no row named %q in %v", name, pickerNames(m.picker.matches))
+		t.Fatalf("no row named %q in %v", name, pickerNames(m.picker.Matches))
 	}
-	m.picker.cursor = idx
+	m.picker.Cursor = idx
 	u, cmd := updateChartModalKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = u.(Model)
 	if cmd == nil && m.startup == startupTitleOpen {
@@ -362,7 +362,7 @@ func TestApplyChartPicked_ResolveStaysOutOfArgvLane(t *testing.T) {
 func TestApplyChartPicked_AstrologMissingKeepsPicker(t *testing.T) {
 	smallLibrary(t)
 	m := openedPicker(t)
-	listed := len(m.picker.matches)
+	listed := len(m.picker.Matches)
 	t.Setenv("PATH", t.TempDir()) // no astrolog anywhere
 
 	m, _ = pick(t, m, "Dat Client")
@@ -370,8 +370,8 @@ func TestApplyChartPicked_AstrologMissingKeepsPicker(t *testing.T) {
 	if m.startup != startupChartOpen {
 		t.Errorf("the picker must stay open when a resolve fails, got %q", m.startup)
 	}
-	if len(m.picker.matches) != listed {
-		t.Errorf("the listing lost rows on a failed resolve: %d, want %d", len(m.picker.matches), listed)
+	if len(m.picker.Matches) != listed {
+		t.Errorf("the listing lost rows on a failed resolve: %d, want %d", len(m.picker.Matches), listed)
 	}
 	if m.picker.resolveErr == nil {
 		t.Error("the picker must say the pick failed")
@@ -381,7 +381,7 @@ func TestApplyChartPicked_AstrologMissingKeepsPicker(t *testing.T) {
 	}
 	// And the picker still works: the operator can type and move.
 	u, _ := updateChartModalKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-	if got := u.(Model); got.picker.filterText != "y" {
+	if got := u.(Model); got.picker.FilterText != "y" {
 		t.Error("the picker stopped accepting keys after a failed resolve")
 	}
 }

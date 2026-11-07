@@ -2,6 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
@@ -27,33 +31,35 @@ import (
 
 // countCursors counts cursor rows: with colours off, reverse video opening
 // on the cursor marker.
-func countCursors(frame string) int { return strings.Count(frame, cursorRowOff+rowCursorASCII) }
+func countCursors(frame string) int {
+	return strings.Count(frame, term.CursorRowOff+menu.RowCursorASCII)
+}
 
 // --- the chassis itself ---------------------------------------------------
 
 // walkList drives a cursor from 0 to n-1 and back, the way arrow keys do,
 // scrolling exactly as the modal does, and reports the window at each step.
-func walkList(n, height int, down, up int) (offsets []int, cursors []int, list *fuzzyList[int]) {
+func walkList(n, height int, down, up int) (offsets []int, cursors []int, list *menu.FuzzyList[int]) {
 	items := make([]int, n)
 	for i := range items {
 		items[i] = i
 	}
-	l := &fuzzyList[int]{matches: items}
+	l := &menu.FuzzyList[int]{Matches: items}
 	cur := 0
 	for i := 0; i < down; i++ {
 		if cur+1 < n {
 			cur++
 		}
-		l.scrollTo(cur, height)
-		offsets = append(offsets, l.offset)
+		l.ScrollTo(cur, height)
+		offsets = append(offsets, l.Offset)
 		cursors = append(cursors, cur)
 	}
 	for i := 0; i < up; i++ {
 		if cur > 0 {
 			cur--
 		}
-		l.scrollTo(cur, height)
-		offsets = append(offsets, l.offset)
+		l.ScrollTo(cur, height)
+		offsets = append(offsets, l.Offset)
 		cursors = append(cursors, cur)
 	}
 	return offsets, cursors, l
@@ -76,14 +82,14 @@ func TestWindowKeepsTheCursorVisibleAtEveryIndex(t *testing.T) {
 				t.Errorf("height %d step %d: cursor %d NOT VISIBLE in window [%d,%d)", height, i, cur, off, off+rows)
 			}
 		}
-		if l.offset != 0 {
-			t.Errorf("height %d: walking back to the top left the window at offset %d, want 0", height, l.offset)
+		if l.Offset != 0 {
+			t.Errorf("height %d: walking back to the top left the window at offset %d, want 0", height, l.Offset)
 		}
 	}
 }
 
 // THE property that was wrong. With room on both sides the cursor keeps
-// listScrollMargin rows above AND below it. The old rule had a bottom margin
+// menu.ScrollMargin rows above AND below it. The old rule had a bottom margin
 // only: walking down felt like moving a cursor, walking back up felt like
 // dragging the list, because the window moved on every single step.
 func TestWindowKeepsTheMarginOnBothSides(t *testing.T) {
@@ -97,11 +103,11 @@ func TestWindowKeepsTheMarginOnBothSides(t *testing.T) {
 		// The margin is necessarily spent at the two ends of the list:
 		// there is nothing to show beyond them, and refusing to reach the
 		// first or last row would be worse than losing the margin.
-		if cur >= listScrollMargin && above < listScrollMargin && off != 0 {
-			t.Errorf("step %d: cursor %d has %d rows above it (offset %d), want >= %d", i, cur, above, off, listScrollMargin)
+		if cur >= menu.ScrollMargin && above < menu.ScrollMargin && off != 0 {
+			t.Errorf("step %d: cursor %d has %d rows above it (offset %d), want >= %d", i, cur, above, off, menu.ScrollMargin)
 		}
-		if cur < n-listScrollMargin && below < listScrollMargin && off != n-height {
-			t.Errorf("step %d: cursor %d has %d rows below it (offset %d), want >= %d", i, cur, below, off, listScrollMargin)
+		if cur < n-menu.ScrollMargin && below < menu.ScrollMargin && off != n-height {
+			t.Errorf("step %d: cursor %d has %d rows below it (offset %d), want >= %d", i, cur, below, off, menu.ScrollMargin)
 		}
 	}
 }
@@ -128,7 +134,7 @@ func TestWindowHoldsStillWhileTheCursorCrossesIt(t *testing.T) {
 
 	// The first scroll happens on the step AFTER the cursor reaches the
 	// bottom margin row — the cursor is allowed to stand on that row with
-	// listScrollMargin rows still visible below it, and only moving beyond
+	// menu.ScrollMargin rows still visible below it, and only moving beyond
 	// it costs a scroll.
 	firstMove := -1
 	for i := 1; i < len(offsets); i++ {
@@ -137,7 +143,7 @@ func TestWindowHoldsStillWhileTheCursorCrossesIt(t *testing.T) {
 			break
 		}
 	}
-	if want := height - listScrollMargin; firstMove != want {
+	if want := height - menu.ScrollMargin; firstMove != want {
 		t.Errorf("the window first moved at cursor %d, want %d", firstMove, want)
 	}
 }
@@ -188,8 +194,8 @@ func TestScrollingIsSymmetric(t *testing.T) {
 	if downStep > 1 || upStep > 1 {
 		t.Errorf("the window jumped (down step %d, up step %d); every scroll must be one row", downStep, upStep)
 	}
-	if l.offset != 0 {
-		t.Errorf("the round trip ended at offset %d, want back at 0", l.offset)
+	if l.Offset != 0 {
+		t.Errorf("the round trip ended at offset %d, want back at 0", l.Offset)
 	}
 }
 
@@ -221,7 +227,7 @@ func TestTurningAroundMovesTheCursorBeforeTheList(t *testing.T) {
 	// From the bottom row the cursor has `height-1` rows of window above it
 	// and must keep `margin` of them, so it can climb height-1-margin steps
 	// before the window has to move.
-	want := height - 1 - listScrollMargin
+	want := height - 1 - menu.ScrollMargin
 	if still != want {
 		t.Errorf("turning around at the bottom, the list moved after %d upward steps, want %d\n"+
 			"  (cursor went %d -> %d while the window %s)",
@@ -238,21 +244,21 @@ func min(a, b int) int {
 }
 
 func TestWindowHandlesDegenerateSizes(t *testing.T) {
-	l := &fuzzyList[int]{matches: []int{1, 2, 3}}
+	l := &menu.FuzzyList[int]{Matches: []int{1, 2, 3}}
 	for _, height := range []int{0, -1} {
-		if rows, off := l.windowAt(0, height); rows != nil || off != 0 {
+		if rows, off := l.WindowAt(0, height); rows != nil || off != 0 {
 			t.Errorf("height %d gave %v/%d, want nothing", height, rows, off)
 		}
 	}
-	empty := &fuzzyList[int]{}
-	if rows, off := empty.windowAt(0, 5); rows != nil || off != 0 {
+	empty := &menu.FuzzyList[int]{}
+	if rows, off := empty.WindowAt(0, 5); rows != nil || off != 0 {
 		t.Errorf("an empty list gave %v/%d, want nothing", rows, off)
 	}
 	// A window taller than the list never scrolls.
-	short := &fuzzyList[int]{matches: []int{1, 2, 3}}
-	short.scrollTo(2, 10)
-	if short.offset != 0 {
-		t.Errorf("a list shorter than the window scrolled to %d", short.offset)
+	short := &menu.FuzzyList[int]{Matches: []int{1, 2, 3}}
+	short.ScrollTo(2, 10)
+	if short.Offset != 0 {
+		t.Errorf("a list shorter than the window scrolled to %d", short.Offset)
 	}
 }
 
@@ -260,25 +266,25 @@ func TestWindowHandlesDegenerateSizes(t *testing.T) {
 // at the top, a terminal that shrank — the window drawn contains the cursor's
 // row, because that is the row Enter acts on. Drawing still stores nothing.
 func TestWindowKeepsTheCursorOnScreen(t *testing.T) {
-	l := &fuzzyList[int]{matches: make([]int, 40)}
-	l.scrollTo(30, 10)
-	l.offset = 0 // what setMatches does to the window after a filter
-	rows, off := l.windowAt(30, 10)
+	l := &menu.FuzzyList[int]{Matches: make([]int, 40)}
+	l.ScrollTo(30, 10)
+	l.Offset = 0 // what setMatches does to the window after a filter
+	rows, off := l.WindowAt(30, 10)
 	if 30 < off || 30 >= off+len(rows) {
 		t.Errorf("window %d..%d does not hold the cursor at 30", off, off+len(rows)-1)
 	}
-	if l.offset != 0 {
-		t.Errorf("drawing stored offset %d", l.offset)
+	if l.Offset != 0 {
+		t.Errorf("drawing stored offset %d", l.Offset)
 	}
-	l.offset = 25 // a window laid out for a taller terminal
-	rows, off = l.windowAt(10, 5)
+	l.Offset = 25 // a window laid out for a taller terminal
+	rows, off = l.WindowAt(10, 5)
 	if 10 < off || 10 >= off+len(rows) {
 		t.Errorf("window %d..%d does not hold the cursor at 10", off, off+len(rows)-1)
 	}
 	// A negative cursor is "not in this list" (the aspect chooser's cursor
 	// up in its family block): the stored window stands.
-	l.offset = 12
-	if _, off := l.windowAt(-1, 5); off != 12 {
+	l.Offset = 12
+	if _, off := l.WindowAt(-1, 5); off != 12 {
 		t.Errorf("a cursor outside the list moved the window to %d", off)
 	}
 }
@@ -287,14 +293,14 @@ func TestWindowKeepsTheCursorOnScreen(t *testing.T) {
 // navigation.
 func TestDrawingDoesNotScroll(t *testing.T) {
 	items := make([]int, 40)
-	l := &fuzzyList[int]{matches: items}
-	l.scrollTo(30, 10)
-	first := l.offset
+	l := &menu.FuzzyList[int]{Matches: items}
+	l.ScrollTo(30, 10)
+	first := l.Offset
 	for i := 0; i < 5; i++ {
-		l.windowAt(30, 10)
+		l.WindowAt(30, 10)
 	}
-	if l.offset != first {
-		t.Errorf("drawing moved the window from %d to %d", first, l.offset)
+	if l.Offset != first {
+		t.Errorf("drawing moved the window from %d to %d", first, l.Offset)
 	}
 }
 
@@ -325,23 +331,23 @@ func TestAspectChooserCursorStaysVisibleWhileWalking(t *testing.T) {
 		w, h int
 	}{{"80x24", 80, 24}, {"132x40", 132, 40}} {
 		t.Run(size.name, func(t *testing.T) {
-			st := openAspectModal(bigRegistry(40), recipe.AspectPolicy{})
+			st := popup.OpenAspects(bigRegistry(40), recipe.AspectPolicy{})
 			cfg := Config{Accessible: true, Color: ColorNever}
-			total := st.totalRows()
+			total := st.TotalRows()
 			// Scroll for the window this size actually draws. Passing a
 			// height that does not match the render is the precise hazard
-			// modalListHeight exists to remove, and an earlier version of
+			// dialog.ListHeight exists to remove, and an earlier version of
 			// this test walked into it: it scrolled for 132x40's 18-row
 			// window while rendering 80x24's 2-row one, and the cursor was
 			// legitimately off screen.
-			listH := aspectListHeight(size.h)
+			listH := popup.AspectListHeight(size.h)
 
 			for step := 0; step < total-1; step++ {
 				st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, listH)
 				frame := renderAspectModal(st, cfg, size.w, size.h)
 				if got := countCursors(frame); got != 1 {
 					t.Fatalf("after %d downs (cursor %d of %d): %d cursor markers on screen, want exactly 1",
-						step+1, st.cursor, total, got)
+						step+1, st.Cursor, total, got)
 				}
 			}
 			for step := 0; step < total-1; step++ {
@@ -349,11 +355,11 @@ func TestAspectChooserCursorStaysVisibleWhileWalking(t *testing.T) {
 				frame := renderAspectModal(st, cfg, size.w, size.h)
 				if got := countCursors(frame); got != 1 {
 					t.Fatalf("after %d ups (cursor %d): %d cursor markers on screen, want exactly 1",
-						step+1, st.cursor, got)
+						step+1, st.Cursor, got)
 				}
 			}
-			if st.cursor != 0 {
-				t.Errorf("walking back up left the cursor at %d, want 0", st.cursor)
+			if st.Cursor != 0 {
+				t.Errorf("walking back up left the cursor at %d, want 0", st.Cursor)
 			}
 		})
 	}
@@ -361,31 +367,31 @@ func TestAspectChooserCursorStaysVisibleWhileWalking(t *testing.T) {
 
 // The cursor cannot leave the rows that exist, in either direction.
 func TestAspectChooserCursorCannotLeaveTheList(t *testing.T) {
-	st := openAspectModal(bigRegistry(12), recipe.AspectPolicy{})
+	st := popup.OpenAspects(bigRegistry(12), recipe.AspectPolicy{})
 	for i := 0; i < 200; i++ {
 		st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, testListHeight)
 	}
-	if st.cursor != st.totalRows()-1 {
-		t.Errorf("cursor ran to %d, want it pinned at the last row %d", st.cursor, st.totalRows()-1)
+	if st.Cursor != st.TotalRows()-1 {
+		t.Errorf("cursor ran to %d, want it pinned at the last row %d", st.Cursor, st.TotalRows()-1)
 	}
 	for i := 0; i < 200; i++ {
 		st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyUp}, testListHeight)
 	}
-	if st.cursor != 0 {
-		t.Errorf("cursor ran to %d, want it pinned at 0", st.cursor)
+	if st.Cursor != 0 {
+		t.Errorf("cursor ran to %d, want it pinned at 0", st.Cursor)
 	}
 }
 
 // Filtering to a shorter list must not leave the cursor pointing past the end.
 func TestAspectChooserCursorSurvivesFiltering(t *testing.T) {
-	st := openAspectModal(bigRegistry(40), recipe.AspectPolicy{})
+	st := popup.OpenAspects(bigRegistry(40), recipe.AspectPolicy{})
 	for i := 0; i < 30; i++ {
 		st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, testListHeight)
 	}
 	st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Aspect01")}, testListHeight)
 
-	if st.cursor >= st.totalRows() {
-		t.Fatalf("after filtering, cursor %d is past the %d rows that exist", st.cursor, st.totalRows())
+	if st.Cursor >= st.TotalRows() {
+		t.Fatalf("after filtering, cursor %d is past the %d rows that exist", st.Cursor, st.TotalRows())
 	}
 	frame := renderAspectModal(st, Config{Accessible: true, Color: ColorNever}, 132, 40)
 	if got := countCursors(frame); got != 1 {
@@ -395,8 +401,8 @@ func TestAspectChooserCursorSurvivesFiltering(t *testing.T) {
 	// An empty result parks the cursor in the family block rather than
 	// nowhere, so the next keystroke still has somewhere to be.
 	st, _ = updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zzzz")}, testListHeight)
-	if st.cursor >= st.totalRows() {
-		t.Errorf("cursor %d past %d rows on an empty result", st.cursor, st.totalRows())
+	if st.Cursor >= st.TotalRows() {
+		t.Errorf("cursor %d past %d rows on an empty result", st.Cursor, st.TotalRows())
 	}
 }
 
@@ -408,37 +414,37 @@ func TestAtlasCursorStaysVisibleWhileWalking(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		places = append(places, location.PlaceInfo{Name: fmt.Sprintf("Town%02d", i), Country: "XX", TZ: "UTC"})
 	}
-	st := atlasModalState{index: location.NewIndex(places)}
-	st.filterText = "town"
-	st.refilter()
+	st := atlasModalState{Atlas: popup.Atlas{Index: location.NewIndex(places)}}
+	st.FilterText = "town"
+	st.Refilter()
 
 	cfg := Config{Accessible: true, Color: ColorNever}
-	height := modalListHeight(24)
-	for cursor := 0; cursor < len(st.matches); cursor++ {
+	height := dialog.ListHeight(24)
+	for cursor := 0; cursor < len(st.Matches); cursor++ {
 		// Move the way the key handler does: a cursor that is assigned
 		// without scrolling is not navigation, and asserting against it
 		// would be testing a state the app can never be in.
-		st.cursor = cursor
-		st.scrollTo(cursor, height)
+		st.Cursor = cursor
+		st.ScrollTo(cursor, height)
 		frame := renderAtlasModal(st, cfg, 80, 24)
 		if got := countCursors(frame); got != 1 {
-			t.Fatalf("atlas cursor %d of %d: %d markers on screen, want exactly 1", cursor, len(st.matches), got)
+			t.Fatalf("atlas cursor %d of %d: %d markers on screen, want exactly 1", cursor, len(st.Matches), got)
 		}
 	}
 }
 
 // testListHeight is the window the aspect chooser's list gets at 132x40 — the
 // state-machine tests scroll against a real height rather than a made-up one.
-var testListHeight = aspectListHeight(40)
+var testListHeight = popup.AspectListHeight(40)
 
 // --- the body selector, rendered ------------------------------------------
 
 // bigObjectRegistry builds n objects with distinct names, shaped like the real
-// read: 0-based numbering, so a walk covers the row the enum cannot name.
+// read: 0-based numbering, so a walk covers the row at number zero.
 func bigObjectRegistry(n int) []aspect.RegistryObject {
 	reg := make([]aspect.RegistryObject, 0, n)
 	for i := 0; i < n; i++ {
-		reg = append(reg, aspect.RegistryObject{Number: i, Name: fmt.Sprintf("Object%02d", i)})
+		reg = append(reg, aspect.RegistryObject{Object: aspect.Object{Number: i, Name: fmt.Sprintf("Object%02d", i)}})
 	}
 	return reg
 }
@@ -453,20 +459,20 @@ func TestBodySelectorCursorStaysVisibleWhileWalking(t *testing.T) {
 		w, h int
 	}{{"80x24", 80, 24}, {"132x40", 132, 40}} {
 		t.Run(size.name, func(t *testing.T) {
-			st := openBodyModal(bigObjectRegistry(40), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+			st := popup.Open(bigObjectRegistry(40), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 			cfg := Config{Accessible: true, Color: ColorNever}
-			total := len(st.matches)
+			total := len(st.Matches)
 			// Scroll for the window this size actually draws — the hazard
-			// modalListHeight exists to remove. The body list subtracts the
+			// dialog.ListHeight exists to remove. The body list subtracts the
 			// tag bar, so its height is NOT the aspect chooser's.
-			listH := bodyListHeight(size.h)
+			listH := popup.ListHeight(size.h)
 
 			for step := 0; step < total-1; step++ {
 				st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, listH)
 				frame := renderBodyModal(st, cfg, size.w, size.h)
 				if got := countCursors(frame); got != 1 {
 					t.Fatalf("after %d downs (cursor %d of %d): %d cursor markers on screen, want exactly 1",
-						step+1, st.cursor, total, got)
+						step+1, st.Cursor, total, got)
 				}
 			}
 			for step := 0; step < total-1; step++ {
@@ -474,29 +480,29 @@ func TestBodySelectorCursorStaysVisibleWhileWalking(t *testing.T) {
 				frame := renderBodyModal(st, cfg, size.w, size.h)
 				if got := countCursors(frame); got != 1 {
 					t.Fatalf("after %d ups (cursor %d): %d cursor markers on screen, want exactly 1",
-						step+1, st.cursor, got)
+						step+1, st.Cursor, got)
 				}
 			}
-			if st.cursor != 0 {
-				t.Errorf("walking back up left the cursor at %d, want 0", st.cursor)
+			if st.Cursor != 0 {
+				t.Errorf("walking back up left the cursor at %d, want 0", st.Cursor)
 			}
 		})
 	}
 }
 
 func TestBodySelectorCursorCannotLeaveTheList(t *testing.T) {
-	st := openBodyModal(bigObjectRegistry(12), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+	st := popup.Open(bigObjectRegistry(12), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 	for i := 0; i < 200; i++ {
 		st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, testListHeight)
 	}
-	if st.cursor != st.totalRows()-1 {
-		t.Errorf("cursor ran to %d, want it pinned at the last row %d", st.cursor, st.totalRows()-1)
+	if st.Cursor != st.TotalRows()-1 {
+		t.Errorf("cursor ran to %d, want it pinned at the last row %d", st.Cursor, st.TotalRows()-1)
 	}
 	for i := 0; i < 200; i++ {
 		st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyUp}, testListHeight)
 	}
-	if st.cursor != 0 {
-		t.Errorf("cursor ran to %d, want it pinned at 0", st.cursor)
+	if st.Cursor != 0 {
+		t.Errorf("cursor ran to %d, want it pinned at 0", st.Cursor)
 	}
 }
 
@@ -505,14 +511,14 @@ func TestBodySelectorCursorCannotLeaveTheList(t *testing.T) {
 // chooser still has its family block. Zero is the only answer, and the render
 // must survive it.
 func TestBodySelectorCursorSurvivesFiltering(t *testing.T) {
-	st := openBodyModal(bigObjectRegistry(40), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+	st := popup.Open(bigObjectRegistry(40), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 	for i := 0; i < 30; i++ {
 		st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyDown}, testListHeight)
 	}
 	st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Object01")}, testListHeight)
 
-	if st.cursor >= st.totalRows() {
-		t.Fatalf("after filtering, cursor %d is past the %d rows that exist", st.cursor, st.totalRows())
+	if st.Cursor >= st.TotalRows() {
+		t.Fatalf("after filtering, cursor %d is past the %d rows that exist", st.Cursor, st.TotalRows())
 	}
 	frame := renderBodyModal(st, Config{Accessible: true, Color: ColorNever}, 132, 40)
 	if got := countCursors(frame); got != 1 {
@@ -522,8 +528,8 @@ func TestBodySelectorCursorSurvivesFiltering(t *testing.T) {
 	st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zzzz")}, testListHeight)
 	// The group block never shrinks, so an empty result parks the cursor on
 	// the last group row, as in the aspect chooser (the specification 2).
-	if st.cursor != groupRows()-1 {
-		t.Errorf("cursor %d on an empty result, want the last group row %d", st.cursor, groupRows()-1)
+	if st.Cursor != popup.GroupRows()-1 {
+		t.Errorf("cursor %d on an empty result, want the last group row %d", st.Cursor, popup.GroupRows()-1)
 	}
 	// The list has no rows, so the one cursor marker is on a group row.
 	frame = renderBodyModal(st, Config{Accessible: true, Color: ColorNever}, 132, 40)

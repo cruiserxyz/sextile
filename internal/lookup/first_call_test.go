@@ -41,9 +41,9 @@ func TestFirstCallTransits_PassesLensAndCoords(t *testing.T) {
 	var gotHouses recipe.HouseSystem
 	var gotZodiac recipe.Zodiac
 	var gotTrueNode bool
-	var gotAdd recipe.BodySet
+	var gotAdd recipe.ObjectSet
 	aspectStyles := astrologstyle.Aspects{
-		{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Square}: {
+		{First: objSun, Second: objMoon, Kind: aspect.Square}: {
 			First: "sun", Kind: "square", Second: "moon",
 		},
 	}
@@ -53,7 +53,7 @@ func TestFirstCallTransits_PassesLensAndCoords(t *testing.T) {
 		gotHouses, gotZodiac = spec.Houses, spec.Zodiac
 		gotTrueNode, gotAdd = spec.Objects.TrueNodeMode, spec.Objects.Add
 		return payload.RawOutput{
-			Positions:    []aspect.Position{{Body: aspect.Sun, Longitude: 35.5}},
+			Positions:    []aspect.Position{{Object: objSun, Longitude: 35.5}},
 			Aspects:      []aspect.Aspect{},
 			AspectStyles: aspectStyles,
 		}, nil
@@ -80,17 +80,17 @@ func TestFirstCallTransits_PassesLensAndCoords(t *testing.T) {
 	if !gotTrueNode {
 		t.Error("Hellenistic true-node mode should pass through as true (-Yn)")
 	}
-	wantAdd := recipe.NewBodySet(aspect.Chiron, aspect.SouthNode, aspect.Lilith, aspect.ImumCoeli, aspect.Descendant)
-	if !sameBodySet(gotAdd, wantAdd) {
-		t.Errorf("Add body set = %v, want %v", gotAdd.Members(), wantAdd.Members())
+	wantAdd := recipe.NewObjectSet(11, 17, 18, 25, 28) // Chiron, South Node, Lilith, Nadir, Descendant
+	if !sameObjectSet(gotAdd, wantAdd) {
+		t.Errorf("Add object set = %v, want %v", gotAdd.Members(), wantAdd.Members())
 	}
 	if gotJD < 2461000 || gotJD > 2462000 {
 		t.Errorf("JD looks wrong for 2026-04-25: %v", gotJD)
 	}
-	if len(result.Positions) != 1 || result.Positions[0].Body != aspect.Sun {
+	if len(result.Positions) != 1 || result.Positions[0].Object != objSun {
 		t.Errorf("Result.Positions did not pass through: %+v", result.Positions)
 	}
-	if got := result.AspectStyles[astrologstyle.AspectIdentity{First: aspect.Sun, Second: aspect.Moon, Kind: aspect.Square}]; got.Kind != "square" {
+	if got := result.AspectStyles[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Square}]; got.Kind != "square" {
 		t.Errorf("Result.AspectStyles did not pass through: %#v", result.AspectStyles)
 	}
 }
@@ -116,7 +116,7 @@ func TestFirstCallTransits_DifferentCitiesHitComputerWithDifferentCoords(t *test
 		// Synthetic moon position derived from lat — proves the model would
 		// see different positions if astrolog actually responded to lat/lon.
 		return payload.RawOutput{
-			Positions: []aspect.Position{{Body: aspect.Moon, Longitude: 100.0 + m.Lat*0.01}},
+			Positions: []aspect.Position{{Object: objMoon, Longitude: 100.0 + m.Lat*0.01}},
 		}, nil
 	})
 
@@ -184,8 +184,8 @@ func moment(t *testing.T, spec recipe.ChartSpec) recipe.MomentAtPlace {
 	return m
 }
 
-// sameBodySet reports whether two body sets have identical members.
-func sameBodySet(a, b recipe.BodySet) bool {
+// sameObjectSet reports whether two object sets have identical members.
+func sameObjectSet(a, b recipe.ObjectSet) bool {
 	am, bm := a.Members(), b.Members()
 	if len(am) != len(bm) {
 		return false

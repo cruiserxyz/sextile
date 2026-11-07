@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/rules"
 	"github.com/cruiserxyz/sextile/internal/templates"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -21,7 +24,7 @@ import (
 func templateTestModel(t *testing.T) Model {
 	t.Helper()
 	m := detailsTestModel(t)
-	m.chart.positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}, {Body: aspect.Venus}}
+	m.chart.positions = []aspect.Position{{Object: objSun}, {Object: objMoon}, {Object: objVenus}}
 	m.focused = PanelBodies
 	m.bodyCursorIdx = 2
 	return m
@@ -39,26 +42,26 @@ type bodyFactsCall struct {
 func stubBodyFacts(t *testing.T, fail error) *[]bodyFactsCall {
 	t.Helper()
 	calls := &[]bodyFactsCall{}
-	old := computeBodyFacts
-	computeBodyFacts = func(_ context.Context, req lookup.BodyFactsRequest) (lookup.BodyFactsResult, error) {
-		zone, _ := time.LoadLocation(req.Place.TZ)
-		res := lookup.BodyFactsResult{Commands: []string{"astrolog -qj … -b0 -v -Z -R0 1 4 -RA0 1"}}
-		c := bodyFactsCall{req: req, reusedCycle: req.Cycle != nil}
-		if req.Cycle != nil {
-			res.Cycle = *req.Cycle
-		} else {
-			res.Cycle = lookup.CycleResult{Span: lookup.CycleSpanFor(req.When, zone), Commands: []string{"astrolog -z 0 -qy … -dY 13 -b0"}}
-			res.Commands = append(append([]string(nil), res.Cycle.Commands...), res.Commands...)
-			c.cycleStarted = 1
+	stubSpawns(t, func(s *rowSpawns) {
+		s.bodyFacts = func(_ context.Context, req lookup.BodyFactsRequest) (lookup.BodyFactsResult, error) {
+			zone, _ := time.LoadLocation(req.Place.TZ)
+			res := lookup.BodyFactsResult{Commands: []string{"astrolog -qj … -b0 -v -Z -R0 1 4 -RA0 1"}}
+			c := bodyFactsCall{req: req, reusedCycle: req.Cycle != nil}
+			if req.Cycle != nil {
+				res.Cycle = *req.Cycle
+			} else {
+				res.Cycle = lookup.CycleResult{Span: lookup.CycleSpanFor(req.When, zone), Commands: []string{"astrolog -z 0 -qy … -dY 13 -b0"}}
+				res.Commands = append(append([]string(nil), res.Cycle.Commands...), res.Commands...)
+				c.cycleStarted = 1
+			}
+			*calls = append(*calls, c)
+			if fail != nil {
+				return res, fail
+			}
+			res.Now = researchSkyFacts()
+			return res, nil
 		}
-		*calls = append(*calls, c)
-		if fail != nil {
-			return res, fail
-		}
-		res.Now = researchSkyFacts()
-		return res, nil
-	}
-	t.Cleanup(func() { computeBodyFacts = old })
+	})
 	return calls
 }
 
@@ -234,7 +237,7 @@ func TestTemplateFailureKeepsTheFrame(t *testing.T) {
 	if len(m.tpl.lines) == 0 {
 		t.Fatal("no first frame")
 	}
-	stubBodyFacts(t, os.ErrDeadlineExceeded)
+	m = withNewStubs(t, m, func() { stubBodyFacts(t, os.ErrDeadlineExceeded) })
 	f := m.slots.Floating()
 	m.slots.SetFloatingTime(f.Time.Add(time.Hour))
 	m = runTemplate(t, m)
@@ -245,7 +248,7 @@ func TestTemplateFailureKeepsTheFrame(t *testing.T) {
 		t.Errorf("last Log line %+v", last)
 	}
 	// A different template key (another body) drops the lines at once.
-	m.tpl.key.body = aspect.Mercury
+	m.tpl.key.object = objMercury.Number
 	m, _ = m.syncTemplate()
 	if len(m.tpl.lines) != 0 {
 		t.Errorf("another body's lines stayed: %+v", m.tpl.lines)
@@ -275,7 +278,7 @@ func TestCycleWindowFetchedOncePerSpan(t *testing.T) {
 func TestVenusNowTaste(t *testing.T) {
 	forceColor(t)
 	m := activeOnTemplate(templateTestModel(t))
-	tpl, _ := templates.ForBody(shippedTemplates, "venus")
+	tpl, _, _ := templates.ForObject(shippedTemplates, objVenus)
 	var sheet strings.Builder
 	for _, frame := range []struct {
 		name  string
@@ -290,6 +293,7 @@ func TestVenusNowTaste(t *testing.T) {
 		// and its run ended, so the tab is not waiting and does not dim.
 		if _, _, key, ok := m.templateInputs(); ok {
 			m.tpl.key, m.tpl.keyed, m.tpl.done, m.tpl.hasDone = key, true, key, true
+			m.tpl.content, m.tpl.hasContent = key, true
 		}
 		for _, mode := range []struct {
 			name string
@@ -319,18 +323,18 @@ func TestTemplateTabFollowsTheChooser(t *testing.T) {
 		t.Fatal("no request on Venus")
 	}
 	noSun := m
-	noSun.chart.positions = []aspect.Position{{Body: aspect.Moon}, {Body: aspect.Venus}}
+	noSun.chart.positions = []aspect.Position{{Object: objMoon}, {Object: objVenus}}
 	noSun.bodyCursorIdx = 1
-	noSun.lens.Objects.Remove = map[aspect.Body]bool{aspect.Sun: true}
+	noSun.lens.Objects.Remove = recipe.NewObjectSet(objSun.Number)
 	if !isTemplateTab(noSun.activeTabID(PanelDetails)) {
 		t.Errorf("Sun unticked: the tab is gone (%q)", noSun.activeTabID(PanelDetails))
 	}
 	_, after, _, ok := noSun.templateInputs()
-	if !ok || after.Body != before.Body || !after.When.Equal(before.When) || after.Place != before.Place {
+	if !ok || after.Object != before.Object || !after.When.Equal(before.When) || after.Place != before.Place {
 		t.Errorf("Sun unticked: request %+v, before %+v", after, before)
 	}
 	noVenus := m
-	noVenus.chart.positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}}
+	noVenus.chart.positions = []aspect.Position{{Object: objSun}, {Object: objMoon}}
 	noVenus.bodyCursorIdx = 1
 	for _, tab := range noVenus.panelTabs(PanelDetails) {
 		if isTemplateTab(tab.ID) {
@@ -345,7 +349,7 @@ func TestMissingEventKeepsTheFrame(t *testing.T) {
 	stubBodyFacts(t, nil)
 	m := runTemplate(t, activeOnTemplate(templateTestModel(t)))
 	before := fmt.Sprint(m.tpl.lines)
-	stubBodyFacts(t, &lookup.MissingEventError{Event: "a station before and after the moment"})
+	m = withNewStubs(t, m, func() { stubBodyFacts(t, &lookup.MissingEventError{Event: "a station before and after the moment"}) })
 	f := m.slots.Floating()
 	m.slots.SetFloatingTime(f.Time.Add(time.Hour))
 	m = runTemplate(t, m)
@@ -365,12 +369,17 @@ func TestTemplateTabLogsSlotBranch(t *testing.T) {
 	stubBodyFacts(t, nil)
 	// The second slot of line 10 reaches an absent fact: the line is omitted,
 	// but its first slot ran and is still logged.
-	stubbed := computeBodyFacts
-	computeBodyFacts = func(ctx context.Context, req lookup.BodyFactsRequest) (lookup.BodyFactsResult, error) {
-		res, err := stubbed(ctx, req)
-		res.Now["elongation.lon.abs"] = lookup.BodyFact{Kind: lookup.FactValue, Absent: true}
-		return res, err
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		stubbed := s.bodyFacts
+		if stubbed == nil {
+			return
+		}
+		s.bodyFacts = func(ctx context.Context, req lookup.BodyFactsRequest) (lookup.BodyFactsResult, error) {
+			res, err := stubbed(ctx, req)
+			res.Now["elongation.lon.abs"] = lookup.BodyFact{Kind: lookup.FactValue, Absent: true}
+			return res, err
+		}
+	})
 	allow, err := os.ReadFile("../templates/allowlist.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -382,8 +391,8 @@ func TestTemplateTabLogsSlotBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := shippedTemplates
-	shippedTemplates = ts
 	t.Cleanup(func() { shippedTemplates = old })
+	shippedTemplates = ts
 	m := runTemplate(t, activeOnTemplate(templateTestModel(t)))
 	var slotLines []string
 	var all []string
@@ -419,17 +428,18 @@ func TestTemplateTabScrollsItsOwnLines(t *testing.T) {
 	// the current inputs', so a key press does not drop it as another body's.
 	if _, _, key, ok := m.templateInputs(); ok {
 		m.tpl.key, m.tpl.keyed, m.tpl.done, m.tpl.hasDone = key, true, key, true
+		m.tpl.content, m.tpl.hasContent = key, true
 	}
 
 	total, height := m.detailsScrollSpan()
 	if total <= height {
 		t.Fatalf("fixture: the template tab (%d lines) must overflow its panel (%d rows)", total, height)
 	}
-	if want := len(templateBodyLines(lines, m.geometry()[PanelDetails].w-2, m.cfg)); total != want {
+	if want := len(panel.TemplateBodyLines(lines, m.geometry()[PanelDetails].w-2, m.cfg)); total != want {
 		t.Fatalf("scroll span = %d lines, want the template's own %d", total, want)
 	}
-	if len(m.detailsView().lines) > height {
-		t.Fatalf("fixture: the report (%d lines) must fit, or the test cannot tell the tabs apart", len(m.detailsView().lines))
+	if len(m.detailsView().Lines) > height {
+		t.Fatalf("fixture: the report (%d lines) must fit, or the test cannot tell the tabs apart", len(m.detailsView().Lines))
 	}
 	if !m.detailsScrolls() {
 		t.Error("detailsScrolls is false on an overflowing template tab")
@@ -445,5 +455,87 @@ func TestTemplateTabScrollsItsOwnLines(t *testing.T) {
 	}
 	if m.details.scrollOffset != 0 {
 		t.Errorf("Ctrl+PgUp held: offset %d, want 0", m.details.scrollOffset)
+	}
+}
+
+// Any row with an Object finds the template that lists it: Ceres, which has
+// no glyph, opens a template listing `ceres` while Venus keeps the shipped
+// one; the facts are asked for object 12, the key carries the number and the
+// subject id, and Render gets that subject (two rule rows are written for one
+// body each, so only the row for `ceres` may show).
+func TestTemplateTabForAnUntypedObject(t *testing.T) {
+	calls := stubBodyFacts(t, nil)
+	allow, err := os.ReadFile("../templates/allowlist.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := "---\nformat: 2\norigin: shipped\nid: ceres-fixture\ntab: Details\nsubject: {kind: body, class: dwarf-planet, bodies: [ceres]}\n---\n## @now\n" +
+		"{term:elongation} {elongation.lon} {elongation.side}\n{rule:solar.beams}\n"
+	ts, err := templates.LoadFS(fstest.MapFS{"ceres-fixture.md": {Data: []byte(src)}, "allowlist.txt": {Data: allow}}, factRegistry{}, shippedRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The two beams rows, one body each: Render's subject is the only thing
+	// that tells which of them applies.
+	oldTemplates, oldRules := shippedTemplates, shippedRules
+	t.Cleanup(func() { shippedTemplates, shippedRules = oldTemplates, oldRules })
+	set := rules.Set{Terms: oldRules.Terms, Rules: map[string]rules.Rule{}}
+	for id, r := range oldRules.Rules {
+		set.Rules[id] = r
+	}
+	beams := set.Rules["solar.beams"]
+	beams.Rows = append([]rules.Row(nil), beams.Rows...)
+	seen := 0
+	for i := range beams.Rows {
+		switch beams.Rows[i].ID {
+		case "solar.beams/17":
+			beams.Rows[i].Bodies, seen = []string{"ceres"}, seen+1
+		case "solar.beams/12":
+			beams.Rows[i].Bodies, seen = []string{"venus"}, seen+1
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("fixture: %d of the two beams rows found", seen)
+	}
+	set.Rules["solar.beams"] = beams
+	shippedRules = set
+	shippedTemplates = append(append([]templates.Template(nil), oldTemplates...), ts...)
+
+	m := templateTestModel(t)
+	ceres := fixtureObject(t, 12)
+	m.chart.positions = append(m.chart.positions, aspect.Position{Object: ceres})
+	m.bodyCursorIdx = 3
+	if tabs := m.panelTabs(PanelDetails); len(tabs) != 2 || tabs[1].ID != "tpl:ceres-fixture" {
+		t.Fatalf("on Ceres: %+v", tabs)
+	}
+	m.bodyCursorIdx = 2
+	if tabs := m.panelTabs(PanelDetails); len(tabs) != 2 || tabs[1].ID != "tpl:body-inferior-planet" {
+		t.Fatalf("on Venus: %+v", tabs)
+	}
+
+	m.bodyCursorIdx = 3
+	m = runTemplate(t, activeOnTemplate(m))
+	key, ok := m.templateKeyFor()
+	if !ok || key.template != "ceres-fixture" || key.object != 12 || key.listsBy != "ceres" {
+		t.Errorf("key %+v (%v), want the ceres-fixture template, object 12, subject ceres", key, ok)
+	}
+	if len(*calls) == 0 {
+		t.Fatal("no facts were asked for")
+	}
+	for _, c := range *calls {
+		if c.req.Object != ceres {
+			t.Errorf("facts asked for %+v, want Ceres %+v", c.req.Object, ceres)
+		}
+	}
+	var all []string
+	for _, l := range m.logLines {
+		all = append(all, l.text)
+	}
+	log := strings.Join(all, "\n")
+	if !strings.Contains(log, "ceres-fixture verdicts from rule rows solar.beams/17") || strings.Contains(log, "solar.beams/12") {
+		t.Errorf("the rule rows are not the ones written for ceres:\n%s", log)
+	}
+	if len(m.tpl.lines) == 0 || m.tpl.lines[0].Label != "elongation" {
+		t.Errorf("lines %+v", m.tpl.lines)
 	}
 }

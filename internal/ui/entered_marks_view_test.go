@@ -9,6 +9,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -20,7 +21,7 @@ import (
 // at all .... fix that".
 func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 	cfg := Config{Color: ColorNever}
-	bodies := []aspect.Body{aspect.Moon, aspect.Mars, aspect.Jupiter, aspect.Saturn, aspect.Mercury, aspect.Uranus, aspect.Neptune, aspect.Pluto}
+	bodies := []aspect.Object{objMoon, objMars, objJupiter, objSaturn, objMercury, objUranus, objNeptune, objPluto}
 	// check reads the Aspects panel: the wanted cell is drawn, it is the only
 	// bold cell, it sits in the last drawn line with nothing to its right, and
 	// the first drawn cell is the strongest entry.
@@ -57,37 +58,45 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 	// A transit row of ② (Sun opposite natal Venus): 39 stronger squares, the
 	// row's opposition at the lowest power.
 	m, _ := markFixture(t, cfg)
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		var list []lookup.OverlayAspect
-		for i := 0; i < 39; i++ {
-			list = append(list, lookup.OverlayAspect{Transit: bodies[i%8], Natal: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+	m = withSpawns(m, func(s *rowSpawns) {
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			var list []lookup.OverlayAspect
+			for i := 0; i < 39; i++ {
+				list = append(list, lookup.OverlayAspect{TransitObject: bodies[i%8], NatalObject: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+			}
+			list = append(list, lookup.OverlayAspect{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0, Power: 1})
+			return lookup.OverlayAspects{Aspects: list}, nil
 		}
-		list = append(list, lookup.OverlayAspect{Transit: aspect.Sun, Natal: aspect.Venus, Kind: aspect.Opposition, Orb: 0, Power: 1})
-		return lookup.OverlayAspects{Aspects: list}, nil
-	}
+	})
 	m = enter(t, m, timelineRowWith(t, m.timeline.rows, "Opp natal (Ari) Venus"))
 	if got := activeAspectsTitle(m); got != "3 in 2" {
 		t.Fatalf("fixture: the Aspects tab is %q, want 3 in 2", got)
 	}
-	check("cross list", m, bodyGlyph(aspect.Venus)+" "+aspectGlyph(aspect.Opposition)+" "+bodyGlyph(aspect.Sun), bodyGlyph(aspect.Saturn)+" "+aspectGlyph(aspect.Square)+" "+bodyGlyph(aspect.Moon))
+	// A cross cell reads transit first, as the row does (operator, 2026-11-06).
+	check("cross list", m, panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus), panel.BodyGlyph(objMoon)+" "+panel.AspectGlyph(aspect.Square)+" "+panel.BodyGlyph(objSaturn))
 
 	// A sky row (Moon trine Mars) on the Aspects tab: 39 stronger own aspects,
 	// the row's trine at the lowest power.
 	m, _ = markFixture(t, cfg)
-	inner := firstCallTransits
-	firstCallTransits = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
-		res, err := inner(ctx, p, when, place, lens)
-		var list []aspect.Aspect
-		for i := 0; i < 39; i++ {
-			list = append(list, aspect.Aspect{A: bodies[i%8], B: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+	m = withSpawns(m, func(s *rowSpawns) {
+		inner := s.cast.transit
+		if inner == nil {
+			return
 		}
-		list = append(list, aspect.Aspect{A: aspect.Moon, B: aspect.Mars, Kind: aspect.Trine, Orb: 0, Power: 1})
-		res.Aspects = list
-		return res, err
-	}
+		s.cast.transit = func(ctx context.Context, p *lookup.Probers, when time.Time, place location.PlaceInfo, lens lookup.Lens) (lookup.Result, error) {
+			res, err := inner(ctx, p, when, place, lens)
+			var list []aspect.Aspect
+			for i := 0; i < 39; i++ {
+				list = append(list, aspect.Aspect{AObject: bodies[i%8], BObject: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+			}
+			list = append(list, aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: aspect.Trine, Orb: 0, Power: 1})
+			res.Aspects = list
+			return res, err
+		}
+	})
 	m = enter(t, m, timelineRowWith(t, m.timeline.rows, "Moon (Sag) Tri (Leo) Mars"))
 	if got := activeAspectsTitle(m); got != "Aspects" {
 		t.Fatalf("fixture: the Aspects tab is %q, want Aspects", got)
 	}
-	check("own list", m, glyphs(aspect.Moon)+" "+aspectGlyph(aspect.Trine)+" "+glyphs(aspect.Mars), glyphs(aspect.Moon)+" "+aspectGlyph(aspect.Square)+" "+glyphs(aspect.Saturn))
+	check("own list", m, glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Trine)+" "+glyphs(objMars), glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Square)+" "+glyphs(objSaturn))
 }

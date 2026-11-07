@@ -1,7 +1,7 @@
 // Help/keymap parity invariant.
 //
-// The UI's `keyMap` struct (internal/ui/keys.go) declares every user-facing
-// key.Binding. The ordered binding table in `keyMap.mainBindings()` is the single
+// The UI's `KeyMap` struct (internal/ui/keys/keys.go) declares every user-facing
+// key.Binding. The ordered binding table in `mainBindings(keys.KeyMap)` is the single
 // registry used by help rendering. If a binding is added to keyMap but not
 // represented in Entries(), matching and help can silently drift. If an entry
 // is duplicated or points at a non-existent field, the registry is no longer a
@@ -9,14 +9,14 @@
 //
 // This test is the silent-drift guard. It parses the UI source with
 // go/parser + go/ast, extracts:
-//   - from keys.go: the field names of type keyMap whose type is `key.Binding`
+//   - from keys/keys.go: the field names of type KeyMap whose type is `key.Binding`
 //   - from Entries(): the selector names referenced as `Binding: k.<Field>`
 //
 // and asserts exact set parity, plus exactly-once coverage in the table.
 //
 // Since the specification every owner of the keyboard has a
 // table of its own; the rule is unchanged for the main screen's, and the test
-// also requires every owner's table function to exist in keys.go, so an owner
+// also requires every owner's table function to exist in its own file (ownerTables), so an owner
 // cannot quietly lose the table its key bar is drawn from.
 package ui
 
@@ -29,34 +29,87 @@ import (
 	"testing"
 )
 
-const uiKeysPath = "keys.go"
+// keyMapPath declares the KeyMap type; uiKeysPath holds the main table that reads it.
+const (
+	keyMapPath = "keys/keys.go"
+	uiKeysPath = "keys.go"
+)
 
-// ownerTables are the ten owners' table functions, in the spec's order: the
-// main screen, the seven popups, the Log console and attached Details.
-var ownerTables = []string{
-	"mainBindings", "cityBindings", "openChartBindings", "chartTitleBindings",
-	"saveChartBindings", "bodiesBindings", "aspectsBindings", "helpBindings",
-	"consoleBindings", "detailsBindings",
+// ownerTables maps each owner's table function to the file that declares it:
+// keys.go keeps the main screen's and attached Details' tables, every other
+// owner's sits above its key handler (split item 6.1).
+var ownerTables = map[string]string{
+	"mainBindings": "keys.go", "detailsBindings": "keys.go",
+	"cityBindings": "atlas_modal_model.go", "openChartBindings": "chart_modal.go",
+	"chartTitleBindings": "title_form.go", "titleConfirmBindings": "title_form.go",
+	"saveChartBindings": "save_modal.go", "bodiesBindings": "body_modal_model.go",
+	"aspectsBindings": "aspect_modal_model.go", "housesBindings": "house_finder_model.go",
+	"zodiacBindings": "zodiac_finder_model.go", "displayBindings": "house_display_popup_model.go",
+	"sessionsBindings": "sessions_popup_model.go", "sessionNameBindings": "sessions_popup_model.go",
+	"helpBindings": "model.go", "consoleBindings": "console.go", "actionsBindings": "actions_popup_model.go",
+	"timelineSearchBindings": "timeline.go", "reportSearchBindings": "report_search_bindings.go",
 }
 
-// TestUIKeymapHelpParity fails when internal/ui/keys.go's keyMap fields and
-// keyMap.mainBindings() diverge. Either direction counts: missing entries,
+// ownerTableFiles is every file that holds an owner's table, once each.
+func ownerTableFiles() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range ownerTables {
+		if !seen[f] {
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// missingTables names the tables of tables that their file does not declare.
+func missingTables(t *testing.T, tables map[string]string) []string {
+	t.Helper()
+	declared := map[string]map[string]bool{}
+	var out []string
+	for table, file := range tables {
+		if declared[file] == nil {
+			declared[file] = map[string]bool{}
+			ast.Inspect(parseFile(t, file), func(n ast.Node) bool {
+				if fn, ok := n.(*ast.FuncDecl); ok {
+					declared[file][fn.Name.Name] = true
+				}
+				return true
+			})
+		}
+		if !declared[file][table] {
+			out = append(out, table)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestOwnerTablesSitInTheirFiles is the wrong-file control: pointing one
+// table at a file that does not declare it must be reported by that table's
+// name, so the map above cannot pass while it names the wrong file.
+func TestOwnerTablesSitInTheirFiles(t *testing.T) {
+	wrong := map[string]string{}
+	for k, v := range ownerTables {
+		wrong[k] = v
+	}
+	wrong["cityBindings"] = "keys.go"
+	if got := missingTables(t, wrong); len(got) != 1 || got[0] != "cityBindings" {
+		t.Errorf("a table pointed at the wrong file was reported as %v, want [cityBindings]", got)
+	}
+}
+
+// TestUIKeymapHelpParity fails when internal/ui/keys's KeyMap fields and
+// mainBindings(keys.KeyMap) diverge. Either direction counts: missing entries,
 // dangling selectors, and duplicate table references all fail.
 func TestUIKeymapHelpParity(t *testing.T) {
-	keyMapFields := extractKeyMapFields(t, uiKeysPath)
+	keyMapFields := extractKeyMapFields(t, keyMapPath)
 	entryBindings := extractEntryBindings(t, uiKeysPath)
 
-	declared := map[string]bool{}
-	ast.Inspect(parseFile(t, uiKeysPath), func(n ast.Node) bool {
-		if fn, ok := n.(*ast.FuncDecl); ok {
-			declared[fn.Name.Name] = true
-		}
-		return true
-	})
-	for _, table := range ownerTables {
-		if !declared[table] {
-			t.Errorf("owner table %s() is not declared in %s", table, uiKeysPath)
-		}
+	for _, table := range missingTables(t, ownerTables) {
+		t.Errorf("owner table %s() is not declared in %s", table, ownerTables[table])
 	}
 
 	only := func(a map[string]bool, b map[string]int) []string {
@@ -97,18 +150,18 @@ func TestUIKeymapHelpParity(t *testing.T) {
 	}
 
 	if len(missingInEntries) > 0 {
-		t.Errorf("keyMap fields missing from keyMap.mainBindings(): %v\n  → add matching BindingEntry rows in %s.", missingInEntries, uiKeysPath)
+		t.Errorf("KeyMap fields missing from mainBindings(keys.KeyMap): %v\n  → add matching BindingEntry rows in %s.", missingInEntries, uiKeysPath)
 	}
 	if len(missingInKeyMap) > 0 {
-		t.Errorf("keyMap.mainBindings() references selectors not on keyMap: %v\n  → add matching key.Binding fields to keyMap in %s, or drop the stale BindingEntry rows.", missingInKeyMap, uiKeysPath)
+		t.Errorf("mainBindings(keys.KeyMap) references selectors not on KeyMap: %v\n  → add matching key.Binding fields to KeyMap in %s, or drop the stale BindingEntry rows.", missingInKeyMap, keyMapPath)
 	}
 	if len(duplicateEntries) > 0 {
-		t.Errorf("keyMap.mainBindings() references keyMap fields more than once: %v\n  → each key.Binding field must appear in exactly one BindingEntry row in %s.", duplicateEntries, uiKeysPath)
+		t.Errorf("mainBindings(keys.KeyMap) references KeyMap fields more than once: %v\n  → each key.Binding field must appear in exactly one BindingEntry row in %s.", duplicateEntries, uiKeysPath)
 	}
 }
 
-// extractKeyMapFields parses uiKeysPath and returns the set of field names
-// of `type keyMap struct` whose field type is `key.Binding`. Non-binding
+// extractKeyMapFields parses the file and returns the set of field names
+// of `type KeyMap struct` whose field type is `key.Binding`. Non-binding
 // fields (if any future refactor adds them) are ignored.
 func extractKeyMapFields(t *testing.T, path string) map[string]bool {
 	t.Helper()
@@ -116,7 +169,7 @@ func extractKeyMapFields(t *testing.T, path string) map[string]bool {
 	out := make(map[string]bool)
 	ast.Inspect(file, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
-		if !ok || ts.Name.Name != "keyMap" {
+		if !ok || ts.Name.Name != "KeyMap" {
 			return true
 		}
 		st, ok := ts.Type.(*ast.StructType)
@@ -136,12 +189,12 @@ func extractKeyMapFields(t *testing.T, path string) map[string]bool {
 		return false
 	})
 	if len(out) == 0 {
-		t.Fatalf("no exported key.Binding fields found on type keyMap in %s", path)
+		t.Fatalf("no exported key.Binding fields found on type KeyMap in %s", path)
 	}
 	return out
 }
 
-// extractEntryBindings parses keyMap.mainBindings() and returns a count per
+// extractEntryBindings parses mainBindings(keys.KeyMap) and returns a count per
 // selector name referenced as `Binding: k.<Field>`.
 func extractEntryBindings(t *testing.T, path string) map[string]int {
 	t.Helper()
@@ -149,11 +202,10 @@ func extractEntryBindings(t *testing.T, path string) map[string]int {
 	out := make(map[string]int)
 	ast.Inspect(file, func(n ast.Node) bool {
 		fn, ok := n.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "mainBindings" || fn.Recv == nil || len(fn.Recv.List) != 1 {
+		if !ok || fn.Name.Name != "mainBindings" || fn.Recv != nil || len(fn.Type.Params.List) != 1 {
 			return true
 		}
-		recvName, ok := receiverTypeName(fn.Recv.List[0].Type)
-		if !ok || recvName != "keyMap" {
+		if sel, isSel := fn.Type.Params.List[0].Type.(*ast.SelectorExpr); !isSel || sel.Sel.Name != "KeyMap" {
 			return true
 		}
 		ast.Inspect(fn.Body, func(nn ast.Node) bool {
@@ -161,7 +213,12 @@ func extractEntryBindings(t *testing.T, path string) map[string]int {
 			if !ok || len(ret.Results) != 1 {
 				return true
 			}
-			lit, ok := ret.Results[0].(*ast.CompositeLit)
+			res := ret.Results[0]
+			// The table is returned through keys.Titled(...): read its argument.
+			if call, isCall := res.(*ast.CallExpr); isCall && len(call.Args) == 1 {
+				res = call.Args[0]
+			}
+			lit, ok := res.(*ast.CompositeLit)
 			if !ok {
 				return true
 			}
@@ -181,7 +238,7 @@ func extractEntryBindings(t *testing.T, path string) map[string]int {
 		return false
 	})
 	if len(out) == 0 {
-		t.Fatalf("no `Binding: k.<Field>` selectors found in keyMap.mainBindings() in %s", path)
+		t.Fatalf("no `Binding: k.<Field>` selectors found in mainBindings(keys.KeyMap) in %s", path)
 	}
 	return out
 }
@@ -207,21 +264,6 @@ func isKeyBinding(expr ast.Expr) bool {
 		return false
 	}
 	return ident.Name == "key" && sel.Sel.Name == "Binding"
-}
-
-func receiverTypeName(expr ast.Expr) (string, bool) {
-	switch v := expr.(type) {
-	case *ast.Ident:
-		return v.Name, true
-	case *ast.StarExpr:
-		ident, ok := v.X.(*ast.Ident)
-		if !ok {
-			return "", false
-		}
-		return ident.Name, true
-	default:
-		return "", false
-	}
 }
 
 func extractBindingSelector(entry *ast.CompositeLit) string {

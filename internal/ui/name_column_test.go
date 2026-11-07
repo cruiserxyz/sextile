@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"reflect"
 	"strings"
 	"testing"
@@ -133,7 +134,7 @@ func cellOf(line, sub string) int {
 func TestSlotRowNameColumn(t *testing.T) {
 	birth := time.Date(2001, 2, 3, 4, 5, 0, 0, time.UTC)
 	slots := twoSlots(t, birth, nameColUTC)
-	prefixW := ansi.StringWidth(rowPrefix(false, false, true, true, Config{Accessible: true}))
+	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
 
 	t.Run("short name sets N to its width", func(t *testing.T) {
 		rows := stripRows(slots, "Constructed One", 78)
@@ -240,7 +241,7 @@ func TestSlotRowWidth64(t *testing.T) {
 		}
 	}
 	row := rows[0]
-	prefixW := ansi.StringWidth(rowPrefix(false, false, true, true, Config{Accessible: true}))
+	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
 	if got := cellOf(row, "Tue Jul  3, 2001  6:05 CEST "); got != prefixW+nameColumnMax+2 {
 		t.Fatalf("fixture is not N = 20 with a CEST anchored zone: moment at cell %d in %q", got, row)
 	}

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // The selected set, its numerals and the comparison it drives
@@ -16,28 +17,25 @@ import (
 // cursor's chart is read against (operator 2026-10-24), and the row the cursor
 // arrived on last.
 
-// circledNumerals are ①–⑥, indexed by numeral-1: the Unicode numeral glyphs
-// the operator asked for (P6).
-var circledNumerals = [store.MaxSelectedSlots]string{"①", "②", "③", "④", "⑤", "⑥"}
+var circledNumerals = panel.CircledNumerals
 
-// numeralForColour is a numeral spelled for the current COLOUR mode: ①–⑥ with
-// colours on, `1`–`6` with colours off (C1's tab titles). Out of range spells
-// the plain digits, so a stray numeral can never index out of the table.
-func numeralForColour(n int, cfg Config) string {
-	if n < 1 || n > len(circledNumerals) || !cfg.useColor() {
+// numeralForGlyphs is a numeral spelled for the current GLYPH mode: ①–⑥ in
+// Unicode mode, `1`–`6` in ASCII mode — the existing UseASCII switch that picks
+// ● or `*` (C14's Chart row marker).
+func numeralForGlyphs(n int, cfg Config) string {
+	if n < 1 || n > len(circledNumerals) || cfg.UseASCII() {
 		return fmt.Sprintf("%d", n)
 	}
 	return circledNumerals[n-1]
 }
 
-// numeralForGlyphs is a numeral spelled for the current GLYPH mode: ①–⑥ in
-// Unicode mode, `1`–`6` in ASCII mode — the existing useASCII switch that picks
-// ● or `*` (C14's Chart row marker).
-func numeralForGlyphs(n int, cfg Config) string {
-	if n < 1 || n > len(circledNumerals) || cfg.useASCII() {
-		return fmt.Sprintf("%d", n)
+// numeralMark is the numeral a selected Chart row shows in its marker column,
+// spelled for the glyph mode, or empty for an unselected row (numeral 0).
+func numeralMark(n int, cfg Config) string {
+	if n < 1 {
+		return ""
 	}
-	return circledNumerals[n-1]
+	return numeralForGlyphs(n, cfg)
 }
 
 // pairTabTitle is the Aspects tab for a pair, `<right> in <left>`: `③ in ①`,
@@ -45,7 +43,7 @@ func numeralForGlyphs(n int, cfg Config) string {
 // cursor, the one you read; the left one is the base and supplies the houses
 // and the zodiac.
 func pairTabTitle(left, right int, cfg Config) string {
-	return numeralForColour(right, cfg) + " in " + numeralForColour(left, cfg)
+	return panel.NumeralForColour(right, cfg) + " in " + panel.NumeralForColour(left, cfg)
 }
 
 func (m Model) pairTabTitle(left, right int) string { return pairTabTitle(left, right, m.cfg) }

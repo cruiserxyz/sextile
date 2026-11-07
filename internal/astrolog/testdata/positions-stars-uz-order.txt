@@ -1,0 +1,6 @@
+Astrolog 8.00 chart for Sun Jan  2, 2000  0:00 (ST Zone 0W)   0°00W 52°00N
+Body  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Placidus Houses
+
+Regu: 29Leo26   + 0°00' (-) [10th house] [-] +0.000
+Spic: 23Lib26   + 0°00' (-) [12th house] [-] +0.000
+Anta:  9Sag22   + 0°00' (-) [ 3rd house] [-] +0.000

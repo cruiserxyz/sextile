@@ -2,12 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -38,7 +40,7 @@ func legacyHouseTail(own, compared aspect.House, comparing bool, style astrologs
 			return ""
 		}
 		cells := []rune(strings.Repeat(" ", 18))
-		for i, r := range houseQuadrantStrings[0] {
+		for i, r := range panel.HouseQuadrantStrings[0] {
 			if r == '|' {
 				cells[i] = '|'
 			}
@@ -48,7 +50,7 @@ func legacyHouseTail(own, compared aspect.House, comparing bool, style astrologs
 			if !h.Valid() {
 				return
 			}
-			src := []rune(houseQuadrantStrings[h-1])
+			src := []rune(panel.HouseQuadrantStrings[h-1])
 			start, end := -1, -1
 			for j, r := range src {
 				if r != ' ' && r != '|' {
@@ -73,9 +75,9 @@ func legacyHouseTail(own, compared aspect.House, comparing bool, style astrologs
 			run := string(cells[i:j])
 			switch {
 			case owner[i] == 1 && useColor && strings.TrimSpace(run) != "":
-				run = sgrFaint + run + sgrReset
+				run = term.SGRFaint + run + term.SGRReset
 			case owner[i] == 2 && useColor && strings.TrimSpace(run) != "":
-				run = sgrBold + string(normalWeightSGR(style)) + run + sgrReset
+				run = term.SGRBold + string(panel.NormalWeightSGR(style)) + run + term.SGRReset
 			}
 			b.WriteString(run)
 			i = j
@@ -85,9 +87,9 @@ func legacyHouseTail(own, compared aspect.House, comparing bool, style astrologs
 	if !own.Valid() {
 		return ""
 	}
-	tail := " " + houseQuadrantStrings[own-1]
+	tail := " " + panel.HouseQuadrantStrings[own-1]
 	if useColor {
-		return renderSGR(style, tail)
+		return panel.RenderSGR(style, tail)
 	}
 	return tail
 }
@@ -112,12 +114,12 @@ func TestHouseColumnForms(t *testing.T) {
 		}
 	}
 	// want is the form's column, escapes stripped, without the separating space.
-	want := func(form houseForm, s shape) string {
+	want := func(form panel.HouseForm, s shape) string {
 		pad := func(t string) string { return t + strings.Repeat(" ", 18-len(t)) }
 		num := func(h aspect.House) string { return fmt.Sprint(int(h)) }
 		mark := func(h aspect.House) string { return num(h) + string(letters[h-1]) }
 		switch form {
-		case houseQuadrants:
+		case panel.HouseQuadrants:
 			if !s.comparing {
 				return wantQuadrants[s.own-1]
 			}
@@ -128,13 +130,13 @@ func TestHouseColumnForms(t *testing.T) {
 				}
 			}
 			return string(cells)
-		case houseNumber:
+		case panel.HouseNumber:
 			switch {
 			case !s.comparing:
 				return pad(num(s.own))
 			}
 			return pad(num(s.own) + "  " + num(s.compare))
-		case houseMarked:
+		case panel.HouseMarked:
 			switch {
 			case !s.comparing:
 				return pad(mark(s.own))
@@ -150,7 +152,7 @@ func TestHouseColumnForms(t *testing.T) {
 			for _, s := range shapes(h) {
 				t.Run(fmt.Sprintf("%s/house %d/%s", info.value, h, s.name), func(t *testing.T) {
 					// Colours off: the cells alone.
-					col := houseColumn(form, s.own, s.compare, s.comparing, "", false)
+					col := panel.HouseColumn(form, s.own, s.compare, s.comparing, "", false)
 					if !strings.HasPrefix(col, " ") {
 						t.Fatalf("column %q does not start with the separating space", col)
 					}
@@ -162,19 +164,19 @@ func TestHouseColumnForms(t *testing.T) {
 					}
 
 					// Colours on: weight carries the difference, in the same cells.
-					styled := houseColumn(form, s.own, s.compare, s.comparing, "", true)
+					styled := panel.HouseColumn(form, s.own, s.compare, s.comparing, "", true)
 					if got := astrologstyle.StripSGR(styled); got != col {
 						t.Errorf("colour changed the cells: %q vs %q", got, col)
 					}
-					compact := form == houseNumber || form == houseMarked
+					compact := form == panel.HouseNumber || form == panel.HouseMarked
 					if s.comparing && (s.own != s.compare || compact) {
-						faint, bold := ownRuns(styled, sgrFaint), ownRuns(styled, sgrBold)
+						faint, bold := ownRuns(styled, term.SGRFaint), ownRuns(styled, term.SGRBold)
 						if !strings.Contains(faint, fmt.Sprint(int(s.own))) || !strings.Contains(bold, fmt.Sprint(int(s.compare))) {
 							t.Errorf("own %d should be faint and compared %d bold: faint %q bold %q in %q", s.own, s.compare, faint, bold, styled)
 						}
 					}
 					if s.comparing && s.own == s.compare && !compact {
-						if strings.Contains(styled, sgrFaint) || !strings.Contains(ownRuns(styled, sgrBold), fmt.Sprint(int(s.own))) {
+						if strings.Contains(styled, term.SGRFaint) || !strings.Contains(ownRuns(styled, term.SGRBold), fmt.Sprint(int(s.own))) {
 							t.Errorf("a frame form shows the same house in both once, bold: %q", styled)
 						}
 					}
@@ -187,7 +189,7 @@ func TestHouseColumnForms(t *testing.T) {
 		owner := map[int]aspect.House{}
 		for h := aspect.House(1); h <= 12; h++ {
 			digits := 0
-			for i, r := range quadrantsFrame.of(h) {
+			for i, r := range panel.QuadrantsFrame.Of(h) {
 				if r == ' ' || r == '|' {
 					continue
 				}
@@ -198,14 +200,14 @@ func TestHouseColumnForms(t *testing.T) {
 				owner[i] = h
 			}
 			if digits != len(fmt.Sprint(int(h))) {
-				t.Errorf("house %d draws %d digits in %q", h, digits, quadrantsFrame.of(h))
+				t.Errorf("house %d draws %d digits in %q", h, digits, panel.QuadrantsFrame.Of(h))
 			}
 		}
 	})
 
 	t.Run("marked letters for all twelve", func(t *testing.T) {
 		for h := aspect.House(1); h <= 12; h++ {
-			if got, want := strings.TrimSpace(houseColumn(houseMarked, h, 0, false, "", false)), fmt.Sprint(int(h))+string(letters[h-1]); got != want {
+			if got, want := strings.TrimSpace(panel.HouseColumn(panel.HouseMarked, h, 0, false, "", false)), fmt.Sprint(int(h))+string(letters[h-1]); got != want {
 				t.Errorf("house %d marked = %q, want %q", h, got, want)
 			}
 		}
@@ -214,11 +216,11 @@ func TestHouseColumnForms(t *testing.T) {
 	t.Run("no house, no column", func(t *testing.T) {
 		for _, form := range houseForms {
 			for _, comparing := range []bool{false, true} {
-				if got := houseColumn(form.form, 0, 0, comparing, "", true); got != "" {
+				if got := panel.HouseColumn(form.form, 0, 0, comparing, "", true); got != "" {
 					t.Errorf("%s with no house (comparing %v) = %q, want nothing", form.value, comparing, got)
 				}
 			}
-			if got := houseColumn(form.form, 13, 0, false, "", false); got != "" {
+			if got := panel.HouseColumn(form.form, 13, 0, false, "", false); got != "" {
 				t.Errorf("%s with house 13 = %q, want nothing", form.value, got)
 			}
 		}
@@ -226,10 +228,10 @@ func TestHouseColumnForms(t *testing.T) {
 
 	t.Run("a compared house alone, or an own house alone, is still shown", func(t *testing.T) {
 		for _, form := range houseForms {
-			if got := ansi.Strip(houseColumn(form.form, 0, 7, true, "", false)); !strings.Contains(got, "7") {
+			if got := ansi.Strip(panel.HouseColumn(form.form, 0, 7, true, "", false)); !strings.Contains(got, "7") {
 				t.Errorf("%s: compared 7 with no own house = %q", form.value, got)
 			}
-			if got := ansi.Strip(houseColumn(form.form, 7, 0, true, "", false)); !strings.Contains(got, "7") {
+			if got := ansi.Strip(panel.HouseColumn(form.form, 7, 0, true, "", false)); !strings.Contains(got, "7") {
 				t.Errorf("%s: own 7 with no compared house = %q", form.value, got)
 			}
 		}
@@ -242,7 +244,7 @@ func TestHouseColumnForms(t *testing.T) {
 				for _, comparing := range []bool{false, true} {
 					for _, color := range []bool{false, true} {
 						for _, style := range styles {
-							got := houseColumn(houseAngularity, own, cmp, comparing, style, color)
+							got := panel.HouseColumn(panel.HouseAngularity, own, cmp, comparing, style, color)
 							if want := legacyHouseTail(own, cmp, comparing, style, color); got != want {
 								t.Fatalf("own %d compared %d comparing %v colour %v style %q:\n got %q\nwant %q", own, cmp, comparing, color, style, got, want)
 							}
@@ -263,7 +265,7 @@ func ownRuns(s, sgr string) string {
 			return out.String()
 		}
 		s = s[i+len(sgr):]
-		j := strings.Index(s, sgrReset)
+		j := strings.Index(s, term.SGRReset)
 		if j < 0 {
 			return out.String() + s
 		}

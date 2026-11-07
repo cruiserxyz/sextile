@@ -1,0 +1,23 @@
+Astrolog 8.00 chart for Sat Jan  1, 2000 12:00 (ST Zone 0W)   0:00W  0:00N
+Body  Locat. Ret. Lati. Rul.      House  Rul. Veloc.    Placidus Houses
+
+Sun : 10Cap22   + 0:00' (-) [10th house] [-] +1.034  -  House cusp  1: 11Ari22
+Pall: 14Leo02 R -48:21' (d) [ 5th house] [d] -0.916  -  House cusp  2: 12Tau54
+Asce: 11Ari22   + 0:00'     [ 1st house]     +1.083  -  House cusp  3: 11Gem57
+Midh:  9Cap36   + 0:00'     [10th house]     +0.922  -  House cusp  4:  9Can36
+Tita:  0Ari00   + 0:00' (-) [12th house] [-] +0.000  -  House cusp  5:  8Leo02
+Tita:  0Ari00   + 0:00' (-) [12th house] [-] +0.000  -  House cusp  6:  8Vir50
+                                                     -  House cusp  7: 11Lib22
+                                                     -  House cusp  8: 12Sco54
+                                                     -  House cusp  9: 11Sag57
+                                                     -  House cusp 10:  9Cap36
+                                                     -  House cusp 11:  8Aqu02
+                                                     -  House cusp 12:  8Pis50
+                                                   
+                                                        Car Fix Mut TOT   +: 4
+                                                     Fir  3   1   0   4   -: 2
+                                                     Ear  2   0   0   2   M: 3
+                                                     Air  0   0   0   0   N: 1
+                                                     Wat  0   0   0   0   A: 3
+                                                     TOT  5   1   0   6   D: 1
+                                                                          <: 4

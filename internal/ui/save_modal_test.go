@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,11 +181,11 @@ func TestSavePromptStaysOpenOnRefusal(t *testing.T) {
 	if m.save.typedName() != "Test  Person" {
 		t.Errorf("the typed name became %q, want it kept as typed", m.save.typedName())
 	}
-	if m.save.refusal == "" {
+	if m.save.Refusal == "" {
 		t.Fatal("the prompt shows no refusal")
 	}
-	if !strings.Contains(m.save.refusal, "test-person") {
-		t.Errorf("the refusal %q does not name what it collided with", m.save.refusal)
+	if !strings.Contains(m.save.Refusal, "test-person") {
+		t.Errorf("the refusal %q does not name what it collided with", m.save.Refusal)
 	}
 	// And the frame actually shows it.
 	if !strings.Contains(m.View(), "is taken") {
@@ -227,8 +228,8 @@ func countArgvLines(m Model) int {
 // C13: the binding table declares the save as exactly one help-visible entry
 // claiming ctrl+s, and the rendered help modal names it.
 func TestSaveChartBindingIsDeclaredAndInHelp(t *testing.T) {
-	var claiming []BindingEntry
-	for _, e := range defaultKeys().mainBindings() {
+	var claiming []keys.BindingEntry
+	for _, e := range mainBindings(keys.DefaultKeys()) {
 		for _, k := range e.Binding.Keys() {
 			if k == "ctrl+s" {
 				claiming = append(claiming, e)
@@ -238,7 +239,7 @@ func TestSaveChartBindingIsDeclaredAndInHelp(t *testing.T) {
 	if len(claiming) != 1 {
 		t.Fatalf("%d entries claim ctrl+s, want exactly 1", len(claiming))
 	}
-	if claiming[0].ID != BindingSaveChart {
+	if claiming[0].ID != keys.BindingSaveChart {
 		t.Errorf("ctrl+s is claimed by binding %v, want BindingSaveChart", claiming[0].ID)
 	}
 	if !claiming[0].Help {
@@ -272,7 +273,7 @@ func TestSavePromptRefusesAnEmptySlug(t *testing.T) {
 	if m.startup != startupSaveOpen {
 		t.Fatalf("startup = %q, want the prompt still open", m.startup)
 	}
-	if m.save.refusal == "" {
+	if m.save.Refusal == "" {
 		t.Error("the prompt shows no refusal for a name with nothing to slugify")
 	}
 	entries, err := os.ReadDir(chartsDirOf(t))
@@ -395,7 +396,7 @@ func TestSavePromptSanitisesAPastedNewline(t *testing.T) {
 	// And it saves, rather than being refused for something the prompt let in.
 	m = runSaveFrom(t, m)
 	if m.startup == startupSaveOpen {
-		t.Errorf("the sanitised name was refused: %q", m.save.refusal)
+		t.Errorf("the sanitised name was refused: %q", m.save.Refusal)
 	}
 }
 
@@ -443,11 +444,11 @@ func TestSavedChartAnchorsThroughThePicker(t *testing.T) {
 	if m.picker.loadErr != nil {
 		t.Fatalf("library load failed: %v", m.picker.loadErr)
 	}
-	if len(m.picker.matches) != 1 {
+	if len(m.picker.Matches) != 1 {
 		t.Fatalf("picker shows %d rows, want exactly the 1 just saved (drops: %+v)",
-			len(m.picker.matches), m.picker.drops)
+			len(m.picker.Matches), m.picker.drops)
 	}
-	if got := m.picker.matches[0].ID; got != "anchor-me" {
+	if got := m.picker.Matches[0].ID; got != "anchor-me" {
 		t.Fatalf("the listed row is %q, want %q", got, "anchor-me")
 	}
 
@@ -510,9 +511,9 @@ func TestSavedChartAnchorsAtAFormerlyPoisonedCity(t *testing.T) {
 	}
 	tm, _ = m.Update(cmd())
 	m = tm.(Model)
-	if len(m.picker.matches) != 1 {
+	if len(m.picker.Matches) != 1 {
 		t.Fatalf("picker shows %d rows, want the 1 just saved (drops: %+v)",
-			len(m.picker.matches), m.picker.drops)
+			len(m.picker.Matches), m.picker.drops)
 	}
 
 	tm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})

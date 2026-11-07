@@ -18,12 +18,16 @@ func TestPumpWaitsOutAbandonedCommands(t *testing.T) {
 	var finished atomic.Bool
 	// A long timer: since pump waits for any other slow work
 	// (pump_load_test.go), a long timer is what it still abandons.
-	slow := longTimer(600*time.Millisecond, func(time.Time) tea.Msg {
+	timer := longTimer(600*time.Millisecond, func(time.Time) tea.Msg { return nil })
+	// An abandoned long timer now ends at once without its message, so the
+	// flag is set when the command RETURNS, not when its timer fires.
+	slow := func() tea.Msg {
+		msg := timer()
 		finished.Store(true)
-		return nil
-	})
+		return msg
+	}
 	t.Run("abandons", func(t *testing.T) {
-		m := NewModelWithClock(Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)))
+		m := newTestModel(t, Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)))
 		pump(t, m, slow)
 		if finished.Load() {
 			t.Fatal("fixture: the command finished inside pump's deadline; it must outlast it")
@@ -42,7 +46,7 @@ func TestPumpPatientAppliesSlowCommands(t *testing.T) {
 		return tea.WindowSizeMsg{Width: 99, Height: 33}
 	})
 	fresh := func() Model {
-		return NewModelWithClock(Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)))
+		return newTestModel(t, Config{Color: ColorNever}, FrozenClock(time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)))
 	}
 	if m := pump(t, fresh(), slow); m.width == 99 {
 		t.Fatal("fixture: pump applied a command slower than its deadline")

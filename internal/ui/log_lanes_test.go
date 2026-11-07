@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -94,7 +96,7 @@ func drawnAs(lines []string) []string {
 	out := make([]string, len(lines))
 	for i, l := range lines {
 		if strings.HasPrefix(l, "error") {
-			l = errorLinePrefix + l
+			l = term.ErrorLinePrefix + l
 		}
 		// An argv line is drawn in its short form (argv_display.go).
 		if strings.HasPrefix(l, "argv") {
@@ -179,13 +181,13 @@ func TestEveryLogLineHasALane(t *testing.T) {
 	}
 	for _, site := range callSites(t, "appendLog") {
 		switch site.enclosing {
-		case "logNote", "logError", "logErrorLine", "logCommands", "logWarnings", "logWheelOpen", "logWheelClosed", "setNowLine":
+		case "logNote", "logTrace", "logError", "logErrorLine", "logCommands", "logWarnings", "logWheelOpen", "logWheelClosed", "setNowLine", "logEphemeris":
 		default:
 			t.Errorf("appendLog is called from %s (%s), which is not a writer verb", site.enclosing, site.file)
 		}
 	}
 
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	m = m.testNote("wheel: %v", errors.New("this text looks like an error but was written as a note"))
 	m = m.testError("copy failed: %v", errors.New("no clipboard"))
 	m = m.logCommands([]string{"active city: this text looks like a note but was written as a command"})
@@ -211,14 +213,14 @@ func TestCommittedFrameLogsItsCommands(t *testing.T) {
 	var tm tea.Model = m
 	tm, _ = tm.Update(FirstFrameReadyMsg{
 		RunID: st.runningRunID, WantID: st.wantID,
-		Positions: []aspect.Position{{Body: aspect.Sun}}, TransitTime: m.targetFloatingTime,
+		Positions: []aspect.Position{{Object: objSun}}, TransitTime: m.targetFloatingTime,
 		Commands: commands,
 	})
 	m = tm.(Model)
 	if len(m.chart.positions) != 1 {
 		t.Fatal("the frame did not commit")
 	}
-	if got := m.logLines[before:]; len(got) != 2 || got[0] != (logLine{laneArgv, commands[0]}) || got[1] != (logLine{laneArgv, commands[1]}) {
+	if got := m.logLines[before:]; len(got) != 2 || got[0] != (logLine{lane: laneArgv, text: commands[0]}) || got[1] != (logLine{lane: laneArgv, text: commands[1]}) {
 		t.Errorf("appended %+v, want the two commands on the argv lane in carried order", got)
 	}
 }
@@ -319,7 +321,7 @@ func TestErrorFrameStillLogsItsCommands(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("appended %+v, want the command and the error", got)
 	}
-	if got[0] != (logLine{laneArgv, "the spawn that failed"}) {
+	if got[0] != (logLine{lane: laneArgv, text: "the spawn that failed", failed: true}) {
 		t.Errorf("first line = %+v, want the failed command on the argv lane", got[0])
 	}
 	// The text is the sentence an earlier change writes, not the wrapped cause: the cause
@@ -348,7 +350,7 @@ func TestDetailsCommitLogsItsCommand(t *testing.T) {
 				err:     tc.err,
 			})
 			got := m.logLines[before:]
-			if len(got) == 0 || got[0] != (logLine{laneArgv, "the report spawn"}) {
+			if len(got) == 0 || got[0] != (logLine{lane: laneArgv, text: "the report spawn", failed: tc.err != nil}) {
 				t.Fatalf("appended %+v, want the report's command first", got)
 			}
 			if tc.err == nil && len(got) != 1 {
@@ -441,7 +443,7 @@ func TestSixRowLogHidesArgv(t *testing.T) {
 // in arrival order, together with every note; while open it renders that
 // snapshot. an earlier change added the notes: they had no surface at 80x24 at all.
 func TestConsoleShowsEveryLane(t *testing.T) {
-	m, _ := press(t, mixedLogModel(t), ",", "l")
+	m, _ := press(t, mixedLogModel(t), ",", "l", "l")
 	want := []string{
 		"note one", "argv one", "error one", "note two",
 		"argv two", "argv three", "error two", "note three",
@@ -469,7 +471,7 @@ func TestConsoleShowsEveryLane(t *testing.T) {
 
 // C9: the MaxLogLines cap applies to argv lines alone.
 func TestOnlyArgvLinesAreCapped(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	m = m.testNote("note before")
 	m = m.testError("error before")
 	for i := 0; i < MaxLogLines+50; i++ {
@@ -494,7 +496,7 @@ func TestOnlyArgvLinesAreCapped(t *testing.T) {
 // C10: error and note lines survive for the life of the process, however
 // many argv lines arrive.
 func TestErrorsAndNotesAreNeverEvicted(t *testing.T) {
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime()))
 	for i := 0; i < 3; i++ {
 		m = m.testNote("note %d", i)
 		m = m.testError("error %d", i)
@@ -527,7 +529,7 @@ func TestErrorLaneMembership(t *testing.T) {
 		"Couldn't draw the wheel. %s":                                            1, // render failure, refresh.go
 		"Couldn't show the wheel. %s":                                            1, // publish failure, refresh.go
 		"Couldn't read the full report. %s":                                      1,
-		"Couldn't copy that line to the clipboard.":                              1,
+		"Couldn't copy that line to the clipboard.":                              2, // the console's Enter and the focused Log's
 		"Couldn't cast the chart. %s":                                            1,
 		"Couldn't cast %s. %s":                                                   1,
 		"Couldn't open that chart. %s":                                           1, // requirement C15: a picked chart's resolve failed
@@ -559,8 +561,14 @@ func TestErrorLaneMembership(t *testing.T) {
 		// A body template tab's facts (the specification P5).
 		"Couldn't compute the %s tab. %s":                   1,
 		"Couldn't copy the Details panel to the clipboard.": 1,
+		// `,y` on the Log, the console and each main panel names the panel.
+		"Couldn't copy the Log to the clipboard.":           1,
+		"Couldn't copy the Log console to the clipboard.":   1,
+		"Couldn't copy the Chart panel to the clipboard.":   1,
+		"Couldn't copy the Bodies panel to the clipboard.":  1,
+		"Couldn't copy the Aspects panel to the clipboard.": 1,
 		// Save as and opening a named session save the session the window ran
-		// first; a failure of that write is said (sessions_popup.go).
+		// first; a failure of that write is said (sessions_popup_model.go).
 		"Couldn't save the session this window ran. Its file could not be written.": 2,
 	}
 	got := map[string]int{}
@@ -608,7 +616,7 @@ func TestErrorLaneMembership(t *testing.T) {
 type consoleFrame struct {
 	cursor  int
 	rows    []string
-	view    viewport
+	view    pane.Viewport
 	snapped []string
 }
 
@@ -638,7 +646,7 @@ func TestConsoleSnapshotIsInert(t *testing.T) {
 		t.Errorf("the open console changed:\n before %+v\n  after %+v", before, got)
 	}
 
-	m, _ = press(t, m, "esc", ",", "l")
+	m, _ = press(t, m, "esc", "l")
 	fresh := snapshotTexts(m)
 	if len(fresh) != MaxLogLines+2 {
 		t.Fatalf("reopened over %d lines, want %d argv + 1 note + 1 error", len(fresh), MaxLogLines+2)
@@ -665,7 +673,7 @@ func TestConsoleCursorAddressesSnapshot(t *testing.T) {
 	m = m.testNote("note 2")
 	m = m.logCommands([]string{"argv C"})
 	m = m.testNote("note 3")
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	want := []string{"note 0", "argv A", "note 1", "error B", "note 2", "argv C", "note 3"}
 	if got := snapshotTexts(m); !reflect.DeepEqual(got, want) {
 		t.Fatalf("snapshot = %q, want %q", got, want)
@@ -715,7 +723,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		}
 		return m
 	}
-	m, _ := press(t, build(), ",", "l")
+	m, _ := press(t, build(), ",", "l", "l")
 	if len(m.console.snapshot) != 20 || len(m.logLines) != 20 {
 		t.Fatalf("snapshot %d over buffer %d, want 20 over 20", len(m.console.snapshot), len(m.logLines))
 	}
@@ -723,7 +731,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		t.Errorf("opened on %d, want 19 (the newest snapshot line)", m.console.cursor)
 	}
 	for _, k := range []string{"up", "k"} {
-		m, _ = press(t, build(), ",", "l")
+		m, _ = press(t, build(), ",", "l", "l")
 		m, _ = press(t, m, k)
 		if m.console.cursor != 18 {
 			t.Errorf("%s moved to %d, want 18", k, m.console.cursor)
@@ -736,7 +744,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		}
 	}
 	for _, k := range []string{"down", "j"} {
-		m, _ = press(t, build(), ",", "l")
+		m, _ = press(t, build(), ",", "l", "l")
 		m, _ = press(t, m, "up", "up", "up")
 		m, _ = press(t, m, k)
 		if m.console.cursor != 17 {
@@ -759,7 +767,7 @@ func TestConsoleWindowFollowsCursorFiltered(t *testing.T) {
 		m = m.testNote("note %d", i)
 		m = m.logCommands([]string{fmt.Sprintf("argv %d", i)})
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	innerH := m.consoleInnerHeight()
 	check := func(where string) {
 		t.Helper()
@@ -802,7 +810,7 @@ func TestYankCopiesWholeCommand(t *testing.T) {
 	m = m.testError("error between")
 	m = m.logCommands([]string{long})
 	m = m.testNote("note after")
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	// The newest snapshot line is `note after` since an earlier change admitted the note
 	// lane, so step up onto the command. That the step is needed at all is the
 	// console carrying notes, which is the point of that ticket.
@@ -835,12 +843,12 @@ func TestYankCopiesErrorLine(t *testing.T) {
 		m = m.logCommands([]string{"argv before"})
 		m = m.testError("details: astrolog exited 1: %s", strings.Repeat("a long explanation ", 8))
 		want := m.logLines[len(m.logLines)-1].text
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		m, _ = press(t, m, "enter")
 		if *last != want {
 			t.Errorf("%+v: copied %q, want the stored error %q", cfg, *last, want)
 		}
-		for _, chrome := range []string{"|", "+", "\x1b", errorLinePrefix} {
+		for _, chrome := range []string{"|", "+", "\x1b", term.ErrorLinePrefix} {
 			if strings.Contains(*last, chrome) {
 				t.Errorf("%+v: the copied error carries %q", cfg, chrome)
 			}
@@ -865,13 +873,13 @@ func TestConsoleEmptyFilteredList(t *testing.T) {
 	if len(m.logLines) != 0 {
 		t.Fatalf("the fixture starts with %d lines, want an empty buffer", len(m.logLines))
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open || len(m.console.snapshot) != 0 {
 		t.Fatalf("open=%v snapshot=%d, want an open console over an empty snapshot", m.console.open, len(m.console.snapshot))
 	}
 	assertEmpty := func(where string) {
 		t.Helper()
-		if v := consoleViewport(len(m.console.snapshot), m.console, m.consoleInnerHeight()); v.overflows() {
+		if v := consoleViewport(len(m.console.snapshot), m.console, m.consoleInnerHeight()); v.Overflows() {
 			t.Errorf("%s: an empty snapshot drew an indicator", where)
 		}
 		for i, row := range consoleBodyLines(t, m) {
@@ -889,7 +897,7 @@ func TestConsoleEmptyFilteredList(t *testing.T) {
 	m = m.testError("an error arriving while open")
 	assertEmpty("after arrivals")
 
-	m, _ = press(t, m, "esc", ",", "l")
+	m, _ = press(t, m, "esc", "l")
 	if got := snapshotTexts(m); !reflect.DeepEqual(got, []string{"a command arriving while open", "an error arriving while open"}) {
 		t.Errorf("reopened snapshot = %q", got)
 	}
@@ -899,7 +907,7 @@ func TestConsoleEmptyFilteredList(t *testing.T) {
 func TestCommitWithNoCommandsLogsNothing(t *testing.T) {
 	m := textModel(t)
 	before := len(m.logLines)
-	m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: []aspect.Position{{Body: aspect.Sun}}, TransitTime: m.targetFloatingTime})
+	m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: []aspect.Position{{Object: objSun}}, TransitTime: m.targetFloatingTime})
 	if len(m.logLines) != before {
 		t.Errorf("a frame with no commands wrote %+v", m.logLines[before:])
 	}
@@ -961,7 +969,7 @@ func TestErrorAppearsInBothViewsOnce(t *testing.T) {
 	if n := count(m.logPanelLines()); n != 1 {
 		t.Errorf("the 6-row Log holds the error %d times, want once", n)
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if n := count(snapshotTexts(m)); n != 1 {
 		t.Errorf("the console snapshot holds the error %d times, want once", n)
 	}
@@ -1013,7 +1021,7 @@ func TestANoteIsReachableAtTheSmallerWidth(t *testing.T) {
 		t.Fatalf("the note is already on the ordinary frame:\n%s", ordinary)
 	}
 
-	opened, _ := press(t, m, ",", "l")
+	opened, _ := press(t, m, ",", "l", "l")
 	if !opened.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -1035,7 +1043,7 @@ func checkErrorLineMembership(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("logErrorLine is called from %v, want exactly %v", got, want)
 	}
-	m := NewModelWithClock(Config{}, FrozenClock(testFrozenTime())).logErrorLine("default city not saved: x")
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime())).logErrorLine("default city not saved: x")
 	if l := lastLine(m); l.lane != laneError || l.text != "default city not saved: x" {
 		t.Errorf("line = %q on lane %d, want the text as given on the error lane", l.text, l.lane)
 	}

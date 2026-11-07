@@ -18,7 +18,7 @@ import (
 // file put there meanwhile is never replaced. No source is ever modified or
 // removed: the old folder is left exactly as it was.
 
-// MigrationResult is what MigrateLegacyState did, for one Log line.
+// MigrationResult is what MigrateLegacyState did, for one line in the large log.
 type MigrationResult struct {
 	Copied  []string // what was copied, in the operator's words
 	Already []string // what was not copied because its new place already held a file
@@ -30,9 +30,9 @@ func (r MigrationResult) Empty() bool {
 	return len(r.Copied) == 0 && len(r.Already) == 0 && len(r.Refused) == 0
 }
 
-// Line is the one Log line for r. It is "" unless something was copied or
+// Line is the one large-log line for r. It is "" unless something was copied or
 // refused: the sources are never removed, so every later launch finds them
-// already there, and saying so each time would bury the Log.
+// already there, and saying so each time would bury the large log.
 func (r MigrationResult) Line() string {
 	if len(r.Copied) == 0 && len(r.Refused) == 0 {
 		return ""

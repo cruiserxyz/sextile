@@ -28,6 +28,7 @@ func manyTimelineRows(t *testing.T, n int) []lookup.TimelineRow {
 // a height that gives the list a window well short of n.
 func pagedTimeline(t *testing.T, n int) Model {
 	t.Helper()
+	freshModels(t)
 	rows := manyTimelineRows(t, n)
 	stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
 		return lookup.TimelineResult{Rows: rows, Commands: []string{"astrolog -dm"}}, nil
@@ -182,6 +183,10 @@ func TestWaitingTimelineIgnoresPageKeys(t *testing.T) {
 	stubTextCompute(t)
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	m, _ = nextMonth(m)
+	// nextMonth applies the commit without an Update; the Update that delivers it
+	// in the program also arms the loading overlay's timer, so the test does that
+	// part here and the keys below are judged on their own.
+	m, _ = m.syncLoading()
 	if !m.detailsTabWaiting(TabDetailsTimeline) || !m.details.attached {
 		t.Fatalf("fixture: waiting=%v attached=%v", m.detailsTabWaiting(TabDetailsTimeline), m.details.attached)
 	}
@@ -203,6 +208,7 @@ func TestWaitingTimelineIgnoresPageKeys(t *testing.T) {
 	long := pagedTimeline(t, 100)
 	long.details.cursor, long.details.rowOffset = 7, 3
 	long.timeline.complete = false
+	long, _ = long.syncLoading() // as above: the Update that started this wait arms the overlay's timer
 	if !long.detailsRowKeysBlocked() || len(long.timelineShown()) != 100 {
 		t.Fatalf("fixture: blocked=%v shown=%d, want a waiting tab that still lists its rows", long.detailsRowKeysBlocked(), len(long.timelineShown()))
 	}

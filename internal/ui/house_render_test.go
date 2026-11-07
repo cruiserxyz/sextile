@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -17,13 +18,13 @@ import (
 // (Slice B1) shows which house — and which zodiac quadrant — the body occupies.
 func TestFormatPositionRow_IncludesHouseQuadrant(t *testing.T) {
 	p := aspect.Position{
-		Body:      aspect.Moon,
+		Object:    objMoon,
 		Longitude: 194.05, // 14Lib03 — same in Dubai and Berlin (geocentric)
 		House:     aspect.House(8),
 	}
 	row := formatPositionRow(p, false)
-	if !strings.Contains(row, houseQuadrant(8)) {
-		t.Errorf("row %q missing the house-8 quadrant frame %q", row, houseQuadrant(8))
+	if !strings.Contains(row, panel.HouseQuadrant(8)) {
+		t.Errorf("row %q missing the house-8 quadrant frame %q", row, panel.HouseQuadrant(8))
 	}
 	if !strings.Contains(row, "Lib") {
 		t.Errorf("row %q missing 'Lib' sign", row)
@@ -34,8 +35,8 @@ func TestFormatPositionRow_IncludesHouseQuadrant(t *testing.T) {
 // visibly different rendered row — the user-facing guarantee that switching
 // cities updates the bodies view.
 func TestFormatPositionRow_DiffersByHouseAcrossCities(t *testing.T) {
-	dubai := aspect.Position{Body: aspect.Moon, Longitude: 194.05, House: aspect.House(1)}
-	berlin := aspect.Position{Body: aspect.Moon, Longitude: 194.05, House: aspect.House(2)}
+	dubai := aspect.Position{Object: objMoon, Longitude: 194.05, House: aspect.House(1)}
+	berlin := aspect.Position{Object: objMoon, Longitude: 194.05, House: aspect.House(2)}
 	if formatPositionRow(dubai, false) == formatPositionRow(berlin, false) {
 		t.Errorf("rows must differ — same body/longitude, different house")
 	}
@@ -44,7 +45,7 @@ func TestFormatPositionRow_DiffersByHouseAcrossCities(t *testing.T) {
 // House.Valid() returns false for House(0); rows without house data render with
 // no quadrant frame so synthetic positions that omit houses stay clean.
 func TestFormatPositionRow_NoHouseSegmentWhenZero(t *testing.T) {
-	p := aspect.Position{Body: aspect.Sun, Longitude: 35.5, House: aspect.House(0)}
+	p := aspect.Position{Object: objSun, Longitude: 35.5, House: aspect.House(0)}
 	row := formatPositionRow(p, false)
 	if strings.Contains(row, "|") {
 		t.Errorf("row %q should not contain a quadrant frame when House is zero", row)
@@ -55,7 +56,7 @@ func TestFormatPositionRow_NoHouseSegmentWhenZero(t *testing.T) {
 // the house number, and out-of-range houses render empty.
 func TestHouseQuadrant_AllTwelve(t *testing.T) {
 	for h := aspect.House(1); h <= 12; h++ {
-		got := houseQuadrant(h)
+		got := panel.HouseQuadrant(h)
 		if len([]rune(got)) != 18 {
 			t.Errorf("houseQuadrant(%d) width = %d, want 18 (%q)", h, len([]rune(got)), got)
 		}
@@ -63,10 +64,10 @@ func TestHouseQuadrant_AllTwelve(t *testing.T) {
 			t.Errorf("houseQuadrant(%d) = %q, missing the house number", h, got)
 		}
 	}
-	if got := houseQuadrant(0); got != "" {
+	if got := panel.HouseQuadrant(0); got != "" {
 		t.Errorf("houseQuadrant(0) = %q, want empty", got)
 	}
-	if got := houseQuadrant(13); got != "" {
+	if got := panel.HouseQuadrant(13); got != "" {
 		t.Errorf("houseQuadrant(13) = %q, want empty", got)
 	}
 }

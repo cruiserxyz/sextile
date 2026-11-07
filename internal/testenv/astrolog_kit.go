@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
@@ -29,7 +30,7 @@ type Place struct{ Lon, Lat float64 }
 // UT, the form every pair report took before the clock pins, and returns
 // Astrolog's report and parsed cross aspects.
 func UTTransitCross(ctx context.Context, natal time.Time, natalAt Place, transit time.Time, transitAt Place,
-	houses recipe.HouseSystem, zodiac recipe.Zodiac, objects recipe.ObjectPolicy, aspects recipe.AspectPolicy) (string, []aspect.CrossAspect, error) {
+	houses recipe.HouseSystem, zodiac recipe.Zodiac, objects recipe.ObjectPolicy, aspects recipe.AspectPolicy, registry aspect.Registry) (string, []aspect.CrossAspect, error) {
 	spec, err := recipe.NewChartSpec(recipe.Comparison{
 		Primary:   recipe.MomentAtPlace{JD: JD(natal), Lon: natalAt.Lon, Lat: natalAt.Lat},
 		Secondary: recipe.MomentAtPlace{JD: JD(transit), Lon: transitAt.Lon, Lat: transitAt.Lat},
@@ -39,9 +40,35 @@ func UTTransitCross(ctx context.Context, natal time.Time, natalAt Place, transit
 		return "", nil, err
 	}
 	spec.Aspects = aspects
+	spec.Registry = registry
 	out, err := astrolog.ComputeCrossAspects(ctx, spec)
 	if err != nil {
 		return "", nil, err
 	}
 	return out.Report, out.Aspects, nil
 }
+
+var (
+	hostDefaultOnce sync.Once
+	hostDefault     astrolog.Availability
+)
+
+// HostDefault is the availability a started app holds before it casts anything
+// (the startup probe has answered): the host's own default object set, read
+// once from the binary (`astrolog -HO`), and no absent object. The compiler has
+// no other baseline (slice 8c), so a test that compiles a chart installs this
+// first, in its TestMain and again after anything that resets the availability.
+// With no Astrolog on PATH it is the thirteen objects the shipped binary lists
+// (the classical ten, the North Node, the Ascendant, the Midheaven).
+func HostDefault() astrolog.Availability {
+	hostDefaultOnce.Do(func() {
+		hostDefault = astrolog.Availability{Default: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 31}}
+		if sets, err := astrolog.ReadDefaultSets(context.Background()); err == nil && len(sets.Main) > 0 {
+			hostDefault.Default = sets.Main
+		}
+	})
+	return hostDefault
+}
+
+// InstallHostDefault installs HostDefault for the compiler.
+func InstallHostDefault() { astrolog.SetAvailability(HostDefault()) }

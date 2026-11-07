@@ -356,7 +356,9 @@ func loadNamedSession(file string) (Session, string, []byte, error) {
 	if err != nil || !ok || s.DroppedFrames > 0 {
 		return Session{}, "", nil, ErrSessionUnreadable
 	}
-	if formatNamedSession(sessionName(string(b)), s) != string(b) {
+	// The compare is made at the generation the file declares: a 0.1.2 file
+	// (generation 3) still opens, and a save of it writes sessionVersion.
+	if withSessionName(formatSessionAt(s.Version, s), sessionName(string(b))) != string(b) {
 		return Session{}, "", nil, ErrSessionUnknownContent
 	}
 	for _, sl := range s.Slots {

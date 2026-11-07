@@ -14,6 +14,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
 // the specification. Every test drives Model.Update with the
@@ -106,7 +107,7 @@ func TestCantStartEphemeris(t *testing.T) {
 	wrapped := csEphemerisErr()
 	cases := map[string]func(m Model) tea.Msg{
 		"columns (text commit)": func(m Model) tea.Msg {
-			return refreshResultMsg{surface: surfaceText, payload: textPayload{msg: FirstFrameReadyMsg{Columns: []bodyColumn{{label: "Berlin", err: wrapped}}}}}
+			return refreshResultMsg{surface: surfaceText, payload: textPayload{msg: FirstFrameReadyMsg{Columns: []panel.BodyColumn{{Label: "Berlin", Err: wrapped}}}}}
 		},
 		"chart cast (text commit)": func(m Model) tea.Msg { return csEphemerisMsg() },
 		"wheel render": func(m Model) tea.Msg {
@@ -114,7 +115,7 @@ func TestCantStartEphemeris(t *testing.T) {
 		},
 		"full report": func(m Model) tea.Msg {
 			st := m.refresh[surfaceDetails]
-			return refreshResultMsg{surface: surfaceDetails, runID: st.runningRunID, wantID: st.wantID, err: wrapped, payload: detailsPayload{}}
+			return refreshResultMsg{surface: surfaceDetails, runID: st.runningRunID, wantID: st.wantID, err: wrapped, payload: detailsPayload{key: keyNow(m)}}
 		},
 		"timeline search": func(m Model) tea.Msg {
 			st := m.refresh[surfaceTimeline]
@@ -217,7 +218,7 @@ func TestCantStartNotForOneBody(t *testing.T) {
 	}
 	var note bool
 	for _, l := range m.logLines[before:] {
-		if strings.Contains(l.text, "your Astrolog has no ephemeris for Eris — not drawn") {
+		if strings.Contains(l.text, "Eris can't be drawn: no ephemeris data") {
 			note = true
 		}
 	}

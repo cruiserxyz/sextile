@@ -2,6 +2,7 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 )
 
 // replayBurst resolves a burst of typed runes one key at a time, through the
@@ -50,7 +51,7 @@ func (m Model) quitsOn(msg tea.KeyMsg) bool {
 	if m.leaderKey != "" && msg.String() == m.leaderKey {
 		return false
 	}
-	return matchBinding(msg, m.available(m.keys.mainBindings())) == BindingQuit
+	return keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys))) == keys.BindingQuit
 }
 
 // isBurst reports whether msg is several typed runes read at once. Only a

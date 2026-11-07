@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestMinuteStepMovesTargetOneMinute(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+			m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 			{
 				updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 				m = updated.(Model)
@@ -67,7 +68,7 @@ func TestMinuteStepActsWhenFloatingNotFocused(t *testing.T) {
 
 	for _, k := range []rune{'m', 'M'} {
 		t.Run(string(k), func(t *testing.T) {
-			m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+			m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
 			{
 				updated, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
 				m = updated.(Model)
@@ -121,7 +122,7 @@ func TestMinuteStepCrossesTheDSTGap(t *testing.T) {
 		t.Fatalf("precondition: 01:59 should be CET (+1h), got %s (%ds)", name, off)
 	}
 
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(start))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(start))
 	slots, err := store.NewSlots(start, testPlaceBerlin())
 	if err != nil {
 		t.Fatalf("NewSlots: %v", err)
@@ -165,10 +166,10 @@ func TestMinuteStepDeltaIsDurationOnly(t *testing.T) {
 // and the rendered help modal actually carries that label — a row that is
 // declared but never drawn would be a key the operator cannot discover.
 func TestBindingTableDeclaresTheMinuteStep(t *testing.T) {
-	keys := defaultKeys()
+	kmap := keys.DefaultKeys()
 
-	var matches []BindingEntry
-	for _, e := range keys.mainBindings() {
+	var matches []keys.BindingEntry
+	for _, e := range mainBindings(kmap) {
 		got := e.Binding.Keys()
 		if len(got) == 2 && got[0] == "m" && got[1] == "M" {
 			matches = append(matches, e)
@@ -190,7 +191,7 @@ func TestBindingTableDeclaresTheMinuteStep(t *testing.T) {
 		t.Errorf("help label description %q does not say what the key does", h.Desc)
 	}
 
-	rendered := helpListText(keys, defaultLeaderKey, defaultLeaderMap())
+	rendered := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
 	if !strings.Contains(rendered, h.Desc) {
 		t.Errorf("rendered help modal does not contain %q", h.Desc)
 	}

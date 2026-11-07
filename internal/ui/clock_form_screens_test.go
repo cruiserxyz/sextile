@@ -78,7 +78,7 @@ func formCases() []formCase {
 // (at, place), room for Details.
 func formModel(t *testing.T, fc formCase) Model {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(fc.at))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(fc.at))
 	slots, err := store.NewSlots(fc.at, fc.place)
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestEveryDetailsReportReadsTheSlotClock(t *testing.T) {
 						req   lookup.RawReportRequest
 					}{
 						{"Chart", lookup.RawReportRequest{Kind: lookup.RawReportChart}},
-						{"body", lookup.RawReportRequest{Kind: lookup.RawReportBody, Body: aspect.Sun}},
+						{"body", lookup.RawReportRequest{Kind: lookup.RawReportBody, Object: objSun}},
 					} {
 						body, _, err := lookup.ComputeRawReport(ctx, fc.at, fc.place, lens, k.req)
 						if err != nil {
@@ -158,7 +158,7 @@ func TestEveryDetailsReportReadsTheSlotClock(t *testing.T) {
 						}
 						mm := m
 						mm.focused = PanelChart
-						mm = mm.adoptDetailsReport("[0] "+k.label, body)
+						mm = mm.adoptWantedReport("[0] "+k.label, body)
 						check(k.label, plainView(mm))
 					}
 
@@ -236,9 +236,6 @@ func mustLoc(t *testing.T, name string) *time.Location {
 // show the chosen form, under all four.
 func TestTimelineDisplaysChosenClock(t *testing.T) {
 	needLiveAstrolog(t)
-	old := computeTimeline
-	computeTimeline = lookup.Timeline
-	t.Cleanup(func() { computeTimeline = old })
 
 	for _, c := range clockCases {
 		t.Run(c.String(), func(t *testing.T) {
@@ -362,7 +359,7 @@ func TestFirstRowFollowsThePreference(t *testing.T) {
 			st := stepped.refresh[surfaceText]
 			var tm tea.Model = stepped
 			tm, _ = tm.Update(FirstFrameReadyMsg{
-				Positions: []aspect.Position{{Body: aspect.Sun, Longitude: 100}},
+				Positions: []aspect.Position{{Object: objSun, Longitude: 100}},
 				RunID:     st.runningRunID, WantID: st.wantID, TransitTime: stepped.targetFloatingTime,
 			})
 			stepped = tm.(Model)
@@ -409,7 +406,7 @@ func TestClockFormFrames(t *testing.T) {
 	m := formModel(t, formCase{berlin, time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC)})
 	m.cfg = cfg
 	m.focused = PanelChart
-	m = m.adoptDetailsReport("[0] Chart", string(raw))
+	m = m.adoptWantedReport("[0] Chart", string(raw))
 	writeDesignFrame(t, "clock-form-details-144x40-never", m.View())
 
 	tl := onTimeline(t, cfg)

@@ -339,8 +339,12 @@ func (m Model) showLens(s *store.Slot) lookup.Lens {
 	if m.slots == nil || s == nil {
 		return l
 	}
-	if sel := m.slots.SelectedBodies(m.slotIndexOf(s)); len(sel) > 0 {
-		l.Objects.Only = recipe.NewBodySet(sel...)
+	if sel := m.slots.SelectedObjects(m.slotIndexOf(s)); len(sel) > 0 {
+		nums := make([]int, len(sel))
+		for i, o := range sel {
+			nums[i] = o.Number
+		}
+		l.Objects.Only = recipe.NewObjectSet(nums...)
 	}
 	return l
 }
@@ -427,6 +431,9 @@ type frameChoice struct {
 	// noun names the choice on the Log ("houses", "zodiac") and in the failure
 	// line ("house", "zodiac").
 	lane, noun string
+	// runOnly is the choice in the Log line of a run that cannot save it
+	// ("houses are", "zodiac is").
+	runOnly string
 	// set puts the choice into a session record.
 	set func(rec *store.FrameRecord)
 	// setVolatile remembers the choice until quit, for a chart with no file.
@@ -442,7 +449,7 @@ func (m Model) chooseHouseSystem(slotIdx int, hs recipe.HouseSystem) (Model, tea
 		return m, nil
 	}
 	return m.chooseFrame(slotIdx, frameChoice{
-		lane: "houses", noun: "house",
+		lane: "houses", noun: "house", runOnly: "houses are",
 		set: func(rec *store.FrameRecord) {
 			rec.Houses, rec.HasHouses, rec.From = hs, true, store.FrameFromChosen
 		},
@@ -465,7 +472,7 @@ func (m Model) chooseZodiac(slotIdx int, z recipe.Zodiac) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.chooseFrame(slotIdx, frameChoice{
-		lane: "zodiac", noun: "zodiac",
+		lane: "zodiac", noun: "zodiac", runOnly: "zodiac is",
 		set: func(rec *store.FrameRecord) { rec.Zodiac, rec.HasZodiac = z.RecordName(), true },
 		setVolatile: func(f *frameState, key string) {
 			vol := make(map[string]recipe.Zodiac, len(f.volatileZ)+1)
@@ -518,7 +525,13 @@ func (m Model) chooseFrame(slotIdx int, c frameChoice) (Model, tea.Cmd) {
 			if err := m.writeSessionNow(); err != nil {
 				var outside bool
 				if m, outside = m.sessionChangedOutside(err); !outside {
-					m = m.logError("Couldn't save the %s choice. It will be tried again at quit.", c.noun)
+					if errors.Is(err, errForeignSession) {
+						// Nothing will retry it at quit: say what is true. Why was
+						// said at start, so the line stays short enough for the Log.
+						m = m.logNote("session", "%s's %s for this run only", m.slotLabel(slot), c.runOnly)
+					} else {
+						m = m.logError("Couldn't save the %s choice. It will be tried again at quit.", c.noun)
+					}
 				}
 			}
 		}
@@ -624,7 +637,13 @@ func (m Model) recastHouses() (Model, tea.Cmd) {
 // writeSessionNow writes the session the way quit does (C8). A launch whose
 // refused file could not be kept writes nothing, and says so as an error so a
 // caller that depends on the write (a rename's preservation) does not go on.
-// The caller puts a failure on the error lane; the quit write retries.
+// A launch that runs another charts folder's general session writes nothing
+// either and answers errForeignSession. Callers tell the two apart: an ordinary
+// failure goes on the error lane and the quit write retries it, while
+// errForeignSession is the intended suppression (a house or zodiac choice says it
+// holds for this run only, a rename goes on without its preservation write) and
+// no write of such a run, at quit or at any other time, reaches the general
+// session.
 func (m Model) writeSessionNow() error {
 	if m.slots == nil || m.cantStart.locked() {
 		return errors.New("no workspace to save")
@@ -637,6 +656,9 @@ func (m Model) writeSessionNow() error {
 	}
 	if m.sessionKept && !m.named.running() {
 		return errors.New("the refused session file was left in place")
+	}
+	if m.sessionForeign && !m.named.running() {
+		return errForeignSession
 	}
 	return m.saveRunningSession()
 }
@@ -753,7 +775,7 @@ func (m Model) noteHouseSources() Model {
 		return m
 	}
 	m.frames = m.frames.withLogged("source|" + id)
-	return m.logNote("houses", "%s: %s houses, from %s", m.slotLabel(s), lookup.HouseName(own.hs), from)
+	return m.logTrace("houses", "%s: %s houses, from %s", m.slotLabel(s), lookup.HouseName(own.hs), from)
 }
 
 // castsOf is the cast fact of one lookup: nothing for a failed one.
@@ -949,7 +971,7 @@ type renameUndo struct {
 // applyRenameRead is step (b) and (c): the record goes into the model and the
 // session in one synchronous step, then the rewrite is issued.
 func applyRenameRead(m Model, msg RenameReadMsg) (Model, tea.Cmd) {
-	if msg.Gen != m.titleGen || m.startup != startupTitleOpen || !m.title.saving {
+	if msg.Gen != m.titleGen || m.startup != startupTitleOpen || !m.title.Saving {
 		// Esc walked away before anything was written: nothing to undo.
 		m.abandonedTitles, _ = reclaim(m.abandonedTitles, msg.Gen)
 		return m, nil
@@ -965,14 +987,17 @@ func applyRenameRead(m Model, msg RenameReadMsg) (Model, tea.Cmd) {
 	keep.Houses, keep.HasHouses, keep.From = msg.Read.Houses, true, store.FrameFromFile
 	prev := m.frames
 	m.frames = m.frames.with(keep)
-	if err := m.writeSessionNow(); err != nil {
+	// A run that never saves the general session has nothing to preserve in
+	// it: the record stays in the model, so the chart keeps its houses on
+	// screen for the run, and the rename goes on without the write.
+	if err := m.writeSessionNow(); err != nil && !errors.Is(err, errForeignSession) {
 		m.frames = prev
-		m.title.saving = false
+		m.title.Saving = false
 		if errors.Is(err, errSecondWindow) {
-			m.title.refusal = "Rename it in the first Sextile window: only that one can keep its house system."
+			m.title.Refusal = "Rename it in the first Sextile window: only that one can keep its house system."
 			return m.logError("Couldn't rename that chart. Its house system can only be kept by the first Sextile window."), nil
 		}
-		m.title.refusal = "The house system could not be saved first."
+		m.title.Refusal = "The house system could not be saved first."
 		return m.logError("Couldn't rename that chart. Its house system could not be saved first."), nil
 	}
 	undo := make(map[int]renameUndo, len(m.frames.renames)+1)
@@ -1007,7 +1032,8 @@ func (m Model) settlePreservation(msg TitleWrittenMsg) Model {
 	} else {
 		m.frames = m.frames.without(u.file)
 	}
-	if err := m.writeSessionNow(); err != nil {
+	// A run that never saves the general session has no file to put back.
+	if err := m.writeSessionNow(); err != nil && !errors.Is(err, errForeignSession) {
 		return m.logError("Couldn't restore the session after the failed rename.")
 	}
 	return m

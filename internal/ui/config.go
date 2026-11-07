@@ -1,6 +1,11 @@
 package ui
 
-import "github.com/cruiserxyz/sextile/internal/store"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
+)
 
 // ColorMode is the resolved colour policy for a run. The zero value
 // (ColorAuto) preserves the historical behaviour: colour follows Accessible,
@@ -31,12 +36,12 @@ type Config struct {
 	// `--color` flag, the SEXTILE_COLOR / NO_COLOR environment variables.
 	Color ColorMode
 
-	// FocusColour and CursorRowColour override the two colours the operator
+	// FocusColourName and CursorRowColour override the two colours the operator
 	// may change (display.focus_color, display.cursor_row_color): a
 	// 256-colour number or #rrggbb, already validated. Empty means the
 	// theme's default (the specification C8, C9).
-	FocusColour     string
-	CursorRowColour string
+	FocusColourName     string
+	CursorRowColourName string
 
 	// InstanceLockUnsupported is true when the session folder's filesystem
 	// cannot flock, so a second copy of Sextile cannot be detected. The model
@@ -46,7 +51,7 @@ type Config struct {
 	// SecondWindow is true when another Sextile holds the instance lock. This
 	// window starts empty and never writes the general session: not at quit,
 	// not for a house choice, not before a rename. Once it saves or opens a
-	// named session it keeps that one (sessions_popup.go).
+	// named session it keeps that one (sessions_popup_model.go).
 	SecondWindow bool
 
 	// Launch is what the launcher says about how it started this copy: the
@@ -54,7 +59,7 @@ type Config struct {
 	// The Log's first line names it. Any other shape, and empty, says nothing.
 	Launch string
 
-	// Migration is the one Log line saying what the one-time copy of the
+	// Migration is the one large-log line saying what the one-time copy of the
 	// charts folder's old state did (store.MigrationResult.Line); empty when
 	// there was nothing to copy.
 	Migration string
@@ -70,10 +75,10 @@ type Config struct {
 	SessionNote string
 }
 
-// useColor reports whether explicit colours should be emitted for this render.
+// UseColor reports whether explicit colours should be emitted for this render.
 // ColorAuto defers to Accessible so existing callers (and golden fixtures that
 // build Config{Accessible: ...} directly) keep their current behaviour.
-func (c Config) useColor() bool {
+func (c Config) UseColor() bool {
 	switch c.Color {
 	case ColorAlways:
 		return true
@@ -84,7 +89,25 @@ func (c Config) useColor() bool {
 	}
 }
 
-// useASCII reports whether ASCII glyphs should replace Unicode box-drawing.
-func (c Config) useASCII() bool {
+// UseASCII reports whether ASCII glyphs should replace Unicode box-drawing.
+func (c Config) UseASCII() bool {
 	return c.Accessible
+}
+
+// FocusColour is the focus colour this run draws: the operator's
+// display.focus_color, or the default.
+func (c Config) FocusColour() lipgloss.Color {
+	if c.FocusColourName != "" {
+		return lipgloss.Color(c.FocusColourName)
+	}
+	return term.DefaultFocusColour
+}
+
+// CursorRowColour is the cursor-row background this run draws: the
+// operator's display.cursor_row_color, or the default.
+func (c Config) CursorRowColour() lipgloss.Color {
+	if c.CursorRowColourName != "" {
+		return lipgloss.Color(c.CursorRowColourName)
+	}
+	return term.DefaultCursorRowColour
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
@@ -66,7 +67,7 @@ func TestArgvDisplayShort(t *testing.T) {
 		m := readyModelWithSlots(t, berlinP)
 		m.width, m.height = 144, 40
 		m = m.logCommands([]string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"})
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		if !m.console.open {
 			t.Fatal("the console did not open")
 		}
@@ -79,7 +80,7 @@ func TestArgvDisplayShort(t *testing.T) {
 		}
 		found := false
 		for _, row := range strings.Split(view, "\n") {
-			if i := strings.Index(row, "astrolog "+cutMark(m.cfg)+" -qj 2462084"); i >= 0 && strings.Count(row[i:], cutMark(m.cfg)) == 2 && !strings.Contains(row, "'=j0' -k0") {
+			if i := strings.Index(row, "astrolog "+term.CutMark(m.cfg)+" -qj 2462084"); i >= 0 && strings.Count(row[i:], term.CutMark(m.cfg)) == 2 && !strings.Contains(row, "'=j0' -k0") {
 				found = true
 			}
 		}
@@ -96,7 +97,7 @@ func TestArgvCopyIsFull(t *testing.T) {
 	m := readyModelWithSlots(t, berlinP)
 	m.width, m.height = 144, 40
 	m = m.logCommands([]string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"})
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	for _, want := range []string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"} {
 		at := -1
 		for i, l := range m.console.snapshot {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os/exec"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -46,6 +48,31 @@ func exhaustiveLens(selection []int) lookup.Lens {
 	return l
 }
 
+// exhaustiveProbe does what startup does before any chart is cast: it asks
+// Astrolog which objects have no ephemeris file, so every argv leaves them out.
+// A selection made only of such objects draws nothing, and the startup account
+// (ephemeris.go) is what says why.
+func exhaustiveProbe(t *testing.T) lookup.EphemerisAvailability {
+	t.Helper()
+	lookup.ForgetEphemeris()
+	t.Cleanup(resetEphemeris)
+	av, err := lookup.ProbeEphemeris(context.Background())
+	if err != nil {
+		t.Fatalf("ephemeris probe: %v", err)
+	}
+	return av
+}
+
+// allAbsent reports whether every selected object has no ephemeris file.
+func allAbsent(av lookup.EphemerisAvailability, sel []int) bool {
+	for _, n := range sel {
+		if !av.IsAbsent(n) {
+			return false
+		}
+	}
+	return len(sel) > 0
+}
+
 func exhaustiveRegistry(t *testing.T) []aspect.RegistryObject {
 	t.Helper()
 	reg, err := lookup.ObjectRegistry(context.Background())
@@ -70,7 +97,11 @@ func TestEverySelectableObjectKeepsTheUIIntact(t *testing.T) {
 		t.Skip("astrolog not on PATH; skipping live-binary exhaustive selector test")
 	}
 	reg := exhaustiveRegistry(t)
-	lensDefault := lookup.Hellenistic.VisibleObjectNumbers()
+	av := exhaustiveProbe(t)
+	lensDefault, err := lookup.Hellenistic.VisibleObjectNumbers()
+	if err != nil {
+		t.Fatal(err)
+	}
 	place := location.PlaceInfo{Name: "Berlin", Lat: 52.52, Lon: 13.405, TZ: "Europe/Berlin"}
 	when := time.Date(1985, 6, 15, 12, 0, 0, 0, time.UTC)
 
@@ -84,6 +115,9 @@ func TestEverySelectableObjectKeepsTheUIIntact(t *testing.T) {
 			{"alone", []int{obj.Number}},
 		} {
 			t.Run(shapeName(obj, shape.name), func(t *testing.T) {
+				if shape.name == "alone" && allAbsent(av, shape.selection) {
+					t.Skip("the chooser does not let an object without its ephemeris file be ticked (TestChooserCannotTickAnAbsentBody)")
+				}
 				res, err := lookup.FirstCallTransits(context.Background(), nil, when, place, exhaustiveLens(shape.selection))
 				if err != nil {
 					t.Fatalf("selecting %d (%s) %s made the frame fail: %v", obj.Number, obj.Name, shape.name, err)
@@ -104,7 +138,7 @@ func TestEverySelectableObjectKeepsTheUIIntact(t *testing.T) {
 				// at all" was a RENDER symptom, and a frame that parses and
 				// then draws nothing is the same bug to the operator.
 				state := chartViewState{positions: res.Positions, aspects: res.Aspects}
-				bodies, _, _ := renderSingleBodies(res.Positions, res.Cusps, res.BodyStyles, nil, 0, 0, 64, 20, false, Config{Accessible: true, Color: ColorNever}, houseOverlay{})
+				bodies, _, _ := renderSingleBodies(res.Positions, res.Cusps, res.BodyStyles, nil, 0, 0, 64, 20, false, Config{Accessible: true, Color: ColorNever}, panel.HouseOverlay{})
 				if strings.TrimSpace(bodies) == "" {
 					t.Fatalf("selecting %d (%s) %s drew an empty Bodies panel from %d positions", obj.Number, obj.Name, shape.name, len(res.Positions))
 				}
@@ -113,7 +147,7 @@ func TestEverySelectableObjectKeepsTheUIIntact(t *testing.T) {
 				// operator were shown `Eris Ari 0°00'` as a real position.
 				for _, p := range res.Positions {
 					if p.Longitude == 0 && p.Speed == 0 && p.Latitude == 0 {
-						t.Fatalf("selecting %d (%s) %s drew %q at 0Ari00 with no motion — an object with no ephemeris must be dropped, not shown as a position", obj.Number, obj.Name, shape.name, p.DisplayName(p.Body.String()))
+						t.Fatalf("selecting %d (%s) %s drew %q at 0Ari00 with no motion — an object with no ephemeris must be dropped, not shown as a position", obj.Number, obj.Name, shape.name, p.Object.Name)
 					}
 				}
 				// Aspects may legitimately be empty — a one-body chart has no
@@ -144,40 +178,40 @@ func TestEverySelectableObjectIsReachableInTheModal(t *testing.T) {
 	for _, obj := range reg {
 		obj := obj
 		t.Run(shapeName(obj, "reachable"), func(t *testing.T) {
-			st := openBodyModal(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+			st := popup.Open(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 
 			// Type the object's own name and find it among the matches. This
 			// is what an operator does with a 134-row list, and it catches a
 			// filter that cannot express a name — one with a space in it, a
 			// trailing period, or a leading digit ("11th Cusp").
 			for _, r := range obj.Name {
-				st.appendRunes([]rune{r})
+				st.AppendRunes([]rune{r})
 			}
-			st.refilter()
+			st.Refilter()
 
 			row := -1
-			for i, m := range st.matches {
+			for i, m := range st.Matches {
 				if m.Number == obj.Number {
 					row = i
 					break
 				}
 			}
 			if row < 0 {
-				t.Fatalf("object %d (%q) cannot be found by typing its own name; %d rows matched", obj.Number, obj.Name, len(st.matches))
+				t.Fatalf("object %d (%q) cannot be found by typing its own name; %d rows matched", obj.Number, obj.Name, len(st.Matches))
 			}
 
-			st.toggleAt(groupRows() + row)
-			if !st.selected[obj.Number] {
+			st.ToggleAt(popup.GroupRows() + row)
+			if !st.Selected[obj.Number] {
 				t.Fatalf("object %d (%q) did not tick", obj.Number, obj.Name)
 			}
-			sel := st.policy().Selected()
+			sel := st.Policy().Selected()
 			if len(sel) != 1 || sel[0] != obj.Number {
 				t.Fatalf("object %d (%q) produced selection %v", obj.Number, obj.Name, sel)
 			}
 			// ...and the policy it produces must be one the compiler accepts.
 			if _, err := recipe.NewChartSpec(
 				recipe.MomentAtPlace{JD: 2446232.0, Lon: 13.405, Lat: 52.52},
-				recipe.WholeSign, recipe.Tropical, st.policy(),
+				recipe.WholeSign, recipe.Tropical, st.Policy(),
 			); err != nil {
 				t.Fatalf("object %d (%q) produced a policy the recipe refuses: %v", obj.Number, obj.Name, err)
 			}
@@ -208,12 +242,16 @@ func TestEverySelectableObjectPairKeepsTheUIIntact(t *testing.T) {
 		t.Skip("astrolog not on PATH; skipping live-binary exhaustive pair test")
 	}
 	reg := exhaustiveRegistry(t)
+	av := exhaustiveProbe(t)
 	place := location.PlaceInfo{Name: "Berlin", Lat: 52.52, Lon: 13.405, TZ: "Europe/Berlin"}
 	when := time.Date(1985, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	for i := 0; i+1 < len(reg); i++ {
 		a, b := reg[i], reg[i+1]
 		t.Run(shapeName(a, "with_"+shapeName(b, "pair")), func(t *testing.T) {
+			if allAbsent(av, []int{a.Number, b.Number}) {
+				t.Skip("the chooser does not let an object without its ephemeris file be ticked (TestChooserCannotTickAnAbsentBody)")
+			}
 			res, err := lookup.FirstCallTransits(context.Background(), nil, when, place,
 				exhaustiveLens([]int{a.Number, b.Number}))
 			if err != nil {
@@ -226,7 +264,7 @@ func TestEverySelectableObjectPairKeepsTheUIIntact(t *testing.T) {
 			}
 			for _, p := range res.Positions {
 				if p.Longitude == 0 && p.Speed == 0 && p.Latitude == 0 {
-					t.Fatalf("selecting %d and %d drew %q at the no-data sentinel", a.Number, b.Number, p.DisplayName(p.Body.String()))
+					t.Fatalf("selecting %d and %d drew %q at the no-data sentinel", a.Number, b.Number, p.Object.Name)
 				}
 			}
 		})

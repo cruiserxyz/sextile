@@ -18,17 +18,18 @@ import (
 )
 
 // WheelHighlight is the ui-facing highlight state for a wheel render:
-// the focused slot's selected bodies plus the Bodies-panel cursor body.
-// BodyUnknown means no focused body. The zero value renders the plain wheel.
-// lookup lowers it into the recipe highlight with the shipped tier colors —
-// the ui speaks bodies, never Astrolog color indices.
+// the focused slot's selected objects (Astrolog's numbers) plus the
+// Bodies-panel cursor object. The zero Object means no focused object. The
+// zero value renders the plain wheel. lookup lowers it into the recipe
+// highlight with the shipped tier colors — the ui speaks objects, never
+// Astrolog color indices.
 //
 // The ui still computes and passes this state while the composite is parked
 // ; lookup simply declines to lower it unless the opt-in is set, so
 // the wiring stays warm for pickup.
 type WheelHighlight struct {
-	Selected []aspect.Body
-	Focused  aspect.Body
+	Selected []int
+	Focused  aspect.Object
 }
 
 // RenderWheelImage renders the chart for `when` at `place` under `lens` as a

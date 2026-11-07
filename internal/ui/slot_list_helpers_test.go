@@ -7,7 +7,6 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // addAnchor adds an anchored slot holding no named chart: the old
@@ -42,8 +41,8 @@ func firstAnchor(s *store.Slots) *store.Slot {
 // it and in the floating slot, and any body names the reader could not parse.
 // It exists so the restore tests written for one-chart sessions state their
 // input in the terms they always did (the specification C15).
-func v1(chart *store.SessionChart, usable, comparison bool, anchored, floating []aspect.Body, unknown ...string) store.Session {
-	s := store.Session{Version: 1, Folder: testFolderID, FloatingBodies: floating, UnknownBodies: unknown}
+func v1(chart *store.SessionChart, usable, comparison bool, anchored, floating []string) store.Session {
+	s := store.Session{Version: 1, Folder: testFolderID, FloatingBodies: floating}
 	if chart != nil {
 		s.Slots = []store.SessionSlot{{Chart: *chart, Usable: usable, Selected: comparison, Bodies: anchored}}
 		s.FloatingSelected = usable && comparison

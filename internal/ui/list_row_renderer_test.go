@@ -24,16 +24,16 @@ import (
 
 // listRowRenderer is the shared renderer's name. The walk stops at it: what it
 // does inside is C2–C6's business.
-const listRowRenderer = "listRow"
+const listRowRenderer = "menu.Row"
 
 // listModalRoots maps each list modal's entry point to the row builders the
 // spec names for it. Each builder must call the renderer directly.
 var listModalRoots = map[string][]string{
-	"renderAtlasModal":  {"renderResultList"},
-	"renderChartModal":  {"chartRows"},
-	"renderAspectModal": {"aspectFamilyRows", "aspectListRows"},
-	"renderBodyModal":   {"bodyListRows"},
-	"renderHelpModal":   {"helpListRows"},
+	"popup.Atlas.Render":   {"ResultList"},
+	"renderChartModal":     {"chartRows"},
+	"popup.Aspects.Render": {"AspectFamilyRows", "AspectListRows"},
+	"popup.Render":         {"ListRows"},
+	"keys.RenderHelp":      {"helpListRows"},
 }
 
 // listNonRowHelpers draw lines that are NOT pickable rows — a placeholder, the
@@ -46,18 +46,19 @@ var listModalRoots = map[string][]string{
 // message, never a rendered row, and adding a name here is the deliberate act
 // that would let one through.
 var listNonRowHelpers = map[string]bool{
-	"listNote":       true,
-	"listMessage":    true,
+	"menu.Note":      true,
+	"menu.Heading":   true,
+	"menu.Message":   true,
 	"chartDropBlock": true,
 	"chartDropLines": true,
 	"fitDropLines":   true,
-	"bodyTagBar":     true,
+	"TagBar":         true,
 	// The aspect chooser's decision whether its rows keep the orb: a width
 	// measured over the registry, a number and never a line.
 	"aspectFullWidth": true,
 	// The dashed rule under a pinned block (the specification 6):
 	// built from a glyph and a width, never from a rendered row.
-	"listRule": true,
+	"menu.Rule": true,
 }
 
 // forbiddenRowCalls are the ways a line gets padded, truncated or restyled.
@@ -85,6 +86,52 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 
 	funcs := map[string][]*ast.FuncDecl{}
 	imports := map[string]bool{}
+	// The bodies popup's rows are drawn in internal/ui/popup. Its functions join
+	// the walk, except the Render method: a method named like lipgloss's would
+	// make every `.Render` call look local, so it is kept apart as a root.
+	roots := map[string][]*ast.FuncDecl{}
+	// The Keys popup is drawn in internal/ui/keys: its functions join the walk,
+	// and RenderHelp, the box's caller, is a root.
+	for _, sub := range []string{"popup", "keys"} {
+		subEntries, err := os.ReadDir(sub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range subEntries {
+			if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+				continue
+			}
+			f, err := parser.ParseFile(fset, filepath.Join(sub, e.Name()), nil, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, imp := range f.Imports {
+				p := strings.Trim(imp.Path.Value, `"`)
+				imports[p[strings.LastIndex(p, "/")+1:]] = true
+			}
+			for _, d := range f.Decls {
+				if fd, ok := d.(*ast.FuncDecl); ok {
+					if sub == "keys" && fd.Name.Name == "RenderHelp" {
+						roots["keys.RenderHelp"] = append(roots["keys.RenderHelp"], fd)
+						continue
+					}
+					if fd.Name.Name == "Render" && fd.Recv != nil {
+						key := "popup.Render"
+						t := fd.Recv.List[0].Type
+						if ix, ok := t.(*ast.IndexExpr); ok { // a generic receiver: Finder[T]
+							t = ix.X
+						}
+						if id, ok := t.(*ast.Ident); ok && id.Name != "Body" {
+							key = "popup." + id.Name + ".Render"
+						}
+						roots[key] = append(roots[key], fd)
+						continue
+					}
+					funcs[fd.Name.Name] = append(funcs[fd.Name.Name], fd)
+				}
+			}
+		}
+	}
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -109,8 +156,26 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 		}
 	}
 
-	if len(funcs[listRowRenderer]) == 0 {
-		t.Fatalf("internal/ui has no %s: the list modals share no row renderer", listRowRenderer)
+	rendererCalled := false
+	for _, ds := range funcs {
+		for _, fd := range ds {
+			if fd.Body == nil {
+				continue
+			}
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if x, ok := sel.X.(*ast.Ident); ok && x.Name+"."+sel.Sel.Name == listRowRenderer {
+							rendererCalled = true
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	if !rendererCalled {
+		t.Fatalf("internal/ui calls no %s: the list modals share no row renderer", listRowRenderer)
 	}
 
 	// callName names a call the way forbiddenRowCalls spells it, and reports
@@ -142,12 +207,15 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 
 	for rootName, builders := range listModalRoots {
 		decls := funcs[rootName]
+		if r, isRoot := roots[rootName]; isRoot {
+			decls = r
+		}
 		if len(decls) != 1 {
 			t.Errorf("%s: want one declaration, found %d", rootName, len(decls))
 			continue
 		}
 
-		// The list closure handed to renderModalBox is where the row path
+		// The list closure handed to dialog.Render is where the row path
 		// starts; everything the box draws as list content comes out of it.
 		var listFn *ast.FuncLit
 		ast.Inspect(decls[0].Body, func(n ast.Node) bool {
@@ -155,8 +223,10 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "renderModalBox" && len(call.Args) > 0 {
-				listFn, _ = call.Args[len(call.Args)-1].(*ast.FuncLit)
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Render" && len(call.Args) > 0 {
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "dialog" {
+					listFn, _ = call.Args[len(call.Args)-1].(*ast.FuncLit)
+				}
 			}
 			return true
 		})
@@ -213,7 +283,7 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 		}
 		for _, name := range onPath {
 			for _, fd := range funcs[name] {
-				// A function that returns a listRowSpec builds CELLS for
+				// A function that returns a menu.RowSpec builds CELLS for
 				// the renderer to lay out; its []string are not lines.
 				if fd.Body == nil || returnsRowSpec(fd) {
 					continue
@@ -260,7 +330,7 @@ func TestListModalsShareOneRowRenderer(t *testing.T) {
 // argument appended to a slice, each element of a returned slice literal, each
 // value stored into a slice element — that is not, directly, a call to an
 // allowed function or a slice passed along whole (`rows...`). Containing a
-// listRow call somewhere is not enough: a builder could draw its rows through
+// menu.Row call somewhere is not enough: a builder could draw its rows through
 // the renderer on one branch and append a raw row on another, and a parent
 // could add a cell to a line it was handed.
 func unrenderedLines(body ast.Node, callName func(*ast.CallExpr) (string, bool), allowed func(string) bool) []string {
@@ -341,7 +411,7 @@ func unrenderedLines(body ast.Node, callName func(*ast.CallExpr) (string, bool),
 					if spread {
 						// A slice passed along whole: a path function's
 						// result, or a field of a value handed in
-						// (pinnedBody's b.Rows...). A local slice is not
+						// (menu.PinnedBody's b.Rows...). A local slice is not
 						// passed along — it was made here, and a row in it
 						// bypassed the renderer (round-3 review).
 						if _, isField := a.(*ast.SelectorExpr); isField || ok(a) {
@@ -388,8 +458,10 @@ func returnsRowSpec(fd *ast.FuncDecl) bool {
 		return false
 	}
 	for _, r := range fd.Type.Results.List {
-		if id, ok := r.Type.(*ast.Ident); ok && id.Name == "listRowSpec" {
-			return true
+		if sel, ok := r.Type.(*ast.SelectorExpr); ok && sel.Sel.Name == "RowSpec" {
+			if x, ok := sel.X.(*ast.Ident); ok && x.Name == "menu" {
+				return true
+			}
 		}
 	}
 	return false

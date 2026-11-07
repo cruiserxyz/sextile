@@ -2,6 +2,9 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"strings"
 	"testing"
 
@@ -14,25 +17,25 @@ import (
 
 // twoFieldForm is the shape item 3's title form will take: a title field with
 // today's name as its hint, and a place field.
-func twoFieldForm() form {
-	return newForm(
-		formField{label: "Title: ", placeholder: "Fixture Untitled"},
-		formField{label: "Place: ", placeholder: "Constructed Town"},
+func twoFieldForm() dialog.Form {
+	return dialog.NewForm(
+		dialog.Field{Label: "Title: ", Placeholder: "Fixture Untitled"},
+		dialog.Field{Label: "Place: ", Placeholder: "Constructed Town"},
 	)
 }
 
 // typeIntoForm types keys into f the way a caller's handler does: Tab and
 // ⇧tab are the caller's table entries (nextField, prevField), everything else
 // is the form's text entry.
-func typeIntoForm(f form, keys ...tea.KeyMsg) form {
-	for _, k := range keys {
+func typeIntoForm(f dialog.Form, kmap ...tea.KeyMsg) dialog.Form {
+	for _, k := range kmap {
 		switch k.Type {
 		case tea.KeyTab:
-			f = f.nextField()
+			f = f.NextField()
 		case tea.KeyShiftTab:
-			f = f.prevField()
+			f = f.PrevField()
 		default:
-			f, _ = f.updateKey(k)
+			f, _ = f.UpdateKey(k)
 		}
 	}
 	return f
@@ -46,11 +49,11 @@ var (
 	keyFormBack     = tea.KeyMsg{Type: tea.KeyBackspace}
 )
 
-func formFrame(f form, cfg Config) string {
-	return renderForm(f, formView{
+func formFrame(f dialog.Form, cfg Config) string {
+	return dialog.RenderForm(f, dialog.FormView{
 		Title: "Test form",
 		Info:  []string{"Fixture.as"},
-	}, cfg, 80, 24)
+	}, cfg, 80, 24, popupChrome(cfg))
 }
 
 // lineWith returns the frame's one line containing label, failing if there is
@@ -88,7 +91,7 @@ func TestFormFields(t *testing.T) {
 	if n := strings.Count(frame, "█"); n != 1 {
 		t.Errorf("the frame carries %d cursors, want exactly 1:\n%s", n, frame)
 	}
-	if got := f.values(); len(got) != 2 || got[0] != "Constructed One" || got[1] != "Bremen" {
+	if got := f.Values(); len(got) != 2 || got[0] != "Constructed One" || got[1] != "Bremen" {
 		t.Errorf("values() = %q, want each field's own value in order", got)
 	}
 }
@@ -101,7 +104,7 @@ func TestFormPlaceholder(t *testing.T) {
 	forceColor(t)
 	color := Config{Color: ColorAlways}
 	f := twoFieldForm()
-	const atRest = "Title: " + sgrReverse + "F" + sgrReset + sgrFaint + "ixture Untitled"
+	const atRest = "Title: " + term.SGRReverse + "F" + term.SGRReset + term.SGRFaint + "ixture Untitled"
 	if line := lineWith(t, formFrame(f, color), "Title: "); !strings.Contains(line, atRest) {
 		t.Fatalf("empty focused field = %q, want %q", line, atRest)
 	}
@@ -109,7 +112,7 @@ func TestFormPlaceholder(t *testing.T) {
 		t.Error("the colour frame draws a block cursor beside the hint")
 	}
 	line := lineWith(t, formFrame(f, color), "Place: ")
-	if !strings.Contains(line, sgrFaint+"Constructed Town") || strings.Contains(line, sgrReverse) {
+	if !strings.Contains(line, term.SGRFaint+"Constructed Town") || strings.Contains(line, term.SGRReverse) {
 		t.Errorf("unfocused empty field = %q, want its whole hint, faint, and no cursor", line)
 	}
 
@@ -137,44 +140,44 @@ func TestFormPlaceholder(t *testing.T) {
 // C2.5: a placeholder never becomes a value.
 func TestFormSubmitsTypedValuesOnly(t *testing.T) {
 	f := twoFieldForm()
-	if got := f.values(); got[0] != "" || got[1] != "" {
+	if got := f.Values(); got[0] != "" || got[1] != "" {
 		t.Fatalf("an untouched form submits %q, want two empty values", got)
 	}
 	f = typeIntoForm(f, keyFormTab, formRunes("Bremen"))
-	if got := f.values(); got[0] != "" || got[1] != "Bremen" {
+	if got := f.Values(); got[0] != "" || got[1] != "Bremen" {
 		t.Errorf("values() = %q, want the untouched title empty and the place as typed", got)
 	}
 	f = typeIntoForm(f, keyFormBack, keyFormBack, keyFormBack, keyFormBack, keyFormBack, keyFormBack, keyFormBack)
-	if got := f.value(1); got != "" {
+	if got := f.Value(1); got != "" {
 		t.Errorf("a value erased past empty is %q, want \"\" (backspace on empty is a no-op)", got)
 	}
 }
 
 // C2.6: Tab and Shift+Tab cycle, wrapping; with one field they change nothing.
 func TestFormFocusCycle(t *testing.T) {
-	f := newForm(formField{label: "A: "}, formField{label: "B: "}, formField{label: "C: "})
+	f := dialog.NewForm(dialog.Field{Label: "A: "}, dialog.Field{Label: "B: "}, dialog.Field{Label: "C: "})
 	for i, want := range []int{1, 2, 0, 1} {
 		f = typeIntoForm(f, keyFormTab)
-		if f.focus != want {
-			t.Fatalf("after %d Tab presses focus = %d, want %d", i+1, f.focus, want)
+		if f.Focus != want {
+			t.Fatalf("after %d Tab presses focus = %d, want %d", i+1, f.Focus, want)
 		}
 	}
 	for i, want := range []int{0, 2, 1} {
 		f = typeIntoForm(f, keyFormShiftTab)
-		if f.focus != want {
-			t.Fatalf("after %d Shift+Tab presses focus = %d, want %d", i+1, f.focus, want)
+		if f.Focus != want {
+			t.Fatalf("after %d Shift+Tab presses focus = %d, want %d", i+1, f.Focus, want)
 		}
 	}
 
 	one := typeIntoForm(newSaveForm(), formRunes("Constructed"))
-	for _, got := range []form{one.nextField(), one.prevField()} {
-		if got.focus != 0 || got.value(0) != "Constructed" {
-			t.Errorf("a field move on a one-field form: focus %d, value %q; want 0, unchanged", got.focus, got.value(0))
+	for _, got := range []dialog.Form{one.NextField(), one.PrevField()} {
+		if got.Focus != 0 || got.Value(0) != "Constructed" {
+			t.Errorf("a field move on a one-field form: focus %d, value %q; want 0, unchanged", got.Focus, got.Value(0))
 		}
 	}
 	// Enter, Esc and Tab are the caller's table's, never the form's.
 	for _, k := range []tea.KeyMsg{{Type: tea.KeyEnter}, {Type: tea.KeyEsc}, keyFormTab, keyFormShiftTab} {
-		if _, handled := one.updateKey(k); handled {
+		if _, handled := one.UpdateKey(k); handled {
 			t.Errorf("the form handled %v; it must leave it to the caller", k)
 		}
 	}
@@ -191,7 +194,7 @@ func TestFormBoxSizeStable(t *testing.T) {
 	const refusal = "Constructed.as changed since the list was read — reopen the picker"
 	states := []struct {
 		name    string
-		f       form
+		f       dialog.Form
 		refusal string
 	}{
 		{"placeholders", twoFieldForm(), ""},
@@ -204,7 +207,7 @@ func TestFormBoxSizeStable(t *testing.T) {
 	for _, cfg := range []Config{{Color: ColorAlways}, {Accessible: true, Color: ColorNever}} {
 		var wantLines, wantWidth int
 		for i, s := range states {
-			frame := renderForm(s.f, formView{Title: "Test form", Info: []string{"Fixture.as"}, Refusal: s.refusal}, cfg, 80, 24)
+			frame := dialog.RenderForm(s.f, dialog.FormView{Title: "Test form", Info: []string{"Fixture.as"}, Refusal: s.refusal}, cfg, 80, 24, popupChrome(cfg))
 			lines := strings.Split(frame, "\n")
 			width := 0
 			for _, l := range lines {
@@ -231,7 +234,7 @@ func TestFormBoxSizeStable(t *testing.T) {
 
 	// A two-field form is one line taller than the one-field save prompt: the
 	// second field is a line of its own, and nothing else is added.
-	one := strings.Split(renderSaveModal(saveModalState{form: newSaveForm(), dest: tasteSaveDest}, Config{Accessible: true, Color: ColorNever}, 80, 24), "\n")
+	one := strings.Split(renderSaveModal(saveModalState{Form: popup.Form{Fields: newSaveForm()}, dest: tasteSaveDest}, Config{Accessible: true, Color: ColorNever}, 80, 24), "\n")
 	two := strings.Split(formFrame(twoFieldForm(), Config{Accessible: true, Color: ColorNever}), "\n")
 	if len(two) != len(one)+1 {
 		t.Errorf("one-field box is %d lines, two-field box %d; want one more (the field)", len(one), len(two))
@@ -242,10 +245,10 @@ func TestFormBoxSizeStable(t *testing.T) {
 // sanitised the same way the save prompt's one field is.
 func TestFormSanitisesPaste(t *testing.T) {
 	f := typeIntoForm(twoFieldForm(), keyFormTab, formRunes("Bremen,\nGermany\t\r1"))
-	if got := f.value(1); got != "Bremen, Germany  1" {
+	if got := f.Value(1); got != "Bremen, Germany  1" {
 		t.Errorf("pasted place = %q, want each control character turned into a space", got)
 	}
-	if got := f.value(0); got != "" {
+	if got := f.Value(0); got != "" {
 		t.Errorf("the paste leaked into the unfocused field: %q", got)
 	}
 	frame := formFrame(f, Config{Accessible: true, Color: ColorNever})

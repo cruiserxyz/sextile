@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // ---- C2 --------------------------------------------------------------------
@@ -579,7 +578,7 @@ func TestReformDateIsPinned(t *testing.T) {
 			utc := recipe.MomentAtPlace{JD: 2450000.5, Lon: 0, Lat: 51.5, TZ: "Europe/London"}
 			local := recipe.LocalMomentAtPlace{JD: 2450000.5, Lon: 0, Lat: 51.5, TZ: "Europe/London"}
 			srcs := map[string][]recipe.Projection{
-				"single": {recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(aspect.Sun), recipe.WheelImage{Render: recipe.DefaultWheelRender()}},
+				"single": {recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(objSun), recipe.WheelImage{Render: recipe.DefaultWheelRender()}},
 				"local":  {recipe.ChartRawReport(), recipe.AspectsRawReport()},
 				"pair":   {recipe.Aspects{}, recipe.AspectsRawReport(), recipe.WheelImage{Render: recipe.DefaultWheelRender()}},
 				"ring":   {recipe.WheelImage{Render: recipe.DefaultWheelRender()}},
@@ -811,7 +810,7 @@ func TestPreReformTimelineMatchesAstrolog(t *testing.T) {
 								astrologOut(t, append(append([]string{"-z", zoneArg}, natal...), "-tr", mo, yr, "=Yt", "_Yd")...))
 						}
 						for _, raw := range raws {
-							got, err := ParseTimeline(raw, time.FixedZone("", seg.Offset))
+							got, err := ParseTimeline(raw, time.FixedZone("", seg.Offset), testRegistry(t))
 							if err != nil {
 								t.Fatalf("raw rows are not readable through Parse: %v", err)
 							}
@@ -938,7 +937,7 @@ func TestOldTimelineRowRefusesAnImpossibleDate(t *testing.T) {
 		transit(" 2/29/2024"),
 	}
 	for _, line := range valid {
-		rows, err := ParseTimeline(line, time.UTC)
+		rows, err := ParseTimeline(line, time.UTC, testRegistry(t))
 		if err != nil || len(rows) != 1 {
 			t.Errorf("%q: %d rows, err %v, want one row", line, len(rows), err)
 		}
@@ -954,7 +953,7 @@ func TestOldTimelineRowRefusesAnImpossibleDate(t *testing.T) {
 		"minute 60":                              " 3/ 1/1500  1:60 trans    Moon (Pis) Con natal (Ari) Venus",
 	}
 	for name, line := range invalid {
-		rows, err := ParseTimeline(line, time.UTC)
+		rows, err := ParseTimeline(line, time.UTC, testRegistry(t))
 		var lineErr *TimelineLineError
 		if !errors.As(err, &lineErr) || lineErr.Line != line || rows != nil {
 			t.Errorf("%s: %q gave %d rows and err %v, want a TimelineLineError naming the row and no row", name, line, len(rows), err)
@@ -1020,7 +1019,7 @@ func TestEveryCallConstructorRefusesAMomentBeforeJulianDayZero(t *testing.T) {
 		if err != nil {
 			continue // the recipe itself refused it: no argv either
 		}
-		for _, p := range []recipe.Projection{recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(aspect.Sun), recipe.WheelImage{Render: recipe.DefaultWheelRender()}} {
+		for _, p := range []recipe.Projection{recipe.Positions{}, recipe.Aspects{}, recipe.ChartRawReport(), recipe.AspectsRawReport(), recipe.BodyRawReport(objSun), recipe.WheelImage{Render: recipe.DefaultWheelRender()}} {
 			if plan, err := Compile(spec, p); err == nil {
 				t.Errorf("%s/%s compiled a plan for a moment before Julian Day 0: %v", name, p.Label(), plan.Invocations[0].Argv)
 			}

@@ -4,6 +4,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,15 +68,15 @@ func titleLibrary(t *testing.T, fixtures []string, extra map[string]string) stri
 func pickRow(t *testing.T, m Model, file string) (Model, tea.Cmd) {
 	t.Helper()
 	idx := -1
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == file {
 			idx = i
 		}
 	}
 	if idx < 0 {
-		t.Fatalf("no row for %s in %v", file, pickerNames(m.picker.matches))
+		t.Fatalf("no row for %s in %v", file, pickerNames(m.picker.Matches))
 	}
-	m.picker.cursor = idx
+	m.picker.Cursor = idx
 	u, cmd := updateChartModalKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	return u.(Model), cmd
 }
@@ -149,12 +151,12 @@ func TestPickUntitledOpensTitleForm(t *testing.T) {
 			if m.pickGen == startGen {
 				t.Error("opening the form did not bump the pick generation; an earlier resolve could land behind it")
 			}
-			f := m.title.form
-			if f.fields[0].value != "" || f.fields[0].placeholder != tc.titleHint {
-				t.Errorf("Title field = %+v, want empty with hint %q", f.fields[0], tc.titleHint)
+			f := m.title.Fields
+			if f.Fields[0].Value != "" || f.Fields[0].Placeholder != tc.titleHint {
+				t.Errorf("Title field = %+v, want empty with hint %q", f.Fields[0], tc.titleHint)
 			}
-			if f.fields[1].value != tc.placeValue || f.fields[1].placeholder != tc.placeHint {
-				t.Errorf("Place field = %+v, want value %q hint %q", f.fields[1], tc.placeValue, tc.placeHint)
+			if f.Fields[1].Value != tc.placeValue || f.Fields[1].Placeholder != tc.placeHint {
+				t.Errorf("Place field = %+v, want value %q hint %q", f.Fields[1], tc.placeValue, tc.placeHint)
 			}
 			// The info line: general with colour, where the placeholder shows
 			// the name; naming the file without, where no placeholder is drawn.
@@ -264,12 +266,12 @@ func titleEquinox(t *testing.T, title string) Model {
 	m = typeText(t, m, title)
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil || !m.title.saving {
+	if cmd == nil || !m.title.Saving {
 		t.Fatal("the submit dispatched no write")
 	}
 	m, cmd = runCmd(t, m, cmd)
-	if m.title.refusal != "" {
-		t.Fatalf("the write was refused: %s", m.title.refusal)
+	if m.title.Refusal != "" {
+		t.Fatalf("the write was refused: %s", m.title.Refusal)
 	}
 	if cmd == nil {
 		t.Fatal("the write was not followed by a resolve")
@@ -359,7 +361,7 @@ func TestRestoreNeverTitles(t *testing.T) {
 	rec := store.SessionChart{ID: row.ID, Name: row.Name, When: when, Place: row.Place, Source: row.Source}
 
 	m := startedModel(t, chartFileSession(rec))
-	if m.startup == startupTitleOpen || m.title.form.fields != nil {
+	if m.startup == startupTitleOpen || m.title.Fields.Fields != nil {
 		t.Error("restore opened the title form")
 	}
 	cmd := m.sessionRecheckCmd(chartFileSession(rec), true)
@@ -368,7 +370,7 @@ func TestRestoreNeverTitles(t *testing.T) {
 	}
 	u, _ := m.Update(cmd())
 	m = u.(Model)
-	if m.startup == startupTitleOpen || m.title.form.fields != nil {
+	if m.startup == startupTitleOpen || m.title.Fields.Fields != nil {
 		t.Error("the re-check opened the title form")
 	}
 	if fileText(t, path) != string(original) {
@@ -399,12 +401,12 @@ func TestTitleFormTasteFrames(t *testing.T) {
 	noplace := store.NamedChart{ID: "noplace", Name: "NoPlace", Untitled: true,
 		Place:  location.PlaceInfo{Name: "Munich", Country: "DE", Lat: 48.13, Lon: 11.57, TZ: "Europe/Berlin"},
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "NoPlace.as"}}
-	typed := titleFormState{form: newTitleForm(equinox), chart: equinox}
-	typed.form.fields[0].value = "Constructed One"
-	refused := titleFormState{form: newTitleForm(noplace), chart: noplace, refusal: emptyPlaceRefusal}
-	refused.form.fields[0].value = "Constructed One"
-	confirming := titleFormState{form: newTitleForm(equinox), chart: equinox, confirming: true, dir: "/data/op/Clients"}
-	confirming.form.fields[0].value = "Constructed One"
+	typed := titleFormState{Form: popup.Form{Fields: newTitleForm(equinox)}, chart: equinox}
+	typed.Fields.Fields[0].Value = "Constructed One"
+	refused := titleFormState{Form: popup.Form{Fields: newTitleForm(noplace), Refusal: emptyPlaceRefusal}, chart: noplace}
+	refused.Fields.Fields[0].Value = "Constructed One"
+	confirming := titleFormState{Form: popup.Form{Fields: newTitleForm(equinox), Confirming: true}, chart: equinox, dir: "/data/op/Clients"}
+	confirming.Fields.Fields[0].Value = "Constructed One"
 	held := confirming
 	held.backupHeld = true
 
@@ -412,8 +414,8 @@ func TestTitleFormTasteFrames(t *testing.T) {
 		name string
 		s    titleFormState
 	}{
-		{"place", titleFormState{form: newTitleForm(equinox), chart: equinox}},
-		{"noplace", titleFormState{form: newTitleForm(noplace), chart: noplace}},
+		{"place", titleFormState{Form: popup.Form{Fields: newTitleForm(equinox)}, chart: equinox}},
+		{"noplace", titleFormState{Form: popup.Form{Fields: newTitleForm(noplace)}, chart: noplace}},
 		{"typed", typed},
 		{"refused", refused},
 		{"confirm", confirming},
@@ -448,8 +450,8 @@ func TestTitleFormRefusesAChangedFile(t *testing.T) {
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = runCmd(t, m, cmd)
-	if want := "Equinox-2026-09.as changed since the list was read — reopen the picker"; m.title.refusal != want {
-		t.Errorf("refusal = %q, want %q", m.title.refusal, want)
+	if want := "Equinox-2026-09.as changed since the list was read — reopen the picker"; m.title.Refusal != want {
+		t.Errorf("refusal = %q, want %q", m.title.Refusal, want)
 	}
 	if fileText(t, path) != edited {
 		t.Error("the edited chart was rewritten")
@@ -462,7 +464,7 @@ func TestTitleFormRefusesAChangedFile(t *testing.T) {
 func TestTitleInfoWrapsALongFileName(t *testing.T) {
 	c := store.NamedChart{ID: "x", Name: "x", Untitled: true, PlaceLabel: "Munich",
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Constructed Client With A Long Name.as"}}
-	frame := renderTitleForm(titleFormState{form: newTitleForm(c), chart: c}, Config{Accessible: true, Color: ColorNever}, 80, 24)
+	frame := renderTitleForm(titleFormState{Form: popup.Form{Fields: newTitleForm(c)}, chart: c}, Config{Accessible: true, Color: ColorNever}, 80, 24)
 	// Read the box's text back as one run of words: wrapping may split the
 	// sentence across lines, but must not drop or cut any of it.
 	var words []string
@@ -577,8 +579,8 @@ func toConfirm(t *testing.T, title string) (Model, tea.Cmd) {
 func TestConfirmNamesTheFileAndBackup(t *testing.T) {
 	dir, _ := confirmWorld(t, nil)
 	m, _ := toConfirm(t, "Constructed One")
-	if m.startup != startupTitleOpen || !m.title.confirming {
-		t.Fatalf("startup %s, confirming %v; want the title popup in its second step", m.startup, m.title.confirming)
+	if m.startup != startupTitleOpen || !m.title.Confirming {
+		t.Fatalf("startup %s, confirming %v; want the title popup in its second step", m.startup, m.title.Confirming)
 	}
 	frame := flat(titleFrame(m))
 	for _, want := range []string{"Equinox-2026-09.as", "keep the previous file in " + store.ChartBackupFolderDisplay(dir) + ".", "Press Enter to save the title, or Esc to go back."} {
@@ -598,8 +600,8 @@ func TestNothingIsWrittenBeforeConfirm(t *testing.T) {
 	if cmd != nil {
 		t.Error("Enter on the form returned a command; nothing may be started before the confirm")
 	}
-	if !m.title.confirming || m.title.saving {
-		t.Errorf("confirming %v, saving %v; want the second step and no write in flight", m.title.confirming, m.title.saving)
+	if !m.title.Confirming || m.title.Saving {
+		t.Errorf("confirming %v, saving %v; want the second step and no write in flight", m.title.Confirming, m.title.Saving)
 	}
 	if after := diskSnapshot(t, roots...); after != before {
 		t.Errorf("disk changed before the confirm:\n--- before\n%s\n--- after\n%s", before, after)
@@ -613,17 +615,17 @@ func TestConfirmCancelLeavesEverything(t *testing.T) {
 	m = typeText(t, m, "Constructed One")
 	before := diskSnapshot(t, roots...)
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !m.title.confirming {
+	if !m.title.Confirming {
 		t.Fatal("precondition: the second step is not open")
 	}
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-	if cmd != nil || m.title.confirming || m.title.saving || m.startup != startupTitleOpen {
-		t.Fatalf("Cancel: cmd %v, confirming %v, saving %v, startup %s; want the form again", cmd != nil, m.title.confirming, m.title.saving, m.startup)
+	if cmd != nil || m.title.Confirming || m.title.Saving || m.startup != startupTitleOpen {
+		t.Fatalf("Cancel: cmd %v, confirming %v, saving %v, startup %s; want the form again", cmd != nil, m.title.Confirming, m.title.Saving, m.startup)
 	}
-	if got, want := m.title.form.value(0), "Constructed One"; got != want {
+	if got, want := m.title.Fields.Value(0), "Constructed One"; got != want {
 		t.Errorf("Title = %q, want %q", got, want)
 	}
-	if got, want := m.title.form.value(1), "Bremen, Germany"; got != want {
+	if got, want := m.title.Fields.Value(1), "Bremen, Germany"; got != want {
 		t.Errorf("Place = %q, want %q", got, want)
 	}
 	if after := diskSnapshot(t, roots...); after != before {
@@ -661,7 +663,7 @@ func TestConfirmWhenBackupHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := toConfirm(t, "Constructed One")
-	if !m.title.confirming {
+	if !m.title.Confirming {
 		t.Fatal("the second step is not open")
 	}
 	if frame := flat(titleFrame(m)); !strings.Contains(unspaced(frame), unspaced("Its first original is already in "+store.ChartBackupFolderDisplay(dir)+" and stays there.")) {
@@ -698,11 +700,11 @@ func TestConfirmRefusesAnUnusableBackup(t *testing.T) {
 	m = typeText(t, m, "Constructed One")
 	before := diskSnapshot(t, roots...)
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil || m.title.confirming || m.title.saving {
-		t.Fatalf("cmd %v, confirming %v, saving %v; want a refusal in the form", cmd != nil, m.title.confirming, m.title.saving)
+	if cmd != nil || m.title.Confirming || m.title.Saving {
+		t.Fatalf("cmd %v, confirming %v, saving %v; want a refusal in the form", cmd != nil, m.title.Confirming, m.title.Saving)
 	}
-	if want := backupRefusal; m.title.refusal != want || !strings.Contains(unspaced(flat(titleFrame(m))), unspaced(want)) {
-		t.Errorf("refusal = %q, want %q drawn in the form", m.title.refusal, want)
+	if want := backupRefusal; m.title.Refusal != want || !strings.Contains(unspaced(flat(titleFrame(m))), unspaced(want)) {
+		t.Errorf("refusal = %q, want %q drawn in the form", m.title.Refusal, want)
 	}
 	if after := diskSnapshot(t, roots...); after != before {
 		t.Error("the refusal changed the disk")
@@ -724,7 +726,7 @@ func TestConfirmWritesWhereItShowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := toConfirm(t, "Constructed One")
-	if !m.title.confirming {
+	if !m.title.Confirming {
 		t.Fatal("the second step is not open")
 	}
 	t.Setenv("SEXTILE_CHARTS_DIR", other)
@@ -753,8 +755,8 @@ func TestConfirmFramesAndBar(t *testing.T) {
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Constructed Client With A Long Name.as"}}
 	for _, held := range []bool{false, true} {
 		for _, size := range [][2]int{{80, 24}, {66, 15}} {
-			st := titleFormState{form: newTitleForm(long), chart: long, confirming: true, backupHeld: held}
-			st.form.fields[0].value = "Constructed One"
+			st := titleFormState{Form: popup.Form{Fields: newTitleForm(long), Confirming: true}, chart: long, backupHeld: held}
+			st.Fields.Fields[0].Value = "Constructed One"
 			cfg := Config{Accessible: true, Color: ColorNever}
 			frame := renderTitleForm(st, cfg, size[0], size[1])
 			lines := strings.Split(frame, "\n")
@@ -776,9 +778,9 @@ func TestConfirmFramesAndBar(t *testing.T) {
 					t.Errorf("held %v %dx%d: %q is cut:\n%s", held, size[0], size[1], want, frame)
 				}
 			}
-			m := NewModelWithClock(cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
+			m := newTestModel(t, cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
 			m.startup, m.title = startupTitleOpen, st
-			if got, want := keyBarLine(size[0], m.keyBarEntries(), cfg), "Save title: enter | Cancel: esc"; got != want {
+			if got, want := keys.BarLine(m.keysContext(), size[0]), "Save title: enter | Cancel: esc"; got != want {
 				t.Errorf("%dx%d bar = %q, want %q", size[0], size[1], got, want)
 			}
 		}
@@ -808,7 +810,7 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 	m, _ = pickRow(t, m, "Equinox-2026-09.as")
 	m = typeText(t, m, "Constructed One")
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !m.title.confirming {
+	if !m.title.Confirming {
 		t.Fatal("the confirm step is not open")
 	}
 	t.Setenv("SEXTILE_CHARTS_DIR", b)
@@ -822,8 +824,8 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 		}
 		u, next := m.Update(msg)
 		m, cmd = u.(Model), next
-		if m.title.refusal != "" {
-			t.Fatalf("the write was refused: %s", m.title.refusal)
+		if m.title.Refusal != "" {
+			t.Fatalf("the write was refused: %s", m.title.Refusal)
 		}
 	}
 
@@ -873,7 +875,7 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	original := fileText(t, path)
 
 	m, _ := toConfirm(t, "Constructed One")
-	if !m.title.confirming {
+	if !m.title.Confirming {
 		t.Fatal("the second step is not open")
 	}
 	frame := flat(titleFrame(m))

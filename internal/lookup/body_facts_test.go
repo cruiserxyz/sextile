@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // Elongation wraps at Aries: a body just past 0° with the Sun just before
@@ -44,7 +43,15 @@ func cycleFixture(t *testing.T) []astrolog.CycleEvent {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := astrolog.ParseCycleEvents(string(b))
+	reg, err := os.ReadFile("../astrolog/testdata/ho-all.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects, err := astrolog.ParseObjectRegistry(string(reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := astrolog.ParseCycleEvents(string(b), objects)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +63,7 @@ func cycleFixture(t *testing.T) []astrolog.CycleEvent {
 func TestLastFiveInferior(t *testing.T) {
 	events := cycleFixture(t)
 	when := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC) // after the 03:44 UT inner conjunction
-	got := LastInferior(events, aspect.Venus, when, 5)
+	got := LastInferior(events, objVenus, when, 5)
 	var dates []string
 	for _, e := range got {
 		dates = append(dates, e.Instant.Format("2006-01-02")+" "+e.OtherAt.Sign)
@@ -65,11 +72,11 @@ func TestLastFiveInferior(t *testing.T) {
 	if strings.Join(dates, " ") != want {
 		t.Errorf("got %v, want %s", dates, want)
 	}
-	before := LastInferior(events, aspect.Venus, time.Date(2026, 10, 24, 3, 0, 0, 0, time.UTC), 5)
+	before := LastInferior(events, objVenus, time.Date(2026, 10, 24, 3, 0, 0, 0, time.UTC), 5)
 	if before[0].Instant.Year() != 2025 {
 		t.Errorf("an hour before the conjunction, the newest is %v", before[0].Instant)
 	}
-	for _, e := range LastInferior(events, aspect.Venus, when, 99) {
+	for _, e := range LastInferior(events, objVenus, when, 99) {
 		if e.OtherAt.Bracket != '[' {
 			t.Errorf("an outer conjunction counted: %s", e.Line)
 		}
@@ -81,8 +88,8 @@ func TestLastFiveInferior(t *testing.T) {
 func TestNowFactsForTheResearchSky(t *testing.T) {
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	pair := SunPairResult{
-		Sun:  astrolog.PrecisePosition{Body: aspect.Sun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600},
-		Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600},
+		Sun:  astrolog.PrecisePosition{Object: objSun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600},
+		Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600},
 	}
 	cycle := CycleResult{Span: CycleSpanFor(when, time.UTC), Events: cycleFixture(t)}
 	facts, err := NowFacts(pair, cycle, when, time.UTC)
@@ -126,14 +133,14 @@ func TestBodyFactSearchesCarryTheirCommands(t *testing.T) {
 	search := func(_ context.Context, call astrolog.BodyCall) (string, string, error) {
 		return string(b), "astrolog -dY …", nil
 	}
-	res, err := SearchCycle(context.Background(), aspect.Venus, CycleSpan{StartYear: 2016, Years: 13}, Hellenistic, search)
+	res, err := SearchCycle(context.Background(), objVenus, CycleSpan{StartYear: 2016, Years: 13}, Hellenistic, search)
 	if err != nil || len(res.Commands) != 1 || len(res.Events) == 0 {
 		t.Errorf("%+v, %v", res.Commands, err)
 	}
 	bad := func(_ context.Context, call astrolog.BodyCall) (string, string, error) {
 		return "garbage\n", "astrolog -dY …", nil
 	}
-	if res, err := SearchCycle(context.Background(), aspect.Venus, CycleSpan{StartYear: 2016, Years: 13}, Hellenistic, bad); err == nil || len(res.Commands) != 1 {
+	if res, err := SearchCycle(context.Background(), objVenus, CycleSpan{StartYear: 2016, Years: 13}, Hellenistic, bad); err == nil || len(res.Commands) != 1 {
 		t.Errorf("an unreadable result: %v, commands %v", err, res.Commands)
 	}
 }
@@ -153,7 +160,7 @@ func TestCycleSpanAndListDatesAreTheSlotsZone(t *testing.T) {
 	if got := CycleSpanFor(when, time.UTC); got.StartYear != 2015 {
 		t.Errorf("span at UTC %+v, want 2015", got)
 	}
-	pair := SunPairResult{Sun: astrolog.PrecisePosition{Body: aspect.Sun}, Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 10}}
+	pair := SunPairResult{Sun: astrolog.PrecisePosition{Object: objSun}, Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 10}}
 	facts, err := NowFacts(pair, CycleResult{Span: CycleSpanFor(when, kiri), Events: cycleFixture(t)}, when, kiri)
 	if err != nil {
 		t.Fatal(err)
@@ -173,8 +180,8 @@ func TestTabDatesFollowTheClock(t *testing.T) {
 	t.Cleanup(func() { HoldClock(held) })
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	pair := SunPairResult{
-		Sun:  astrolog.PrecisePosition{Body: aspect.Sun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600},
-		Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600},
+		Sun:  astrolog.PrecisePosition{Object: objSun, Longitude: 180 + 21 + 9.0/60 + 41.0/3600},
+		Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 210 + 6 + 2.0/60 + 8.0/3600},
 	}
 	cycle := CycleResult{Span: CycleSpanFor(when, time.UTC), Events: cycleFixture(t)}
 	for _, tc := range []struct {
@@ -196,8 +203,8 @@ func TestTabDatesFollowTheClock(t *testing.T) {
 func TestDegreesAlignOnTheSign(t *testing.T) {
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	pair := SunPairResult{
-		Sun:  astrolog.PrecisePosition{Body: aspect.Sun, Longitude: 201},
-		Body: astrolog.PrecisePosition{Body: aspect.Venus, Longitude: 216},
+		Sun:  astrolog.PrecisePosition{Object: objSun, Longitude: 201},
+		Body: astrolog.PrecisePosition{Object: objVenus, Longitude: 216},
 	}
 	cycle := CycleResult{Span: CycleSpanFor(when, time.UTC), Events: cycleFixture(t)}
 	facts, err := NowFacts(pair, cycle, when, time.UTC)

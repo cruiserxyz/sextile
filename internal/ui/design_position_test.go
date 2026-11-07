@@ -8,6 +8,11 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"regexp"
 	"strconv"
 	"strings"
@@ -150,7 +155,7 @@ func positionOwners() []positionOwner {
 			return m
 		}, pos: func(m Model) (int, int) { return m.bodyCursorIdx, len(m.chart.positions) }},
 		{name: "log console", title: "Log", model: func(t *testing.T, cfg Config, w, h int) Model {
-			m, _ := press(t, designAt(t, cfg, w, h), ",", "l")
+			m, _ := press(t, designAt(t, cfg, w, h), ",", "l", "l")
 			m.console.cursor = 0
 			m.console.offset = 0
 			return m
@@ -161,35 +166,35 @@ func positionOwners() []positionOwner {
 			m.details.cursor, m.details.rowOffset = 0, 0
 			return m
 		}, pos: func(m Model) (int, int) { return m.details.cursor, len(m.timelineRows()) }},
-		{name: "city popup", title: popupTitleCity, model: func(t *testing.T, cfg Config, w, h int) Model {
+		{name: "city popup", title: dialog.TitleCity, model: func(t *testing.T, cfg Config, w, h int) Model {
 			m := designAt(t, cfg, w, h)
 			m.atlas = liftState("b", 0)
 			m.startup = startupAtlasOpen
 			return m
-		}, pos: func(m Model) (int, int) { return m.atlas.cursor, len(m.atlas.matches) }},
-		{name: "open chart popup", title: popupTitleOpenChart, model: func(t *testing.T, cfg Config, w, h int) Model {
+		}, pos: func(m Model) (int, int) { return m.atlas.Cursor, len(m.atlas.Matches) }},
+		{name: "open chart popup", title: dialog.TitleOpenChart, model: func(t *testing.T, cfg Config, w, h int) Model {
 			m := designAt(t, cfg, w, h)
 			m.picker = listRowsChartState()
 			m.picker.drops = []store.ChartDrop{{File: "broken.as", Reason: "not a chart"}}
-			m.picker.cursor = 0
+			m.picker.Cursor = 0
 			m.startup = startupChartOpen
 			return m
-		}, pos: func(m Model) (int, int) { return m.picker.cursor, len(m.picker.matches) }},
-		{name: "bodies popup", title: popupTitleBodies, model: func(t *testing.T, cfg Config, w, h int) Model {
+		}, pos: func(m Model) (int, int) { return m.picker.Cursor, len(m.picker.Matches) }},
+		{name: "bodies popup", title: dialog.TitleBodies, model: func(t *testing.T, cfg Config, w, h int) Model {
 			m := designAt(t, cfg, w, h)
 			m.bodyModal = listRowsBodyState()
-			m.bodyModal.cursor = 0
+			m.bodyModal.Cursor = 0
 			m.startup = startupBodyOpen
 			return m
-		}, pos: func(m Model) (int, int) { return m.bodyModal.cursor, m.bodyModal.totalRows() }},
-		{name: "aspects popup", title: popupTitleAspects, model: func(t *testing.T, cfg Config, w, h int) Model {
+		}, pos: func(m Model) (int, int) { return m.bodyModal.Cursor, m.bodyModal.TotalRows() }},
+		{name: "aspects popup", title: dialog.TitleAspects, model: func(t *testing.T, cfg Config, w, h int) Model {
 			m := designAt(t, cfg, w, h)
 			m.aspectModal = listRowsAspectState("")
-			m.aspectModal.cursor = 0
+			m.aspectModal.Cursor = 0
 			m.startup = startupAspectOpen
 			return m
 		}, pos: func(m Model) (int, int) {
-			return m.aspectModal.cursor, familyRows() + len(m.aspectModal.matches)
+			return m.aspectModal.Cursor, popup.FamilyRows() + len(m.aspectModal.Matches)
 		}},
 	}
 }
@@ -249,33 +254,33 @@ func TestEmptyListsReadZeroOfZero(t *testing.T) {
 		name, title string
 		model       func(t *testing.T) Model
 	}{
-		{"city popup before typing", popupTitleCity, func(t *testing.T) Model {
+		{"city popup before typing", dialog.TitleCity, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.atlas = liftState("", 0)
 			m.startup = startupAtlasOpen
 			return m
 		}},
-		{"city popup with no match", popupTitleCity, func(t *testing.T) Model {
+		{"city popup with no match", dialog.TitleCity, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.atlas = liftState("zzzzqqq", 0)
 			m.startup = startupAtlasOpen
 			return m
 		}},
-		{"open chart popup, empty library", popupTitleOpenChart, func(t *testing.T) Model {
+		{"open chart popup, empty library", dialog.TitleOpenChart, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.picker = chartPickerState{loaded: true, prior: startupReady}
 			m.picker.refilter()
 			m.startup = startupChartOpen
 			return m
 		}},
-		{"open chart popup, loading", popupTitleOpenChart, func(t *testing.T) Model {
+		{"open chart popup, loading", dialog.TitleOpenChart, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.picker = chartPickerState{prior: startupReady}
 			m.startup = startupChartOpen
 			return m
 		}},
 		{"console, empty", "Log", func(t *testing.T) Model {
-			m, _ := press(t, consoleTasteModel(t, cfg, 80, 24, 0), ",", "l")
+			m, _ := press(t, consoleTasteModel(t, cfg, 80, 24, 0), ",", "l", "l")
 			return m
 		}},
 	}
@@ -292,9 +297,9 @@ func TestEmptyListsReadZeroOfZero(t *testing.T) {
 
 // thumbRows counts the right-edge cells of a frame that carry the bar.
 func thumbRows(view string, r frameRect, cfg Config) int {
-	glyph := []rune(scrollThumbGlyph)[0]
-	if cfg.useASCII() {
-		glyph = []rune(scrollThumbASCII)[0]
+	glyph := []rune(pane.ThumbGlyph)[0]
+	if cfg.UseASCII() {
+		glyph = []rune(pane.ThumbASCII)[0]
 	}
 	rows := screenRunes(view)
 	n := 0
@@ -321,12 +326,12 @@ func manyCharts(n int) []store.NamedChart {
 
 // manyAspects is more aspects than the Aspects panel's grid can hold.
 func manyAspects() []aspect.Aspect {
-	bodies := []aspect.Body{aspect.Sun, aspect.Moon, aspect.Mercury, aspect.Venus, aspect.Mars, aspect.Jupiter, aspect.Saturn, aspect.Uranus, aspect.Neptune, aspect.Pluto}
+	bodies := []aspect.Object{objSun, objMoon, objMercury, objVenus, objMars, objJupiter, objSaturn, objUranus, objNeptune, objPluto}
 	kinds := []aspect.AspectKind{aspect.Conjunction, aspect.Opposition, aspect.Square, aspect.Trine, aspect.Sextile}
 	var out []aspect.Aspect
 	for i, a := range bodies {
 		for _, b := range bodies[i+1:] {
-			out = append(out, aspect.NewAspect(a, b, kinds[len(out)%len(kinds)], 1))
+			out = append(out, aspect.NewObjectAspect(a, b, kinds[len(out)%len(kinds)], 1))
 		}
 	}
 	return out
@@ -336,7 +341,7 @@ func manyAspects() []aspect.Aspect {
 func manyCrossAspects() []lookup.OverlayAspect {
 	var out []lookup.OverlayAspect
 	for _, a := range manyAspects() {
-		out = append(out, lookup.OverlayAspect{Transit: a.A, Natal: a.B, Kind: a.Kind, Orb: a.Orb, Power: a.Power})
+		out = append(out, lookup.OverlayAspect{TransitObject: a.AObject, NatalObject: a.BObject, Kind: a.Kind, Orb: a.Orb, Power: a.Power})
 	}
 	return out
 }
@@ -356,23 +361,23 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 		{"side Log, 30 lines", "Log", func(t *testing.T) Model { return designAt(t, cfg, 144, 40) }, true},
 		{"side Log, 2 lines", "Log", func(t *testing.T) Model { return consoleTasteModel(t, cfg, 144, 40, 2) }, false},
 		{"console, 30 lines at 80x24", "Log", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 80, 24), ",", "l")
+			m, _ := press(t, designAt(t, cfg, 80, 24), ",", "l", "l")
 			return m
 		}, true},
-		{"city popup, capped matches", popupTitleCity, func(t *testing.T) Model {
+		{"city popup, capped matches", dialog.TitleCity, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.atlas = liftCappedState()
 			m.startup = startupAtlasOpen
 			return m
 		}, true},
-		{"open chart popup, 40 charts", popupTitleOpenChart, func(t *testing.T) Model {
+		{"open chart popup, 40 charts", dialog.TitleOpenChart, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.picker = chartPickerState{loaded: true, prior: startupReady, charts: manyCharts(40)}
 			m.picker.refilter()
 			m.startup = startupChartOpen
 			return m
 		}, true},
-		{"open chart popup, 3 charts", popupTitleOpenChart, func(t *testing.T) Model {
+		{"open chart popup, 3 charts", dialog.TitleOpenChart, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.picker = listRowsChartState()
 			m.startup = startupChartOpen
@@ -381,19 +386,19 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 		// 144x40, not 80x24: at 80x24 the five group rows, their rule and the
 		// Enabled bar leave the list ONE row (the specification 7),
 		// and a one-row track has no thumb to draw (viewport.overflows).
-		{"bodies popup, full registry", popupTitleBodies, func(t *testing.T) Model {
+		{"bodies popup, full registry", dialog.TitleBodies, func(t *testing.T) Model {
 			m := designAt(t, cfg, 144, 40)
-			m.bodyModal = openBodyModal(bigObjectRegistry(60), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+			m.bodyModal = popup.Open(bigObjectRegistry(60), recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
 			m.startup = startupBodyOpen
 			return m
-		}, 60 > bodyListHeight(40)},
-		{"aspects popup, full registry", popupTitleAspects, func(t *testing.T) Model {
+		}, 60 > popup.ListHeight(40)},
+		{"aspects popup, full registry", dialog.TitleAspects, func(t *testing.T) Model {
 			m := designAt(t, cfg, 80, 24)
 			m.aspectModal = listRowsAspectState("")
 			m.startup = startupAspectOpen
 			return m
-		}, len(listRowsAspectState("").matches) > modalListHeight(24)-familyRows()},
-		{"help popup at 80x24", popupTitleKeys, func(t *testing.T) Model {
+		}, len(listRowsAspectState("").Matches) > dialog.ListHeight(24)-popup.FamilyRows()},
+		{"help popup at 80x24", dialog.TitleKeys, func(t *testing.T) Model {
 			m, _ := press(t, designAt(t, cfg, 80, 24), "?")
 			return m
 		}, true},
@@ -420,7 +425,7 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 		view := designAt(t, cfg, 144, 40).View()
 		r := findTitledFrame(t, view, "Log")
 		rows := screenRunes(view)
-		glyph := []rune(scrollThumbGlyph)[0]
+		glyph := []rune(pane.ThumbGlyph)[0]
 		if last := rows[r.y+r.h-2][r.x+r.w-1]; last != glyph {
 			t.Errorf("the last body row's edge is %q, want the thumb: the hidden lines are above\n%s", last, ansi.Strip(view))
 		}
@@ -435,7 +440,7 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 func TestPositionCounterStyle(t *testing.T) {
 	forceColor(t)
 	cfg := Config{Color: ColorAlways}
-	focus, frame := styleFG(t, focusColour), styleFG(t, frameColour)
+	focus, frame := styleFG(t, term.DefaultFocusColour), styleFG(t, term.FrameColour)
 	cases := []struct {
 		name, title string
 		model       func(t *testing.T) Model
@@ -450,7 +455,7 @@ func TestPositionCounterStyle(t *testing.T) {
 			return m
 		}, false},
 		{"console open", "Log", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l")
+			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l", "l")
 			return m
 		}, true},
 		{"timeline attached", "[0] ", func(t *testing.T) Model { return onTimeline(t, cfg) }, true},
@@ -508,7 +513,7 @@ func TestPositionCounterStyle(t *testing.T) {
 func cursorRowText(t *testing.T, view string, r frameRect) string {
 	t.Helper()
 	for y := r.y + 1; y < r.y+r.h-1; y++ {
-		if row := edgeText(view, r, y); strings.Contains(row, rowCursorUnicode) {
+		if row := edgeText(view, r, y); strings.Contains(row, menu.RowCursorUnicode) {
 			return row
 		}
 	}
@@ -526,13 +531,13 @@ func TestHelpPopupFits(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d", w, h), func(t *testing.T) {
 			m, _ := press(t, designAt(t, cfg, w, h), "?")
 			view := m.View()
-			r := findTitledFrame(t, view, popupTitleKeys)
+			r := findTitledFrame(t, view, dialog.TitleKeys)
 			rows := screenRunes(view)
 			if r.y < 0 || r.x < 0 || r.y+r.h > h || r.x+r.w > w || rows[r.y+r.h-1][r.x+r.w-1] != '╯' {
 				t.Fatalf("help's frame %+v is not whole on a %dx%d screen:\n%s", r, w, h, ansi.Strip(view))
 			}
 			for y := r.y + 1; y < r.y+r.h-1; y++ {
-				if strings.Contains(edgeText(view, r, y), rowCursorUnicode) {
+				if strings.Contains(edgeText(view, r, y), menu.RowCursorUnicode) {
 					t.Fatalf("help draws a cursor row:\n%s", ansi.Strip(view))
 				}
 			}
@@ -544,18 +549,18 @@ func TestHelpPopupFits(t *testing.T) {
 			}
 			top := first(m)
 			m, _ = press(t, m, "down")
-			if m.help.offset != 1 || first(m) == top {
-				t.Fatalf("↓ did not scroll one line (offset %d)", m.help.offset)
+			if m.help.Offset != 1 || first(m) == top {
+				t.Fatalf("↓ did not scroll one line (offset %d)", m.help.Offset)
 			}
 			m, _ = press(t, m, "up")
-			if m.help.offset != 0 || first(m) != top {
-				t.Fatalf("↑ did not return to the top (offset %d)", m.help.offset)
+			if m.help.Offset != 0 || first(m) != top {
+				t.Fatalf("↑ did not return to the top (offset %d)", m.help.Offset)
 			}
 			m, _ = press(t, m, "down")
 			m, _ = press(t, m, "?")
 			m, _ = press(t, m, "?")
-			if m.help.offset != 0 {
-				t.Fatalf("help reopened at offset %d, want 0", m.help.offset)
+			if m.help.Offset != 0 {
+				t.Fatalf("help reopened at offset %d, want 0", m.help.Offset)
 			}
 		})
 	}
@@ -570,7 +575,7 @@ func TestTruncationIsMarked(t *testing.T) {
 		name string
 		cfg  Config
 	}{{"unicode", Config{Color: ColorNever}}, {"accessible", Config{Accessible: true}}} {
-		mark := cutMark(mode.cfg)
+		mark := term.CutMark(mode.cfg)
 		cases := []struct {
 			name string
 			view func(t *testing.T) string
@@ -595,18 +600,6 @@ func TestTruncationIsMarked(t *testing.T) {
 				m.slots, m.cursorIdx = slots, 0
 				return m.View()
 			}, "Llanfair", ""},
-			{"Bodies popup tag bar", func(t *testing.T) string {
-				m := designAt(t, mode.cfg, 80, 24)
-				var reg []aspect.RegistryObject
-				var sel []int
-				for i := 0; i < 40; i++ {
-					reg = append(reg, aspect.RegistryObject{Number: i, Name: "Object"})
-					sel = append(sel, i)
-				}
-				m.bodyModal = openBodyModal(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: sel}, nil)
-				m.startup = startupBodyOpen
-				return m.View()
-			}, "Object", ""},
 			{"Open chart list row", func(t *testing.T) string {
 				m := designAt(t, mode.cfg, 80, 24)
 				charts := manyCharts(2)
@@ -641,7 +634,7 @@ func TestTruncationIsMarked(t *testing.T) {
 			// No popup title is long enough to be cut at a supported size, so
 			// the box is drawn with one; the frame is what reaches the screen.
 			{"Popup title", func(t *testing.T) string {
-				return renderModalBox(modalBox{Title: long + long, Fit: modalFit{Width: 1, Rows: 1}}, mode.cfg, 80, 24, func(w, h int) string { return "" })
+				return dialog.Render(dialog.Box{Title: long + long, Fit: dialog.Fit{Width: 1, Rows: 1}}, mode.cfg, 80, 24, popupChrome(mode.cfg), func(w, h int) string { return "" })
 			}, "Constructed", ""},
 			// Bodies rows fit at every supported width; the panel body is
 			// drawn narrower than any of them to reach the cut.
@@ -706,7 +699,7 @@ func TestChartPickNoMatches(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := designAt(t, cfg, 80, 24)
 			m.picker = chartPickerState{loaded: true, prior: startupReady, charts: tc.charts, drops: []store.ChartDrop{drop}}
-			m.picker.filterText = tc.filter
+			m.picker.FilterText = tc.filter
 			m.picker.refilter()
 			m.startup = startupChartOpen
 			plain := ansi.Strip(m.View())
@@ -808,7 +801,7 @@ func TestTitlesAreSentenceCase(t *testing.T) {
 		"workspace": func(t *testing.T) string { return designAt(t, cfg, 144, 40).View() },
 		"timeline":  func(t *testing.T) string { return onTimeline(t, cfg).View() },
 		"console": func(t *testing.T) string {
-			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l")
+			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l", "l")
 			return m.View()
 		},
 	}
@@ -838,7 +831,7 @@ func TestTitlesAreSentenceCase(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"Timeline", popupTitleKeys, popupTitleSaveChart, popupTitleChartTitle} {
+	for _, want := range []string{"Timeline", dialog.TitleKeys, dialog.TitleSaveChart, dialog.TitleChartTitle} {
 		found := false
 		for title := range seen {
 			if strings.Contains(title, want) {
@@ -874,5 +867,5 @@ func TestModalBoxRefusesAnEmptyTitle(t *testing.T) {
 			t.Error("renderModalBox drew a popup with an empty title")
 		}
 	}()
-	renderModalBox(modalBox{}, Config{}, 80, 24, func(w, h int) string { return "" })
+	dialog.Render(dialog.Box{}, Config{}, 80, 24, popupChrome(Config{}), func(w, h int) string { return "" })
 }

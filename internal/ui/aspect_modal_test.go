@@ -2,6 +2,8 @@ package ui
 
 import (
 	"errors"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"sort"
 	"strings"
 	"testing"
@@ -43,9 +45,9 @@ func testRegistry() []aspect.RegistryAspect {
 }
 
 // ticked is the sorted set of indices the modal reports as chosen.
-func ticked(st aspectModalState) []int {
+func ticked(st popup.Aspects) []int {
 	var out []int
-	for n, on := range st.selected {
+	for n, on := range st.Selected {
 		if on {
 			out = append(out, n)
 		}
@@ -66,8 +68,8 @@ func sameInts(a, b []int) bool {
 	return true
 }
 
-func openTest(policy recipe.AspectPolicy) aspectModalState {
-	return openAspectModal(testRegistry(), policy)
+func openTest(policy recipe.AspectPolicy) popup.Aspects {
+	return popup.OpenAspects(testRegistry(), policy)
 }
 
 // C5 — families are defined by the angle's harmonic, not by names or indices.
@@ -82,7 +84,7 @@ func TestGroupsAreDefinedByAngle(t *testing.T) {
 		aspect.FamilyAll:       {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13},
 	}
 	for f, exp := range want {
-		got := st.familyMembers(f)
+		got := st.FamilyMembers(f)
 		if len(got) != len(exp) {
 			t.Errorf("%s members = %v, want %v", f.Name(), got, exp)
 			continue
@@ -102,9 +104,9 @@ func TestGroupsAreDefinedByAngle(t *testing.T) {
 		renamed[i].Name = "Renamed"
 		renamed[i].Abbrev = "Rnm"
 	}
-	rst := openAspectModal(renamed, recipe.AspectPolicy{})
+	rst := popup.OpenAspects(renamed, recipe.AspectPolicy{})
 	for _, f := range aspect.Families() {
-		a, b := st.familyMembers(f), rst.familyMembers(f)
+		a, b := st.FamilyMembers(f), rst.FamilyMembers(f)
 		if len(a) != len(b) {
 			t.Errorf("%s membership changed when every aspect was renamed", f.Name())
 		}
@@ -114,13 +116,13 @@ func TestGroupsAreDefinedByAngle(t *testing.T) {
 // C5 — a family whose predicate matches nothing still renders its row.
 func TestGroupRowSurvivesEmptyMembership(t *testing.T) {
 	onlyConjunction := []aspect.RegistryAspect{{Index: 1, Name: "Conjunct", Abbrev: "Con", Angle: 0, Orb: 7}}
-	st := openAspectModal(onlyConjunction, recipe.AspectPolicy{})
-	if got := len(st.familyMembers(aspect.FamilyHarmonic)); got != 0 {
+	st := popup.OpenAspects(onlyConjunction, recipe.AspectPolicy{})
+	if got := len(st.FamilyMembers(aspect.FamilyHarmonic)); got != 0 {
 		t.Fatalf("Harmonic has %d members in a conjunction-only registry", got)
 	}
-	rows := aspectFamilyRows(st, Config{}, 60)
-	if len(rows) != familyRows() {
-		t.Fatalf("family block rendered %d rows, want %d", len(rows), familyRows())
+	rows := popup.AspectFamilyRows(st, Config{}, 60)
+	if len(rows) != popup.FamilyRows() {
+		t.Fatalf("family block rendered %d rows, want %d", len(rows), popup.FamilyRows())
 	}
 	if !strings.Contains(rows[3], "Harmonic") || !strings.Contains(rows[3], "(0)") {
 		t.Errorf("empty family row = %q, want it present with a zero count", rows[3])
@@ -132,29 +134,29 @@ func TestGroupRowSurvivesEmptyMembership(t *testing.T) {
 func TestGroupTriStateAndToggle(t *testing.T) {
 	st := openTest(recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}})
 
-	if got := st.familyState(aspect.FamilyPtolemaic); got != familyAll {
+	if got := st.FamilyState(aspect.FamilyPtolemaic); got != popup.FamilyAll {
 		t.Errorf("Ptolemaic = %v, want all-selected", got)
 	}
-	if got := st.familyState(aspect.FamilyMajor); got != familyPartial {
+	if got := st.FamilyState(aspect.FamilyMajor); got != popup.FamilyPartial {
 		t.Errorf("Major = %v, want partial (it is a superset of Ptolemaic)", got)
 	}
-	if got := st.familyState(aspect.FamilyHarmonic); got != familyNone {
+	if got := st.FamilyState(aspect.FamilyHarmonic); got != popup.FamilyNone {
 		t.Errorf("Harmonic = %v, want none-selected", got)
 	}
 
 	// Not all selected -> select all.
-	st.toggleFamily(aspect.FamilyMajor)
-	if got := st.familyState(aspect.FamilyMajor); got != familyAll {
+	st.ToggleFamily(aspect.FamilyMajor)
+	if got := st.FamilyState(aspect.FamilyMajor); got != popup.FamilyAll {
 		t.Errorf("after toggling a partial family it is %v, want all", got)
 	}
 	// All selected -> deselect all.
-	st.toggleFamily(aspect.FamilyMajor)
-	if got := st.familyState(aspect.FamilyMajor); got != familyNone {
+	st.ToggleFamily(aspect.FamilyMajor)
+	if got := st.FamilyState(aspect.FamilyMajor); got != popup.FamilyNone {
 		t.Errorf("after toggling a full family it is %v, want none", got)
 	}
 	// Overlap is not a defect: Ptolemaic went with Major because it is a
 	// subset, and that is what the tri-state marker exists to show.
-	if got := st.familyState(aspect.FamilyPtolemaic); got != familyNone {
+	if got := st.FamilyState(aspect.FamilyPtolemaic); got != popup.FamilyNone {
 		t.Errorf("Ptolemaic = %v after Major was cleared, want none", got)
 	}
 }
@@ -165,12 +167,12 @@ func TestEmptySelectionComputesNoAspects(t *testing.T) {
 	// All is PARTIAL here (two of twelve), so the first toggle selects every
 	// member and only the second clears them. That is C6's rule and not an
 	// accident: a partial group fills before it empties.
-	st.toggleFamily(aspect.FamilyAll)
-	if got := st.familyState(aspect.FamilyAll); got != familyAll {
+	st.ToggleFamily(aspect.FamilyAll)
+	if got := st.FamilyState(aspect.FamilyAll); got != popup.FamilyAll {
 		t.Fatalf("toggling a partial All gave %v, want all-selected", got)
 	}
-	st.toggleFamily(aspect.FamilyAll)
-	p := st.policy()
+	st.ToggleFamily(aspect.FamilyAll)
+	p := st.Policy()
 	if !p.Explicit {
 		t.Fatal("an emptied selection is not Explicit; it would silently fall back to the host default")
 	}
@@ -189,7 +191,7 @@ func TestModalTogglesStartNoCompute(t *testing.T) {
 		{Type: tea.KeyRunes, Runes: []rune("squ")}, {Type: tea.KeySpace},
 		{Type: tea.KeyBackspace}, {Type: tea.KeyUp},
 	} {
-		var out aspectModalOutcome
+		var out popup.AspectOutcome
 		st, out = updateAspectModalKey(st, msg, testListHeight)
 		if out.Confirmed || out.Cancelled {
 			t.Fatalf("%v ended the modal", msg.Type)
@@ -208,8 +210,8 @@ func TestConfirmAppliesCancelRestores(t *testing.T) {
 	entry := recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 	st := openTest(entry)
 
-	st.toggleFamily(aspect.FamilyHarmonic)
-	st.toggleAt(0)
+	st.ToggleFamily(aspect.FamilyHarmonic)
+	st.ToggleAt(0)
 
 	_, cancelled := updateAspectModalKey(st, tea.KeyMsg{Type: tea.KeyEsc}, testListHeight)
 	if !cancelled.Cancelled {
@@ -236,17 +238,17 @@ func TestUnknownAspectsAreStillSelectable(t *testing.T) {
 		t.Fatal("the fixture's septile is supposed to be unnameable by the enum")
 	}
 	found := false
-	for i, r := range st.matches {
+	for i, r := range st.Matches {
 		if r.Index != 13 {
 			continue
 		}
 		found = true
-		st.toggleAt(familyRows() + i)
+		st.ToggleAt(popup.FamilyRows() + i)
 	}
 	if !found {
 		t.Fatal("the septile is not in the list at all")
 	}
-	for _, n := range st.policy().Selected() {
+	for _, n := range st.Policy().Selected() {
 		if n == 13 {
 			return
 		}
@@ -259,17 +261,17 @@ func TestUnknownAspectsAreStillSelectable(t *testing.T) {
 func TestZeroOrbAspectsAreDistinguished(t *testing.T) {
 	reg := testRegistry()
 	reg[4].Orb = 0 // the host's astrolog.as disabled the sextile
-	st := openAspectModal(reg, recipe.AspectPolicy{})
+	st := popup.OpenAspects(reg, recipe.AspectPolicy{})
 
-	if st.selected[5] {
+	if st.Selected[5] {
 		t.Error("a zero-orb aspect was seeded as selected; it cannot produce a row")
 	}
 	for _, width := range []int{54, 60} {
-		row := listRow(aspectRow(st, Config{}, reg[4], false, width), Config{}, width)
+		row := menu.Row(popup.AspectRow(st, Config{}, reg[4], false, width), Config{}, width)
 		if !strings.Contains(row, "[-]") {
 			t.Errorf("width %d: zero-orb row = %q, want the unavailable marker", width, row)
 		}
-		live := listRow(aspectRow(st, Config{}, reg[3], false, width), Config{}, width)
+		live := menu.Row(popup.AspectRow(st, Config{}, reg[3], false, width), Config{}, width)
 		if strings.Contains(live, "[-]") {
 			t.Errorf("width %d: a counting aspect was marked unavailable: %q", width, live)
 		}
@@ -281,39 +283,39 @@ func TestZeroOrbAspectsAreDistinguished(t *testing.T) {
 	// from, and every other row of this contract passes while it does.
 
 	// Individually, from the list.
-	for i, r := range st.matches {
+	for i, r := range st.Matches {
 		if r.Index == 5 {
-			st.toggleAt(familyRows() + i)
+			st.ToggleAt(popup.FamilyRows() + i)
 		}
 	}
-	if st.selected[5] {
+	if st.Selected[5] {
 		t.Error("Space on a zero-orb row ticked it")
 	}
 
 	// Through the family row that contains it. Ptolemaic is Con/Opp/Squ/Tri
 	// plus this sextile, so "select all" is the path that used to sweep it in
 	// without the operator ever putting a cursor on it.
-	st.toggleFamily(aspect.FamilyPtolemaic) // full -> empty
-	if got := st.familyState(aspect.FamilyPtolemaic); got != familyNone {
+	st.ToggleFamily(aspect.FamilyPtolemaic) // full -> empty
+	if got := st.FamilyState(aspect.FamilyPtolemaic); got != popup.FamilyNone {
 		t.Fatalf("Ptolemaic = %v after clearing it, want none", got)
 	}
-	st.toggleFamily(aspect.FamilyPtolemaic) // empty -> full
-	if st.selected[5] {
+	st.ToggleFamily(aspect.FamilyPtolemaic) // empty -> full
+	if st.Selected[5] {
 		t.Error("selecting the family swept the zero-orb aspect in")
 	}
-	if got := st.familyState(aspect.FamilyPtolemaic); got != familyAll {
+	if got := st.FamilyState(aspect.FamilyPtolemaic); got != popup.FamilyAll {
 		t.Errorf("Ptolemaic = %v after select-all, want all — a family holding one member that cannot be ticked would fill forever and never empty", got)
 	}
 
 	// And it reaches no policy by any route, including an entry policy that
 	// still names it from a session where its orb was not yet zero.
-	for _, n := range st.policy().Selected() {
+	for _, n := range st.Policy().Selected() {
 		if n == 5 {
 			t.Error("a zero-orb aspect reached the policy; the chart will omit it and the chooser says it is on")
 		}
 	}
-	stale := openAspectModal(reg, recipe.AspectPolicy{Explicit: true, Indices: []int{1, 5}})
-	for _, n := range stale.policy().Selected() {
+	stale := popup.OpenAspects(reg, recipe.AspectPolicy{Explicit: true, Indices: []int{1, 5}})
+	for _, n := range stale.Policy().Selected() {
 		if n == 5 {
 			t.Error("a stale explicit policy carried the zero-orb aspect back into a confirmed set")
 		}
@@ -330,7 +332,7 @@ func TestZeroOrbAspectsAreDistinguished(t *testing.T) {
 func TestOpenSeedsTheHostsInForceSet(t *testing.T) {
 	seen := recordLensSeams(t)
 
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{} // no override: the startup state
 
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
@@ -345,7 +347,7 @@ func TestOpenSeedsTheHostsInForceSet(t *testing.T) {
 	// Said the other way round, because this is the exact wrong reading: the
 	// inconjunct has a 3-degree orb and is restricted out. An orb is not a
 	// restriction.
-	if got.aspectModal.selected[6] {
+	if got.aspectModal.Selected[6] {
 		t.Error("a restricted aspect was ticked because its orb is positive; the seed is reading the wrong fact")
 	}
 
@@ -378,47 +380,47 @@ func TestFilteredFamilyRowAgreesWithItsGlyph(t *testing.T) {
 	// Square (3) selected, SemiSquare (8) and SesquiQuadrate (9) not. All
 	// three match "squ"; nothing else in the fixture does.
 	st := openTest(recipe.AspectPolicy{Explicit: true, Indices: []int{3}})
-	st.filterText = "squ"
-	st.refilter()
+	st.FilterText = "squ"
+	st.Refilter()
 
-	if got := len(st.matches); got != 3 {
+	if got := len(st.Matches); got != 3 {
 		t.Fatalf("filter matched %d rows, want Square, SemiSquare and SesquiQuadrate", got)
 	}
 
 	// Ptolemaic's only visible member is Square, and Square is selected, so
 	// the row is ALL of what it can currently speak for.
-	if got := st.familyState(aspect.FamilyPtolemaic); got != familyAll {
+	if got := st.FamilyState(aspect.FamilyPtolemaic); got != popup.FamilyAll {
 		t.Errorf("Ptolemaic = %v with its one visible member selected, want all", got)
 	}
-	rows := aspectFamilyRows(st, Config{}, 60)
+	rows := popup.AspectFamilyRows(st, Config{}, 60)
 	if !strings.Contains(rows[0], "[● ]") || !strings.Contains(rows[0], "(1)") {
 		t.Errorf("Ptolemaic row = %q, want a full glyph and a count of 1 — both over the same set", rows[0])
 	}
 
 	// And the toggle acts on what the row speaks for. Clearing it must not
 	// reach Conjunct, Opposite or Trine, which the operator cannot see.
-	st.toggleFamily(aspect.FamilyPtolemaic)
-	if st.selected[3] {
+	st.ToggleFamily(aspect.FamilyPtolemaic)
+	if st.Selected[3] {
 		t.Error("clearing the family left its one visible member selected")
 	}
 
-	st.filterText = ""
-	st.refilter()
-	st.selected = map[int]bool{}
-	st.filterText = "squ"
-	st.refilter()
-	st.toggleFamily(aspect.FamilyPtolemaic)
+	st.FilterText = ""
+	st.Refilter()
+	st.Selected = map[int]bool{}
+	st.FilterText = "squ"
+	st.Refilter()
+	st.ToggleFamily(aspect.FamilyPtolemaic)
 	for _, n := range []int{1, 2, 4, 5} {
-		if st.selected[n] {
+		if st.Selected[n] {
 			t.Errorf("filling a filtered family reached index %d, which is not on screen", n)
 		}
 	}
-	if !st.selected[3] {
+	if !st.Selected[3] {
 		t.Error("filling a filtered family did not reach its one visible member")
 	}
 }
 
-// renderPinnedBody's first real caller: the family block must actually reach
+// menu.RenderPinnedBody's first real caller: the family block must actually reach
 // the rendered modal, above the list.
 func TestAspectModalRendersFamilyBlockAboveList(t *testing.T) {
 	st := openTest(recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}})
@@ -445,8 +447,8 @@ func TestAspectModalRendersFamilyBlockAboveList(t *testing.T) {
 
 // --- wiring: the chooser reached from the running model -------------------
 
-func readyModelWithRegistry(reg []aspect.RegistryAspect) Model {
-	m := NewModel(Config{Accessible: true, Color: ColorNever})
+func readyModelWithRegistry(t *testing.T, reg []aspect.RegistryAspect) Model {
+	m := newTestModel(t, Config{Accessible: true, Color: ColorNever}, RealClock{})
 	m.width, m.height = 132, 40
 	m.startup = startupReady
 	m.aspectRegistry = reg
@@ -456,7 +458,7 @@ func readyModelWithRegistry(reg []aspect.RegistryAspect) Model {
 // `a` opens the chooser, and the modal it opens is seeded from the policy in
 // force.
 func TestAspectKeyOpensChooser(t *testing.T) {
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2}}
 
 	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
@@ -470,8 +472,8 @@ func TestAspectKeyOpensChooser(t *testing.T) {
 	if !got.modalOpen() {
 		t.Error("modalOpen() is false while the chooser is open")
 	}
-	if !got.aspectModal.selected[1] || !got.aspectModal.selected[2] || got.aspectModal.selected[3] {
-		t.Errorf("modal seeded %v, want exactly the policy in force", got.aspectModal.selected)
+	if !got.aspectModal.Selected[1] || !got.aspectModal.Selected[2] || got.aspectModal.Selected[3] {
+		t.Errorf("modal seeded %v, want exactly the policy in force", got.aspectModal.Selected)
 	}
 	if !strings.Contains(got.View(), "Ptolemaic") {
 		t.Error("the open chooser is not on screen")
@@ -479,7 +481,7 @@ func TestAspectKeyOpensChooser(t *testing.T) {
 
 	// C12: modals remain usable over the friendly too-small fallback. Refusing
 	// only this chooser would make its hotkey behave unlike every other modal.
-	small := readyModelWithRegistry(testRegistry())
+	small := readyModelWithRegistry(t, testRegistry())
 	small.width, small.height = 70, 14
 	if view := small.View(); !strings.Contains(view, "Terminal too small") {
 		t.Fatalf("70x14 baseline is not tooSmallView:\n%s", view)
@@ -498,7 +500,7 @@ func TestAspectKeyOpensChooser(t *testing.T) {
 // computing with whatever was already in force. The failed read is logged
 // once, when it lands; the key says nothing (the specification B1).
 func TestModalRefusesWithoutRegistry(t *testing.T) {
-	m := readyModelWithRegistry(nil)
+	m := readyModelWithRegistry(t, nil)
 	m.aspectRegErr = errors.New("astrolog: -HA: no aspect rows found")
 	before := m.lens.Aspects
 
@@ -527,7 +529,7 @@ func TestModalRefusesWithoutRegistry(t *testing.T) {
 	// duplicate would spend another Astrolog process for the same answer
 	// and, if it failed first, would clear the pending flag and leave the
 	// original's success with nothing to open.
-	young := readyModelWithRegistry(nil)
+	young := readyModelWithRegistry(t, nil)
 	tm2, cmd2 := young.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	got2 := tm2.(Model)
 	if cmd2 != nil {
@@ -556,7 +558,7 @@ func TestChooserConfirmAndCancelReachTheModel(t *testing.T) {
 	entry := recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
 
 	// Cancel.
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	m.lens.Aspects = entry
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeySpace}) // toggle Ptolemaic off
@@ -570,7 +572,7 @@ func TestChooserConfirmAndCancelReachTheModel(t *testing.T) {
 	}
 
 	// Confirm.
-	m2 := readyModelWithRegistry(testRegistry())
+	m2 := readyModelWithRegistry(t, testRegistry())
 	m2.lens.Aspects = entry
 	tm2, _ := m2.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	tm2, _ = tm2.(Model).Update(tea.KeyMsg{Type: tea.KeySpace}) // Ptolemaic off
@@ -590,13 +592,13 @@ func TestChooserConfirmAndCancelReachTheModel(t *testing.T) {
 // The registry read lands on the Model, and a failed read is kept so the
 // refusal can name it.
 func TestAspectRegistryLoadedReachesTheModel(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	tm, _ := m.Update(AspectRegistryLoadedMsg{Registry: testRegistry()})
 	if got := len(tm.(Model).aspectRegistry); got != len(testRegistry()) {
 		t.Errorf("registry = %d rows, want %d", got, len(testRegistry()))
 	}
 
-	m2 := NewModel(Config{Accessible: true})
+	m2 := newTestModel(t, Config{Accessible: true}, RealClock{})
 	tm2, _ := m2.Update(AspectRegistryLoadedMsg{Err: errors.New("boom")})
 	if tm2.(Model).aspectRegErr == nil {
 		t.Error("a failed read was discarded; the refusal could not name its cause")
@@ -607,7 +609,7 @@ func TestAspectRegistryLoadedReachesTheModel(t *testing.T) {
 // — including `q`. Losing the operator's half-made selection to the quit
 // binding would be the worst possible way to learn this was unhandled.
 func TestChooserSwallowsMainScopeKeys(t *testing.T) {
-	m := readyModelWithRegistry(testRegistry())
+	m := readyModelWithRegistry(t, testRegistry())
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	if tm.(Model).startup != startupAspectOpen {
 		t.Fatal("chooser did not open")
@@ -620,8 +622,8 @@ func TestChooserSwallowsMainScopeKeys(t *testing.T) {
 	if got.startup != startupAspectOpen {
 		t.Errorf("`q` inside the chooser left it: startup = %q", got.startup)
 	}
-	if got.aspectModal.filterText != "q" {
-		t.Errorf("filterText = %q, want %q — typed characters must filter, not act", got.aspectModal.filterText, "q")
+	if got.aspectModal.FilterText != "q" {
+		t.Errorf("filterText = %q, want %q — typed characters must filter, not act", got.aspectModal.FilterText, "q")
 	}
 }
 
@@ -630,7 +632,7 @@ func TestChooserSwallowsMainScopeKeys(t *testing.T) {
 // overwritten the moment the frame commits. Pressing early must say so, not
 // arm something that will be silently clobbered.
 func TestChooserDoesNotOpenBeforeFirstFrame(t *testing.T) {
-	m := NewModel(Config{Accessible: true, Color: ColorNever})
+	m := newTestModel(t, Config{Accessible: true, Color: ColorNever}, RealClock{})
 	m.width, m.height = 132, 40
 	m.aspectRegistry = testRegistry()
 	if m.startup == startupReady {

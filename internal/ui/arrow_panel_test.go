@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"strings"
 	"testing"
 
@@ -72,18 +73,18 @@ func TestArrowsReachTheSamePanelAsTab(t *testing.T) {
 // satisfy C1 with two NEW bindings and leave the keymap carrying two ways to
 // say one thing, which is how the help modal and the footer drift.
 func TestArrowsRideTheExistingPanelBindings(t *testing.T) {
-	keys := defaultKeys()
+	kmap := keys.DefaultKeys()
 	for _, tc := range []struct {
 		name string
-		id   BindingID
+		id   keys.BindingID
 		want []string
 	}{
-		{"next", BindingNextView, []string{"tab", "right"}},
-		{"prev", BindingPrevView, []string{"shift+tab", "left"}},
+		{"next", keys.BindingNextView, []string{"tab", "right"}},
+		{"prev", keys.BindingPrevView, []string{"shift+tab", "left"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var rows []BindingEntry
-			for _, e := range keys.mainBindings() {
+			var rows []keys.BindingEntry
+			for _, e := range mainBindings(kmap) {
 				if e.ID == tc.id {
 					rows = append(rows, e)
 				}
@@ -143,17 +144,18 @@ func TestArrowsDoNotReachPanelsFromAModal(t *testing.T) {
 // naming both lands on 82 of 80 columns and KeyBarHeight reserves one row. The
 // HELP MODAL carries the whole binding, so tab is documented, not dropped.
 func TestPanelBindingsAdvertiseTheArrows(t *testing.T) {
-	keys := defaultKeys()
+	kmap := keys.DefaultKeys()
 
-	help := helpListText(keys, defaultLeaderKey, defaultLeaderMap())
+	help := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
 	for _, want := range []string{"tab/→", "⇧ tab/←"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("the help modal does not carry %q, so that key is undocumented", want)
 		}
 	}
 
-	bar := renderKeyBar(80, NewModel(Config{}).available(keys.mainBindings()), Config{Accessible: true}, "")
-	for _, want := range []string{"Next panel: →"} {
+	tm := newTestModel(t, Config{}, RealClock{})
+	bar := tm.barText(ownerMain, mainBindings(kmap), 80, Config{Accessible: true}, "")
+	for _, want := range []string{"Switch panel: ←→"} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("the key bar does not name %q", want)
 		}
@@ -173,14 +175,14 @@ func TestPanelBindingsAdvertiseTheArrows(t *testing.T) {
 //
 // The scroll entry is only asserted from 132 columns up, and that is not a
 // convenience: Details is laid out only at 132 and wider, so an 80-column
-// frame never carries the scroll entry. `renderKeyBar(80, …, scroll=true)`
+// frame never carries the scroll entry. `keys.RenderBar(…, 80)` with the scroll entry
 // does wrap onto two lines — it did so before this slice too, and the
 // keybar golden's "80 accessible details=true" block records it — but no
 // frame can reach that combination. Asserting it would pin a state the
 // product cannot enter and would have failed against unchanged code.
 func TestFrameHeightSurvivesTheFooter(t *testing.T) {
 	for _, width := range []int{80, 132, 200} {
-		bar := renderKeyBar(width, defaultKeys().mainBindings(), Config{Accessible: true}, "")
+		bar := arrowBase(t).barText(ownerMain, withoutConditions(mainBindings(keys.DefaultKeys())), width, Config{Accessible: true}, "")
 		if lines := strings.Count(bar, "\n") + 1; lines != 1 {
 			t.Errorf("key bar at %d cols is %d lines; KeyBarHeight reserves 1, so it overflows the frame", width, lines)
 		}

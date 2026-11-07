@@ -93,8 +93,8 @@ func TestFloatingAttachedFlag(t *testing.T) {
 		stubTextCompute(t)
 		m := onTimeline(t, Config{Accessible: true})
 		// The cursor between slots, the panels' digits, Details, a selection.
-		keys := []tea.KeyMsg{keyDown, keyUp, keyTab, runes("1"), runes("2"), runes("3"), runes("0"), keyEnter, keyEsc, {Type: tea.KeySpace}}
-		for _, k := range keys {
+		kmap := []tea.KeyMsg{keyDown, keyUp, keyTab, runes("1"), runes("2"), runes("3"), runes("0"), keyEnter, keyEsc, {Type: tea.KeySpace}}
+		for _, k := range kmap {
 			m, _ = tpress(t, m, k)
 			if m.floatingDetached {
 				t.Fatalf("key %v detached the floating chart", k)
@@ -103,7 +103,7 @@ func TestFloatingAttachedFlag(t *testing.T) {
 		// Detached stays detached through the same keys.
 		d := readyModelWithSlots(t, berlinP)
 		d, _ = tpress(t, d, runes("d"))
-		for _, k := range keys {
+		for _, k := range kmap {
 			d, _ = tpress(t, d, k)
 			if !d.floatingDetached {
 				t.Fatalf("key %v re-attached the floating chart", k)
@@ -197,11 +197,11 @@ func recordTimer(t *testing.T, timer func(time.Duration, func(time.Time) tea.Msg
 	t.Helper()
 	var asked []time.Duration
 	prev := minuteTimer
+	t.Cleanup(func() { minuteTimer = prev })
 	minuteTimer = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
 		asked = append(asked, d)
 		return timer(d, fn)
 	}
-	t.Cleanup(func() { minuteTimer = prev })
 	return &asked
 }
 
@@ -210,7 +210,7 @@ func recordTimer(t *testing.T, timer func(time.Duration, func(time.Time) tea.Msg
 // test can tell one was started; it is never run, so nothing waits a minute.
 func liveModel(t *testing.T, clock *fakeClock) (Model, tea.Cmd) {
 	t.Helper()
-	m := NewModelWithClock(Config{Accessible: true}, clock)
+	m := newTestModel(t, Config{Accessible: true}, clock)
 	m.startup = startupReady
 	m.place = berlinP
 	slots, err := store.NewSlots(clock.Now(), berlinP)
@@ -466,7 +466,7 @@ func TestTickIsQuietInTheLog(t *testing.T) {
 		}
 	}
 
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -481,6 +481,7 @@ func TestTickIsQuietInTheLog(t *testing.T) {
 	}
 
 	templateNotesStayOut := func(t *testing.T) {
+		freshModels(t)
 		stubBodyFacts(t, nil)
 		clock := &fakeClock{t: tickStart()}
 		m := activeOnTemplate(templateTestModel(t))
@@ -529,20 +530,21 @@ func TestTickIsQuietInTheLog(t *testing.T) {
 		}
 		m = commit(t, m, refreshResultMsg{
 			surface: surfaceDetails, runID: st.runningRunID, wantID: st.runningWantID,
-			payload: detailsPayload{title: "[0] Chart", body: "report", commands: []string{"/bin/astrolog report"}},
+			payload: detailsPayload{title: "[0] Chart", body: "report", commands: []string{"/bin/astrolog report"}, key: keyNow(m)},
 		})
 		if got := argvTexts(m); len(got) != 0 {
 			t.Errorf("the report the tick asked for wrote argv lines: %q", got)
 		}
-		// A report the operator asks for afterwards is logged as ever.
-		m = m.requestDetailsForTest()
+		// A report the operator asks for afterwards is logged as ever. The test
+		// reads a run's own argv line, so the tick's report is not remembered.
+		m = m.forgetMemory().requestDetailsForTest()
 		st = m.refresh[surfaceDetails]
 		if st.wantID == st.runningWantID && st.runningRunID == 1 && m.quiet[surfaceDetails] == st.wantID {
 			t.Fatal("fixture: the operator's request registered no new want")
 		}
 		m = commit(t, m, refreshResultMsg{
 			surface: surfaceDetails, runID: st.runningRunID, wantID: st.wantID,
-			payload: detailsPayload{title: "[0] Chart", body: "report", commands: []string{"/bin/astrolog user-report"}},
+			payload: detailsPayload{title: "[0] Chart", body: "report", commands: []string{"/bin/astrolog user-report"}, key: keyNow(m)},
 		})
 		if got := argvTexts(m); len(got) != 1 || got[0] != "/bin/astrolog user-report" {
 			t.Errorf("argv lines = %q, want the operator's report alone", got)
@@ -565,15 +567,15 @@ func slotTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := shippedTemplates
-	shippedTemplates = ts
 	t.Cleanup(func() { shippedTemplates = old })
+	shippedTemplates = ts
 }
 
 // venusFrame is frameFor with the positions the template fixture's cursor
 // stands on (Sun, Moon, Venus), so the committed frame leaves the tab where it was.
 func venusFrame(m Model, at time.Time) FirstFrameReadyMsg {
 	f := frameFor(m, at)
-	f.Positions = []aspect.Position{{Body: aspect.Sun}, {Body: aspect.Moon}, {Body: aspect.Venus}}
+	f.Positions = []aspect.Position{{Object: objSun}, {Object: objMoon}, {Object: objVenus}}
 	return f
 }
 
@@ -618,7 +620,7 @@ func TestNowLineCopiesFullCommand(t *testing.T) {
 	m, _ = deliverTick(m)
 	m = commit(t, m, frameFor(m, clock.Now(), full))
 
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	at := -1
 	for i, l := range m.console.snapshot {
 		if l.lane == laneNow {
@@ -653,7 +655,7 @@ func TestNowLineIsAlwaysLastInTheConsole(t *testing.T) {
 	m, _ := liveModel(t, clock)
 	m = tickAt(t, m, clock, 1, "/bin/astrolog tick-1")
 	m = m.logCommands([]string{"/bin/astrolog user-one", "/bin/astrolog user-two"})
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -674,7 +676,7 @@ func TestOpenConsoleShowsEachTick(t *testing.T) {
 	m, _ := liveModel(t, clock)
 	m = tickAt(t, m, clock, 1, "/bin/astrolog tick-1")
 	m = m.logCommands([]string{"/bin/astrolog user-one"})
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	n, cursor := len(m.console.snapshot), m.console.cursor
 	for i := 2; i <= 3; i++ {
 		m = tickAt(t, m, clock, i, fmt.Sprintf("/bin/astrolog tick-%d", i))
@@ -711,7 +713,7 @@ func TestConsoleOpensOnTheNowLineWhileFollowing(t *testing.T) {
 		return m, clock
 	}
 	open := func(t *testing.T, m Model) consoleState {
-		m, _ = press(t, m, ",", "l")
+		m, _ = press(t, m, ",", "l", "l")
 		if !m.console.open {
 			t.Fatal("the console did not open")
 		}

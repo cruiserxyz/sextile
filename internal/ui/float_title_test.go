@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestFloatTitleGivesWayToThePlace(t *testing.T) {
 	s := slots.All()[0]
 	used := ansi.StringWidth(slotMoment(s.Time, s.Location)) + 1 + ansi.StringWidth(slotZone(s.Time, s.Location)) +
 		1 + ansi.StringWidth(place.Display()) + 1 + len("WhTr")
-	prefixW := ansi.StringWidth(chartRowPrefix(false, true, 0, false, cfg))
+	prefixW := ansi.StringWidth(menu.ChartRowPrefix(false, true, "", false, cfg))
 	sawShort, sawWhole := false, false
 	for width := prefixW + used; width <= prefixW+used+12; width++ {
 		row := ansi.Strip(chartSlotsBodyLayout(slots, 0, false, testFrozenTime(), place, lookup.Hellenistic, width, cfg, nil, "~ Now", true))

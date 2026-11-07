@@ -71,20 +71,49 @@ const stationBand = 0.05
 // no civil-clock arithmetic, so a DST change cannot move it.
 const stationProbeDay = 1.0
 
-// stationCandidate reports whether a body can carry a mark: a typed body
-// outside the excluded class, not retrograde by the sign bit (Astrolog prints
-// no R), and inside the band. The excluded class is the angles, the lunar nodes
-// and Lilith — points whose speed does not move one way across a day (D38).
-func stationCandidate(p aspect.Position) bool {
-	if !p.Named() {
+// moonsLo and moonsHi bound Astrolog's planetary moons by object number.
+const (
+	moonsLo = 52
+	moonsHi = 78
+)
+
+// stationShape reports whether an object can carry a mark by its number and
+// speed alone: a resolved object outside the excluded class, not retrograde by
+// the sign bit (Astrolog prints no R), and inside the band. The excluded class
+// is a fact by number: the house cusp points (aspect.CuspHouse, which holds the
+// four angles), the lunar nodes (16, 17), Lilith (18) and the three points
+// derived from the angles, Fortune, Vertex and East Point (19, 20, 21) — their
+// speed does not move one way across a day (D38), the last three because they
+// move with the angles, not on an orbit. Every other object is a candidate by
+// the speed test: Ceres and Sedna as much as Mars, except the planetary moons.
+func stationShape(p aspect.Position) bool {
+	n := p.Object.Number
+	if p.Object == (aspect.Object{}) {
 		return false
 	}
-	switch p.Body {
-	case aspect.Ascendant, aspect.Midheaven, aspect.Descendant, aspect.ImumCoeli,
-		aspect.NorthNode, aspect.SouthNode, aspect.Lilith:
+	if _, cusp := aspect.CuspHouse(p.Object); cusp {
+		return false
+	}
+	switch n {
+	case 16, 17, 18, 19, 20, 21:
+		return false
+	}
+	// The planetary moons, Astrolog's objects 52 to 78 (moonsLo..moonsHi: 21
+	// core, 12 sign, 9 Uranus, 9 dwarf moons), have no mark. A moon's geocentric
+	// speed crosses zero several times a day (Phobos every 8 hours), so the
+	// one-day probe's trend is aliased and S/R against S/D would be a coin toss
+	// (council Custodian, 2026-11-07). The centres of body, 79 to 83, orbit the
+	// Sun and keep theirs.
+	if n >= moonsLo && n <= moonsHi {
 		return false
 	}
 	return !math.Signbit(p.Speed) && p.Speed < stationBand
+}
+
+// stationCandidate is stationShape and not a fixed star by the registry (a
+// star's speed column is not a motion).
+func stationCandidate(p aspect.Position, reg aspect.Registry) bool {
+	return stationShape(p) && !reg.IsStar(p.Object.Number)
 }
 
 // StationMarks is the one place the station rule lives. Given the focused
@@ -102,10 +131,10 @@ func stationCandidate(p aspect.Position) bool {
 // commands is the probe's ready-to-paste command (also on failure when the
 // spawn happened), for the caller to append to its Result's Commands so the
 // argv lane shows it like every other compute.
-func StationMarks(ctx context.Context, probers *Probers, positions []aspect.Position, moment time.Time, place location.PlaceInfo, lens Lens) (marks map[aspect.Body]Station, commands []string, err error) {
+func StationMarks(ctx context.Context, probers *Probers, positions []aspect.Position, moment time.Time, place location.PlaceInfo, lens Lens) (marks map[int]Station, commands []string, err error) {
 	var candidates []aspect.Position
 	for _, p := range positions {
-		if stationCandidate(p) {
+		if stationCandidate(p, lens.Registry) {
 			candidates = append(candidates, p)
 		}
 	}
@@ -127,21 +156,23 @@ func StationMarks(ctx context.Context, probers *Probers, positions []aspect.Posi
 // apart: each candidate of now (see stationCandidate) is marked by the trend of
 // its ratio into later. StationMarks runs it on the probe's positions; it is
 // exported so a test of a caller can put real rule behind a stubbed Astrolog.
+// The marks are keyed on Object.Number. It judges the shape only (no registry):
+// StationMarks has already dropped the fixed stars from its candidates.
 //
 // derivation: Bodies station mark (S/R, S/D)
-func StationMarksBetween(now, later []aspect.Position) map[aspect.Body]Station {
-	next := make(map[aspect.Body]float64, len(later))
+func StationMarksBetween(now, later []aspect.Position) map[int]Station {
+	next := make(map[int]float64, len(later))
 	for _, q := range later {
-		if q.Named() {
-			next[q.Body] = q.Speed
+		if q.Object != (aspect.Object{}) {
+			next[q.Object.Number] = q.Speed
 		}
 	}
-	var marks map[aspect.Body]Station
+	var marks map[int]Station
 	for _, c := range now {
-		if !stationCandidate(c) {
+		if !stationShape(c) {
 			continue
 		}
-		speed, ok := next[c.Body]
+		speed, ok := next[c.Object.Number]
 		if !ok {
 			continue
 		}
@@ -154,9 +185,9 @@ func StationMarksBetween(now, later []aspect.Position) map[aspect.Body]Station {
 		}
 		if mark != StationNone {
 			if marks == nil {
-				marks = make(map[aspect.Body]Station)
+				marks = make(map[int]Station)
 			}
-			marks[c.Body] = mark
+			marks[c.Object.Number] = mark
 		}
 	}
 	return marks

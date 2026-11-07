@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -292,7 +294,7 @@ func TestActiveTabTitleNeverTruncates(t *testing.T) {
 				m = send(t, m, runes("]"))
 			}
 			title := activeAspectsTitle(m)
-			want := numeralForColour(1, mode) + " in " + numeralForColour(tab+1, mode)
+			want := panel.NumeralForColour(1, mode) + " in " + panel.NumeralForColour(tab+1, mode)
 			if title != want {
 				t.Fatalf("tab %d: title %q, want %q", tab, title, want)
 			}
@@ -332,7 +334,7 @@ func TestFrameIdentity(t *testing.T) {
 			}
 			// The title ends in the frame's own numeral: "<cursor> in <base>".
 			title := activeAspectsTitle(m)
-			if want := " in " + numeralForColour(sc.numeral(frame), m.cfg); !strings.HasSuffix(title, want) {
+			if want := " in " + panel.NumeralForColour(sc.numeral(frame), m.cfg); !strings.HasSuffix(title, want) {
 				t.Errorf("cursor %d base %d: title %q does not end in %q", cursor, base, title, want)
 			}
 			ofFrame, _, opts := m.overlayInputs(sc, transitTimeFromWorkspace(m))
@@ -375,12 +377,14 @@ func bodiesStubs(t *testing.T) {
 		}
 		return c
 	}
-	firstCallNatalPositions = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
-	}
-	firstCallTransits = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
-		return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
-	}
+	stubSpawns(t, func(s *rowSpawns) {
+		s.cast.natal = func(_ context.Context, _ *lookup.Probers, c store.AnchorChart, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(c.When)), Cusps: cuspsFor(shiftOf(c.When))}, nil
+		}
+		s.cast.transit = func(_ context.Context, _ *lookup.Probers, when time.Time, _ location.PlaceInfo, _ lookup.Lens) (lookup.Result, error) {
+			return lookup.Result{Positions: shiftedChart(shiftOf(when) + 11), Cusps: cuspsFor(shiftOf(when) + 11)}, nil
+		}
+	})
 }
 
 // bodiesFrame is Anna ①, Ben ②, now ③ with Anna the base and the cursor on
@@ -539,7 +543,7 @@ func TestNoBaseSwitchText(t *testing.T) {
 			if m.width < 100 {
 				m.width = 132
 			}
-			bar := ansi.Strip(renderKeyBar(m.width, m.keyBarEntries(), m.cfg, m.footerIndicator()))
+			bar := ansi.Strip(keys.RenderBar(m.keysContext(), m.width))
 			if baseWord.MatchString(bar) {
 				t.Errorf("%s: the key bar says base: %q", name, bar)
 			}
@@ -550,9 +554,9 @@ func TestNoBaseSwitchText(t *testing.T) {
 			if lines := helpLinesText(m); baseWord.MatchString(lines) {
 				t.Errorf("%s: the help list names a base:\n%s", name, lines)
 			}
-			// Every leader entry's own description, in both maps.
-			for _, lb := range append(append([]leaderBinding(nil), m.leaderBindings...), detailsLeaderMap()...) {
-				if d := bindingDesc(m.keys, lb.ID); baseWord.MatchString(d) {
+			// Every leader entry's own description.
+			for _, lb := range m.leaderBindings {
+				if d := keys.BindingDesc(m.keysContextFor(ownerHelp), lb.ID); baseWord.MatchString(d) {
 					t.Errorf("%s: leader entry %v is described %q", name, lb.Seq, d)
 				}
 			}
@@ -564,7 +568,7 @@ func TestNoBaseSwitchText(t *testing.T) {
 func helpLinesText(m Model) string {
 	var b strings.Builder
 	for _, l := range m.helpLines() {
-		b.WriteString(ansi.Strip(l.text))
+		b.WriteString(ansi.Strip(l.Text))
 		b.WriteString("\n")
 	}
 	return b.String()
@@ -672,7 +676,7 @@ func TestPairLabelMatchesAspectsAndDetails(t *testing.T) {
 				t.Errorf("cursor %d base %d: the Aspects cross call's other chart is not the pair's right chart", cursor, base)
 			}
 			m.focused = PanelBodies
-			m.chart.positions = []aspect.Position{{Body: aspect.Venus}}
+			m.chart.positions = []aspect.Position{{Object: objVenus}}
 			req, ok := m.detailsRequestFor()
 			if !ok || !req.cross {
 				t.Fatalf("cursor %d base %d: no Details cross request", cursor, base)
@@ -692,7 +696,7 @@ func TestPairLabelMatchesAspectsAndDetails(t *testing.T) {
 func TestRestoreStartsOnOwnTab(t *testing.T) {
 	sessionSandbox(t)
 	sess := v2([]store.SessionSlot{listEntry(1, true), listEntry(2, true)}, true)
-	var tm tea.Model = NewModelWithClock(Config{Color: ColorAlways}, FrozenClock(sessionFrozen))
+	var tm tea.Model = newTestModel(t, Config{Color: ColorAlways}, FrozenClock(sessionFrozen))
 	m := tm.(Model)
 	stale := &store.Slot{} // a slot of some earlier workspace
 	m.base, m.at = stale, stale
@@ -743,6 +747,7 @@ func TestStagedWheelMatchesTheFrame(t *testing.T) {
 			if base == cursor {
 				continue
 			}
+			freshModels(t)
 			wheels, _ := stubWheels(t)
 			stubPairCompute(t)
 			m := framesFixture(t, 3, cursor)
@@ -793,5 +798,36 @@ func TestCityRepickKeepsTheBase(t *testing.T) {
 		// The cursor lands on now after a re-pick; walking to the row reads the same tab.
 		m = walk(t, m, keyUp, 2-tc.cursor)
 		wantTab(t, m, tc.title, tc.name+" after the re-pick, back on the row")
+	}
+}
+
+// Walk line 2026-11-06: "[ and ] keys should be available everywhere to change
+// the behavior of aspect-handling content". From Bodies `[` and `]` pick the
+// base exactly as from Chart and Aspects, and the focus stays on Bodies; with
+// Details holding the keyboard they still switch Details' own tabs.
+func TestBracketsFromBodiesWriteTheBase(t *testing.T) {
+	m := framesFixture(t, 3, 0)
+	for _, step := range []struct {
+		key  string
+		want int // list index of the base, -1 for none
+	}{{"]", 1}, {"]", 2}, {"]", -1}, {"[", 2}, {"[", 1}} {
+		m.focused = PanelBodies
+		m = send(t, m, runes(step.key))
+		if m.focused != PanelBodies {
+			t.Fatalf("%s from Bodies moved the focus to %v", step.key, m.focused)
+		}
+		switch {
+		case step.want < 0 && m.base != nil:
+			t.Fatalf("%s from Bodies: base %v, want none (the chart's own tab)", step.key, m.base)
+		case step.want >= 0 && m.base != slotAt(m, step.want):
+			t.Fatalf("%s from Bodies: base is not the slot at %d", step.key, step.want)
+		}
+	}
+	if got := m.focusedView(); got != PanelAspects {
+		t.Errorf("Bodies' bracket view is %v, want Aspects", got)
+	}
+	m.details.attached = true
+	if got := m.focusedView(); got != PanelDetails {
+		t.Errorf("with Details holding the keyboard the bracket view is %v, want Details", got)
 	}
 }

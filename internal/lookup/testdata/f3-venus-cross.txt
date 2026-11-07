@@ -1,0 +1,20 @@
+Astrolog 8.00 chart for Sat Sep 23, 1995 18:00 (DT Zone 1E)  11°34E 48°08N
+Chart #2 comparison for Fri Jun 15, 1990 16:30 (DT Zone 1E)   8°43E 52°51N
+
+  1:    Moon (Vir) Tri with (Tau) Venus     - orb: a1°34' - power:  8.43
+  2:   Venus (Lib) Squ with [Cap] Uranus    - orb: s1°06' - power:  6.06
+  3:   Venus (Lib) Opp with (Ari) Mars      - orb: a1°50' - power:  5.89
+  4:   Venus (Lib) Tri with (Aqu) Nadir     - orb: a1°50' - power:  4.42
+  5:  Saturn [Pis] Sex with (Tau) Venus     - orb: a1°44' - power:  4.25
+  6:   Venus (Lib) Tri with (Gem) Mercury   - orb: a3°24' - power:  3.08
+  7:   Venus (Lib) Squ with [Cap] Neptune   - orb: a4°26' - power:  2.63
+  8: Neptune [Cap] Tri with (Tau) Venus     - orb: a3°54' - power:  2.38
+  9:   Venus (Lib) Tri with (Aqu) North Node- orb: s1°08' - power:  1.91
+ 10:   Venus (Lib) Squ with (Can) Jupiter   - orb: a6°38' - power:  0.41
+ 11:   Venus (Lib) Squ with (Can) Chiron    - orb: a6°47' - power:  0.18
+
+Sum power: 39.66 - Average power: 3.61
+Con:  0   Opp:  1   Squ:  4   Tri:  5   Sex:  1
+Sun:  0   Moo:  1   Mer:  1   Ven: 11   Mar:  1   Jup:  1   Sat:  1   Ura:  1
+Nep:  2   Plu:  0   Chi:  1   Nor:  1   Sou:  0   Lil:  0   Asc:  0   Nad:  1
+Des:  0   Mid:  0

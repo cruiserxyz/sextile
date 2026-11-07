@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"strings"
 	"testing"
 	"time"
@@ -76,14 +77,14 @@ func TestOpenLineShowsTheModeSlashes(t *testing.T) {
 // filterCells is a cross list of n cells in falling power, most with the Sun on
 // the transit side and each fourth with Mars there.
 func filterCells(n int) []lookup.OverlayAspect {
-	natal := []aspect.Body{aspect.Moon, aspect.Venus, aspect.Jupiter, aspect.Mercury, aspect.Neptune, aspect.Pluto}
+	natal := []aspect.Object{objMoon, objVenus, objJupiter, objMercury, objNeptune, objPluto}
 	var list []lookup.OverlayAspect
 	for i := 0; i < n; i++ {
-		transit := aspect.Sun
+		transit := objSun
 		if i%4 == 3 {
-			transit = aspect.Mars
+			transit = objMars
 		}
-		list = append(list, lookup.OverlayAspect{Transit: transit, Natal: natal[i%len(natal)], Kind: aspect.Square, Orb: aspect.Orb(i % 9), Power: float64(1000 - i)})
+		list = append(list, lookup.OverlayAspect{TransitObject: transit, NatalObject: natal[i%len(natal)], Kind: aspect.Square, Orb: aspect.Orb(i % 9), Power: float64(1000 - i)})
 	}
 	return list
 }
@@ -93,9 +94,11 @@ func filterCells(n int) []lookup.OverlayAspect {
 func aspectsFocused(t *testing.T, list []lookup.OverlayAspect) Model {
 	t.Helper()
 	m, _ := markFixture(t, Config{Color: ColorNever})
-	overlayCrossAspects = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
-		return lookup.OverlayAspects{Aspects: list}, nil
-	}
+	m = withSpawns(m, func(s *rowSpawns) {
+		s.cast.overlay = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
+			return lookup.OverlayAspects{Aspects: list}, nil
+		}
+	})
 	m = enter(t, m, timelineRowWith(t, m.timeline.rows, "Opp natal (Ari) Venus"))
 	m, _ = press(t, m, "3")
 	if m.focused != PanelAspects || m.details.attached {
@@ -130,9 +133,9 @@ func TestSlashOnTheAspectsPanelDoesNothing(t *testing.T) {
 	}
 }
 
-func bodyNames(st bodyModalState) []string {
+func bodyNames(st popup.Body) []string {
 	var out []string
-	for _, o := range st.matches {
+	for _, o := range st.Matches {
 		out = append(out, o.Name)
 	}
 	return out
@@ -142,13 +145,13 @@ func bodyNames(st bodyModalState) []string {
 // the cursor on it, below the group rows.
 func TestBodiesPopupRanksAndLandsOnTheBestMatch(t *testing.T) {
 	reg := []aspect.RegistryObject{
-		{Number: 20, Name: "Dharma"},
-		{Number: 21, Name: "Moon Satellite"},
-		{Number: 4, Name: "Mars"},
-		{Number: 22, Name: "Lunar Mass"},
+		{Object: aspect.Object{Number: 20, Name: "Dharma"}},
+		{Object: aspect.Object{Number: 21, Name: "Moon Satellite"}},
+		{Object: aspect.Object{Number: 4, Name: "Mars"}},
+		{Object: aspect.Object{Number: 22, Name: "Lunar Mass"}},
 	}
-	st := openBodyModal(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
-	st.cursor = groupRows() + 3
+	st := popup.Open(reg, recipe.ObjectPolicy{Baseline: recipe.Explicit}, nil)
+	st.Cursor = popup.GroupRows() + 3
 	for _, r := range "ma" {
 		st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}, 10)
 	}
@@ -156,8 +159,8 @@ func TestBodiesPopupRanksAndLandsOnTheBestMatch(t *testing.T) {
 	if len(got) == 0 || got[0] != "Mars" {
 		t.Fatalf("`ma` ranks %v, want Mars first", got)
 	}
-	if st.cursor != groupRows() {
-		t.Errorf("cursor = %d, want %d: the first match below the group rows", st.cursor, groupRows())
+	if st.Cursor != popup.GroupRows() {
+		t.Errorf("cursor = %d, want %d: the first match below the group rows", st.Cursor, popup.GroupRows())
 	}
 	if want := []string{"Mars", "Dharma", "Lunar Mass", "Moon Satellite"}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("`ma` ranks %v, want %v (starts-with, contains, then loose in list order)", got, want)
@@ -174,8 +177,8 @@ func TestHouseFinderCursorLandsOnTheBestMatch(t *testing.T) {
 	}
 	m = typeInFinder(t, m, "pla")
 	f := m.houseFinder
-	if f.cursor != 0 || len(f.matches) == 0 || f.matches[f.cursor] != recipe.Placidus {
-		t.Errorf("after `pla` the cursor is %d on %v, want 0 on Placidus", f.cursor, finderNames(m))
+	if f.Cursor != 0 || len(f.Matches) == 0 || f.Matches[f.Cursor] != recipe.Placidus {
+		t.Errorf("after `pla` the cursor is %d on %v, want 0 on Placidus", f.Cursor, finderNames(m))
 	}
 	if shown := visibleCursorRow(t, m); shown != "Placidus" {
 		t.Errorf("the screen marks %q, want Placidus", shown)
@@ -196,16 +199,16 @@ func TestZodiacFinderCursorLandsOnTheBestMatch(t *testing.T) {
 		m, _ = tpress(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	f := m.zodiacFinder
-	if f.cursor != 0 || len(f.matches) == 0 || f.matches[0].Name() != "Raman" {
-		t.Errorf("after `ra` the cursor is %d over %d matches, want 0 on Raman", f.cursor, len(f.matches))
+	if f.Cursor != 0 || len(f.Matches) == 0 || f.Matches[0].Name() != "Raman" {
+		t.Errorf("after `ra` the cursor is %d over %d matches, want 0 on Raman", f.Cursor, len(f.Matches))
 	}
 }
 
 // An exact city name ranks that city first, and the cursor follows it.
 func TestCityPickerRanksTheExactNameFirst(t *testing.T) {
-	m := NewModel(Config{Accessible: true})
+	m := newTestModel(t, Config{Accessible: true}, RealClock{})
 	m.startup = startupAtlasOpen
-	m.atlas.index = location.NewIndex([]location.PlaceInfo{
+	m.atlas.Index = location.NewIndex([]location.PlaceInfo{
 		{Name: "Parisot", Country: "FR"},
 		{Name: "Paris Hill", Country: "US"},
 		{Name: "Paris", Country: "FR"},
@@ -220,11 +223,11 @@ func TestCityPickerRanksTheExactNameFirst(t *testing.T) {
 	tm, _ := updateAtlasModalKey(m, keyDown)
 	m = tm.(Model)
 	type_("is")
-	if got := m.atlas.matches; len(got) == 0 || got[0].Name != "Paris" {
+	if got := m.atlas.Matches; len(got) == 0 || got[0].Name != "Paris" {
 		t.Fatalf("`paris` ranks %v, want the exact name first", got)
 	}
-	if m.atlas.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 on the best match", m.atlas.cursor)
+	if m.atlas.Cursor != 0 {
+		t.Errorf("cursor = %d, want 0 on the best match", m.atlas.Cursor)
 	}
 }
 
@@ -250,10 +253,10 @@ func TestChartPickerCursorLandsOnTheBestMatch(t *testing.T) {
 	tm, _ := updateChartModalKey(m, keyDown)
 	m = tm.(Model)
 	type_("l")
-	if got := pickerNames(m.picker.matches); len(got) != 3 || got[0] != "Carl" || got[1] != "Carlton Reed" {
+	if got := pickerNames(m.picker.Matches); len(got) != 3 || got[0] != "Carl" || got[1] != "Carlton Reed" {
 		t.Fatalf("`carl` ranks %v, want Carl, Carlton Reed, Old Carl Reed", got)
 	}
-	if m.picker.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 on the best match", m.picker.cursor)
+	if m.picker.Cursor != 0 {
+		t.Errorf("cursor = %d, want 0 on the best match", m.picker.Cursor)
 	}
 }

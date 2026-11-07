@@ -6,30 +6,38 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// TestNewChartSpec_RejectsUnknownBody: aspect.Body is a uint8, so an
-// out-of-range value is constructible. The policy must reject it, so a
-// validated spec is always compilable (no body without an astrolog number).
-func TestNewChartSpec_RejectsUnknownBody(t *testing.T) {
-	if _, err := NewChartSpec(
-		MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0},
-		WholeSign, Tropical,
-		ObjectPolicy{Baseline: AstrologDefault, Add: NewBodySet(aspect.Body(99))},
-	); err == nil {
-		t.Error("Add with an out-of-range body must be rejected")
+// TestNewChartSpec_RejectsNegativeObjectNumber: an object number is 0 or more
+// (object 0 is Earth). The policy must reject a negative one in Add and in
+// Remove, so a validated spec only ever names objects Astrolog can number.
+func TestNewChartSpec_RejectsNegativeObjectNumber(t *testing.T) {
+	moment := MomentAtPlace{JD: 2446232.0, Lon: 0, Lat: 0}
+	if _, err := NewChartSpec(moment, WholeSign, Tropical,
+		ObjectPolicy{Baseline: AstrologDefault, Add: NewObjectSet(-1)}); err == nil {
+		t.Error("Add of object -1 must be rejected")
+	}
+	if _, err := NewChartSpec(moment, WholeSign, Tropical,
+		ObjectPolicy{Baseline: AstrologDefault, Remove: NewObjectSet(-1)}); err == nil {
+		t.Error("Remove of object -1 must be rejected")
 	}
 }
 
-// TestObjectPolicy_AddRemoveValidation: Add must be outside the baseline,
-// Remove must be inside it.
+// TestObjectPolicy_AddRemoveValidation: the checks are structural. An object in
+// both Add and Remove is refused; an Add the host already lists (the Sun) and a
+// Remove it does not (Chiron) are not, because the policy holds no list of the
+// host's default set (slice 8c: each draws what it says, whatever the host lists).
 func TestObjectPolicy_AddRemoveValidation(t *testing.T) {
 	moment := MomentAtPlace{JD: 1, Lon: 0, Lat: 0}
 	if _, err := NewChartSpec(moment, WholeSign, Tropical,
-		ObjectPolicy{Baseline: AstrologDefault, Add: NewBodySet(aspect.Sun)}); err == nil {
-		t.Error("Add of a baseline body (Sun) must be rejected")
+		ObjectPolicy{Baseline: AstrologDefault, Add: NewObjectSet(11), Remove: NewObjectSet(11)}); err == nil {
+		t.Error("an object in both Add and Remove must be rejected")
 	}
 	if _, err := NewChartSpec(moment, WholeSign, Tropical,
-		ObjectPolicy{Baseline: AstrologDefault, Remove: NewBodySet(aspect.Chiron)}); err == nil {
-		t.Error("Remove of a non-baseline body (Chiron) must be rejected")
+		ObjectPolicy{Baseline: AstrologDefault, Add: NewObjectSet(1)}); err != nil { // the Sun
+		t.Errorf("Add of the Sun is structurally fine, got %v", err)
+	}
+	if _, err := NewChartSpec(moment, WholeSign, Tropical,
+		ObjectPolicy{Baseline: AstrologDefault, Remove: NewObjectSet(11)}); err != nil { // Chiron
+		t.Errorf("Remove of Chiron is structurally fine, got %v", err)
 	}
 }
 
@@ -50,11 +58,10 @@ func TestRawReport_Validate(t *testing.T) {
 		ok   bool
 	}{
 		{"chart", ChartRawReport(), true},
-		{"body", BodyRawReport(aspect.Moon), true},
+		{"body", BodyRawReport(aspect.Object{Number: 2, Name: "Moon"}), true},
 		{"aspects", AspectsRawReport(), true},
 		{"zero", RawReport{}, false},
-		{"unknown body", BodyRawReport(aspect.BodyUnknown), false},
-		{"out-of-range body", BodyRawReport(aspect.Body(99)), false},
+		{"zero object", BodyRawReport(aspect.Object{}), false},
 	}
 	for _, tc := range cases {
 		if err := tc.r.Validate(); (err == nil) != tc.ok {
@@ -128,5 +135,30 @@ func TestMultiWheelRejectsNestedAndBadRings(t *testing.T) {
 	if _, err := NewChartSpec(Comparison{Primary: MultiWheel{Rings: multiWheelRings(3)}, Secondary: MomentAtPlace{JD: 2, Lon: 0, Lat: 0}},
 		WholeSign, Tropical, obj); err == nil {
 		t.Error("a MultiWheel inside a Comparison must be rejected")
+	}
+}
+
+// TestBodyRawReportTakesAnyObject: a body report is for any object Astrolog's
+// registry names (Fortune, a fixed star, a cusp point), not only the ones Sextile has glyphs for;
+// only the zero Object is refused, and the other kinds refuse an object.
+func TestBodyRawReportTakesAnyObject(t *testing.T) {
+	for _, o := range []aspect.Object{
+		{Number: 19, Name: "Fortune"},
+		{Number: 23, Name: "2nd Cusp"},
+		{Number: 60, Name: "Algol"},
+	} {
+		r := BodyRawReport(o)
+		if err := r.Validate(); err != nil {
+			t.Errorf("BodyRawReport(%v) refused: %v", o, err)
+		}
+		if r.Object() != o {
+			t.Errorf("Object() = %v, want %v", r.Object(), o)
+		}
+	}
+	if err := BodyRawReport(aspect.Object{}).Validate(); err == nil {
+		t.Error("the zero Object was accepted for a body report")
+	}
+	if err := (RawReport{kind: RawReportChart, object: aspect.Object{Number: 19, Name: "Fortune"}}).Validate(); err == nil {
+		t.Error("a chart report accepted an object")
 	}
 }

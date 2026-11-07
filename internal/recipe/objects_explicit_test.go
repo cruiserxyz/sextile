@@ -3,15 +3,13 @@ package recipe
 import (
 	"reflect"
 	"testing"
-
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // objects_explicit_test.go covers the second VisibilityProfile (body-selector
 // spec § The decision this slice makes). `Explicit` carries the operator's
 // chosen set as Astrolog's own object numbers rather than as deltas over a
 // baseline, because the operator picked a set and not a difference — and
-// because `BodySet` names seventeen bodies where the registry carries 134.
+// because the registry carries 134 objects and no list of Sextile's own may bound the choice.
 
 // TestObjectPolicy_ExplicitIsAValidProfile: the profile must pass validation on
 // its own, or nothing downstream can be built.
@@ -31,12 +29,12 @@ func TestObjectPolicy_ExplicitIsAValidProfile(t *testing.T) {
 func TestObjectPolicy_ExplicitRejectsDeltas(t *testing.T) {
 	moment := MomentAtPlace{JD: 1, Lon: 0, Lat: 0}
 	if _, err := NewChartSpec(moment, WholeSign, Tropical,
-		ObjectPolicy{Baseline: Explicit, Selection: []int{1}, Add: NewBodySet(aspect.Chiron)},
+		ObjectPolicy{Baseline: Explicit, Selection: []int{1}, Add: NewObjectSet(11)}, // Chiron
 	); err == nil {
 		t.Error("Add alongside Explicit must be rejected")
 	}
 	if _, err := NewChartSpec(moment, WholeSign, Tropical,
-		ObjectPolicy{Baseline: Explicit, Selection: []int{1}, Remove: NewBodySet(aspect.Sun)},
+		ObjectPolicy{Baseline: Explicit, Selection: []int{1}, Remove: NewObjectSet(1)}, // the Sun
 	); err == nil {
 		t.Error("Remove alongside Explicit must be rejected")
 	}
@@ -110,26 +108,5 @@ func TestObjectPolicy_SelectedIsAscendingAndDeduplicated(t *testing.T) {
 func TestObjectPolicy_ZeroValueIsUnchanged(t *testing.T) {
 	if (ObjectPolicy{}).Baseline != AstrologDefault {
 		t.Fatal("the zero ObjectPolicy must still mean AstrologDefault")
-	}
-	zero := ObjectPolicy{}
-	if !reflect.DeepEqual(zero.Visible(), profileBodies(AstrologDefault)) {
-		t.Error("the zero policy's visible set must still be the AstrologDefault profile")
-	}
-}
-
-// TestObjectPolicy_VisibleIsNotMeaningfulUnderExplicit pins a GAP, not a
-// behaviour. `Visible()` answers in `aspect.Body`, which cannot name a registry
-// object, and `recipe` holds no number→Body mapping — that lives in the
-// compiler. So it reports the empty set here.
-//
-// Its one production consumer is the wheel-image highlight
-// (`highlightMembers`), which drops undrawn bodies; an empty answer therefore
-// degrades an Explicit chart's highlight to the plain wheel SILENTLY. Step 2
-// (C1a, the explicit set meeting the highlight composite) is where that is
-// settled. This test exists so the gap fails loudly if someone reaches for
-// `Visible()` under Explicit before then.
-func TestObjectPolicy_VisibleIsNotMeaningfulUnderExplicit(t *testing.T) {
-	if got := (ObjectPolicy{Baseline: Explicit, Selection: []int{1, 2}}).Visible(); len(got) != 0 {
-		t.Errorf("Visible() under Explicit = %v; recipe cannot resolve registry numbers to bodies, so it must report the empty set until C1a settles the highlight", got)
 	}
 }

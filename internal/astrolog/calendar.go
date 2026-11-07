@@ -238,7 +238,7 @@ type Parsed struct {
 }
 
 // Parse is what Astrolog READS and what its searches step through (rule b): the
-// fields of an event printed by `-t`, `-tr` or `-dm` at a zone offset seconds
+// fields of an event printed by `-t`, `-tr`, `-d` or `-dm` at a zone offset seconds
 // east, as an instant. It copies MdyToJulian with the reform date of 15 Oct
 // 1582 (calc.cpp:66-89, data.cpp:173) and AddDay's skip from 4 to 15 Oct
 // (general.cpp:786): the days 5-14 Oct 1582 are read as Julian dates and a
@@ -282,10 +282,18 @@ func (c AstrologCalendar) ParseIn(f Fields, zone *time.Location) (Parsed, error)
 
 // MonthOf is Parse's inverse for a month: the year and month Astrolog's reader
 // would write for the local day of t at offset seconds east.
-func (AstrologCalendar) MonthOf(t time.Time, offset int) (int, time.Month) {
+func (c AstrologCalendar) MonthOf(t time.Time, offset int) (int, time.Month) {
+	y, m, _ := c.DateOf(t, offset)
+	return y, m
+}
+
+// DateOf is Parse's inverse for a day: the year, month and day Astrolog's reader
+// would write for the local day of t at offset seconds east (the day after 4 Oct
+// 1582 is 15 Oct, as Astrolog's searches step).
+func (AstrologCalendar) DateOf(t time.Time, offset int) (int, time.Month, int) {
 	n := floorDiv(t.Unix()+int64(offset), 86400) + jdnOfUnixDayZero
-	y, m, _ := civilFromJDN(n, n >= jdnReform)
-	return y, time.Month(m)
+	y, m, d := civilFromJDN(n, n >= jdnReform)
+	return y, time.Month(m), d
 }
 
 // MonthBounds is the half-open instant interval [start, end) of a calendar

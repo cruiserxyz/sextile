@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"path/filepath"
 	"slices"
@@ -107,7 +108,7 @@ func TestSecondWindowLeavesARefusedSessionInPlace(t *testing.T) {
 // The second window says so once, on the Log and in the key bar.
 func TestSecondWindowSaysSoOnce(t *testing.T) {
 	sessionSandbox(t)
-	m := NewModel(Config{SecondWindow: true})
+	m := newTestModel(t, Config{SecondWindow: true}, RealClock{})
 	m.width, m.height = 200, 40
 	m, _ = applyStartupPerimeter(m, ingest.StartupPerimeterReadMsg{})
 	line := "second window: " + secondWindowNote
@@ -117,10 +118,10 @@ func TestSecondWindowSaysSoOnce(t *testing.T) {
 	if got := m.footerIndicator(); got != noticeSecondWindow {
 		t.Errorf("key bar slot = %q, want the notice", got)
 	}
-	if !strings.Contains(csText(renderKeyBar(200, m.keyBarEntries(), m.cfg, m.footerIndicator())), noticeSecondWindow) {
+	if !strings.Contains(csText(keys.RenderBar(m.keysContext(), 200)), noticeSecondWindow) {
 		t.Error("the key bar does not show the notice at 200 columns")
 	}
-	first := NewModel(Config{})
+	first := newTestModel(t, Config{}, RealClock{})
 	first, _ = applyStartupPerimeter(first, ingest.StartupPerimeterReadMsg{})
 	if logHas(first, line) != 0 || first.footerIndicator() != "" {
 		t.Error("a first window says it is a second one")
@@ -137,9 +138,9 @@ func TestSecondWindowRefusesARenameThatNeedsTheSession(t *testing.T) {
 	m := openedPicker(t)
 	m.cfg.SecondWindow = true
 	m.frames.records = []store.FrameRecord{{File: "K.as", When: frameWhenUI, Houses: recipe.Koch, HasHouses: true, From: store.FrameFromChosen}}
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -150,8 +151,8 @@ func TestSecondWindowRefusesARenameThatNeedsTheSession(t *testing.T) {
 		t.Errorf("the chart file was rewritten by a window that cannot keep its houses:\n%s", got)
 	}
 	noBackup(t, filepath.Join(dir, "K.as"))
-	if !strings.Contains(m.title.refusal, "first Sextile window") {
-		t.Errorf("refusal = %q, want it to name the first window", m.title.refusal)
+	if !strings.Contains(m.title.Refusal, "first Sextile window") {
+		t.Errorf("refusal = %q, want it to name the first window", m.title.Refusal)
 	}
 	if _, err := os.Stat(store.SessionPath()); !os.IsNotExist(err) {
 		t.Errorf("a session was written (%v)", err)
@@ -165,9 +166,9 @@ func TestSecondWindowRenamesAChartWithNoHouseLine(t *testing.T) {
 	dir := titleLibrary(t, nil, map[string]string{"N.as": kochChart("Client N", false)})
 	m := openedPicker(t)
 	m.cfg.SecondWindow = true
-	for i, c := range m.picker.matches {
+	for i, c := range m.picker.Matches {
 		if c.Source.File == "N.as" {
-			m.picker.cursor = i
+			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})

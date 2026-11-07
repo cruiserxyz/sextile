@@ -11,7 +11,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // chosenLens is a lens with both choosers engaged: an explicit body list (no
@@ -49,7 +48,7 @@ func TestSynastrySpecIsR0AndCarriesTheBand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.BodyRawReport(aspect.Sun)} {
+		for _, p := range []recipe.Projection{recipe.Aspects{}, recipe.BodyRawReport(objSun)} {
 			plan, err := astrolog.Compile(spec, p)
 			if err != nil {
 				t.Fatalf("%s/%s: %v", name, p.Label(), err)
@@ -184,7 +183,7 @@ func TestSynastryProducersAgainstLiveAstrolog(t *testing.T) {
 		t.Errorf("synastry report names the unticked Moon:\n%s", cross.Report)
 	}
 	for _, x := range cross.Aspects {
-		if x.Natal == aspect.Moon || x.Transit == aspect.Moon {
+		if x.NatalObject == objMoon || x.TransitObject == objMoon {
 			t.Errorf("a typed row names the unticked Moon: %+v", x)
 		}
 	}
@@ -198,7 +197,7 @@ func TestSynastryProducersAgainstLiveAstrolog(t *testing.T) {
 		t.Error("the overlay (-rt) report equals the synastry (-r0) report")
 	}
 
-	raw, command, err := SynastryCrossBodyRawReport(context.Background(), lens, chart1, b.when, b.place, store.ReportLabel{}, aspect.Sun)
+	raw, command, err := SynastryCrossBodyRawReport(context.Background(), lens, chart1, b.when, b.place, store.ReportLabel{}, objSun)
 	if err != nil {
 		t.Fatalf("SynastryCrossBodyRawReport: %v", err)
 	}
@@ -223,10 +222,10 @@ func TestSynastryProducersRefuseUntimedPlaces(t *testing.T) {
 	f := fixtureByName(t, "F1")
 	timed := store.AnchorChart{When: f.when, Place: f.place}
 	bare := location.PlaceInfo{Name: "Nowhere"}
-	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, timed, f.when, bare, store.ReportLabel{}, aspect.Sun); err == nil {
+	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, timed, f.when, bare, store.ReportLabel{}, objSun); err == nil {
 		t.Error("an untimed second place was accepted")
 	}
-	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, store.AnchorChart{When: f.when, Place: bare}, f.when, f.place, store.ReportLabel{}, aspect.Sun); err == nil {
+	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, store.AnchorChart{When: f.when, Place: bare}, f.when, f.place, store.ReportLabel{}, objSun); err == nil {
 		t.Error("an untimed first place was accepted")
 	}
 }

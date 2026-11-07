@@ -8,6 +8,9 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,6 +25,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ingest"
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -196,7 +200,7 @@ func assertFullWidthRun(t *testing.T, s designScreen, y int, pred func(designCel
 	// Past the gap is the frame itself: a border, or the scroll thumb on it.
 	// Anything else means part of the row was left off the band.
 	edge := func(x int) bool {
-		return x >= 0 && x < len(row) && strings.ContainsRune("│|"+scrollThumbGlyph+scrollThumbASCII, row[x].r)
+		return x >= 0 && x < len(row) && strings.ContainsRune("│|"+pane.ThumbGlyph+pane.ThumbASCII, row[x].r)
 	}
 	if left != gap || right != gap || !edge(a-1-gap) || !edge(b+1+gap) {
 		t.Fatalf("%s: the cursor row does not fill its frame (gap %d left, %d right): %q", what, left, right, s.text(y))
@@ -204,7 +208,7 @@ func assertFullWidthRun(t *testing.T, s designScreen, y int, pred func(designCel
 	return row[a]
 }
 
-// popupRowGap is modalBox's horizontal padding: a popup's list rows sit that
+// popupRowGap is dialog.Box's horizontal padding: a popup's list rows sit that
 // far inside its border.
 const popupRowGap = 2
 
@@ -265,11 +269,11 @@ func cursorLists() []cursorList {
 			m.focused = PanelBodies
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
-			planets, _ := bodyRows(m.chart.positions, nil, false, houseOverlay{})
-			return prefixOf(planets[m.bodyCursorIdx].text, 10)
+			planets, _ := panel.BodyRows(m.chart.positions, nil, plainColour, panel.HouseOverlay{})
+			return prefixOf(planets[m.bodyCursorIdx].Text, 10)
 		}},
 		{name: "log console", model: func(t *testing.T, cfg Config) Model {
-			m, _ := press(t, designBase(t, cfg), ",", "l")
+			m, _ := press(t, designBase(t, cfg), ",", "l", "l")
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
 			// The row as drawn: an argv line shows short (argv_display.go).
@@ -279,7 +283,7 @@ func cursorLists() []cursorList {
 			return onTimeline(t, cfg)
 		}, cursorText: func(t *testing.T, m Model) string {
 			// The row as drawn: the time column is 7 cells wide in every clock form.
-			return prefixOf(alignTimelineRow(m.timelineRows()[m.details.cursor]), 24)
+			return prefixOf(panel.AlignRow(m.timelineRows()[m.details.cursor]), 24)
 		}},
 		{name: "city popup", popup: true, model: func(t *testing.T, cfg Config) Model {
 			m := designBase(t, cfg)
@@ -287,7 +291,7 @@ func cursorLists() []cursorList {
 			m.startup = startupAtlasOpen
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
-			return m.atlas.matches[m.atlas.cursor].Name
+			return m.atlas.Matches[m.atlas.Cursor].Name
 		}},
 		{name: "open chart popup", popup: true, model: func(t *testing.T, cfg Config) Model {
 			m := designBase(t, cfg)
@@ -295,7 +299,7 @@ func cursorLists() []cursorList {
 			m.startup = startupChartOpen
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
-			return m.picker.matches[m.picker.cursor].Name
+			return m.picker.Matches[m.picker.Cursor].Name
 		}},
 		{name: "bodies popup", popup: true, model: func(t *testing.T, cfg Config) Model {
 			m := designBase(t, cfg)
@@ -303,7 +307,7 @@ func cursorLists() []cursorList {
 			m.startup = startupBodyOpen
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
-			return m.bodyModal.matches[m.bodyModal.cursor-groupRows()].Name
+			return m.bodyModal.Matches[m.bodyModal.Cursor-popup.GroupRows()].Name
 		}},
 		{name: "aspects popup", popup: true, model: func(t *testing.T, cfg Config) Model {
 			m := designBase(t, cfg)
@@ -311,10 +315,10 @@ func cursorLists() []cursorList {
 			m.startup = startupAspectOpen
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
-			if c := m.aspectModal.cursor; c < familyRows() {
+			if c := m.aspectModal.Cursor; c < popup.FamilyRows() {
 				return aspect.Families()[c].Name()
 			}
-			return m.aspectModal.matches[m.aspectModal.cursor-familyRows()].Name
+			return m.aspectModal.Matches[m.aspectModal.Cursor-popup.FamilyRows()].Name
 		}},
 	}
 }
@@ -327,7 +331,7 @@ func cursorLists() []cursorList {
 func TestCursorRowBand(t *testing.T) {
 	forceColor(t)
 	cfg := Config{Color: ColorAlways}
-	band := styleBG(t, cursorRowBackground)
+	band := styleBG(t, term.DefaultCursorRowColour)
 	onBand := func(c designCell) bool { return c.bg == band }
 	for _, l := range cursorLists() {
 		t.Run(l.name, func(t *testing.T) {
@@ -364,7 +368,7 @@ func TestCursorRowBand(t *testing.T) {
 			m.focused = PanelBodies
 			// An Astrolog span with its own background, the reset that ends
 			// it, and the text after the reset.
-			m.chart.bodyStyles = astrologstyle.Bodies{aspect.Sun: {
+			m.chart.bodyStyles = astrologstyle.Bodies{objSun: {
 				Body:     "\x1b[91m",
 				Position: "\x1b[41;33m",
 				House:    "\x1b[36m",
@@ -444,7 +448,7 @@ func TestCursorRowColoursOff(t *testing.T) {
 func TestNoRowIsStriped(t *testing.T) {
 	forceColor(t)
 	cfg := Config{Color: ColorAlways}
-	band := styleBG(t, cursorRowBackground)
+	band := styleBG(t, term.DefaultCursorRowColour)
 	lists := cursorLists()
 	lists = append(lists,
 		cursorList{name: "aspects", model: func(t *testing.T, cfg Config) Model {
@@ -483,7 +487,7 @@ func TestNoRowIsStriped(t *testing.T) {
 // pinned exactly as before, for whichever glyph the panel uses.
 func TestSelectionMarker(t *testing.T) {
 	forceColor(t)
-	focusFG := styleFG(t, focusColour)
+	focusFG := styleFG(t, term.DefaultFocusColour)
 	modes := []struct {
 		name string
 		cfg  Config
@@ -522,7 +526,7 @@ func TestSelectionMarker(t *testing.T) {
 			m.focused = PanelBodies
 			m.bodyCursorIdx = 0
 			if selected {
-				m.slots.ToggleBodySelection(m.cursorIdx, aspect.Mars)
+				m.slots.ToggleObjectSelection(m.cursorIdx, objMars)
 			}
 			return m
 		}, "♂ Mars", 2, false},
@@ -535,13 +539,13 @@ func TestSelectionMarker(t *testing.T) {
 				want := mode.mark
 				if pc.numeral {
 					want = '①'
-					if mode.cfg.useASCII() {
+					if mode.cfg.UseASCII() {
 						want = '1'
 					}
 					// Every selected Chart row carries its own numeral.
 					marks = map[rune]bool{}
 					for _, n := range []string{"①", "②", "③", "④", "⑤", "⑥", "1", "2", "3", "4", "5", "6"} {
-						if mode.cfg.useASCII() == (len(n) == 1) {
+						if mode.cfg.UseASCII() == (len(n) == 1) {
 							marks[[]rune(n)[0]] = true
 						}
 					}
@@ -561,7 +565,7 @@ func TestSelectionMarker(t *testing.T) {
 					return -1
 				}
 				cursorCol := 0
-				if !mode.cfg.useColor() {
+				if !mode.cfg.UseColor() {
 					cursorCol = 2
 				}
 				markX := r.x + 1 + cursorCol
@@ -582,7 +586,7 @@ func TestSelectionMarker(t *testing.T) {
 				y := find(sel)
 				if c := sel[y][markX]; c.r != want {
 					t.Fatalf("C11: the selected row's marker is %q, want %q: %q", c.r, want, sel.text(y))
-				} else if mode.cfg.useColor() && c.fg != focusFG {
+				} else if mode.cfg.UseColor() && c.fg != focusFG {
 					t.Errorf("C11: the marker is in %q, want the focus colour %q", c.fg, focusFG)
 				}
 
@@ -619,7 +623,7 @@ func TestSelectionMarker(t *testing.T) {
 				}
 
 				// C10: in Chart only the cursor row is bold.
-				if pc.panel == PanelChart && mode.cfg.useColor() {
+				if pc.panel == PanelChart && mode.cfg.UseColor() {
 					for yy := r.y + 1; yy < r.y+r.h-1; yy++ {
 						onCursor := false
 						for x := r.x + 1; x < r.x+r.w-1; x++ {
@@ -637,11 +641,11 @@ func TestSelectionMarker(t *testing.T) {
 
 // C8: the defaults are terminal colour 10 for focus and 4 for the cursor row.
 func TestThemeDefaults(t *testing.T) {
-	if focusColour != "10" || focusColourFor(Config{}) != "10" {
-		t.Errorf("focus colour = %q / %q, want 10", focusColour, focusColourFor(Config{}))
+	if term.DefaultFocusColour != "10" || (Config{}).FocusColour() != "10" {
+		t.Errorf("focus colour = %q / %q, want 10", term.DefaultFocusColour, (Config{}).FocusColour())
 	}
-	if cursorRowBackground != "4" || cursorRowColourFor(Config{}) != "4" {
-		t.Errorf("cursor-row colour = %q / %q, want 4", cursorRowBackground, cursorRowColourFor(Config{}))
+	if term.DefaultCursorRowColour != "4" || (Config{}).CursorRowColour() != "4" {
+		t.Errorf("cursor-row colour = %q / %q, want 4", term.DefaultCursorRowColour, (Config{}).CursorRowColour())
 	}
 }
 
@@ -671,7 +675,7 @@ func TestDisplayColoursReachTheScreen(t *testing.T) {
 				LatPresent: true, LonPresent: true,
 			}}
 			perimeter.HasSession, perimeter.Session = false, store.Session{}
-			var m tea.Model = NewModelWithClock(Config{Color: ColorAlways}, FrozenClock(testFrozenTime()))
+			var m tea.Model = newTestModel(t, Config{Color: ColorAlways}, FrozenClock(testFrozenTime()))
 			for _, msg := range []tea.Msg{
 				tea.WindowSizeMsg{Width: 132, Height: 40},
 				AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{{Name: "Berlin", Country: "DE", Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin"}})},
@@ -723,7 +727,7 @@ func TestNoStatusBar(t *testing.T) {
 			if c, ok := consoleRect(w, h, 1, 1); !ok || c.y != 0 || c.h != h-KeyBarHeight {
 				t.Errorf("console rect = %+v, want rows 0..%d", c, h-KeyBarHeight-1)
 			}
-			m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+			m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 			m.width, m.height = w, h
 			view := ansi.Strip(m.View())
 			lines := strings.Split(view, "\n")
@@ -736,7 +740,7 @@ func TestNoStatusBar(t *testing.T) {
 		})
 	}
 	t.Run("one row under the minimum", func(t *testing.T) {
-		m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+		m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 		m.width, m.height = 80, MinTerminalHeight-1
 		view := ansi.Strip(m.View())
 		if !strings.Contains(view, "Terminal too small") || !strings.Contains(view, "66x15") {

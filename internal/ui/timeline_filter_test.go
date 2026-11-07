@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ func typeQuery(t *testing.T, m Model, s string) Model {
 func shownLines(m Model) []string {
 	var out []string
 	for _, r := range m.timelineShown() {
-		out = append(out, alignTimelineRow(r))
+		out = append(out, panel.AlignRow(r))
 	}
 	return out
 }
@@ -45,7 +46,7 @@ func TestSlashFiltersTheTimelineLiveWithTheSharedMatcher(t *testing.T) {
 	got := shownLines(m)
 	var want []string
 	for _, r := range m.timeline.rows {
-		line := alignTimelineRow(r)
+		line := panel.AlignRow(r)
 		if strings.Contains(strings.ToLower(line), "venus") {
 			want = append(want, line)
 		}
@@ -189,7 +190,7 @@ func TestNearestMarksAndCopyActOnTheRowsShown(t *testing.T) {
 	if !m.timeline.marks[markOf(shown[0])] || len(m.timeline.marks) != 1 {
 		t.Errorf("Space marked %v, want the first shown row", m.timeline.marks)
 	}
-	if got := m.copiedRows(); len(got) != 1 || got[0] != alignTimelineRow(shown[0]) {
+	if got := m.copiedRows(); len(got) != 1 || got[0] != panel.AlignRow(shown[0]) {
 		t.Errorf(",y with one mark = %q", got)
 	}
 	// Enter acts on the shown row under the cursor.
@@ -199,6 +200,38 @@ func TestNearestMarksAndCopyActOnTheRowsShown(t *testing.T) {
 	m = pump(t, m, cmd)
 	if got := m.slots.Floating().Time; !got.Equal(want) {
 		t.Errorf("Enter jumped to %v, want the second shown row %v", got, want)
+	}
+}
+
+// Enter in the open line is the row's Enter: the arrows move the row cursor
+// there, so the row they reach is jumped to, and the line closes with its
+// query (operator, 2026-11-06: "'down' to trans sun tri natal pollux, enter,
+// aspects tab unchanged, second enter on the same row, tab changes").
+func TestEnterInTheOpenLineJumpsToTheRowUnderTheCursor(t *testing.T) {
+	m := onTimeline(t, Config{Accessible: true})
+	m, _ = tpress(t, m, runes("/"))
+	m = typeQuery(t, m, "venus")
+	shown := m.timelineShown()
+	step, key := 1, tea.KeyMsg{Type: tea.KeyDown}
+	if m.details.cursor+1 >= len(shown) {
+		step, key = -1, tea.KeyMsg{Type: tea.KeyUp}
+	}
+	at := m.details.cursor + step
+	if len(shown) < 2 || at < 0 {
+		t.Fatalf("fixture: %d rows match venus, cursor %d", len(shown), m.details.cursor)
+	}
+	m, _ = tpress(t, m, key)
+	if !m.timeline.searching || m.details.cursor != at {
+		t.Fatalf("the arrow in the open line: searching=%v cursor %d, want open on %d", m.timeline.searching, m.details.cursor, at)
+	}
+	want := landedAt(shown[at].Instant)
+	m, cmd := tpress(t, m, keyEnter)
+	m = pump(t, m, cmd)
+	if m.timeline.searching || m.timeline.query != "venus" {
+		t.Errorf("searching=%v query=%q, want the line closed with its query", m.timeline.searching, m.timeline.query)
+	}
+	if got := m.slots.Floating().Time; !got.Equal(want) {
+		t.Errorf("Enter in the open line moved now to %v, want the row under the cursor %v", got, want)
 	}
 }
 

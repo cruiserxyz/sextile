@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -13,9 +14,9 @@ import (
 // emits them out of that order.
 func TestPositionRows_AnglesPinnedAndOrdered(t *testing.T) {
 	ps := []aspect.Position{
-		{Body: aspect.Midheaven, Longitude: 100}, // angle, emitted before ASC
-		{Body: aspect.Sun, Longitude: 35},        // planet
-		{Body: aspect.Ascendant, Longitude: 10},  // angle
+		{Object: objMidheaven, Longitude: 100}, // angle, emitted before ASC
+		{Object: objSun, Longitude: 35},        // planet
+		{Object: objAscendant, Longitude: 10},  // angle
 	}
 	rows := positionRows(ps, false)
 	if len(rows) != 3 {
@@ -34,7 +35,7 @@ func TestPositionRows_AnglesPinnedAndOrdered(t *testing.T) {
 
 func TestRenderBodiesBody_FocusedSlotOnly(t *testing.T) {
 	state := chartViewState{
-		positions: []aspect.Position{{Body: aspect.Sun, Longitude: 35}},
+		positions: []aspect.Position{{Object: objSun, Longitude: 35}},
 		overlay:   true,
 	}
 
@@ -50,8 +51,8 @@ func TestRenderBodiesBody_FocusedSlotOnly(t *testing.T) {
 }
 
 func TestFormatPositionRowStyled_UsesDistinctAstrologSpans(t *testing.T) {
-	p := aspect.Position{Body: aspect.Moon, Longitude: 136.18, House: 8}
-	row := formatPositionRowStyled(p, astrologstyle.BodyRow{Body: "\x1b[1;31m", Position: "\x1b[1;33m", House: "\x1b[1;34m"}, true, houseOverlay{})
+	p := aspect.Position{Object: objMoon, Longitude: 136.18, House: 8}
+	row := panel.FormatPositionRowStyled(p, astrologstyle.BodyRow{Body: "\x1b[1;31m", Position: "\x1b[1;33m", House: "\x1b[1;34m"}, colourOf(true), panel.HouseOverlay{})
 	for _, want := range []string{"\x1b[91m", "\x1b[93m", "\x1b[94m"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("styled row %q missing span %q", row, want)
@@ -72,7 +73,7 @@ func TestNormalWeightSGRPreservesColorSemantics(t *testing.T) {
 		{"\x1b[1m", ""},
 	}
 	for _, tt := range tests {
-		if got := normalWeightSGR(tt.in); got != tt.want {
+		if got := panel.NormalWeightSGR(tt.in); got != tt.want {
 			t.Errorf("normalWeightSGR(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
@@ -80,13 +81,13 @@ func TestNormalWeightSGRPreservesColorSemantics(t *testing.T) {
 
 // TestNewBodyNamesAndGlyphs: the B1 bodies all have names and glyphs (no "?").
 func TestNewBodyNamesAndGlyphs(t *testing.T) {
-	for _, b := range []aspect.Body{
-		aspect.Lilith, aspect.Ascendant, aspect.Midheaven, aspect.Descendant, aspect.ImumCoeli,
+	for _, b := range []aspect.Object{
+		objLilith, objAscendant, objMidheaven, objDescendant, objNadir,
 	} {
-		if got := bodyName(b); got == "?" || got == "" {
+		if got := panel.BodyName(b); got == "?" || got == "" {
 			t.Errorf("bodyName(%v) unset (%q)", b, got)
 		}
-		if got := bodyGlyph(b); got == "?" || got == "" {
+		if got := panel.BodyGlyph(b); got == "?" || got == "" {
 			t.Errorf("bodyGlyph(%v) unset (%q)", b, got)
 		}
 	}

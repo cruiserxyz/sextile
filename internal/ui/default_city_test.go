@@ -127,9 +127,9 @@ func startFromDisk(t *testing.T, places ...location.PlaceInfo) (Model, tea.Cmd) 
 	if !ok {
 		t.Fatal("fixture: the perimeter read returned another message")
 	}
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	m.width, m.height = 80, 24
-	m.atlas.index = location.NewIndex(places)
+	m.atlas.Index = location.NewIndex(places)
 	m.pendingPerimeter = &msg
 	return maybeResolveStartup(m)
 }
@@ -280,7 +280,7 @@ func TestCommaCDFailureIsLoudAndLeavesTheFile(t *testing.T) {
 // Acceptance 8: with no city chosen there is nothing to keep.
 func TestCommaCDWithNoCity(t *testing.T) {
 	sessionSandbox(t)
-	m := NewModelWithClock(Config{Accessible: true}, FrozenClock(testFrozenTime()))
+	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	m.width, m.height = 80, 24
 	m.startup = startupReady
 	before := profileSnapshot(t)
@@ -343,7 +343,7 @@ func TestSetLocationHasOneCaller(t *testing.T) {
 			return true
 		})
 	}
-	if want := []string{"saveDefaultCityCmd (startup.go)"}; !reflect.DeepEqual(in, want) || named != 1 || len(files) < 50 {
+	if want := []string{"saveDefaultCityCmd (startup_resolve.go)"}; !reflect.DeepEqual(in, want) || named != 1 || len(files) < 50 {
 		t.Errorf("store.SetLocation is called from %v and named %d times in %d files, want only %v", in, named, len(files), want)
 	}
 }

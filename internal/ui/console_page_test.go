@@ -12,7 +12,7 @@ func TestConsolePageKeys(t *testing.T) {
 	// A terminal short enough for a 12-row console (the smallest there is) over 60 lines.
 	m := consoleModel(t, 60)
 	m.height = 15
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "l", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -73,16 +73,16 @@ func TestConsolePageKeysWithNoRows(t *testing.T) {
 		t.Fatalf("fixture: the console has %d rows after the resize, want none", h)
 	}
 	total := len(m.console.snapshot)
-	keys := []string{"pgup", "pgdown", "end", "home", "G", "g", "pgdown", "pgdown", "pgup"}
+	kmap := []string{"pgup", "pgdown", "end", "home", "G", "g", "pgdown", "pgdown", "pgup"}
 	// Held long enough that a page which moves by the (zero) height would walk off the list.
 	for i := 0; i < 2*total; i++ {
-		keys = append(keys, "pgup")
+		kmap = append(kmap, "pgup")
 	}
-	keys = append(keys, "end")
+	kmap = append(kmap, "end")
 	for i := 0; i < 2*total; i++ {
-		keys = append(keys, "pgdown")
+		kmap = append(kmap, "pgdown")
 	}
-	for i, k := range keys {
+	for i, k := range kmap {
 		m, _ = press(t, m, k)
 		if m.console.cursor < 0 || m.console.cursor >= total || m.console.offset < 0 || m.console.offset >= total {
 			t.Fatalf("press %d (%s): cursor %d offset %d outside %d lines", i, k, m.console.cursor, m.console.offset, total)

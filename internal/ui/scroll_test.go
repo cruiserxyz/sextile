@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"strings"
 	"testing"
 
@@ -13,19 +14,19 @@ import (
 func TestViewportOverflows(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		v    viewport
+		v    pane.Viewport
 		want bool
 	}{
-		{"fits exactly", viewport{Total: 30, Visible: 30}, false},
-		{"fits with room", viewport{Total: 5, Visible: 30}, false},
-		{"one line hidden", viewport{Total: 31, Visible: 30}, true},
-		{"many hidden", viewport{Total: 300, Visible: 30}, true},
-		{"one-row track", viewport{Total: 40, Visible: 1}, false},
-		{"zero-row track", viewport{Total: 40, Visible: 0}, false},
-		{"empty content", viewport{Total: 0, Visible: 30}, false},
-		{"two-row track", viewport{Total: 40, Visible: 2}, true},
+		{"fits exactly", pane.Viewport{Total: 30, Visible: 30}, false},
+		{"fits with room", pane.Viewport{Total: 5, Visible: 30}, false},
+		{"one line hidden", pane.Viewport{Total: 31, Visible: 30}, true},
+		{"many hidden", pane.Viewport{Total: 300, Visible: 30}, true},
+		{"one-row track", pane.Viewport{Total: 40, Visible: 1}, false},
+		{"zero-row track", pane.Viewport{Total: 40, Visible: 0}, false},
+		{"empty content", pane.Viewport{Total: 0, Visible: 30}, false},
+		{"two-row track", pane.Viewport{Total: 40, Visible: 2}, true},
 	} {
-		if got := tc.v.overflows(); got != tc.want {
+		if got := tc.v.Overflows(); got != tc.want {
 			t.Errorf("%s: %+v.overflows() = %v, want %v", tc.name, tc.v, got, tc.want)
 		}
 	}
@@ -35,7 +36,7 @@ func TestViewportOverflows(t *testing.T) {
 // shorter report gets a longer thumb. The rows are the spec's worked examples.
 func TestThumbSize(t *testing.T) {
 	for _, tc := range thumbFixture {
-		_, size := tc.v.thumb()
+		_, size := tc.v.Thumb()
 		if size != tc.size {
 			t.Errorf("%s: %+v thumb size = %d, want %d", tc.reads, tc.v, size, tc.size)
 		}
@@ -50,7 +51,7 @@ func TestThumbSize(t *testing.T) {
 // from zero.
 func TestThumbTop(t *testing.T) {
 	for _, tc := range thumbFixture {
-		top, size := tc.v.thumb()
+		top, size := tc.v.Thumb()
 		if top != tc.top {
 			t.Errorf("%s: %+v thumb top = %d, want %d", tc.reads, tc.v, top, tc.top)
 		}
@@ -64,20 +65,20 @@ func TestThumbTop(t *testing.T) {
 // length tells you how much is left". A Details panel at 132x40 has
 // Visible = 30; the last row is a Bodies planet window.
 var thumbFixture = []struct {
-	v         viewport
+	v         pane.Viewport
 	size, top int
 	reads     string
 }{
-	{viewport{Visible: 30, Total: 31}, 29, 0, "one line hidden — thumb fills all but one row"},
-	{viewport{Visible: 30, Total: 35}, 26, 0, "a few lines hidden"},
-	{viewport{Visible: 30, Total: 52}, 17, 0, "the earlier change influence chart, top of report"},
-	{viewport{Visible: 30, Total: 52, Offset: 11}, 17, 7, "same report, middle"},
-	{viewport{Visible: 30, Total: 52, Offset: 22}, 17, 13, "same report, last page — thumb touches bottom"},
-	{viewport{Visible: 30, Total: 60, Offset: 30}, 15, 15, "exactly half hidden — thumb is half the track"},
-	{viewport{Visible: 30, Total: 120}, 8, 0, "four screens of content"},
-	{viewport{Visible: 30, Total: 300}, 3, 0, "ten screens"},
-	{viewport{Visible: 30, Total: 1000}, 1, 0, "floor: never smaller than one row"},
-	{viewport{Visible: 9, Total: 14, Offset: 5}, 6, 3, "Bodies: 9 planet rows visible of 14"},
+	{pane.Viewport{Visible: 30, Total: 31}, 29, 0, "one line hidden — thumb fills all but one row"},
+	{pane.Viewport{Visible: 30, Total: 35}, 26, 0, "a few lines hidden"},
+	{pane.Viewport{Visible: 30, Total: 52}, 17, 0, "the earlier change influence chart, top of report"},
+	{pane.Viewport{Visible: 30, Total: 52, Offset: 11}, 17, 7, "same report, middle"},
+	{pane.Viewport{Visible: 30, Total: 52, Offset: 22}, 17, 13, "same report, last page — thumb touches bottom"},
+	{pane.Viewport{Visible: 30, Total: 60, Offset: 30}, 15, 15, "exactly half hidden — thumb is half the track"},
+	{pane.Viewport{Visible: 30, Total: 120}, 8, 0, "four screens of content"},
+	{pane.Viewport{Visible: 30, Total: 300}, 3, 0, "ten screens"},
+	{pane.Viewport{Visible: 30, Total: 1000}, 1, 0, "floor: never smaller than one row"},
+	{pane.Viewport{Visible: 9, Total: 14, Offset: 5}, 6, 3, "Bodies: 9 planet rows visible of 14"},
 }
 
 // C5 — the thumb touches the first track row at the top of the content and
@@ -88,11 +89,11 @@ func TestThumbTouchesBothEnds(t *testing.T) {
 			if total <= visible {
 				continue
 			}
-			top, size := viewport{Total: total, Visible: visible}.thumb()
+			top, size := pane.Viewport{Total: total, Visible: visible}.Thumb()
 			if top != 0 {
 				t.Errorf("total=%d visible=%d offset=0: top = %d, want 0", total, visible, top)
 			}
-			top, size = viewport{Total: total, Visible: visible, Offset: total - visible}.thumb()
+			top, size = pane.Viewport{Total: total, Visible: visible, Offset: total - visible}.Thumb()
 			if top+size != visible {
 				t.Errorf("total=%d visible=%d at the end: thumb ends at %d, want the last track row %d",
 					total, visible, top+size, visible)
@@ -104,13 +105,13 @@ func TestThumbTouchesBothEnds(t *testing.T) {
 // Failure mode — thumb() never divides by zero, and reports no thumb where
 // there is nothing to report.
 func TestThumbNoDivideByZero(t *testing.T) {
-	for _, v := range []viewport{
+	for _, v := range []pane.Viewport{
 		{}, {Total: 30, Visible: 30}, {Total: 30, Visible: 30, Offset: 9},
 		{Total: 0, Visible: 0}, {Total: 5, Visible: 0}, {Total: 5, Visible: 1},
 		{Total: -3, Visible: 4}, {Total: 10, Visible: 4, Offset: -8},
 	} {
-		top, size := v.thumb()
-		if v.overflows() {
+		top, size := v.Thumb()
+		if v.Overflows() {
 			continue
 		}
 		if top != 0 || size != 0 {
@@ -126,11 +127,11 @@ func TestNoIndicatorWhenContentFits(t *testing.T) {
 	body := strings.Join([]string{"alpha", "beta", "gamma"}, "\n")
 	for _, cfg := range []Config{{Accessible: true}, {Color: ColorAlways}, {Color: ColorNever}} {
 		for _, focused := range []bool{false, true} {
-			for _, v := range []viewport{
+			for _, v := range []pane.Viewport{
 				{}, {Total: 3, Visible: 8}, {Total: 8, Visible: 8}, {Total: 40, Visible: 1},
 			} {
 				box := renderTitledBox("[0] Details", 40, 10, focused, cfg, body)
-				if got := withScrollIndicator(box, v, cfg, focused); got != box {
+				if got := pane.WithScrollIndicator(box, v, cfg, focused); got != box {
 					t.Errorf("cfg=%+v focused=%v %+v: indicator drawn on a panel that fits:\n%s", cfg, focused, v, got)
 				}
 			}
@@ -143,11 +144,11 @@ func TestNoIndicatorWhenContentFits(t *testing.T) {
 func TestIndicatorTouchesOnlyRightBorder(t *testing.T) {
 	const w, h = 40, 12
 	cfg := Config{Accessible: true}
-	v := viewport{Total: 52, Visible: h - 2, Offset: 11}
-	top, size := v.thumb()
+	v := pane.Viewport{Total: 52, Visible: h - 2, Offset: 11}
+	top, size := v.Thumb()
 
 	box := renderTitledBox("[0] Details", w, h, false, cfg, strings.Repeat("x\n", 9)+"x")
-	got := withScrollIndicator(box, v, cfg, false)
+	got := pane.WithScrollIndicator(box, v, cfg, false)
 
 	before := strings.Split(box, "\n")
 	after := strings.Split(got, "\n")
@@ -164,7 +165,7 @@ func TestIndicatorTouchesOnlyRightBorder(t *testing.T) {
 		for col := range wantRow {
 			expect := wantRow[col]
 			if onThumb && col == w-1 {
-				expect = []rune(scrollThumbASCII)[0]
+				expect = []rune(pane.ThumbASCII)[0]
 			}
 			if gotRow[col] != expect {
 				t.Errorf("row %d col %d = %q, want %q (onThumb=%v)", i, col, gotRow[col], expect, onThumb)
@@ -178,17 +179,17 @@ func TestIndicatorTouchesOnlyRightBorder(t *testing.T) {
 func TestIndicatorUsesBorderColor(t *testing.T) {
 	forceColor(t)
 	cfg := Config{Color: ColorAlways}
-	v := viewport{Total: 52, Visible: 10, Offset: 0}
+	v := pane.Viewport{Total: 52, Visible: 10, Offset: 0}
 	for _, focused := range []bool{false, true} {
 		box := renderTitledBox("[0] Details", 40, 12, focused, cfg, strings.Repeat("x\n", 9)+"x")
-		got := withScrollIndicator(box, v, cfg, focused)
-		want := lipgloss.NewStyle().Foreground(panelBorderColor(focused, Config{})).Render(scrollThumbGlyph)
+		got := pane.WithScrollIndicator(box, v, cfg, focused)
+		want := lipgloss.NewStyle().Foreground(pane.BorderColour(focused, Config{})).Render(pane.ThumbGlyph)
 		if !strings.Contains(got, want) {
 			t.Errorf("focused=%v: thumb %q not rendered in the border colour", focused, want)
 		}
 		// The colour must be the one the side border already uses: the SGR
 		// introducing the thumb also introduces untouched border rows.
-		sgr := strings.SplitN(want, scrollThumbGlyph, 2)[0]
+		sgr := strings.SplitN(want, pane.ThumbGlyph, 2)[0]
 		if sgr == "" {
 			t.Fatal("no SGR emitted for the thumb; colour profile not forced?")
 		}
@@ -197,9 +198,9 @@ func TestIndicatorUsesBorderColor(t *testing.T) {
 		}
 	}
 	// The two focus states must actually differ, or C7 proves nothing.
-	unfocused := withScrollIndicator(renderTitledBox("[0] Details", 40, 12, false, cfg, "x"), v, cfg, false)
-	focusedBox := withScrollIndicator(renderTitledBox("[0] Details", 40, 12, true, cfg, "x"), v, cfg, true)
-	if strings.Contains(unfocused, strings.SplitN(lipgloss.NewStyle().Foreground(panelBorderColor(true, Config{})).Render(scrollThumbGlyph), scrollThumbGlyph, 2)[0]) {
+	unfocused := pane.WithScrollIndicator(renderTitledBox("[0] Details", 40, 12, false, cfg, "x"), v, cfg, false)
+	focusedBox := pane.WithScrollIndicator(renderTitledBox("[0] Details", 40, 12, true, cfg, "x"), v, cfg, true)
+	if strings.Contains(unfocused, strings.SplitN(lipgloss.NewStyle().Foreground(pane.BorderColour(true, Config{})).Render(pane.ThumbGlyph), pane.ThumbGlyph, 2)[0]) {
 		t.Error("the unfocused thumb carries the focused border colour")
 	}
 	if unfocused == focusedBox {
@@ -213,15 +214,15 @@ func TestIndicatorUsesBorderColor(t *testing.T) {
 // side border with no colour at all.
 func TestIndicatorAccessible(t *testing.T) {
 	body := strings.Repeat("x\n", 9) + "x"
-	v := viewport{Total: 52, Visible: 10, Offset: 4}
+	v := pane.Viewport{Total: 52, Visible: 10, Offset: 4}
 
-	ascii := withPanelRule(withScrollIndicator(
+	ascii := pane.WithPanelRule(pane.WithScrollIndicator(
 		renderTitledBox("[2] Bodies", 40, 12, false, Config{Accessible: true}, body),
 		v, Config{Accessible: true}, false), 6, Config{Accessible: true}, false)
-	if !strings.Contains(ascii, scrollThumbASCII) {
+	if !strings.Contains(ascii, pane.ThumbASCII) {
 		t.Errorf("accessible thumb missing:\n%s", ascii)
 	}
-	if !strings.Contains(ascii, panelRuleTeeASCII+strings.Repeat(panelRuleASCII, 38)+panelRuleTeeASCII) {
+	if !strings.Contains(ascii, pane.RuleTeeASCII+strings.Repeat(pane.RuleASCII, 38)+pane.RuleTeeASCII) {
 		t.Errorf("accessible rule missing:\n%s", ascii)
 	}
 	for _, r := range ascii {
@@ -236,14 +237,14 @@ func TestIndicatorAccessible(t *testing.T) {
 
 	// --color=never / NO_COLOR: no SGR, but the frame keeps its Unicode
 	// borders, so the thumb stays the heavy bar that contrasts with `│`.
-	plain := withScrollIndicator(renderTitledBox("[0] Details", 40, 12, false, Config{Color: ColorNever}, body), v, Config{Color: ColorNever}, false)
+	plain := pane.WithScrollIndicator(renderTitledBox("[0] Details", 40, 12, false, Config{Color: ColorNever}, body), v, Config{Color: ColorNever}, false)
 	if strings.ContainsRune(plain, '\x1b') {
 		t.Errorf("--color=never emitted ANSI:\n%s", plain)
 	}
-	if !strings.Contains(plain, scrollThumbGlyph) {
+	if !strings.Contains(plain, pane.ThumbGlyph) {
 		t.Errorf("--color=never lost the thumb:\n%s", plain)
 	}
-	if scrollThumbGlyph == "│" {
+	if pane.ThumbGlyph == "│" {
 		t.Error("the thumb must not be the side border glyph: with no colour it would be invisible")
 	}
 }
@@ -254,12 +255,12 @@ func TestPanelRuleSpansBorders(t *testing.T) {
 	const w, h, row = 40, 12, 5
 	cfg := Config{Accessible: true}
 	box := renderTitledBox("[2] Bodies", w, h, false, cfg, strings.Repeat("x\n", 9)+"x")
-	got := withPanelRule(box, row, cfg, false)
+	got := pane.WithPanelRule(box, row, cfg, false)
 
 	before, after := strings.Split(box, "\n"), strings.Split(got, "\n")
 	for i := range before {
 		if i == 1+row {
-			want := panelRuleTeeASCII + strings.Repeat(panelRuleASCII, w-2) + panelRuleTeeASCII
+			want := pane.RuleTeeASCII + strings.Repeat(pane.RuleASCII, w-2) + pane.RuleTeeASCII
 			if after[i] != want {
 				t.Errorf("rule row = %q, want %q", after[i], want)
 			}
@@ -269,7 +270,7 @@ func TestPanelRuleSpansBorders(t *testing.T) {
 			t.Errorf("row %d changed: %q -> %q", i, before[i], after[i])
 		}
 	}
-	if got := withPanelRule(box, -1, cfg, false); got != box {
+	if got := pane.WithPanelRule(box, -1, cfg, false); got != box {
 		t.Error("row -1 must leave the box untouched")
 	}
 }

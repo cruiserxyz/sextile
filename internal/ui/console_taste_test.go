@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,15 +71,15 @@ func consoleTasteLines(t *testing.T, n int) []logLine {
 	for i := 0; i < n; i++ {
 		switch {
 		case i == 0:
-			out = append(out, logLine{laneNote, "active city: Berlin, DE (source=stored-location)"})
+			out = append(out, logLine{lane: laneNote, text: "active city: Berlin, DE (source=stored-location)"})
 		case i == 1:
-			out = append(out, logLine{laneNote, "anchor chart: 1990-06-15 14:30 Amsterdam, NL"})
+			out = append(out, logLine{lane: laneNote, text: "anchor chart: 1990-06-15 14:30 Amsterdam, NL"})
 		case i%18 == 17:
-			out = append(out, logLine{laneError, "details: astrolog exited 1: unknown switch -Yq"})
+			out = append(out, logLine{lane: laneError, text: "details: astrolog exited 1: unknown switch -Yq"})
 		case i%9 == 8:
-			out = append(out, logLine{laneNote, "wheel: /tmp/sextile-chart.png"})
+			out = append(out, logLine{lane: laneNote, text: "wheel: /tmp/sextile-chart.png"})
 		default:
-			out = append(out, logLine{laneArgv, commands[i%len(commands)]})
+			out = append(out, logLine{lane: laneArgv, text: commands[i%len(commands)]})
 		}
 	}
 	return out
@@ -123,7 +124,7 @@ func TestYankFlashTaste(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		t.Run(cfg.name, func(t *testing.T) {
 			m := consoleTasteModel(t, cfg.cfg, 144, 40, 60)
-			m, _ = press(t, m, ",", "l")
+			m, _ = press(t, m, ",", "l", "l")
 			m, _ = press(t, m, "enter")
 			if !m.yank.active {
 				t.Fatal("the copy did not flash")
@@ -166,13 +167,13 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 		fmt.Fprintf(&v1, "== %s / at rest ==\n%s\n\n", cfg.name, footerRowOf(m.View()))
 		for _, style := range []struct {
 			name string
-			mode leaderPendingStyleMode
-		}{{"bare", leaderPendingBare}, {"ellipsis", leaderPendingEllipsis}, {"bracketed", leaderPendingBracketed}} {
-			prev := leaderPendingStyle
-			leaderPendingStyle = style.mode
+			mode keys.LeaderPendingStyleMode
+		}{{"bare", keys.LeaderPendingBare}, {"ellipsis", keys.LeaderPendingEllipsis}, {"bracketed", keys.LeaderPendingBracketed}} {
+			prev := keys.LeaderPendingStyle
+			keys.LeaderPendingStyle = style.mode
 			pending, _ := press(t, m, ",")
 			fmt.Fprintf(&v1, "== %s / pending %s ==\n%s\n\n", cfg.name, style.name, footerRowOf(pending.View()))
-			leaderPendingStyle = prev
+			keys.LeaderPendingStyle = prev
 		}
 	}
 	writeSheet(t, dir, "t105-v1-leader-pending.txt", v1.String())
@@ -183,7 +184,7 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		for _, size := range []struct{ w, h int }{{144, 40}, {80, 24}} {
 			m := consoleTasteModel(t, cfg.cfg, size.w, size.h, 60)
-			m, _ = press(t, m, ",", "l")
+			m, _ = press(t, m, ",", "l", "l")
 			fmt.Fprintf(&v2, "== %s / %dx%d ==\n%s\n\n", cfg.name, size.w, size.h, m.View())
 		}
 	}
@@ -196,15 +197,15 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		for _, style := range []struct {
 			name string
-			mode yankFlashStyleMode
-		}{{"plain", yankFlashPlain}, {"counted", yankFlashCounted}, {"arrow", yankFlashArrow}} {
-			prev := yankFlashStyle
-			yankFlashStyle = style.mode
+			mode keys.YankFlashStyleMode
+		}{{"plain", keys.YankFlashPlain}, {"counted", keys.YankFlashCounted}, {"arrow", keys.YankFlashArrow}} {
+			prev := keys.YankFlashStyle
+			keys.YankFlashStyle = style.mode
 			m := consoleTasteModel(t, cfg.cfg, 144, 40, 60)
-			m, _ = press(t, m, ",", "l")
+			m, _ = press(t, m, ",", "l", "l")
 			m, _ = press(t, m, "enter")
 			fmt.Fprintf(&v4, "== %s / %s ==\n%s\n\n", cfg.name, style.name, footerRowOf(m.View()))
-			yankFlashStyle = prev
+			keys.YankFlashStyle = prev
 		}
 	}
 	writeSheet(t, dir, "t105-v4-yank-flash.txt", v4.String())

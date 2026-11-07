@@ -37,7 +37,7 @@
 [38;5;240m│[0m                                                                                                                                  [38;5;240m│[0m
 [38;5;240m│[0m                                                                                                                                  [38;5;240m│[0m
 [38;5;240m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
-[38;5;244m Next panel: → | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | Remove: del | … | Help: ? | Quit: q[0m     
+[38;5;244m Switch panel: ←→ | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Move down: ⌃j | Remove: del | … | Help: ? | Quit: q[0m
 
 ╭─[1m▸[1] Chart[0m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │  ① Synthetic Aster  Wed Jan 11, 1961  1:01 EST  Testford 1, TS                                                               WhTr│
@@ -78,4 +78,4 @@
 │                                                                                                                                  │
 │                                                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Next panel: → | Select: space | Step day: d/D | Move: ↑↓ | Chart up: ⌃k | Chart down: ⌃j | Remove: del | … | Help: ? | Quit: q     
+ Switch panel: ←→ | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Move down: ⌃j | Remove: del | … | Help: ? | Quit: q

@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"strings"
+	"github.com/cruiserxyz/sextile/internal/ui/term"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -64,8 +64,9 @@ const (
 // aspectsStripPrefix is the Aspects strip's Jump-digit prefix.
 const aspectsStripPrefix = "[3] "
 
-// detailsPendingMark ends the active Details tab's title, colours off, while
-// that tab's content for the current scene is still to come.
+// detailsPendingMark ends the active Details tab's title, in every mode, while
+// the content under it is the same subject at another version and its
+// replacement is still to come.
 const detailsPendingMark = " …"
 
 // detailsPrefix is Details' strip prefix and the head of every report title:
@@ -105,14 +106,10 @@ func (m Model) panelTabs(p PanelID) []Tab {
 		}
 		return tabs
 	case PanelDetails:
-		// The caption names the report's subject, never "Details" itself
-		// (the specification); before any report has
-		// arrived it names the focused panel.
-		report := strings.TrimPrefix(m.details.title, detailsPrefix)
-		if report == "" {
-			report = focusedPanelTitle(m.focused)
-		}
-		tabs := []Tab{{ID: TabDetailsReport, Title: report}}
+		// The caption names what the focused panel and its cursor point at,
+		// never "Details" itself, in the frame of the key: it is derived from
+		// the wanted key (detailsWanted), not from the report on screen.
+		tabs := []Tab{{ID: TabDetailsReport, Title: m.detailsWanted().caption}}
 		// The timeline belongs to the Chart panel and to the floating chart's
 		// month: see timelineTabOffered for whose cursor it is offered on.
 		if m.timelineTabOffered() {
@@ -120,7 +117,7 @@ func (m Model) panelTabs(p PanelID) []Tab {
 		}
 		// A body a shipped template lists gains the template's tab while its
 		// Bodies row has the cursor (the specification P1).
-		if t, _, ok := m.cursorTemplate(); ok {
+		if t, _, _, ok := m.cursorTemplate(); ok {
 			tabs = append(tabs, Tab{ID: templateTabID(t), Title: t.Tab})
 		}
 		return tabs
@@ -132,14 +129,11 @@ func (m Model) panelTabs(p PanelID) []Tab {
 
 // bodiesTitle is the Bodies panel's title: the active Aspects pair tab's own
 // string while a pair is on screen ("② in ①", the cursor's bodies read in the
-// base's houses), else "Bodies". It reads the strip Aspects is drawing, the
-// held one included, so the two titles always name the view the panels show.
+// base's houses), else "Bodies". It comes from the live scene, like every
+// caption (specs/details-follows-its-tab.md C2).
 func (m Model) bodiesTitle() string {
-	strip := m.shown.aspects
-	if !m.holding() {
-		tabs := m.panelTabs(PanelAspects)
-		strip = tabStrip{tabs: tabs, active: activeTabIndex(tabs, m.tabChoice(PanelAspects))}
-	}
+	tabs := m.panelTabs(PanelAspects)
+	strip := tabStrip{tabs: tabs, active: activeTabIndex(tabs, m.tabChoice(PanelAspects))}
 	if id := strip.activeID(); isAspectsPairTab(id) {
 		for _, tab := range strip.tabs {
 			if tab.ID == id {
@@ -203,7 +197,13 @@ func focusedPanelTitle(p PanelID) string {
 func (m Model) detailsTabWaiting(id TabID) bool {
 	switch {
 	case id == TabDetailsReport:
-		return m.details.pending
+		switch m.detailsReportState() {
+		case paneUpdating:
+			return true
+		case paneEmpty:
+			return m.detailsWanted().has
+		}
+		return false
 	case id == TabDetailsTimeline:
 		return m.timelineWaiting()
 	case isTemplateTab(id):
@@ -212,14 +212,22 @@ func (m Model) detailsTabWaiting(id TabID) bool {
 	return false
 }
 
-// detailsTabDimmed is whether the tab draws faint: waiting for content, or
-// held while a navigation key repeats (followKeyRun). A wait a tap started
-// is not drawn faint: the previous content stays as drawn until the new
-// content paints. Only the look follows the hold; keys follow
-// detailsTabWaiting alone, so a timeline Enter does not lock the rows for
-// the hold's length.
+// detailsTabDimmed is whether the tab draws its content faint, and its title
+// ends in ` …`: the content on screen is another version of the subject the
+// caption names and its replacement is owed. Every tab follows the view rule
+// (subject.go): an empty pane is not faint content, it is one `…` line. A held
+// key changes nothing here (C8). Only the look follows this; keys follow
+// detailsTabWaiting.
 func (m Model) detailsTabDimmed(id TabID) bool {
-	return m.detailsHold.on || (m.detailsTabWaiting(id) && !m.detailsHold.tapped)
+	switch {
+	case id == TabDetailsReport:
+		return m.detailsReportState() == paneUpdating
+	case id == TabDetailsTimeline:
+		return m.timelinePaneState() == paneUpdating
+	case isTemplateTab(id):
+		return m.templatePaneState() == paneUpdating
+	}
+	return m.detailsTabWaiting(id)
 }
 
 // detailsTabHasRowCursor is the one declaration of which Details tabs carry a
@@ -292,8 +300,8 @@ func (m Model) activeTabID(p PanelID) TabID {
 }
 
 // focusedView is the view the tab keys act on (C34): Details while Details
-// is attached, the Aspects panel while the Chart panel is focused, the focused
-// ring panel otherwise. One definition, because m.focused can never be Details
+// is attached, the Aspects panel while the Chart or the Bodies panel is
+// focused, the focused ring panel otherwise. One definition, because m.focused can never be Details
 // (C15, C40) while `[`/`]` must still reach Details' tabs when it is attached
 // (D15). The Chart panel has one tab, and the Aspects tab picks the base the
 // cursor's chart is read against, so from the rows `[`/`]` change the base
@@ -302,7 +310,11 @@ func (m Model) focusedView() PanelID {
 	if m.details.attached {
 		return PanelDetails
 	}
-	if m.focused == PanelChart {
+	// Chart and Bodies have no tabs of their own to switch: from either, `[`
+	// and `]` pick the base the Aspects panel reads against (walk line,
+	// 2026-11-06: "available everywhere"). Details keeps them for its own tabs
+	// while it holds the keyboard.
+	if m.focused == PanelChart || m.focused == PanelBodies {
 		return PanelAspects
 	}
 	return m.focused
@@ -362,18 +374,12 @@ func (m Model) tabStrips() map[PanelID]tabStrip {
 		PanelDetails: detailsPrefix,
 		PanelLog:     "",
 	} {
-		if p == PanelAspects && m.holding() {
-			// The previous scene's strip, tabs and active one, until its frame
-			// swaps in with the body it names.
-			strips[p] = m.shown.aspects
-			continue
-		}
 		tabs := m.panelTabs(p)
 		active := activeTabIndex(tabs, m.tabChoice(p))
-		if p == PanelDetails && len(tabs) > 0 && !m.cfg.useColor() && m.detailsTabDimmed(tabs[active].ID) {
-			// A waiting active tab is told apart without colour by a trailing
-			// ellipsis (the specification rule 6); with
-			// colour its body dims instead (renderDetailsPanel).
+		if p == PanelDetails && len(tabs) > 0 && m.detailsTabDimmed(tabs[active].ID) {
+			// The active tab's content is another version of its subject: the
+			// caption ends in an ellipsis in every mode (C4), and its body
+			// dims where colour allows (renderDetailsPanel).
 			tabs = append([]Tab(nil), tabs...)
 			tabs[active].Title += detailsPendingMark
 		}
@@ -470,7 +476,7 @@ func layoutTabStrip(prefix string, tabs []Tab, active int, marker bool, maxCells
 	if budget < 0 {
 		budget = 0
 	}
-	return build(included, 0, cutRight(activeTitle, budget, cfg))
+	return build(included, 0, term.CutRight(activeTitle, budget, cfg))
 }
 
 func stripWidth(runs []stripRun) int {

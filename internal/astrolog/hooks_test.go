@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/recipe"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
+	"github.com/cruiserxyz/sextile/internal/testenv/astrodir"
 )
 
 // the specification: every call clears the host's calculation hooks
@@ -367,15 +367,15 @@ func TestHostHooksCannotMoveTheChart(t *testing.T) {
 	}
 	t.Run("control/A", func(t *testing.T) {
 		c, h := both(rawAspects.Argv())
-		if nc, nh := len(parseAspects(c)), len(parseAspects(h)); nc == 0 || nh != 0 {
+		if nc, nh := len(parseAspects(c, testRegistry(t))), len(parseAspects(h, testRegistry(t))); nc == 0 || nh != 0 {
 			t.Errorf("~A is not live: %d clean aspects, %d hostile, want >0 and 0", nc, nh)
 		}
 	})
 	t.Run("control/O", func(t *testing.T) {
 		c, h := both(rawPositions.Argv())
 		sun := func(out string) (float64, bool) {
-			for _, p := range parsePositions(out) {
-				if p.Body == aspect.Sun {
+			for _, p := range mustPositions(t, out, posCall.Objects...) {
+				if p.Object == objSun {
 					return p.Longitude, true
 				}
 			}
@@ -408,14 +408,14 @@ func TestHostHooksCannotMoveTheChart(t *testing.T) {
 		c, _ := rawAstrolog(t, tlCall.Argv())
 		useDataDir(t, only)
 		h, _ := rawAstrolog(t, tlCall.Argv())
-		rc, errc := ParseTimeline(c, time.UTC)
+		rc, errc := ParseTimeline(c, time.UTC, testRegistry(t))
 		if errc != nil || len(rc) == 0 {
 			t.Fatalf("clean timeline parsed %d rows, err %v", len(rc), errc)
 		}
 		if !strings.Contains(h, "Transits during") {
 			t.Fatalf("the hostile -t run printed no search header, so it never searched: %q", h)
 		}
-		rh, errh := ParseTimeline(h, time.UTC)
+		rh, errh := ParseTimeline(h, time.UTC, testRegistry(t))
 		if errh != nil {
 			t.Fatalf("hostile timeline: %v", errh)
 		}
@@ -594,35 +594,29 @@ func TestMissingEphemerisFileKeepsTheChart(t *testing.T) {
 	missing := missingLine("se00010s.se1")
 	t.Run("live Hygiea", func(t *testing.T) {
 		needAstrolog(t)
+		astrodir.Reduced(t, []string{"se00010s.se1"}) // a host without the file, whatever this host has
 		spec, err := recipe.NewChartSpec(hookOther, recipe.WholeSign, recipe.Tropical, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 43}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		out, err := ComputeChart(context.Background(), spec)
-		if err != nil {
-			t.Fatalf("a chart selecting Hygiea must succeed: %v", err)
+		// The folder is reduced above: the refusal is required.
+		if !errors.Is(err, ErrAstrologWarned) {
+			t.Fatalf("err = %v, want ErrAstrologWarned for the missing file", err)
 		}
-		var hygiea []string
-		for _, p := range out.Positions {
-			if strings.HasPrefix(p.Label, "Hygi") {
-				hygiea = append(hygiea, p.Label)
-				if p.Speed == 0 {
-					t.Errorf("Hygiea is listed at speed 0: %v", p)
-				}
-			}
-		}
-		if len(hygiea) > 0 {
-			return // the file is present on this host
-		}
-		if !slices.Contains(out.Unavailable, "Hygiea") && !slices.ContainsFunc(out.Unavailable, func(n string) bool { return strings.HasPrefix(n, "Hygi") }) {
-			t.Errorf("Hygiea is neither listed nor named unavailable: positions %v, unavailable %v", out.Positions, out.Unavailable)
+		if len(out.Positions) != 0 {
+			t.Errorf("a refused chart carried positions: %v", out.Positions)
 		}
 	})
-	t.Run("the expected line alone succeeds", func(t *testing.T) {
+	t.Run("the line alone refuses, unless the call collects it", func(t *testing.T) {
 		warnShim(t, "echo 'CHART'; echo \""+missing+"\" >&2")
-		out, _, err := spawn(context.Background(), testCall(singleChartArgv))
-		if err != nil || out != "CHART\n" {
-			t.Fatalf("out %q err %v; want the chart and no error", out, err)
+		if out, _, err := spawn(context.Background(), testCall(singleChartArgv)); !errors.Is(err, ErrAstrologWarned) || out != "" {
+			t.Fatalf("out %q err %v; want a refusal carrying no chart", out, err)
+		}
+		var files []string
+		out, _, err := spawn(context.Background(), testCall(singleChartArgv).reportingMissing(&files))
+		if err != nil || out != "CHART\n" || len(files) != 1 {
+			t.Fatalf("collecting call: out %q err %v files %v; want the chart, no error, one file", out, err, files)
 		}
 	})
 	t.Run("beside another warning refuses", func(t *testing.T) {

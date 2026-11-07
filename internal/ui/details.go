@@ -2,7 +2,8 @@ package ui
 
 import (
 	"context"
-	"slices"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,12 +11,32 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 type detailsViewState struct {
-	title       string
-	body        string
+	title string
+	body  string
+	// key is the key the report tab's title and body were computed for, stored
+	// WITH them in one assignment (adoptDetailsReport); keyed says there is
+	// one. The screen draws the body only for the subject the caption names
+	// (the view rule, subject.go).
+	key   contentKey
+	keyed bool
+	// runKey is the key of the report run in flight (set when it starts); the
+	// reconciler asks for no second run for a key that has one.
+	runKey detailsKey
+	// failed is the wanted report key whose accepted run most recently failed.
+	// It stands while the wanted key is that key; a wanted key that changes
+	// leaves it behind, and a success for any key clears it.
+	failed struct {
+		set bool
+		key detailsKey
+	}
 	pending     bool
 	waitForText bool
 	timerArmed  bool
@@ -90,23 +111,6 @@ func (m Model) detailsSubject() detailsSubject {
 	return detailsSubject{panel: m.focused, slot: m.cursorIdx}
 }
 
-// detailsReportLines splits a report into the lines the panel scrolls. A
-// report's final newline TERMINATES its last line rather than starting an
-// empty one — Astrolog ends every report with one — so it is never a row the
-// operator can scroll onto. An empty report has no lines at all.
-func detailsReportLines(body string) []string {
-	body = strings.TrimSuffix(body, "\n")
-	if body == "" {
-		return nil
-	}
-	return strings.Split(body, "\n")
-}
-
-// detailsLineCount is the report's line count as the panel renders it.
-func detailsLineCount(body string) int {
-	return len(detailsReportLines(body))
-}
-
 // detailsInnerHeight is how many report lines the Details panel body can show,
 // or 0 when the panel is not in the layout.
 func (m Model) detailsInnerHeight() int {
@@ -129,7 +133,7 @@ func (m Model) clampDetailsOffset() Model {
 		return m
 	}
 	total, height := m.detailsScrollSpan()
-	m.details.scrollOffset = clampOffset(m.details.scrollOffset, total, height)
+	m.details.scrollOffset = pane.ClampOffset(m.details.scrollOffset, total, height)
 	return m
 }
 
@@ -144,9 +148,9 @@ func (m Model) detailsScrollSpan() (total, height int) {
 		if !ok {
 			return 0, 0
 		}
-		return len(templateBodyLines(m.tpl.lines, r.w-2, m.cfg)), r.h - 2
+		return len(panel.TemplateBodyLines(m.tpl.lines, r.w-2, m.cfg)), r.h - 2
 	}
-	return len(m.detailsView().lines), m.detailsReportHeight()
+	return len(m.detailsView().Lines), m.detailsReportHeight()
 }
 
 // scrollDetails moves the report by delta lines, clamped to what it can show.
@@ -159,25 +163,32 @@ func (m Model) scrollDetails(delta int) Model {
 		return m
 	}
 	total, height := m.detailsScrollSpan()
-	m.details.scrollOffset = clampOffset(m.details.scrollOffset+delta, total, height)
+	m.details.scrollOffset = pane.ClampOffset(m.details.scrollOffset+delta, total, height)
 	return m
 }
 
-// adoptDetailsReport replaces the visible frame with a completed report and
-// decides what happens to the scroll offset: the same title is the same
-// context refreshed under the operator's eyes, so their position is kept (and
-// re-clamped to the new text); a different title is a new report, read from
-// the top.
-func (m Model) adoptDetailsReport(title, body string) Model {
-	same := title == m.details.title
+// adoptDetailsReport replaces the visible frame with a completed report and its
+// key, in one assignment, and decides what happens to the scroll offset: the
+// same subject is the same context refreshed under the operator's eyes, so
+// their position is kept (and re-clamped to the new text); a different subject
+// is a new report, read from the top.
+func (m Model) adoptDetailsReport(title, body string, key contentKey) Model {
+	same := m.details.keyed && m.details.key.subject() == key.subject()
 	prev := m.details.scrollOffset
 	m.details.title, m.details.body, m.details.scrollOffset = title, body, 0
+	m.details.key, m.details.keyed = key, true
+	m.details.failed.set = false
 	if !same {
 		// A new subject: the query was about the old one (the specification 7).
 		m.details.query, m.details.searching = "", false
 		return m
 	}
-	m.details.scrollOffset = clampOffset(prev, len(m.detailsView().lines), m.detailsReportHeight())
+	v := m.detailsViewOf(body)
+	height := m.detailsInnerHeight()
+	if height > 0 && v.Line {
+		height--
+	}
+	m.details.scrollOffset = pane.ClampOffset(prev, len(v.Lines), height)
 	return m
 }
 
@@ -197,14 +208,10 @@ type detailsRequest struct {
 	synastry bool
 	// otherLabel is that other chart's name and place for its report header.
 	otherLabel store.ReportLabel
+	// cursorNumeral is the cursor chart's numeral as the pair tab spells it
+	// (② or 2); the Log line that says the report was filtered names it.
+	cursorNumeral string
 }
-
-var (
-	computeRawReport       = lookup.ComputeRawReport
-	computeCrossBodyReport = lookup.CrossBodyRawReport
-	// computeSynastryBodyReport is the cross report's anchored × anchored form.
-	computeSynastryBodyReport = lookup.SynastryCrossBodyRawReport
-)
 
 // detailsVisible is the work gate, not merely a render check: no Details
 // request may start unless layoutGeometry actually includes the panel.
@@ -219,7 +226,7 @@ func (m Model) detailsVisible() bool {
 // the Chart/Bodies frame it explains. The Aspects panel has no request: its
 // Details is the committed frame's own report (aspectsDetailsFromFrame).
 func (m Model) detailsRequestFor() (detailsRequest, bool) {
-	if !m.detailsVisible() || m.startup != startupReady {
+	if !m.detailsVisible() {
 		return detailsRequest{}, false
 	}
 	slot := m.focusedSlot()
@@ -235,13 +242,13 @@ func (m Model) detailsRequestFor() (detailsRequest, bool) {
 		req.title = detailsPrefix + tabTitleChart
 		req.report.Kind = lookup.RawReportChart
 	case PanelBodies:
-		body, ok := bodyAtCursor(m.chart.positions, m.chart.cusps, m.bodyCursorIdx)
+		title, object, ok := m.detailsBodyTitle()
 		if !ok {
 			return detailsRequest{}, false
 		}
 		req.report.Kind = lookup.RawReportBody
-		req.report.Body = body
-		req.title = detailsPrefix + bodyName(body)
+		req.report.Object = object
+		req.title = title
 		// While comparing, a body's report follows the Aspects panel's active
 		// pair (C4): its cross rows against the pair's other chart, in the
 		// relation the pair has — transit for the floating slot,
@@ -256,12 +263,30 @@ func (m Model) detailsRequestFor() (detailsRequest, bool) {
 			req.when, req.place = pair.right.Time, pair.right.Location
 			req.synastry = !pair.right.Floating
 			req.otherLabel = pair.right.Chart.Label
-			req.title += " " + m.pairTabTitle(sc.numeral(pair.left), sc.numeral(pair.right))
+			req.cursorNumeral = panel.NumeralForColour(sc.numeral(pair.right), m.cfg)
 		}
 	default:
 		return detailsRequest{}, false
 	}
 	return req, true
+}
+
+// detailsBodyTitle is the title of the Bodies row under the cursor, in the
+// frame Bodies paints (shownChart), with the active pair appended while
+// comparing. It is the ONE computation behind both the next body report's
+// title (detailsRequestFor) and the caption shown before that report commits
+// (detailsCaption).
+func (m Model) detailsBodyTitle() (title string, o aspect.Object, ok bool) {
+	ch := m.shownChart()
+	o, ok = panel.ObjectAtCursor(ch.positions, ch.cusps, m.bodyCursorIdx)
+	if !ok {
+		return "", aspect.Object{}, false
+	}
+	title = detailsPrefix + panel.BodyName(o)
+	if sc := m.deriveScene(); sc.pair != nil {
+		title += " " + m.pairTabTitle(sc.numeral(sc.pair.left), sc.numeral(sc.pair.right))
+	}
+	return title, o, true
 }
 
 // aspectsDetailsFromFrame is the Aspects panel's Details: the committed
@@ -272,8 +297,17 @@ func (m Model) detailsRequestFor() (detailsRequest, bool) {
 // the strip and the renderer, so the Details title always names what
 // the Aspects panel is actually showing. ok is false when the frame carries no
 // report yet (nothing committed, or an error frame), so the caller keeps the
-// last complete Details frame in place.
-func (m Model) aspectsDetailsFromFrame() (title, body string, ok bool) {
+// last complete Details frame in place. key is the frame the copy was taken
+// from: the stamp of the committed frame, never the key the screen asks for now.
+func (m Model) aspectsDetailsFromFrame() (title, body string, key contentKey, ok bool) {
+	pk, stamped := m.shownPaneKey(PanelAspects)
+	if !stamped {
+		pk, stamped = m.wantedPaneKey(PanelAspects)
+	}
+	key = contentKey{kind: reportFrame, frame: pk}
+	if !stamped {
+		return "", "", key, false
+	}
 	if active := m.activeTabID(PanelAspects); isAspectsPairTab(active) {
 		title := ""
 		for _, tab := range m.panelTabs(PanelAspects) {
@@ -281,16 +315,17 @@ func (m Model) aspectsDetailsFromFrame() (title, body string, ok bool) {
 				title = tab.Title
 			}
 		}
-		return detailsPrefix + title, m.chart.crossAspectsReport, m.chart.crossAspectsReport != ""
+		return detailsPrefix + title, m.chart.crossAspectsReport, key, m.chart.crossAspectsReport != ""
 	}
-	return detailsPrefix + tabTitleAspects, m.chart.aspectsReport, m.chart.aspectsReport != ""
+	return detailsPrefix + tabTitleAspects, m.chart.aspectsReport, key, m.chart.aspectsReport != ""
 }
 
 // applyAspectsDetails fills Details from the frame with no Astrolog work
 // : it cancels and fences any in-flight report — a Chart or body
 // report left over from the previous focus must not paint over this — clears
-// the pending state, and replaces title and body atomically, or leaves the
-// last complete frame untouched when the frame has no report to give.
+// the pending state, and replaces title, body and key atomically, or leaves the
+// last complete frame untouched when the frame has no report to give (the view
+// rule hides it when it is another subject's).
 func (m Model) applyAspectsDetails() Model {
 	if !m.detailsVisible() {
 		return m
@@ -299,8 +334,8 @@ func (m Model) applyAspectsDetails() Model {
 	m.details.pending = false
 	m.details.waitForText = false
 	m.details.timerArmed = false
-	if title, body, ok := m.aspectsDetailsFromFrame(); ok {
-		m = m.adoptDetailsReport(title, body)
+	if title, body, key, ok := m.aspectsDetailsFromFrame(); ok {
+		m = m.adoptDetailsReport(title, body, key)
 	}
 	return m
 }
@@ -337,6 +372,10 @@ func (m Model) requestDetails() (Model, tea.Cmd) {
 // runnable, so one immediate run is sufficient and avoids an otherwise useless
 // post-commit timer message.
 func (m Model) startDetailsNow() (Model, tea.Cmd) {
+	// A report already computed for this key is drawn now, from memory.
+	if nm, ok := m.adoptReportFromMemory(); ok {
+		return nm, nil
+	}
 	if c := m.refresh[surfaceDetails].cancel; c != nil {
 		c()
 	}
@@ -349,19 +388,23 @@ func (m Model) startDetailsNow() (Model, tea.Cmd) {
 	return m.startRun(surfaceDetails)
 }
 
-// deferDetails handles contexts that change without a chart-text recompute
+// deferDetails is deferDetailsWith for a repeat key: the debounce rests.
+func (m Model) deferDetails() (Model, tea.Cmd) { return m.deferDetailsWith(false) }
+
+// deferDetailsWith handles contexts that change without a chart-text recompute
 // (Bodies cursor and panel focus). Every key cancels/fences old work and records
 // a new desired context, while at most one trailing timer remains armed; no
-// Astrolog process starts until navigation settles. The last successful title
-// and body remain untouched throughout the burst, so Details has no visible
-// intermediate state to repaint.
-func (m Model) deferDetails() (Model, tea.Cmd) {
+// Astrolog process starts until navigation settles, except for atOnce, the first
+// key of a run of equal keys, which starts the report now. The last successful
+// title and body remain untouched throughout the burst, so Details has no
+// visible intermediate state to repaint.
+func (m Model) deferDetailsWith(atOnce bool) (Model, tea.Cmd) {
 	if !m.detailsVisible() {
 		return m, nil
 	}
 	if m.reportTabHidden() {
 		m.details.stale = true
-		m.detailsHold.seq++ // the timeline or template tab now awaits its content
+		m.keyRun.seq++ // the timeline or template tab now awaits its content
 		return m, nil
 	}
 	m.details.stale = false // a request for the current subject settles the remembered change
@@ -381,6 +424,11 @@ func (m Model) deferDetails() (Model, tea.Cmd) {
 		return m.suspendSurface(surfaceDetails), nil
 	}
 	m = m.markDetailsPending(false)
+	// The first key of a run of equal keys starts the report at once; only a
+	// repeat inside the run rests for the debounce (specs/details-follows-its-tab.md C14).
+	if atOnce {
+		return m.startDetailsNow()
+	}
 	if c := m.refresh[surfaceDetails].cancel; c != nil {
 		c()
 	}
@@ -394,7 +442,7 @@ func (m Model) deferDetails() (Model, tea.Cmd) {
 	}
 	m.refresh[surfaceDetails].timerID = m.refresh[surfaceDetails].wantID
 	m.details.timerArmed = true
-	return m, armRefresh(surfaceDetails, m.refresh[surfaceDetails].timerID)
+	return m, m.armRefresh(surfaceDetails, m.refresh[surfaceDetails].timerID)
 }
 
 // waitDetailsForText handles time, slot, and comparison navigation whose raw
@@ -409,7 +457,7 @@ func (m Model) waitDetailsForText() Model {
 	// catch-up asks for the report when the report tab is chosen.
 	if m.reportTabHidden() {
 		m.details.stale = true
-		m.detailsHold.seq++ // the timeline or template tab now awaits its content
+		m.keyRun.seq++ // the timeline or template tab now awaits its content
 		return m
 	}
 	m.details.stale = false
@@ -441,115 +489,57 @@ func (m Model) catchUpDetails() (Model, tea.Cmd) {
 	return m.requestDetails()
 }
 
-// The hold keeps every Details tab faint while a navigation key is held. A
-// terminal reports no key release, so a held key is a run of the same key:
-// one press, the terminal's delay before the first repeat (up to 500 ms on
-// Windows and GNOME), then repeats every 30-50 ms. A tap is a run of one and
-// never greys: the previous content stays as drawn until the new content
-// commits and paints. The second key of a run, within holdStartWindow of the
-// first, starts the hold; each further key extends it. The hold ends when no
-// key of the run has arrived for releaseQuiet, three of the run's measured
-// repeat gaps, so it ends about 0.1 s after the key is let go. Any other key
-// ends the run and is judged on its own.
-const (
-	holdStartWindow = 650 * time.Millisecond
-	// holdQuietUnmeasured is releaseQuiet before the run has a repeat gap.
-	holdQuietUnmeasured = 150 * time.Millisecond
-	holdQuietMin        = 60 * time.Millisecond
-	holdQuietMax        = 200 * time.Millisecond
-	// holdGaps is how many of the run's latest repeat gaps are measured.
-	holdGaps = 5
-)
+// A held navigation key is a run of the same key: a terminal reports no key
+// release, so one press, the terminal's delay before the first repeat (up to
+// 500 ms on Windows and GNOME), then repeats every 30-50 ms. The run is
+// tracked and nothing else: since D1 a held key no longer turns a pane faint
+// (specs/details-follows-its-tab.md C8) — what a pane draws follows its keys
+// alone (the view rule, subject.go). The second key of a run, within
+// holdStartWindow of the first, joins it; any other key ends it.
+const holdStartWindow = 650 * time.Millisecond
 
-type detailsHoldMsg struct{ id uint64 }
-
-// detailsHoldState is the hold. seq counts the changes that leave a Details
-// tab awaiting content (markDetailsPending, and a hidden report tab's
-// timeline or template); Update compares it across a key. on keeps every
-// Details tab faint; id names the newest quiet timer, an older one is stale.
-// key, keys and last are the current run: its key, how many keys it has had
-// and when the newest arrived; gaps are its latest repeat gaps. tapped says
-// the wait on screen was started by a tap, so it is not drawn faint; it
-// clears once nothing waits.
-type detailsHoldState struct {
-	seq    uint64
-	on     bool
-	id     uint64
-	key    string
-	keys   int
-	last   time.Time
-	gaps   []time.Duration
-	tapped bool
+// detailsRunState is the current run of equal keys. seq counts the changes
+// that leave a Details tab awaiting content (markDetailsPending, and a hidden
+// report tab's timeline or template); Update compares it across a key. key and
+// keys are the run's key and how many keys it has had; last is when the newest
+// arrived.
+type detailsRunState struct {
+	seq  uint64
+	key  string
+	keys int
+	last time.Time
 }
 
-// followKeyRun judges one key for the hold. changed says the key changed
-// what Details describes; only such a key joins or starts a run.
-func (m Model) followKeyRun(k tea.KeyMsg, changed bool) (Model, tea.Cmd) {
-	h := m.detailsHold
+// keyJoinsRun says k is a repeat of the run's key inside holdStartWindow of the
+// run's newest key: a key that is not has no run to join and starts one.
+func (m Model) keyJoinsRun(k tea.KeyMsg) bool {
+	h := m.keyRun
+	return h.keys > 0 && k.String() == h.key && m.clock.Now().Sub(h.last) <= holdStartWindow
+}
+
+// followKeyRun judges one key for the run. changed says the key changed what
+// Details describes; only such a key joins or starts a run.
+func (m Model) followKeyRun(k tea.KeyMsg, changed bool) Model {
+	h := m.keyRun
 	now := m.clock.Now()
-	sameRun := h.keys > 0 && k.String() == h.key && now.Sub(h.last) <= holdStartWindow
+	sameRun := m.keyJoinsRun(k)
 	if !sameRun && (k.String() != h.key || changed) {
-		h.on, h.key, h.keys, h.gaps = false, "", 0, nil
+		h.key, h.keys = "", 0
 	}
-	if !changed {
-		m.detailsHold = h
-		return m, nil
-	}
-	if sameRun {
-		// The gap before the first repeat is the terminal's delay, not
-		// its repeat rate.
-		if h.keys >= 2 {
-			// A fresh slice: an earlier Model must keep its own gaps.
-			h.gaps = append(slices.Clone(h.gaps), now.Sub(h.last))
-			if len(h.gaps) > holdGaps {
-				h.gaps = h.gaps[1:]
-			}
+	if changed {
+		if sameRun {
+			h.keys++
+		} else {
+			h.key, h.keys = k.String(), 1
 		}
-		h.keys++
-	} else {
-		h.key, h.keys = k.String(), 1
+		h.last = now
 	}
-	h.last = now
-	h.tapped = h.keys < 2
-	if h.tapped {
-		m.detailsHold = h
-		return m, nil
-	}
-	h.on = true
-	h.id++
-	id := h.id
-	m.detailsHold = h
-	return m, longTimer(h.releaseQuiet(), func(time.Time) tea.Msg { return detailsHoldMsg{id: id} })
-}
-
-// releaseQuiet is how long the run may go without a key before the hold
-// ends: three times the median of its measured repeat gaps, clamped.
-func (h detailsHoldState) releaseQuiet() time.Duration {
-	if len(h.gaps) == 0 {
-		return holdQuietUnmeasured
-	}
-	gaps := slices.Clone(h.gaps)
-	slices.Sort(gaps)
-	switch q := 3 * gaps[len(gaps)/2]; {
-	case q < holdQuietMin:
-		return holdQuietMin
-	case q > holdQuietMax:
-		return holdQuietMax
-	default:
-		return q
-	}
-}
-
-// releaseDetailsHold ends the hold when its newest timer fires.
-func (m Model) releaseDetailsHold(msg detailsHoldMsg) Model {
-	if msg.id == m.detailsHold.id {
-		m.detailsHold.on = false
-	}
+	m.keyRun = h
 	return m
 }
 
 func (m Model) markDetailsPending(waitForText bool) Model {
-	m.detailsHold.seq++
+	m.keyRun.seq++
 	m.details.pending = true
 	m.details.waitForText = waitForText
 	return m
@@ -562,19 +552,95 @@ func (m Model) markDetailsPending(waitForText bool) Model {
 // tab choice survives, so the panel comes back on the tab it left on.
 func (m Model) suspendDetails() Model {
 	m = m.restorePreEnterTab()
+	// A workspace identity is leaving (a session reset, a chart or city pick, a
+	// chart closed) or Details is: nothing computed for it is drawn again.
+	m = m.forgetMemory()
 	m.details = detailsViewState{tabs: m.details.tabs, preEnter: m.details.preEnter, preEnterSet: m.details.preEnterSet}
 	m = m.suspendTimeline()
-	// A template tab's lines that never completed forget their key, so the
-	// run starts again when Details returns.
-	if !m.tpl.complete {
-		m.tpl = templateState{cycle: m.tpl.cycle, cycleFor: m.tpl.cycleFor}
-	} else if m.tpl.done != m.tpl.key {
-		// A run cancelled with the lines still the previous moment's: the key
-		// is forgotten (the lines stay) so the run starts again on return.
-		m.tpl.keyed = false
-	}
 	m = m.suspendSurface(surfaceTemplate)
 	return m.suspendSurface(surfaceDetails)
+}
+
+// detailsLens is the lens a Details report is cast in: the chart's own report
+// shows only the selected bodies, in its own lens; a pair report (cross or
+// synastry) is a comparison, ignores the selection and is cast in the frame's
+// lens. The spawn and the key read it alike.
+func (m Model) detailsLens(req detailsRequest) lookup.Lens {
+	if req.cross {
+		return m.comparisonLens()
+	}
+	return m.showLens(m.focusedSlot())
+}
+
+// detailsKey is the question a Details report answers: every input that
+// changes the argv, as plain comparable values. The search text, the scroll
+// place and the tab choice are presentation and are not in it. The run, want
+// and floor numbers stay their own fields beside it (refreshResultMsg).
+type detailsKey struct {
+	panel PanelID
+	kind  lookup.RawReportKind
+	// The cursor slot and its label.
+	slot     int
+	floating bool
+	// chart, natalChart and otherChart are the identities of the cursor chart
+	// and of the pair's two sides (slotIdentity), which the subject keeps.
+	chart, natalChart, otherChart string
+	slotWhen                      int64
+	slotPlace                     location.PlaceInfo
+	label                         store.ReportLabel
+	object                        int
+	// The pair: the other side's moment, place and label, and the title that
+	// names the pair tab.
+	cross, synastry bool
+	natalWhen       int64
+	natalPlace      location.PlaceInfo
+	natalLabel      store.ReportLabel
+	otherWhen       int64
+	otherPlace      location.PlaceInfo
+	otherLabel      store.ReportLabel
+	title           string
+	// The lens the spawn uses; only is Objects.Only, sorted and joined.
+	houses   recipe.HouseSystem
+	zodiac   recipe.Zodiac
+	objects  string
+	aspects  string
+	trueNode bool
+	only     string
+}
+
+// detailsKeyFor is the key of the report the Model would ask for now; ok is
+// false when there is no request. Built from detailsRequestFor and
+// detailsLens, the values buildDetailsCmd spawns from, so the key a run
+// carries and the key the commit gate compares cannot disagree.
+func (m Model) detailsKeyFor() (detailsKey, bool) {
+	req, ok := m.detailsRequestFor()
+	if !ok {
+		return detailsKey{}, false
+	}
+	slot := m.focusedSlot()
+	lens := m.detailsLens(req)
+	objects, aspects, trueNode := chooserKey(lens)
+	var only []string
+	for _, n := range lens.Objects.Only.Members() {
+		only = append(only, strconv.Itoa(n))
+	}
+	var natalID, otherID string
+	if req.cross {
+		if pair := m.deriveScene().pair; pair != nil {
+			natalID, otherID = slotIdentity(pair.left), slotIdentity(pair.right)
+		}
+	}
+	return detailsKey{
+		panel: m.focused, kind: req.report.Kind,
+		chart: slotIdentity(slot), natalChart: natalID, otherChart: otherID,
+		slot: m.cursorIdx, floating: slot.Floating, slotWhen: slot.Time.UnixNano(), slotPlace: slot.Location,
+		label: req.report.Label, object: req.report.Object.Number,
+		cross: req.cross, synastry: req.synastry, natalWhen: req.natalChart.When.UnixNano(), natalPlace: req.natalChart.Place, natalLabel: req.natalChart.Label,
+		otherWhen: req.when.UnixNano(), otherPlace: req.place, otherLabel: req.otherLabel,
+		title:  req.title,
+		houses: lens.Houses, zodiac: lens.Zodiac, objects: objects, aspects: aspects, trueNode: trueNode,
+		only: strings.Join(only, ","),
+	}, true
 }
 
 func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
@@ -588,10 +654,9 @@ func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd
 	// The chart's own report shows only the selected bodies, in its own lens;
 	// a pair report (cross or synastry) is a comparison, ignores the selection
 	// and is cast in the frame's lens.
-	lens := m.comparisonLens()
-	if !req.cross {
-		lens = m.showLens(m.focusedSlot())
-	}
+	lens := m.detailsLens(req)
+	key, _ := m.detailsKeyFor()
+	reports := m.rows[surfaceDetails].spawn.reports
 	return func() tea.Msg {
 		// Exactly one spawn either way: the comparison body report is a
 		// different Astrolog run, not an extra one. Its command rides on the
@@ -600,22 +665,174 @@ func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd
 		// is carried.
 		raw, command, err := "", "", error(nil)
 		if req.cross && req.synastry {
-			raw, command, err = computeSynastryBodyReport(ctx, lens, req.natalChart, req.when, req.place, req.otherLabel, req.report.Body)
+			raw, command, err = reports.synastry(ctx, lens, req.natalChart, req.when, req.place, req.otherLabel, req.report.Object)
 		} else if req.cross {
-			raw, command, err = computeCrossBodyReport(ctx, lens, req.natalChart, req.when, req.place, req.report.Body)
+			raw, command, err = reports.cross(ctx, lens, req.natalChart, req.when, req.place, req.report.Object)
 		} else {
-			raw, command, err = computeRawReport(ctx, req.when, req.place, lens, req.report)
+			raw, command, err = reports.raw(ctx, req.when, req.place, lens, req.report)
+		}
+		// A cross body report lists the body at either end; the Aspects tab
+		// shows it only as the cursor chart's, so keep those rows. This
+		// arranges Astrolog's text and computes nothing; the Log says so.
+		note := ""
+		if req.cross && err == nil {
+			var kept, total int
+			if raw, kept, total = lookup.KeepCursorSide(raw, req.report.Object); kept != total {
+				note = fmt.Sprintf("kept the rows where %s is %s's: %d of %d rows, totals dropped", panel.BodyName(req.report.Object), req.cursorNumeral, kept, total)
+			}
 		}
 		var commands []string
 		if command != "" {
 			commands = []string{command}
 		}
+		influence := !req.cross && req.report.Kind == lookup.RawReportChart
+		var starsLeft []int
+		if influence {
+			starsLeft = lens.InfluenceLeavesOut()
+		}
 		return refreshResultMsg{
 			surface: surfaceDetails,
 			runID:   runID,
 			wantID:  wantID,
-			payload: detailsPayload{title: req.title, body: raw, commands: commands},
+			payload: detailsPayload{title: req.title, body: raw, commands: commands, note: note, key: key, influence: influence, starsLeft: starsLeft},
 			err:     err,
 		}
 	}
+}
+
+// detailsScrollStep is how far one PgUp/PgDn press or one wheel notch moves
+// the Details report: two lines, mirroring lazygit's `scrollHeight`.
+const detailsScrollStep = 2
+
+// newDetailsRow is the Details surface's refresh policy (specs/
+// refresh-descriptor-details.md): the coordinator asks it through Model.rowFor.
+// applyAspectsDetails, a synchronous adoption of the Aspects tab's text with no
+// run, is the second commit path and stays outside the row until the Text
+// surface has one.
+func newDetailsRow() surfaceRow {
+	return surfaceRow{
+		inputs: func(m Model) (refreshKey, bool) {
+			k, ok := m.detailsKeyFor()
+			return k, ok
+		},
+		trigger:   triggerEvent,
+		supersede: supersedeHard,
+		debounce:  detailsDebounce,
+		rest: restTimer{
+			armed:  func(m Model) bool { return m.details.timerArmed },
+			hidden: (Model).reportTabHidden,
+			park: func(m Model) Model {
+				m.details.timerArmed = false
+				m.details.stale = true
+				return m
+			},
+			disarm: func(m Model) Model {
+				m.details.timerArmed = false
+				return m
+			},
+		},
+		build:   buildDetailsCmd,
+		accept:  acceptDetails,
+		commit:  (Model).commitDetails,
+		suspend: func(m Model) Model { m.details.timerArmed = false; return m },
+		started: func(m Model) Model {
+			m.details.runKey, _ = m.detailsKeyFor()
+			return m
+		},
+		spawn: rowSpawns{reports: detailsSpawns{
+			raw:      lookup.ComputeRawReport,
+			cross:    lookup.CrossBodyRawReport,
+			synastry: lookup.SynastryCrossBodyRawReport,
+		}},
+	}
+}
+
+// acceptDetails is Details' result gate: strict latest-only on the want, and
+// the report lands only for the question the screen asks now, beside the ids
+// (never instead of them). Dropped silently: no Log line, no note, and
+// details.pending is left as it is: the entry that changed the key owns the
+// next run.
+func acceptDetails(m Model, msg refreshResultMsg) bool {
+	if !acceptExactWant(m, msg) {
+		return false
+	}
+	p, _ := msg.payload.(detailsPayload)
+	now, ok := m.detailsKeyFor()
+	return ok && p.key == now
+}
+
+// commitDetails lands an accepted Details result.
+func (m Model) commitDetails(msg refreshResultMsg) (Model, tea.Cmd) {
+	p, _ := msg.payload.(detailsPayload)
+	// The report's command becomes an argv line HERE, at the commit gate,
+	// on the success and the accepted-error branch alike — a
+	// result the coordinator dropped never reaches this, so a
+	// spawn that never painted is never logged (C3).
+	m = m.logCommandsFor(surfaceDetails, msg.wantID, p.commands, failedLast(msg.err, p.commands)...)
+	if p.note != "" && !m.isQuiet(surfaceDetails, msg.wantID) {
+		m = m.logTrace("details", "%s", p.note)
+	}
+	if p.influence && !m.isQuiet(surfaceDetails, msg.wantID) {
+		// Said once per set of left-out stars (Astrolog NEXT.md BUG 7), and
+		// again only when the set changes.
+		said := fmt.Sprint(p.starsLeft)
+		if len(p.starsLeft) == 0 {
+			said = ""
+		}
+		if said != m.starsLeftSaid {
+			m.starsLeftSaid = said
+			if said != "" {
+				m = m.logTrace("details", "%s", starsLeftLine)
+			}
+		}
+	}
+	if msg.err != nil {
+		// A failed replacement is not a frame (C6).
+		m.details.pending = false
+		m.details.waitForText = false
+		m.details.timerArmed = false
+		// The pane reads one faint line for the key that failed and keeps no
+		// older content under it: the old report is gone from the pane, and
+		// from every action on it, with the line.
+		m.details.title, m.details.body, m.details.keyed = "", "", false
+		m.details.key = contentKey{}
+		m.details.failed.set, m.details.failed.key = true, p.key
+		m.details.query, m.details.searching, m.details.scrollOffset = "", false, 0
+		m = m.noteEphemeris(msg.err).logError("Couldn't read the full report. %s", m.failureReason(msg.err, m.consolePointer(len(p.commands) > 0))).logWarnings(msg.err)
+		m.errorKeptView = true
+		return m, nil
+	}
+	// Title and report land together. Navigation leaves the last successful
+	// frame in place until this atomic replacement, so there is no visible
+	// pending, blank, partial, or error frame. The scroll offset follows
+	// the context, not the struct: same title keeps the reader's place.
+	m = m.landReport(p).rememberReport(p)
+	return m, nil
+}
+
+// replayReportTrace writes the trace lines a fresh report commit writes about
+// the result itself, for a report drawn from memory: the note of the rule
+// applied after Astrolog and the fixed stars an influence chart leaves out.
+func (m Model) replayReportTrace(p detailsPayload) Model {
+	if p.note != "" {
+		m = m.logTrace("details", "%s", p.note)
+	}
+	if p.influence && len(p.starsLeft) > 0 {
+		m = m.logTrace("details", "%s", starsLeftLine)
+	}
+	return m
+}
+
+// starsLeftLine is the trace line for the fixed stars an influence chart leaves
+// out (Astrolog NEXT.md BUG 7).
+const starsLeftLine = "no fixed stars in the influence chart, Astrolog 8.00 miscounts them"
+
+// landReport puts a computed report on screen under its key. A fresh result and
+// one adopted from memory land by it alike.
+func (m Model) landReport(p detailsPayload) Model {
+	m = m.adoptDetailsReport(p.title, p.body, contentKey{kind: reportRaw, raw: p.key})
+	m.details.pending = false
+	m.details.waitForText = false
+	m.details.timerArmed = false
+	return m
 }

@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/location"
-	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // session.go owns the one file Sextile writes for itself: what the workspace
@@ -118,12 +118,17 @@ func (c SessionChart) UnusableReason() string {
 }
 
 // sessionVersion is the generation SaveSession writes. LoadSession reads this
-// 1 to 3: version 1 held a single chart, version 2 holds a `charts:` sequence,
+// 1 to 4: version 1 held a single chart, version 2 holds a `charts:` sequence,
 // one entry per anchored slot in list order, version 3 adds one `frames:`
-// sequence (session_frames.go). It is the
-// session file's own constant rather than SchemaVersion, which versions the
-// other files and did not change.
-const sessionVersion = 3
+// sequence (session_frames.go), and version 4 (0.1.3) writes the marks and
+// the chooser's set under Astrolog's registry names (`bodies: Sun,Fortune`,
+// the `drawn:` line) where 3 wrote wire names and no drawn set. The number
+// moved for the reader that came before: 0.1.2 reads a 4 as "written by a
+// newer Sextile", keeps the file aside byte for byte and starts empty, where
+// a 3 it would open, strip of every name it does not know, and rewrite at
+// quit. It is the session file's own constant rather than SchemaVersion,
+// which versions the other files and did not change.
+const sessionVersion = 4
 
 // SessionSlot is one anchored slot as the session file remembers it: the chart
 // it holds, and the selection and body marks it carried.
@@ -135,7 +140,7 @@ type SessionSlot struct {
 	Chart    SessionChart
 	Usable   bool
 	Selected bool
-	Bodies   []aspect.Body
+	Bodies   []string
 }
 
 // Session is one relaunch's worth of workspace state.
@@ -145,7 +150,7 @@ type SessionSlot struct {
 // a relaunch always shows current transits, so it is recreated at now
 // (operator decision, 2026-08-25). Its selection and body marks are kept.
 //
-// Version, DroppedSelections and UnknownBodies are read-side diagnostics —
+// Version and DroppedSelections are read-side diagnostics —
 // LoadSession rebuilds them from the file's text and SaveSession ignores them.
 type Session struct {
 	// Version is the generation the file declared; zero on a hand-built
@@ -159,22 +164,25 @@ type Session struct {
 	// a reader before 0.1.2 ignores the line as an unknown top-level key.
 	Folder string
 
+	// Drawn is the chooser's drawn set as Astrolog's object names, written as
+	// the top-level `drawn:` line. Nil writes no line (the view follows the
+	// defaults); an empty, non-nil list writes the bare line `drawn:`, which reads back
+	// as an empty list. The ui reads that as no choice (the default set) and
+	// never produces it. A reader before 0.1.3 ignores the line as an
+	// unknown top-level key.
+	Drawn []string
+
 	Slots []SessionSlot
 
 	// FloatingSelected is whether the floating slot was selected.
 	FloatingSelected bool
 
-	// FloatingBodies are the bodies marked in the floating slot, exactly as the
-	// file listed them — duplicates included. Collapsing those belongs to
-	// whoever applies them, since applying a name twice would toggle a
+	// FloatingBodies are the objects marked in the floating slot, as the names
+	// the file lists them (Astrolog's registry names, or a 0.1.2 wire name),
+	// duplicates included. Resolving them and collapsing the duplicates belongs
+	// to whoever applies them, since applying a name twice would toggle a
 	// selection back off.
-	FloatingBodies []aspect.Body
-
-	// UnknownBodies names every body name the reader could not parse, in
-	// first-encounter order across the slots in list order and then the
-	// floating slot, de-duplicated. It exists so a relaunch can say what it
-	// skipped instead of silently dropping a selection.
-	UnknownBodies []string
+	FloatingBodies []string
 
 	// DroppedSelections is how many selections beyond MaxSelectedSlots the
 	// reader turned off: the first six selected in list order are kept.
@@ -256,10 +264,27 @@ func replaceSessionFile(op, dir, name, text string) error {
 // list mean the same thing to the reader, and the shorter file is the one an
 // operator can read at a glance.
 func formatSession(s Session) string {
+	return formatSessionAt(sessionVersion, s)
+}
+
+// formatSessionAt is formatSession declaring generation v: what a file of
+// that generation reads back as, for the byte compare a named session's open
+// makes (LoadNamedSession). Every save declares sessionVersion.
+func formatSessionAt(v int, s Session) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "version: %d\n", sessionVersion)
+	fmt.Fprintf(&b, "version: %d\n", v)
 	if validFolderID(s.Folder) {
 		fmt.Fprintf(&b, "folder: %s\n", s.Folder)
+	}
+	if len(s.Drawn) > 0 {
+		// The bare comma, as bodies: (operator, 2026-11-04: "Unify on the bare comma").
+		fmt.Fprintf(&b, "drawn: %s\n", yamlEscape(strings.Join(s.Drawn, ",")))
+	} else if s.Drawn != nil {
+		// The bare form is kept for a non-nil empty list, which a reader gives for
+		// a file that holds it. No ui path produces one any more (operator,
+		// 2026-11-04): nothing ticked in the body chooser is the default set, so
+		// the ui gives nil, not empty, and the next save drops an old bare line.
+		b.WriteString("drawn:\n")
 	}
 	if len(s.Slots) > 0 {
 		b.WriteString("charts:\n")
@@ -291,24 +316,39 @@ func formatSession(s Session) string {
 	b.WriteString("floating:\n")
 	fmt.Fprintf(&b, "  selected: %t\n", s.FloatingSelected)
 	if names := bodyNames(s.FloatingBodies); names != "" {
-		fmt.Fprintf(&b, "  bodies: %s\n", names)
+		fmt.Fprintf(&b, "  bodies: %s\n", yamlEscape(names))
 	}
 	writeFrames(&b, s.Frames)
 	return b.String()
 }
 
-// bodyNames joins a body list into the file's comma-separated wire form.
-// BodyUnknown has no name to write and is dropped rather than written as
-// "unknown", which would read back as a skipped body on the next launch.
-func bodyNames(bodies []aspect.Body) string {
-	names := make([]string, 0, len(bodies))
-	for _, b := range bodies {
-		if b == aspect.BodyUnknown {
+// bodyNames joins a list of object names into the file's `bodies:` value,
+// separated by the bare comma 0.1.2 wrote (a 0.1.2 named session must still pass
+// the byte-for-byte check). An empty name is not a name and is dropped.
+func bodyNames(names []string) string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if strings.TrimSpace(n) == "" {
 			continue
 		}
-		names = append(names, b.String())
+		out = append(out, n)
 	}
-	return strings.Join(names, ",")
+	return strings.Join(out, ",")
+}
+
+// splitNames reads a `bodies:` value: it splits on the comma and trims, and an
+// empty entry is skipped, so a trailing comma is not a name and a hand-written
+// ", " line reads like the writer's.
+func splitNames(val string) []string {
+	var out []string
+	for _, name := range strings.Split(val, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 // LoadSession reads the session file. It returns (zero, false, nil) when there
@@ -357,7 +397,7 @@ func parseSessionFile(path string, b []byte) (Session, bool, error) {
 	} else {
 		s, err = parseSessionV2(text)
 		s.Version = v
-		if v == sessionVersion && err == nil {
+		if v >= 3 && err == nil { // frames came with generation 3 and stay
 			s.Frames, s.DroppedFrames, s.FrameNotes = parseFrames(text)
 		}
 	}
@@ -365,7 +405,28 @@ func parseSessionFile(path string, b []byte) (Session, bool, error) {
 		return Session{}, false, fmt.Errorf("store: LoadSession: %s: %w", path, err)
 	}
 	s.Folder = sessionFolder(text)
+	if v > 1 {
+		s.Drawn = sessionDrawn(text)
+	}
 	return s, true, nil
+}
+
+// sessionDrawn is the names on the first column-zero `drawn:` line, in the
+// file's order and without repeats; nil when the file has no such line, and
+// empty but not nil when the line names nothing.
+func sessionDrawn(text string) []string {
+	for _, line := range strings.Split(text, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "drawn:"); ok {
+			names := []string{}
+			for _, n := range strings.Split(unquoteScalar(strings.TrimSpace(v)), ",") {
+				if n = strings.TrimSpace(n); n != "" && !slices.Contains(names, n) {
+					names = append(names, n)
+				}
+			}
+			return names
+		}
+	}
+	return nil
 }
 
 // folderIDPattern is a FolderID as the writer emits it: 64 lowercase hex.
@@ -436,7 +497,7 @@ func scanErr(sc *bufio.Scanner) error {
 }
 
 // checkSessionVersion is the session file's compatibility rule: exactly the
-// integers 1 to 3. A file from the FUTURE is refused, and so is anything below
+// integers 1 to 4. A file from the FUTURE is refused, and so is anything below
 // the floor — a half-read client record is worse than none.
 func checkSessionVersion(v int) error {
 	switch {
@@ -523,9 +584,8 @@ func parseSessionV1(text string) (Session, error) {
 	s := Session{Version: 1}
 	var f chartFields
 	var comparison bool
-	var anchoredBodies []aspect.Body
+	var anchoredBodies []string
 	var sawChart bool
-	var unknownAnchored, unknownFloating []string
 
 	inChart, inSelection := false, false
 	scanner := bufio.NewScanner(strings.NewReader(text))
@@ -557,9 +617,9 @@ func parseSessionV1(text string) (Session, error) {
 			case "comparison":
 				comparison = val == "true"
 			case "anchored_bodies":
-				anchoredBodies, unknownAnchored = parseBodyList(val)
+				anchoredBodies = splitNames(val) // splitKV has already decoded it
 			case "floating_bodies":
-				s.FloatingBodies, unknownFloating = parseBodyList(val)
+				s.FloatingBodies = splitNames(val) // splitKV has already decoded it
 			}
 		}
 	}
@@ -572,9 +632,6 @@ func parseSessionV1(text string) (Session, error) {
 		s.Slots = []SessionSlot{{Chart: f.c, Usable: usable, Selected: comparison, Bodies: anchoredBodies}}
 		s.FloatingSelected = usable && comparison
 	}
-	// Anchored names come first however the file ordered its keys, so the
-	// line a relaunch prints reads the same as the slots it describes.
-	s.UnknownBodies = dedupe(append(unknownAnchored, unknownFloating...))
 	return s, nil
 }
 
@@ -621,8 +678,8 @@ func canonicalValue(key, raw string) (string, bool) {
 		if v == "" {
 			return v, true
 		}
-		bodies, unknown := parseBodyList(v)
-		return v, len(unknown) == 0 && bodyNames(bodies) == v
+		// Exactly the writer's join; anything else (", " included) is unknown content.
+		return v, bodyNames(splitNames(v)) == v
 	case "kind":
 		return raw, raw == ChartKindFile.String()
 	default: // id, file, name, place, country, tz
@@ -732,7 +789,7 @@ func parseSessionV2(text string) (Session, error) {
 			case "selected":
 				cur.slot.Selected = val == "true"
 			case "bodies":
-				cur.slot.Bodies, _ = parseBodyList(val)
+				cur.slot.Bodies = splitNames(val) // val is canonicalValue's decoded form
 			default:
 				cur.f.set(key, val)
 			}
@@ -748,9 +805,7 @@ func parseSessionV2(text string) (Session, error) {
 			case "selected":
 				s.FloatingSelected = val == "true"
 			case "bodies":
-				var unknown []string
-				s.FloatingBodies, unknown = parseBodyList(val)
-				s.UnknownBodies = dedupe(unknown)
+				s.FloatingBodies = splitNames(val) // splitKV has already decoded it
 			}
 		}
 	}
@@ -778,26 +833,6 @@ func parseSessionV2(text string) (Session, error) {
 		}
 	}
 	return s, nil
-}
-
-// parseBodyList splits the comma-separated wire form into bodies plus the
-// names that answered to none. An empty entry is not a name and is skipped,
-// so a trailing comma is not a skipped body.
-func parseBodyList(val string) ([]aspect.Body, []string) {
-	var bodies []aspect.Body
-	var unknown []string
-	for _, name := range strings.Split(val, ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if b, ok := aspect.ParseBody(name); ok {
-			bodies = append(bodies, b)
-			continue
-		}
-		unknown = append(unknown, name)
-	}
-	return bodies, unknown
 }
 
 // parseFinite parses a coordinate and refuses the values that parse but are
@@ -828,20 +863,4 @@ func loadableTimezone(tz string) bool {
 	}
 	_, err := time.LoadLocation(tz)
 	return err == nil
-}
-
-func dedupe(names []string) []string {
-	if len(names) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(names))
-	out := make([]string, 0, len(names))
-	for _, n := range names {
-		if _, ok := seen[n]; ok {
-			continue
-		}
-		seen[n] = struct{}{}
-		out = append(out, n)
-	}
-	return out
 }

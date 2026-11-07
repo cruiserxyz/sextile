@@ -3,6 +3,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
+	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os"
 	"strings"
 	"testing"
@@ -25,12 +27,11 @@ func saveTasteStates() []struct {
 		name  string
 		state saveModalState
 	}{
-		{"empty", saveModalState{form: newSaveForm(), dest: tasteSaveDest}},
-		{"typed", saveModalState{form: typedSaveForm("Midsummer Transit"), dest: tasteSaveDest}},
+		{"empty", saveModalState{Form: popup.Form{Fields: newSaveForm()}, dest: tasteSaveDest}},
+		{"typed", saveModalState{Form: popup.Form{Fields: typedSaveForm("Midsummer Transit")}, dest: tasteSaveDest}},
 		{"taken", saveModalState{
-			form:    typedSaveForm("Autumn Morning"),
-			dest:    tasteSaveDest,
-			refusal: `"autumn-morning" is taken — try another name`,
+			Form: popup.Form{Fields: typedSaveForm("Autumn Morning"), Refusal: `"autumn-morning" is taken — try another name`},
+			dest: tasteSaveDest,
 		}},
 		// A save in flight renders byte-identically to "typed", so it has no
 		// frame of its own.
@@ -38,9 +39,9 @@ func saveTasteStates() []struct {
 }
 
 // typedSaveForm is the save prompt's form after the operator typed name.
-func typedSaveForm(name string) form {
+func typedSaveForm(name string) dialog.Form {
 	f := newSaveForm()
-	f.fields[0].value = name
+	f.Fields[0].Value = name
 	return f
 }
 
