@@ -52,7 +52,7 @@ func TestTextRunLogTranscript(t *testing.T) {
 		want []string
 	}{
 		{"ok", []string{"/bin/astrolog one", "/bin/astrolog two"}},
-		{"fail", []string{"/bin/astrolog one", "/bin/astrolog two", "Couldn't cast the chart. Press ,l l for what Astrolog ran."}},
+		{"fail", []string{"/bin/astrolog one", "/bin/astrolog two", "astrolog: Now not cast, Astrolog returned nothing usable"}},
 		{"tick", []string{"/bin/astrolog tick-1"}},
 	}
 	for _, c := range cases {

@@ -26,12 +26,13 @@ func TestSaveArgvRefusesALongLabel(t *testing.T) {
 		return err
 	}
 	retitle := func(name, place string) error {
-		return RetitleTo(context.Background(), "src.as", name, place, "dest.as")
+		_, err := RetitleRecord(context.Background(), "src.as", name, place)
+		return err
 	}
 	for _, fn := range []struct {
 		name string
 		call func(name, place string) error
-	}{{"ChartRecord", save}, {"RetitleTo", retitle}} {
+	}{{"ChartRecord", save}, {"RetitleRecord", retitle}} {
 		for _, c := range []struct {
 			name         string
 			label, place string
@@ -59,8 +60,8 @@ func TestSaveArgvRefusesALongLabel(t *testing.T) {
 					t.Fatalf("an over-long %s got %v, want *LabelTooLongError", c.field, err)
 				}
 				want := c.field
-				if fn.name == "RetitleTo" && want == "name" {
-					want = "title" // RetitleTo calls the name a title
+				if fn.name == "RetitleRecord" && want == "name" {
+					want = "title" // RetitleRecord calls the name a title
 				}
 				if long.Bytes != c.bytes || long.What != want {
 					t.Errorf("error says %q %d bytes, want %s %d", long.What, long.Bytes, want, c.bytes)
@@ -92,14 +93,11 @@ func TestNameAtTheBoundRoundTrips(t *testing.T) {
 	if cf.Name != name || cf.PlaceLabel != place {
 		t.Errorf("read back %d/%d bytes, want 54/54", len(cf.Name), len(cf.PlaceLabel))
 	}
-	dest := filepath.Join(dir, "retitled.as")
-	if err := os.WriteFile(dest, []byte("placeholder"), 0o600); err != nil {
-		t.Fatal(err)
+	record, rerr := RetitleRecord(context.Background(), path, strings.Repeat("T", 54), strings.Repeat("Q", 54))
+	if rerr != nil {
+		t.Fatal(rerr)
 	}
-	if err := RetitleTo(context.Background(), path, strings.Repeat("T", 54), strings.Repeat("Q", 54), dest); err != nil {
-		t.Fatal(err)
-	}
-	if cf, err = ResolveChartFile(context.Background(), dest); err != nil || len(cf.Name) != 54 || len(cf.PlaceLabel) != 54 {
+	if cf, err = ResolveChartBytes(context.Background(), record, path); err != nil || len(cf.Name) != 54 || len(cf.PlaceLabel) != 54 {
 		t.Errorf("retitled at the bound: %+v, %v", cf, err)
 	}
 }

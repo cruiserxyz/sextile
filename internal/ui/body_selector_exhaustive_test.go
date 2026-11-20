@@ -41,9 +41,9 @@ import (
 func exhaustiveLens(selection []int) lookup.Lens {
 	l := lookup.Hellenistic
 	l.Objects = recipe.ObjectPolicy{
-		Baseline:     recipe.Explicit,
-		Selection:    selection,
-		TrueNodeMode: l.Objects.TrueNodeMode,
+		Baseline:  recipe.Explicit,
+		Selection: selection,
+		Nodes:     l.Objects.Nodes,
 	}
 	return l
 }

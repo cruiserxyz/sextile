@@ -69,6 +69,7 @@ func (m Model) stampShown(key textKey, keyed bool) Model {
 		s.columns = m.shownColumns(sc, m.slots.Floating().Time)
 	}
 	m.shown = s
+	m.void.due = true
 	return m
 }
 
@@ -108,5 +109,7 @@ func (m Model) paintedChart() chartViewState {
 	state = m.enterColour(state)
 	state.forced = m.enteredStation()
 	state.houseForm = m.houseDisplay
+	state.moonLane = m.moonLane()
+	state.aspectDot = m.experiment(expAspectDot)
 	return state
 }

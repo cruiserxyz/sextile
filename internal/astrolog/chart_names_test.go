@@ -513,6 +513,7 @@ func TestNamesChangeNoParsedValue(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Registry = testRegistry(t)
+		s.AspectRegistry = testAspects(t)
 		return s
 	}
 	t.Run("a single chart", func(t *testing.T) {
@@ -555,6 +556,7 @@ func TestNamesChangeNoParsedValue(t *testing.T) {
 				t.Fatal(err)
 			}
 			s.Registry = testRegistry(t)
+			s.AspectRegistry = testAspects(t)
 			return s
 		}
 		bare, err := ComputeChart(ctx, mk(""))
@@ -611,7 +613,7 @@ func TestNamedHeaderParses(t *testing.T) {
 		if len(bare.Positions) == 0 || len(bare.Aspects) == 0 {
 			t.Fatal("the one-line control parsed nothing")
 		}
-		if !reflect.DeepEqual(named.Positions, bare.Positions) || !reflect.DeepEqual(parseAspects(named.Raw, testRegistry(t)), parseAspects(bare.Raw, testRegistry(t))) {
+		if !reflect.DeepEqual(named.Positions, bare.Positions) || !reflect.DeepEqual(mustAspects(t, named.Raw, testRegistry(t)), mustAspects(t, bare.Raw, testRegistry(t))) {
 			t.Error("named rows differ from the one-line form's")
 		}
 		if first, _ := reportHeader(t, named.AspectsReport); !strings.HasSuffix(first, "Synthetic Aster") {

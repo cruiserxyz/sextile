@@ -273,7 +273,7 @@ func cursorLists() []cursorList {
 			return prefixOf(planets[m.bodyCursorIdx].Text, 10)
 		}},
 		{name: "log console", model: func(t *testing.T, cfg Config) Model {
-			m, _ := press(t, designBase(t, cfg), ",", "l", "l")
+			m, _ := press(t, designBase(t, cfg), ",", "L", "l")
 			return m
 		}, cursorText: func(t *testing.T, m Model) string {
 			// The row as drawn: an argv line shows short (argv_display.go).
@@ -318,7 +318,7 @@ func cursorLists() []cursorList {
 			if c := m.aspectModal.Cursor; c < popup.FamilyRows() {
 				return aspect.Families()[c].Name()
 			}
-			return m.aspectModal.Matches[m.aspectModal.Cursor-popup.FamilyRows()].Name
+			return m.aspectModal.Matches[m.aspectModal.Cursor-popup.FamilyRows()].Kind.Name
 		}},
 	}
 }
@@ -393,7 +393,7 @@ func TestCursorRowBand(t *testing.T) {
 		if y != sunRow(off) {
 			t.Fatal("the Sun row moved between the two frames")
 		}
-		r := layoutGeometry(132, 40, 2, 1)[PanelBodies]
+		r := rectsAt(132, 40, 2, 1)[PanelBodies]
 		spans := 0
 		for x := r.x + 1; x < r.x+r.w-1; x++ {
 			c, o := on[y][x], off[y][x]
@@ -476,6 +476,10 @@ func TestNoRowIsStriped(t *testing.T) {
 	}
 }
 
+// selectionMarkerWidth is a window where Details stands beside the panels, so the
+// Chart and Bodies panels are both open whichever one is in focus.
+const selectionMarkerWidth = 156
+
 // C10, C11, C11a: selection is a marker column and nothing else. Once a panel
 // has a selection every row reserves the column; a selected row's marker is
 // in the focus colour (colours on), ● (ColorNever) or * (--accessible);
@@ -551,10 +555,12 @@ func TestSelectionMarker(t *testing.T) {
 					}
 				}
 				render := func(selected bool) designScreen {
-					return parseDesignScreen(pc.setup(designBase(t, mode.cfg), selected).View())
+					m := pc.setup(designBase(t, mode.cfg), selected)
+					m.width = selectionMarkerWidth
+					return parseDesignScreen(m.View())
 				}
 				sel, plain := render(true), render(false)
-				r := layoutGeometry(132, 40, 2, 1)[pc.panel]
+				r := rectsAt(selectionMarkerWidth, 40, 2, 1)[pc.panel]
 				find := func(s designScreen) int {
 					for y := r.y + 1; y < r.y+r.h-1; y++ {
 						if strings.Contains(s.text(y), pc.rowText) {
@@ -686,7 +692,9 @@ func TestDisplayColoursReachTheScreen(t *testing.T) {
 			}
 			s := parseDesignScreen(m.View())
 			unquote := func(v string) lipgloss.Color { return lipgloss.Color(strings.Trim(v, `"`)) }
-			if got, want := s[0][0].fg, styleFG(t, unquote(tc.focus)); got != want {
+			fm := m.(Model)
+			fr := fm.geometry()[fm.focused] // the focused panel's corner, not the Session panel's above it
+			if got, want := s[fr.y][fr.x].fg, styleFG(t, unquote(tc.focus)); got != want {
 				t.Errorf("the focused frame is drawn in %q, want display.focus_color %s as %q:\n%s", got, tc.focus, want, ansi.Strip(m.View()))
 			}
 			band := styleBG(t, unquote(tc.row))
@@ -699,7 +707,8 @@ func TestDisplayColoursReachTheScreen(t *testing.T) {
 
 // C15, C15a: no row goes to a status bar. The top panel starts on row 0, the
 // panels and the console use every row but the key bar, the rendered frame is
-// exactly the terminal's height with a panel border on row 0, and the minimum
+// exactly the terminal's height with a panel border (or a folded panel's title
+// line) on row 0, and the minimum
 // height is 15.
 func TestNoStatusBar(t *testing.T) {
 	if MinTerminalHeight != 15 {
@@ -708,14 +717,14 @@ func TestNoStatusBar(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {132, 40}, {80, MinTerminalHeight}} {
 		w, h := size[0], size[1]
 		t.Run(fmt.Sprintf("%dx%d", w, h), func(t *testing.T) {
-			rects := layoutGeometry(w, h, 1, 1)
+			rects := rectsAt(w, h, 1, 1)
 			if rects == nil {
 				t.Fatalf("no layout at %dx%d", w, h)
 			}
-			if r := rects[PanelChart]; r.y != 0 {
+			if r := rects[PanelStatus]; r.y != 0 {
 				t.Errorf("the top panel starts on row %d, want 0", r.y)
 			}
-			left := rects[PanelChart].h + rects[PanelBodies].h + rects[PanelAspects].h
+			left := rects[PanelStatus].h + rects[PanelChart].h + rects[PanelBodies].h + rects[PanelAspects].h
 			if left != h-KeyBarHeight {
 				t.Errorf("the left column uses %d rows, want %d", left, h-KeyBarHeight)
 			}
@@ -724,7 +733,7 @@ func TestNoStatusBar(t *testing.T) {
 					t.Errorf("the right column is %+v + %+v, want rows 0..%d", d, rects[PanelLog], h-KeyBarHeight-1)
 				}
 			}
-			if c, ok := consoleRect(w, h, 1, 1); !ok || c.y != 0 || c.h != h-KeyBarHeight {
+			if c, ok := consoleRectAt(w, h, 1, 1); !ok || c.y != 0 || c.h != h-KeyBarHeight {
 				t.Errorf("console rect = %+v, want rows 0..%d", c, h-KeyBarHeight-1)
 			}
 			m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
@@ -734,8 +743,8 @@ func TestNoStatusBar(t *testing.T) {
 			if len(lines) != h {
 				t.Errorf("View() is %d rows, want %d", len(lines), h)
 			}
-			if !strings.HasPrefix(lines[0], "+-") {
-				t.Errorf("row 0 is not a panel border: %q", lines[0])
+			if !strings.HasPrefix(lines[0], "+-") && !strings.HasPrefix(lines[0], "--") {
+				t.Errorf("row 0 is neither a panel border nor a folded panel's title line: %q", lines[0])
 			}
 		})
 	}
@@ -743,7 +752,7 @@ func TestNoStatusBar(t *testing.T) {
 		m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 		m.width, m.height = 80, MinTerminalHeight-1
 		view := ansi.Strip(m.View())
-		if !strings.Contains(view, "Terminal too small") || !strings.Contains(view, "66x15") {
+		if !strings.Contains(view, "The window is too small") || !strings.Contains(view, "66x15") {
 			t.Errorf("at %d rows want the too-small screen naming 66x15:\n%s", MinTerminalHeight-1, view)
 		}
 	})

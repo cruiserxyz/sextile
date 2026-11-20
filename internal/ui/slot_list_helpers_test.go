@@ -125,7 +125,7 @@ func floatingIndex(slots *store.Slots) int {
 }
 
 // cloneSlots is a workspace equal to s that shares nothing with it, for a test
-// that presses keys which change the list (del, ⌃k, ⌃j) against states built
+// that presses keys which change the list (del, K, J) against states built
 // from one base: Model copies share their *Slots.
 func cloneSlots(t *testing.T, s *store.Slots) *store.Slots {
 	t.Helper()

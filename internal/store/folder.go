@@ -65,7 +65,7 @@ func BackupDir(chartsDir string) string {
 	return filepath.Join(BackupBase(), FolderID(chartsDir))
 }
 
-// ChartBackupDisplay is the backup of file as the operator is told it: the
+// ChartBackupDisplay is the backup named file as the operator is told it: the
 // absolute path, or, when the launcher ran this copy in Docker and said where
 // the backups are on the host, the host's path to the same file.
 func ChartBackupDisplay(chartsDir, file string) string {
@@ -82,7 +82,7 @@ func ChartBackupFolderDisplay(chartsDir string) string {
 
 // errLinkedFolder is a folder on the way to one of Sextile's own files that is
 // a symlink or not a folder at all. Nothing is written through it.
-var errLinkedFolder = errors.New("is a link or not a folder, so Sextile will not write through it")
+var errLinkedFolder = errors.New("is a link or no folder, so Sextile writes nothing there")
 
 // privateDir makes sure base/parts... exists as real folders and returns it.
 // base itself is the operator's (an XDG base may well be a link) and is only

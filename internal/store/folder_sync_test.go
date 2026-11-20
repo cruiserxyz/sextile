@@ -207,7 +207,7 @@ func TestFirstChartSaveSyncsTheCreatedFoldersParent(t *testing.T) {
 	}
 	t.Cleanup(func() { syncDir = prev })
 	synced := watchSyncDir(t)
-	if _, err := PlaceChartFile(dir, []byte(astrologRecord), "client"); err != nil {
+	if _, err := OriginalsDoor(dir).Place("client", []byte(astrologRecord)); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{filepath.Dir(dir), filepath.Dir(filepath.Dir(dir))} {

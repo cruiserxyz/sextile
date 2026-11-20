@@ -19,8 +19,8 @@ type RealClock struct{}
 // Now returns time.Now() in the local timezone.
 func (RealClock) Now() time.Time { return time.Now() }
 
-// FrozenClock returns a Clock fixed at t. Used by invariants tests so the
-// first-frame golden does not rotate every second.
+// FrozenClock returns a Clock fixed at t, so a test's frame does not rotate
+// every second.
 func FrozenClock(t time.Time) Clock { return frozenClock{t: t} }
 
 type frozenClock struct{ t time.Time }

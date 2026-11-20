@@ -60,7 +60,7 @@ type Body struct {
 	Selected map[int]bool
 
 	// Defaults are the objects the lens draws when the operator has chosen
-	// nothing, as Astrolog's own numbers: what Ctrl+D ticks. The model supplies
+	// nothing, as Astrolog's own numbers: what the Restore row ticks. The model supplies
 	// them (only it can ask the lens), and nil means it had none to give.
 	Defaults []int
 
@@ -102,7 +102,7 @@ type ProbeInputs struct {
 	TZ       string
 	Houses   recipe.HouseSystem
 	Zodiac   recipe.Zodiac
-	TrueNode bool
+	Nodes    recipe.NodeForm
 }
 
 // ProbeEntry is one verdict: Drawable, or not with the files Astrolog named
@@ -267,6 +267,7 @@ func (b Body) undrawableLast() []aspect.RegistryObject {
 // the aspect side is fixed it will move toward this, not away from it.
 func Open(registry []aspect.RegistryObject, policy recipe.ObjectPolicy, lensDefault []int) Body {
 	st := Body{Registry: registry, Selected: map[int]bool{}, Entry: policy, Probes: map[int]ProbeEntry{}}
+	st.Lead = RestoreRow
 	if policy.Baseline == recipe.Explicit {
 		for _, n := range policy.Selection {
 			st.Selected[n] = true
@@ -284,11 +285,11 @@ func Open(registry []aspect.RegistryObject, policy recipe.ObjectPolicy, lensDefa
 // empty set included; the model reads an empty one as no choice and puts the
 // default policy in force (chosenObjects).
 //
-// TrueNodeMode is carried over from the entry policy rather than dropped.
-// It selects the true-node and Black-Moon-Lilith VARIANTS of objects 16 and 18,
+// Nodes is carried over from the entry policy rather than dropped.
+// It selects the variants of objects 16, 17 and 18 (mean, true or natural),
 // which is orthogonal to which objects are drawn: losing it here would silently
-// swap the mean node for the true one the first time the operator opened this
-// modal, in a slice that is not about nodes at all.
+// change the form of the Nodes and Lilith the first time the operator opened
+// this modal, in a slice that is not about them at all.
 func (b Body) Policy() recipe.ObjectPolicy {
 	sel := make([]int, 0, len(b.Selected))
 	for n, on := range b.Selected {
@@ -298,9 +299,9 @@ func (b Body) Policy() recipe.ObjectPolicy {
 	}
 	sort.Ints(sel)
 	return recipe.ObjectPolicy{
-		Baseline:     recipe.Explicit,
-		Selection:    sel,
-		TrueNodeMode: b.Entry.TrueNodeMode,
+		Baseline:  recipe.Explicit,
+		Selection: sel,
+		Nodes:     b.Entry.Nodes,
 	}
 }
 
@@ -336,9 +337,13 @@ func (b Body) cannotTick(n int) bool {
 // groupRows is how many pinned group rows sit above the list.
 func GroupRows() int { return len(recipe.ObjectGroups) }
 
-// PinnedRows is the lines pinned above the list: the group rows and the
-// rule under them. Only the group rows are cursor rows.
-func PinnedRows() int { return GroupRows() + 1 }
+// RestoreRow is the lead row of the list: Enter on it ticks the lens's default
+// bodies.
+const RestoreRow = "+ Restore the default bodies"
+
+// PinnedRows is the lines pinned above the list: the lead row, the group rows
+// and the rule under them. The lead row and the group rows are cursor rows.
+func PinnedRows() int { return 1 + GroupRows() + 1 }
 
 // totalRows is the group block plus the filtered list.
 func (b Body) TotalRows() int { return GroupRows() + len(b.Matches) }
@@ -394,7 +399,8 @@ func (b *Body) ToggleGroup(g int) {
 	}
 }
 
-// RestoreDefaults ticks the lens's default bodies and nothing else (Ctrl+D). It
+// RestoreDefaults ticks the lens's default bodies and nothing else (Enter on the
+// lead row). It
 // is a tick change like any other, so the model previews it and a closing rule
 // that puts the entry back undoes it. With no defaults given it does nothing.
 func (b *Body) RestoreDefaults() {
@@ -413,8 +419,9 @@ func (b *Body) RestoreDefaults() {
 // terminal height, 80x24 included.
 const groupBlockRows = 5
 
-// boxTaller is the rows the Bodies box adds to the list area every popup gets.
-func boxTaller() int { return max(GroupRows()-groupBlockRows, 0) }
+// boxTaller is the rows the Bodies box adds to the list area every popup gets:
+// the group rows beyond that and the lead row.
+func boxTaller() int { return max(GroupRows()-groupBlockRows, 0) + 1 }
 
 // ListHeight is the rows the list gets: the box's list area, taller by the
 // group rows it was not sized for, minus the pinned group block with its rule
@@ -460,7 +467,7 @@ func (state Body) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome,
 		KeepRows:     PinnedRows() + 1,
 	}, cfg, termW, termH, chrome, func(width, height int) string {
 		return menu.RenderPinnedBody(menu.PinnedBody{
-			Above: append(PinnedGroupRows(state, cfg, width), menu.Rule(cfg, width)),
+			Above: append(append([]string{menu.LeadRow(state.Lead, state.OnLead(), cfg, width)}, PinnedGroupRows(state, cfg, width)...), menu.Rule(cfg, width)),
 			Rows:  ListRows(state, cfg, width, height-PinnedRows()),
 		}, width, height)
 	})
@@ -473,7 +480,7 @@ func (state Body) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome,
 // group block, its rule and every body. The zone's rows (the blank line and the
 // bottom line) are the box's (dialog.Box.Zone).
 func bodyFit(state Body, cfg term.Style) dialog.Fit {
-	fit := dialog.Fit{Width: 1, Rows: PinnedRows() + max(len(state.Registry), 1)}
+	fit := dialog.Fit{Width: menu.RowWidth(menu.RowSpec{Left: RestoreRow}, cfg), Rows: PinnedRows() + max(len(state.Registry), 1)}
 	for i := range recipe.ObjectGroups {
 		// The widest the row can get: every member ticked, so the box does not
 		// change width as bodies are ticked.
@@ -503,10 +510,10 @@ func ListRows(state Body, cfg term.Style, width, height int) []string {
 		return nil
 	}
 	if state.Registry == nil {
-		return []string{menu.Note("(no object registry)", width, cfg)}
+		return []string{menu.Note("(Astrolog's list of bodies could not be read)", width, cfg)}
 	}
 	if len(state.Matches) == 0 {
-		return []string{menu.Note("(no matching bodies)", width, cfg)}
+		return []string{menu.Note("(no body of that name)", width, cfg)}
 	}
 	// The list's own index is the combined cursor minus the group rows; a
 	// negative one means the cursor is up in the group block.
@@ -581,7 +588,7 @@ func ProbeStatusFor(state Body, o aspect.RegistryObject) (string, bool) {
 		return "", false
 	}
 	if e.Said == "" {
-		return fmt.Sprintf("Astrolog gave %s no position and named no file", o.Name), true
+		return fmt.Sprintf("Astrolog cannot place %s here and did not say why", o.Name), true
 	}
 	return "Astrolog: " + e.Said, true
 }
@@ -663,8 +670,6 @@ const (
 	PageEnd
 	// Toggle ticks or unticks the row under the cursor.
 	Toggle
-	// Defaults ticks the lens's default bodies and nothing else (Ctrl+D).
-	Defaults
 )
 
 // Outcome is what one key decided. Both Confirmed and Cancelled carry the
@@ -686,16 +691,18 @@ type Outcome struct {
 // only closing hands a policy back to the caller (C7).
 func (b *Body) Apply(a Action, msg tea.KeyMsg, listHeight int) Outcome {
 	switch a {
-	case Confirm:
-		return Outcome{Confirmed: true, Policy: b.Policy()}
-	case Keep:
+	case Confirm, Keep:
+		if b.OnLead() {
+			b.RestoreDefaults()
+			return Outcome{}
+		}
 		return Outcome{Confirmed: true, Policy: b.Policy()}
 	case Dismiss:
 		return Outcome{Confirmed: true, Dismissed: true, Policy: b.Policy()}
 	case Discard:
 		return Outcome{Cancelled: true, Policy: b.Entry}
 	case Up:
-		if b.Cursor > 0 {
+		if b.Cursor > b.HomeCursor() {
 			b.Cursor--
 		}
 		b.ScrollTo(b.Cursor-GroupRows(), listHeight)
@@ -714,8 +721,6 @@ func (b *Body) Apply(a Action, msg tea.KeyMsg, listHeight int) Outcome {
 		b.pageBodies(menu.PageEnd, listHeight)
 	case Toggle:
 		b.ToggleAt(b.Cursor)
-	case Defaults:
-		b.RestoreDefaults()
 	default:
 		if b.TypeKey(msg) {
 			cur := b.Cursor // Refilter resets it

@@ -191,7 +191,7 @@ func TestBodiesFallbackHasNoRule(t *testing.T) {
 // past the cap it stays that tall and windows (the specification C21).
 func TestChartViewportNeverOverflows(t *testing.T) {
 	for slots := 1; slots <= 12; slots++ {
-		rects := layoutGeometry(132, 60, slots, 1)
+		rects := rectsAt(132, 60, slots, 1)
 		if rects == nil {
 			t.Fatalf("%d slots: no layout at 132x60", slots)
 		}

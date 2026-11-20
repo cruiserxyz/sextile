@@ -11,8 +11,8 @@ import (
 )
 
 // berlinCoordsChart is Berlin, DE (atlas 13.4105E 52.5244N) rounded to the
-// whole arc-minutes a saved record carries. Nearest takes that point for the
-// district "Mitte" (13.4049E 52.52N), not for Berlin.
+// whole arc-minutes a saved record carries. The atlas's nearest entry to that
+// point is the district "Mitte" (13.4049E 52.52N), not Berlin.
 func berlinCoordsChart(zi string) string {
 	return "@AI800  ; test\n-qb Mar 14 1987  4:30pm ST 2E  13:25E 52:31N\n" + zi + "\n"
 }
@@ -35,8 +35,8 @@ func openedPlace(t *testing.T, dir, file string) location.PlaceInfo {
 		t.Fatalf("the library does not list %s (drops: %+v)", file, lib.Drops)
 	}
 	picked, err := ResolvePickedChartIn(context.Background(), dir, *row)
-	if err != nil || !picked.HasPlace {
-		t.Fatalf("ResolvePickedChartIn: %v (HasPlace %v)", err, picked.HasPlace)
+	if err != nil {
+		t.Fatalf("ResolvePickedChartIn: %v", err)
 	}
 	if picked.Place.Display() != row.Place.Display() {
 		t.Errorf("opening says %q, the listing says %q", picked.Place.Display(), row.Place.Display())
@@ -57,25 +57,24 @@ func TestSavedBerlinReopensAsBerlin(t *testing.T) {
 	if got.Display() != "Berlin, DE" {
 		t.Errorf("the saved chart reopens under %q, want \"Berlin, DE\"", got.Display())
 	}
-	if got.TZ != "Europe/Berlin" {
-		t.Errorf("TZ = %q, want Europe/Berlin", got.TZ)
-	}
 }
 
-// T2: the same coordinates with no place label open as Nearest says.
-func TestChartWithoutPlaceLabelOpensAsNearest(t *testing.T) {
+// T2: the same coordinates with no place label open under the coordinates,
+// not under the atlas's nearest entry.
+func TestChartWithoutPlaceLabelOpensAtItsCoordinates(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "nolabel.as", berlinCoordsChart(`-zi "No Label" ""`))
-	if got := openedPlace(t, dir, "nolabel.as"); got.Display() != "Mitte, DE" {
-		t.Errorf("a file with no place label opens under %q, want Nearest's \"Mitte, DE\"", got.Display())
+	if got := openedPlace(t, dir, "nolabel.as"); got.Display() != "13°25'E 52°31'N" {
+		t.Errorf("a file with no place label opens under %q, want its coordinates", got.Display())
 	}
 }
 
-// T3: a label naming a city more than an arc-minute away is ignored.
-func TestPlaceLabelFarAwayIsIgnored(t *testing.T) {
+// T3: a label naming a city far from the coordinates is the file's own words,
+// and the chart opens under them.
+func TestPlaceLabelIsTheFilesOwn(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "hamburg.as", berlinCoordsChart(`-zi "Far Label" "Hamburg, DE"`))
-	if got := openedPlace(t, dir, "hamburg.as"); got.Display() != "Mitte, DE" {
-		t.Errorf("a label naming a distant city opens under %q, want Nearest's \"Mitte, DE\"", got.Display())
+	if got := openedPlace(t, dir, "hamburg.as"); got.Display() != "Hamburg, DE" {
+		t.Errorf("the chart opens under %q, want the file's \"Hamburg, DE\"", got.Display())
 	}
 }

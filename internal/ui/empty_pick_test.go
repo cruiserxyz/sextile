@@ -22,7 +22,7 @@ import (
 // objects plus the lens's additions; at first this was Astrolog's alone, and
 // the same day the operator had it defined by the lens). Nothing ticked is "no
 // choice of mine", not "draw no body": an empty set used to compile to a bare
-// -R0, Astrolog printed no body and the screen said "Couldn't cast the chart"
+// -R0, Astrolog printed no body and the screen said "Couldn't cast "
 // at every start. An empty set is no longer saved, and the bare `drawn:` line
 // that earlier 0.1.3 builds wrote reads the same way.
 
@@ -64,7 +64,7 @@ func hostDefault(m Model) map[int]bool {
 func emptyPickProof(t *testing.T, m Model, entry recipe.ObjectPolicy, read func() [][]string, mark int, want map[int]bool) {
 	t.Helper()
 	def := lookup.Hellenistic.Objects
-	def.TrueNodeMode = entry.TrueNodeMode
+	def.Nodes = entry.Nodes
 	if !reflect.DeepEqual(m.lens.Objects, def) {
 		t.Errorf("the lens holds %+v, want the default policy %+v", m.lens.Objects, def)
 	}
@@ -81,7 +81,7 @@ func emptyPickProof(t *testing.T, m Model, entry recipe.ObjectPolicy, read func(
 	if only, extra := sameSet(want, drawnByArgv(argv, m.ephemeris.Default)); len(only) != 0 || len(extra) != 0 {
 		t.Errorf("the chart does not draw the default set: without %v, extra %v (argv %v)", only, extra, band(argv))
 	}
-	if n := countLines(m, "Couldn't cast the chart"); n != 0 {
+	if n := countLines(m, " not cast,"); n != 0 {
 		t.Errorf("the empty choice failed the cast:\n%s", said(m))
 	}
 	if strings.Contains(ansi.Strip(m.View()), "Couldn't cast") {

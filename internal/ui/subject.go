@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
@@ -49,7 +50,8 @@ const (
 	paneCurrent  paneState = iota // the shown key is the wanted key: draw it bright
 	paneUpdating                  // the same subject at another version: faint, caption ends ` …`
 	paneEmpty                     // another subject, or nothing shown: one faint `…`
-	paneFailed                    // the wanted Details report failed: one faint line saying so
+	paneFailed                    // the wanted result failed: one faint line saying so
+	paneRefused                   // the same subject, kept from before a refused cast: faint, caption unmarked
 )
 
 // slotIdentity is a chart's identity as a subject sees it: the floating slot is
@@ -79,11 +81,11 @@ type textKey struct {
 	place location.PlaceInfo
 	// frames is the house system and zodiac of the cursor's chart and, while
 	// comparing, of the frame chart and the sky.
-	frames   string
-	objects  string
-	aspects  string
-	trueNode bool
-	only     string
+	frames  string
+	objects string
+	aspects string
+	nodes   recipe.NodeForm
+	only    string
 }
 
 func (k textKey) subject() subject {
@@ -138,7 +140,8 @@ func (m Model) textKeyFor() (textKey, bool) {
 		k.place = m.place
 	}
 	show := m.showLens(sc.cursor)
-	k.objects, k.aspects, k.trueNode = chooserKey(show)
+	k.objects, k.aspects, _ = chooserKey(show)
+	k.nodes = m.sceneNodes(sc)
 	var only []string
 	for _, n := range show.Objects.Only.Members() {
 		only = append(only, strconv.Itoa(n))
@@ -188,7 +191,7 @@ func (k detailsKey) subject() subject {
 // subject of a Timeline: the compared charts (the sky alone while single). The
 // month, the zone and every lens field are its version.
 func (k timelineKey) subject() subject {
-	return subject{panel: PanelChart, tab: string(TabDetailsTimeline), chart: k.natals}
+	return subject{panel: PanelChart, tab: string(k.list.tab()), chart: k.natals}
 }
 
 // subject of a template tab: the template and the object it lists. The moment,
@@ -200,18 +203,22 @@ func (k templateKey) subject() subject {
 // timelinePaneState is the view rule for the Timeline tab (C3-C5), read from
 // the key it asks for and the key of the list it can draw. With no search to
 // ask for it draws as it always did.
-func (m Model) timelinePaneState() paneState {
-	want, ok := m.timelineKeyFor()
+func (m Model) timelinePaneState() paneState { return m.timelinePaneStateFor(m.shownList()) }
+
+// timelinePaneStateFor is timelinePaneState for list k.
+func (m Model) timelinePaneStateFor(k timelineList) paneState {
+	want, ok := m.timelineKeyForList(k)
 	if !ok {
 		return paneCurrent
 	}
-	if !m.timeline.hasContent {
+	l := m.list(k)
+	if !l.hasContent {
 		return paneEmpty
 	}
 	switch {
-	case m.timeline.complete && m.timeline.content == want:
+	case l.complete && l.content == want:
 		return paneCurrent
-	case m.timeline.content.subject() == want.subject():
+	case l.content.subject() == want.subject():
 		return paneUpdating
 	}
 	return paneEmpty
@@ -265,6 +272,16 @@ func (m Model) shownFrameValid() bool {
 // names the moment it was cast at (operator, 2026-11-06: "flicker free has
 // prority"). Only another subject empties them.
 func (m Model) textPaneState(p PanelID) paneState {
+	if m.textRefusedNow() {
+		// The frame asked for now was refused. The frame of the same chart
+		// from before stays, faint; another chart's is not drawn under this
+		// one's caption, and the pane says the cast failed instead.
+		want, _ := m.wantedPaneKey(p)
+		if shown, ok := m.shownPaneKey(p); ok && shown.subject() == want.subject() {
+			return paneRefused
+		}
+		return paneFailed
+	}
 	if !m.shown.stamped {
 		if len(m.chart.positions) == 0 && m.chart.epoch == 0 {
 			return paneEmpty
@@ -310,6 +327,10 @@ type detailsWant struct {
 // panel and its cursor alone.
 func (m Model) detailsWanted() detailsWant {
 	switch m.focused {
+	case PanelStatus:
+		// The Status panel's Details is read from the model: no report, no key.
+		// Its report tab is the Credits tab.
+		return detailsWant{caption: tabTitleCredits}
 	case PanelBodies:
 		if title, _, ok := m.detailsBodyTitle(); ok {
 			w := detailsWant{caption: strings.TrimPrefix(title, detailsPrefix)}
@@ -346,7 +367,18 @@ func (m Model) activeAspectsTitle() string {
 
 // detailsReportState is the view rule for the Details report tab.
 func (m Model) detailsReportState() paneState {
+	if m.focused == PanelStatus {
+		return paneCurrent // what it shows is read from the model, never awaited
+	}
 	w := m.detailsWanted()
+	if w.has && m.textRefusedNow() {
+		// The report is cast over the text frame, which was refused: a report
+		// of the same subject stays, faint, and another's is not drawn.
+		if m.details.keyed && m.details.key.subject() == w.key.subject() {
+			return paneRefused
+		}
+		return paneFailed
+	}
 	if w.has && w.key.kind == reportRaw && m.details.failed.set && m.details.failed.key == w.key.raw {
 		return paneFailed
 	}
@@ -374,8 +406,14 @@ func (m Model) detailsReportState() paneState {
 // (scroll, `/`, copy) reads: the shown content while it is drawn, and nothing
 // while the pane is empty or shows its failure line.
 func (m Model) detailsBodyShown() string {
+	if m.focused == PanelStatus {
+		if m.activeTabID(PanelDetails) == TabStatusSession {
+			return m.sessionDetails()
+		}
+		return m.creditsText()
+	}
 	switch m.detailsReportState() {
-	case paneCurrent, paneUpdating:
+	case paneCurrent, paneUpdating, paneRefused:
 		return m.details.body
 	}
 	return ""
@@ -390,6 +428,29 @@ func failedReportLine(name string) string {
 		name = "the " + name
 	}
 	return "Couldn't read " + name + "'s report."
+}
+
+// textRefused is the key of the text frame whose cast Astrolog refused. It
+// stands until a frame commits, and only while it is the key asked for: the
+// panes then keep what they showed and nothing asks for that frame again.
+type textRefused struct {
+	set bool
+	key textKey
+}
+
+// textRefusedNow says the text frame asked for now is the one that was refused.
+func (m Model) textRefusedNow() bool {
+	if !m.refused.set {
+		return false
+	}
+	want, ok := m.textKeyFor()
+	return ok && want == m.refused.key
+}
+
+// failedCastLine is the one faint line Bodies and Aspects read when the chart
+// under the cursor could not be cast.
+func failedCastLine(name string) string {
+	return "Couldn't cast " + name + "."
 }
 
 // emptyPaneLine is the one faint line an empty pane reads.

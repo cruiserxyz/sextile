@@ -1,90 +1,24 @@
 package aspect
 
-// AspectKind enumerates the angular relationships astrolog reports between
-// pairs of bodies.
-//
-// Astrolog source: this enum tracks astrolog's default aspect set — the five
-// classical majors (conjunction, sextile, square, trine, opposition) plus the
-// common Ptolemaic-adjacent minors (semisextile, semisquare, quintile,
-// sesquisquare, biquintile, quincunx). Astrolog's aspect list is runtime-
-// configurable; the subset here is the one whose meaning the bake pipeline has
-// baked. The zero value (AspectUnknown) is reserved.
-type AspectKind uint8
-
-const (
-	AspectUnknown AspectKind = iota
-	Conjunction
-	Semisextile
-	Semisquare
-	Sextile
-	Quintile
-	Square
-	Trine
-	Sesquisquare
-	Biquintile
-	Quincunx
-	Opposition
-)
-
-// Angle returns the canonical angular separation of the aspect kind in
-// degrees. Returns -1 for AspectUnknown.
-func (k AspectKind) Angle() float64 {
-	switch k {
-	case Conjunction:
-		return 0
-	case Semisextile:
-		return 30
-	case Semisquare:
-		return 45
-	case Sextile:
-		return 60
-	case Quintile:
-		return 72
-	case Square:
-		return 90
-	case Trine:
-		return 120
-	case Sesquisquare:
-		return 135
-	case Biquintile:
-		return 144
-	case Quincunx:
-		return 150
-	case Opposition:
-		return 180
-	}
-	return -1
+// AspectKind is an aspect's identity: the index, the name and the three
+// letters of the registry row Astrolog printed for it (`astrolog -HA`). The
+// package holds no list of aspects; the registry of the binary in use is the
+// only one, and a kind is read from it. Two kinds are the same aspect when
+// they are equal. The zero value means no aspect.
+type AspectKind struct {
+	// Index is Astrolog's own registry index, 1-based.
+	Index int
+	// Name is the registry's name for the aspect.
+	Name string
+	// Abbrev is the three-letter form Astrolog prints in its lists.
+	Abbrev string
 }
 
-// String returns a stable lowercase name for the aspect kind.
-func (k AspectKind) String() string {
-	switch k {
-	case Conjunction:
-		return "conjunction"
-	case Semisextile:
-		return "semisextile"
-	case Semisquare:
-		return "semisquare"
-	case Sextile:
-		return "sextile"
-	case Quintile:
-		return "quintile"
-	case Square:
-		return "square"
-	case Trine:
-		return "trine"
-	case Sesquisquare:
-		return "sesquisquare"
-	case Biquintile:
-		return "biquintile"
-	case Quincunx:
-		return "quincunx"
-	case Opposition:
-		return "opposition"
-	default:
-		return "unknown"
-	}
-}
+// Known reports whether the kind names an aspect (the zero value does not).
+func (k AspectKind) Known() bool { return k.Index > 0 }
+
+// String returns the registry's name for the aspect.
+func (k AspectKind) String() string { return k.Name }
 
 // Aspect pairs two objects under a named angular relationship, with the
 // observed orb (angular deviation from the exact angle).

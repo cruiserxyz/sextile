@@ -33,13 +33,14 @@ func pressTyped(m Model, t tea.KeyType) Model {
 	return tm.(Model)
 }
 
-// TestArrowsReachTheSamePanelAsTab is C1: → walks Chart → Bodies → Aspects →
-// Chart and ← walks it back, which is the order Tab already walks.
+// TestArrowsReachTheSamePanelAsTab is C1: → walks Session → Chart → Bodies → Aspects →
+// Session and ← walks it back, which is the order Tab already walks.
 func TestArrowsReachTheSamePanelAsTab(t *testing.T) {
 	forward := []struct{ from, want PanelID }{
+		{PanelStatus, PanelChart},
 		{PanelChart, PanelBodies},
 		{PanelBodies, PanelAspects},
-		{PanelAspects, PanelChart},
+		{PanelAspects, PanelStatus},
 	}
 	for _, tc := range forward {
 		m := arrowBase(t)
@@ -53,7 +54,8 @@ func TestArrowsReachTheSamePanelAsTab(t *testing.T) {
 		}
 	}
 	backward := []struct{ from, want PanelID }{
-		{PanelChart, PanelAspects},
+		{PanelStatus, PanelAspects},
+		{PanelChart, PanelStatus},
 		{PanelBodies, PanelChart},
 		{PanelAspects, PanelBodies},
 	}
@@ -71,7 +73,7 @@ func TestArrowsReachTheSamePanelAsTab(t *testing.T) {
 
 // TestArrowsRideTheExistingPanelBindings is C2. Without this a builder could
 // satisfy C1 with two NEW bindings and leave the keymap carrying two ways to
-// say one thing, which is how the help modal and the footer drift.
+// say one thing, which is how Keybindings and the footer drift.
 func TestArrowsRideTheExistingPanelBindings(t *testing.T) {
 	kmap := keys.DefaultKeys()
 	for _, tc := range []struct {
@@ -115,7 +117,7 @@ func TestArrowsDoNotReachPanelsFromAModal(t *testing.T) {
 		"chart modal":  func(m Model) Model { m.startup = startupChartOpen; return m },
 		"body modal":   func(m Model) Model { m.startup = startupBodyOpen; return m },
 		"aspect modal": func(m Model) Model { m.startup = startupAspectOpen; return m },
-		"help overlay": func(m Model) Model { m.helpOpen = true; return m },
+		"help overlay": func(m Model) Model { m = openedKeybindings(m); return m },
 		"console":      func(m Model) Model { m.console.open = true; return m },
 	}
 	for name, open := range states {
@@ -140,31 +142,34 @@ func TestArrowsDoNotReachPanelsFromAModal(t *testing.T) {
 }
 
 // TestPanelBindingsAdvertiseTheArrows is C6, restated for the sheet the
-// operator approved on 2026-09-20. The FOOTER names the arrow alone, because
-// naming both lands on 82 of 80 columns and KeyBarHeight reserves one row. The
-// HELP MODAL carries the whole binding, so tab is documented, not dropped.
+// operator approved on 2026-09-20. The FOOTER names the arrows in words and
+// the Keybindings popup spells them, so no glyph and no Ctrl key stands in the footer.
 func TestPanelBindingsAdvertiseTheArrows(t *testing.T) {
 	kmap := keys.DefaultKeys()
 
 	help := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
-	for _, want := range []string{"tab/→", "⇧ tab/←"} {
+	for _, want := range []string{"<left>", "<right>"} {
 		if !strings.Contains(help, want) {
-			t.Errorf("the help modal does not carry %q, so that key is undocumented", want)
+			t.Errorf("Keybindings does not carry %q, so that key is undocumented", want)
 		}
 	}
 
 	tm := newTestModel(t, Config{}, RealClock{})
-	bar := tm.barText(ownerMain, mainBindings(kmap), 80, Config{Accessible: true}, "")
-	for _, want := range []string{"Switch panel: ←→"} {
-		if !strings.Contains(bar, want) {
-			t.Errorf("the key bar does not name %q", want)
-		}
+	// The footer does not name the panel keys: Switch panel is a row of
+	// Keybindings, and the footer keeps what is particular to the screen.
+	narrow := tm.barText(ownerMain, mainBindings(kmap), 80, Config{}, "")
+	if !strings.Contains(narrow, "Moon phase: p/P") || !strings.Contains(narrow, "Keybindings: ?") {
+		t.Errorf("the 80-column bar lost a kept or pinned entry: %q", narrow)
+	}
+	bar := tm.barText(ownerMain, mainBindings(kmap), 132, Config{}, "")
+	if strings.Contains(bar, "Switch panel") {
+		t.Errorf("the key bar names Switch panel: %q", bar)
 	}
 	// The whole point of the footer entries: they must NOT spend the columns
 	// the frame does not have.
-	for _, unwanted := range []string{"tab/→", "⇧ tab/←"} {
+	for _, unwanted := range []string{"<left>", "<right>", "←", "→"} {
 		if strings.Contains(bar, unwanted) {
-			t.Errorf("the footer carries %q; that is the wording that overflows 80 columns", unwanted)
+			t.Errorf("the footer carries %q; that is not how the footer spells keys", unwanted)
 		}
 	}
 }

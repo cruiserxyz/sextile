@@ -140,6 +140,10 @@ func (m demoMoment) natalFrame() FirstFrameReadyMsg {
 
 type demoFrame struct{ Name, Frame string }
 
+// demoWidth is wide enough for Details to stand beside the panels with two charts
+// shown, so Session, Chart, Bodies and Aspects are all open in every frame.
+const demoWidth = 144
+
 // captureFirstTransitCheck drives the real startup stream and returns the
 // workflow in order: the client's own chart, today laid over it, the transit
 // aspects read, and the same pair swept a month forward.
@@ -173,7 +177,7 @@ func captureFirstTransitCheck(t *testing.T) []demoFrame {
 		tm = m
 	}
 
-	step(tea.WindowSizeMsg{Width: 132, Height: 40})
+	step(tea.WindowSizeMsg{Width: demoWidth, Height: 40})
 	step(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{demoPlace})})
 	// The client's chart comes back the way it does on any relaunch: from the
 	// session's snapshot, with the pair selected.
@@ -230,20 +234,20 @@ func TestFirstTransitCheckDemo(t *testing.T) {
 	}
 	byName := map[string]string{}
 	for _, f := range frames {
-		assertFrameGeometry(t, f.Frame, 132, 40)
+		assertFrameGeometry(t, f.Frame, demoWidth, 40)
 		assertSelfContainedFrame(t, f.Name, f.Frame)
 		byName[f.Name] = ansi.Strip(f.Frame)
 	}
 
 	// The frames must tell the story the walkthrough claims, or the demo
 	// silently captures the wrong loop and the README beside it lies.
-	if !strings.Contains(byName["01-natal-chart"], "[3] Aspects") || strings.Contains(byName["01-natal-chart"], " in ①") || strings.Contains(byName["01-natal-chart"], " in 1") {
+	if !strings.Contains(byName["01-natal-chart"], "[4] Aspects") || strings.Contains(byName["01-natal-chart"], " in ①") || strings.Contains(byName["01-natal-chart"], " in 1") {
 		t.Error("(1) dropping the comparison must leave the plain Aspects title")
 	}
 	for _, name := range []string{"02-today-over-natal", "03-transit-aspects", "04-one-month-forward"} {
 		// Amended by C1 (2026-10-04): the strip opens with `Aspects`, and the
 		// cursor's own tab, the pair, is the active one.
-		if !strings.Contains(byName[name], "[3] Aspects - [2 in 1]") && !strings.Contains(byName[name], "[3] Aspects - ② in ①") {
+		if !strings.Contains(byName[name], "[4] Aspects - [2 in 1]") && !strings.Contains(byName[name], "[4] Aspects - ② in ①") {
 			t.Errorf("(%s) a comparison frame must title the panel with its pair (selected-charts-compare C1)", name)
 		}
 	}
@@ -262,7 +266,7 @@ func TestFirstTransitCheckDemo(t *testing.T) {
 	// a different program; this is the assertion that caught that.
 	assertAstrologColour(t, frames)
 	// The waterfall is column-major and 15 cells wide per column, so a
-	// comparison frame at 132 must show more than one column of cross-aspects.
+	// comparison frame at the demo width must show more than one column of cross-aspects.
 	assertMultiColumnAspects(t, byName["03-transit-aspects"])
 
 	if !*demoCapture {

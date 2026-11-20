@@ -122,12 +122,12 @@ func TestTimelineReturnSideMirrorsTheNatalSide(t *testing.T) {
 
 func TestTimelineEmptySetIsBare(t *testing.T) {
 	for _, src := range []TimelineSource{TimelineTransit, TimelineReturn} {
-		if got := bandTail(t, src, bandReq(t, explicit(), recipe.AspectPolicy{})); got != "-R0 -RT0" {
-			t.Errorf("%s: an empty set emitted %q, want the bare \"-R0 -RT0\"", src, got)
+		if got := bandTail(t, src, bandReq(t, explicit(), recipe.AspectPolicy{})); got != "_Yn _Ynn -R0 -RT0" {
+			t.Errorf("%s: an empty set emitted %q, want the bare \"_Yn _Ynn -R0 -RT0\"", src, got)
 		}
 	}
-	if got := bandTail(t, TimelineSky, bandReq(t, explicit(), recipe.AspectPolicy{})); got != "-R0" {
-		t.Errorf("sky: an empty set emitted %q, want the bare \"-R0\"", got)
+	if got := bandTail(t, TimelineSky, bandReq(t, explicit(), recipe.AspectPolicy{})); got != "_Yn _Ynn -R0" {
+		t.Errorf("sky: an empty set emitted %q, want the bare \"_Yn _Ynn -R0\"", got)
 	}
 }
 
@@ -184,14 +184,14 @@ func TestTimelineSkyMarks(t *testing.T) {
 	// Step 0 (tmp/orders/out/timeline-objects-build/step0.md): -RO is last-wins and
 	// drops other bodies' ingresses, so the sky marks are the exact -R0 list.
 	o := defaultLens()
-	if got := bandTail(t, TimelineSky, bandReq(t, withMarks(o, 1, 2), recipe.AspectPolicy{})); got != "-Yn -R0 1 2" {
-		t.Errorf("sky marks {1,2}: band %q, want \"-Yn -R0 1 2\"", got)
+	if got := bandTail(t, TimelineSky, bandReq(t, withMarks(o, 1, 2), recipe.AspectPolicy{})); got != "=Yn _Ynn -R0 1 2" {
+		t.Errorf("sky marks {1,2}: band %q, want \"=Yn _Ynn -R0 1 2\"", got)
 	}
 	if got := bandTail(t, TimelineSky, bandReq(t, withMarks(o, 1), recipe.AspectPolicy{})); strings.Contains(got, "-RO") {
 		t.Errorf("sky mark carries -RO: %q", got)
 	}
 	// The marks of the natal never reach the sky search.
-	if got := bandTail(t, TimelineSky, natalReq(t, o, withMarks(o, 1))); got != "-Yn" {
+	if got := bandTail(t, TimelineSky, natalReq(t, o, withMarks(o, 1))); got != "=Yn _Ynn" {
 		t.Errorf("a natal's marks changed the sky band: %q", got)
 	}
 }

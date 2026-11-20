@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -14,7 +15,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
-// The Log takes the focus with `,l`. Like the console it is a mode beside the
+// The Log takes the focus with `,L`. Like the console it is a mode beside the
 // ring, never m.focused: Details takes its subject from m.focused, the wheel
 // and every refresh read it, and none of them may notice the Log being read.
 // Entering and leaving start no work and defer none.
@@ -53,7 +54,7 @@ func (m Model) logFocusView() logFocusView {
 func (m Model) logPanelEntries() []logLine {
 	out := make([]logLine, 0, len(m.logLines))
 	for _, l := range m.logLines {
-		if l.lane != laneArgv && l.lane != laneWarning && l.lane != laneNow && l.lane != laneTrace {
+		if !l.cleared && l.lane != laneArgv && l.lane != laneWarning && l.lane != laneNow && l.lane != laneTrace {
 			out = append(out, l)
 		}
 	}
@@ -69,7 +70,7 @@ func (m Model) logInnerHeight() int {
 	return max(r.h-2, 0)
 }
 
-// focusLog is `,l`: with the Log on screen it takes the focus, cursor on the
+// focusLog is `,L`: with the Log on screen it takes the focus, cursor on the
 // newest line, and the error mark is answered as opening the console answers
 // it. Pressed while the Log is focused, or with no Log panel on screen, it
 // opens the console.
@@ -104,14 +105,14 @@ func (m Model) settleLogFocus() Model {
 // logBindings is the focused Log's table. The leader's `y` is the leader's
 // (updateLeaderKey), so its entry matches no key of its own.
 func logBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{
-		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true, When: func(c keys.Context) bool { return c.Log.Lines > 1 }},
-		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
+	return keys.TitledLocal([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row up", BarKey: "up", When: func(c keys.Context) bool { return c.Log.Lines > 1 }},
+		{ID: keys.BindingListDown, Binding: key.NewBinding(key.WithKeys("down", "j")), Title: "Move row down", BarKey: "down"},
 		{ID: keys.BindingConfirm, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Copy line", BarKey: "enter", Bar: true, When: func(c keys.Context) bool { return c.Log.Lines > 0 }},
-		{ID: keys.BindingCopy, Binding: key.NewBinding(), Title: "Copy all", BarKey: ", y", Bar: true, When: func(c keys.Context) bool { return c.Log.Lines > 0 }},
-		{ID: keys.BindingConsole, Binding: key.NewBinding(key.WithKeys("l")), Title: "Console", BarKey: "l", Bar: true},
-		{ID: keys.BindingPageUp, Title: "Page list", HelpKey: "⇞/⇟", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "⇞"},
-		{ID: keys.BindingPageDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
+		{ID: keys.BindingCopy, Binding: key.NewBinding(), Title: "Copy all", BarKeyFn: chordKey("y"), BarKey: ", y", BarWhen: leaderSet, Bar: true, When: func(c keys.Context) bool { return c.Log.Lines > 0 }},
+		{ID: keys.BindingConsole, Binding: key.NewBinding(key.WithKeys("l")), Title: "Console", BarKey: "l"},
+		{ID: keys.BindingPageUp, Title: "Page list up", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "pgup"},
+		{ID: keys.BindingPageDown, Binding: key.NewBinding(key.WithKeys("pgdown")), Title: "Page list down", BarKey: "pgdown"},
 		{ID: keys.BindingPageHome, Title: "First row", Binding: key.NewBinding(key.WithKeys("home", "g")), BarKey: "home/g"},
 		{ID: keys.BindingPageEnd, Title: "Last row", Binding: key.NewBinding(key.WithKeys("end", "G")), BarKey: "end/G"},
 		{ID: keys.BindingClose, Binding: key.NewBinding(key.WithKeys("esc", "q")), Title: "Back", BarKey: "esc", Bar: true, Pinned: true},
@@ -119,7 +120,7 @@ func logBindings() []keys.BindingEntry {
 }
 
 // updateLogKey owns the keyboard while the Log is focused. Its own keys are in
-// logBindings; the leader works (`,y` copies, `,l` opens the console); every
+// logBindings; the leader works (`,y` copies, `,L l` opens the console); every
 // other key gives the focus back and then runs from the screen it came from,
 // so no key is dead and none acts on a panel that does not look focused.
 func (m Model) updateLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -128,6 +129,10 @@ func (m Model) updateLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.leaderKey != "" && msg.String() == m.leaderKey {
 		return m.armLeader()
+	}
+	// ⌃y is `, y`: the Log keeps the keyboard while it copies.
+	if key.Matches(msg, m.keys.Copy) {
+		return m.copyAll()
 	}
 	switch keys.MatchBinding(msg, m.available(ownerLog, logBindings())) {
 	case keys.BindingClose:
@@ -150,7 +155,7 @@ func (m Model) updateLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keys.BindingConsole:
 		return m.openConsole()
 	}
-	// The hidden door of the Experiments popup: in no table, bar or help.
+	// The hidden door of the Experiments popup: in no table, bar or Keybindings popup.
 	if isPlainKey(msg, "p") {
 		return m.openExperiments()
 	}
@@ -186,7 +191,7 @@ func (m Model) yankLogLine() (tea.Model, tea.Cmd) {
 	}
 	text := lines[m.logFocus.cursor]
 	if err := yankLine(text); err != nil {
-		return m.logError("Couldn't copy that line to the clipboard.").showNotice(noticeCopyFailed)
+		return m.logError("log", "the line did not reach the clipboard").showNotice(noticeCopyFailed)
 	}
 	m.yank.gen++
 	m.yank.active = true
@@ -233,7 +238,7 @@ func (m Model) copyPlan() copyPlan {
 // copyBlocked is why Copy cannot run now, "" when it can.
 func (m Model) copyBlocked() string {
 	if m.currentOwner() == ownerDetails {
-		if m.activeTabID(PanelDetails) == TabDetailsTimeline {
+		if isListTab(m.activeTabID(PanelDetails)) {
 			if len(m.copiedRows()) == 0 {
 				return whyNothingToCopy
 			}
@@ -266,7 +271,7 @@ func (m Model) copyAll() (tea.Model, tea.Cmd) {
 	if len(p.lines) != 1 {
 		noun += "s"
 	}
-	m = m.logNote(p.scope, "copied %d %s", len(p.lines), noun)
+	m = m.logNote(p.scope, "%d %s copied", len(p.lines), noun)
 	m.yank.gen++
 	m.yank.active = true
 	m.yank.notice = ""
@@ -279,15 +284,15 @@ func (m Model) copyAll() (tea.Model, tea.Cmd) {
 func (m Model) logCopyFailed(p copyPlan) Model {
 	switch {
 	case p.console:
-		return m.logError("Couldn't copy the Log console to the clipboard.")
+		return m.logError("log", "the console lines did not reach the clipboard")
 	case p.scope == "log":
-		return m.logError("Couldn't copy the Log to the clipboard.")
+		return m.logError("log", "the Log lines did not reach the clipboard")
 	case p.scope == "chart":
-		return m.logError("Couldn't copy the Chart panel to the clipboard.")
+		return m.logError("chart", "the rows did not reach the clipboard")
 	case p.scope == "bodies":
-		return m.logError("Couldn't copy the Bodies panel to the clipboard.")
+		return m.logError("bodies", "the rows did not reach the clipboard")
 	}
-	return m.logError("Couldn't copy the Aspects panel to the clipboard.")
+	return m.logError("aspects", "the aspects did not reach the clipboard")
 }
 
 // copyWidth is the width a copied row is laid out in: wide enough that no
@@ -303,16 +308,26 @@ func (m Model) copyRows(p PanelID) []string {
 	cfg.Color = ColorNever
 	switch p {
 	case PanelChart:
-		v := m.bodiesView()
 		render := func(w int) string {
-			return chartSlotsBodyLayout(m.slots, m.cursorIdx, false, m.clock.Now(), m.place, m.lens, w, cfg, m.rowTag, m.floatingTitle(), v.count() == 1)
+			return chartSlotsBodyLayout(m.slots, m.cursorIdx, false, m.clock.Now(), m.place, m.lens, w, cfg, m.rowTag, m.floatingTitle(), m.placeWitness())
 		}
 		// The row pins its tag to the right edge, so the width decides the
 		// padding. The narrowest width that still shows every word the wide
 		// layout shows is the row as it is, with nothing cut and no gap.
 		whole := render(copyWidth)
 		w := sort.Search(copyWidth, func(i int) bool { return sameWords(render(i+1), whole) }) + 1
-		return plainRows(render(w))
+		rows := plainRows(render(w))
+		// With any chart selected (Space), only those rows go, in slot order.
+		if set := m.deriveScene().set; len(set) > 0 && len(rows) == len(m.slots.All()) {
+			var chosen []string
+			for i, s := range m.slots.All() {
+				if slices.Contains(set, s) {
+					chosen = append(chosen, rows[i])
+				}
+			}
+			return chosen
+		}
+		return rows
 	case PanelBodies:
 		v, state := m.bodiesView(), m.paintedChart()
 		slot, cursor := m.cursorIdx, m.bodyCursorIdx

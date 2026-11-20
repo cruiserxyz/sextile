@@ -74,7 +74,7 @@ func stubColumnLookups(t *testing.T, failNatal func(store.AnchorChart) bool) *co
 		s.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
 			return lookup.OverlayAspects{Report: "transit cross"}, nil
 		}
-		s.cast.synastry = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(context.Context, lookup.Lens, store.AnchorChart, store.AnchorChart) (lookup.OverlayAspects, error) {
 			return lookup.OverlayAspects{Report: "synastry cross"}, nil
 		}
 	})
@@ -268,21 +268,21 @@ func TestBodiesNeverShowsAnotherScenesColumns(t *testing.T) {
 		t.Fatalf("after the new frame: columns = %d (ok=%v), want 3", len(cols), ok)
 	}
 
-	// Reorder: ⌃j moves ② below the next member, the numerals swap. The panel
+	// Reorder: J moves ② below the next member, the numerals swap. The panel
 	// keeps the scene it last swapped to (the specification rule 8
 	// reverses "paints nothing"): the old order's columns, never a mix.
 	m = settledComparing(t, 1)
 	settledBody, _, _ := renderBodiesFor(m.bodiesView(), m.shownChart(), m.slots, m.cursorIdx, 0, 100, 30, false, m.cfg)
-	m, cmd = tpress(t, m, keyCtrlJ)
+	m, cmd = tpress(t, m, keyMoveDown)
 	if cols, ok := m.bodyColumnsForScene(); !ok || len(cols) != 4 {
-		t.Fatalf("after ⌃j, before its frame: columns = %d (ok=%v), want the old order's 4", len(cols), ok)
+		t.Fatalf("after J, before its frame: columns = %d (ok=%v), want the old order's 4", len(cols), ok)
 	}
 	if body, _, _ := renderBodiesFor(m.bodiesView(), m.shownChart(), m.slots, m.bodiesView().slot, 0, 100, 30, false, m.cfg); body != settledBody {
-		t.Fatalf("after ⌃j, before its frame, Bodies draws\n%q\nwant the settled scene's\n%q", body, settledBody)
+		t.Fatalf("after J, before its frame, Bodies draws\n%q\nwant the settled scene's\n%q", body, settledBody)
 	}
 	m = pump(t, m, cmd)
 	if cols, ok := m.bodyColumnsForScene(); !ok || len(cols) != 4 {
-		t.Fatalf("after ⌃j and its frame: columns = %d (ok=%v), want 4", len(cols), ok)
+		t.Fatalf("after J and its frame: columns = %d (ok=%v), want 4", len(cols), ok)
 	}
 }
 

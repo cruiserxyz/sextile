@@ -67,7 +67,7 @@ func requireProbeCantStart(t *testing.T, m Model, want string) {
 func TestFailedEphemerisProbeCannotStart(t *testing.T) {
 	m := startedAfterProbe(t, EphemerisProbedMsg{Err: errors.New("astrolog: availability: main set: exit status 2")})
 	requireProbeCantStart(t, m,
-		"Sextile can't start: Astrolog's ephemeris files could not be checked: astrolog: availability: main set: exit status 2")
+		"Sextile can't start: Astrolog's files for the planets could not be checked: astrolog: availability: main set: exit status 2")
 }
 
 // A check that does not answer within its deadline is the same screen. The
@@ -99,7 +99,7 @@ func TestLateEphemerisProbeCannotStart(t *testing.T) {
 	}
 	m := startedAfterProbe(t, msg)
 	requireProbeCantStart(t, m,
-		"Sextile can't start: Astrolog's ephemeris files could not be checked: no answer within 40ms")
+		"Sextile can't start: Astrolog's files for the planets could not be checked: no answer within 40ms")
 }
 
 // The deadline is the measured one: the larger of 30 s and ten times the slower
@@ -119,7 +119,7 @@ func TestEphemerisProbeReasonYieldsToAMissingBinary(t *testing.T) {
 		t.Errorf("reasons = %q, want only the missing binary", got)
 	}
 	s.binary = false
-	if got := s.reasons(); len(got) != 1 || !strings.HasPrefix(got[0], "Astrolog's ephemeris files could not be checked: ") {
+	if got := s.reasons(); len(got) != 1 || !strings.HasPrefix(got[0], "Astrolog's files for the planets could not be checked: ") {
 		t.Errorf("reasons = %q, want the check's own words", got)
 	}
 }

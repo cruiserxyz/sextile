@@ -1,217 +1,177 @@
 # Sextile
 
-**Astrology at your fingertips.**
+A terminal astrology suite.
 
-Open a chart.
-Move through time.
-Keep a moment worth returning to.
+> - a&nbsp;moment&nbsp;held ·&nbsp;the&nbsp;sky&nbsp;moving&nbsp;past&nbsp;it ·&nbsp;what&nbsp;forms&nbsp;and&nbsp;what&nbsp;passes ·&nbsp;exact&nbsp;to&nbsp;the&nbsp;second
+> - your&nbsp;charts ·&nbsp;one&nbsp;screen ·&nbsp;many&nbsp;moments ·&nbsp;the&nbsp;keyboard,&nbsp;calm&nbsp;and&nbsp;quick
+> - precise ·&nbsp;quiet ·&nbsp;it&nbsp;keeps&nbsp;up&nbsp;with&nbsp;you ·&nbsp;built&nbsp;to&nbsp;last
 
-Sextile is a keyboard-operated workspace for [Astrolog](https://www.astrolog.org/). Hold a chart still, move the
-sky against it, and watch the aspects between them form and pass. Charts, positions, aspects and a timeline sit on
-one screen, so the whole picture moves at once. A moment worth keeping becomes a chart file. A set of open charts
-becomes a session you can come back to.
+![Sextile with the solar eclipse of 12 August 2026 as the first chart. Beside it are the planets, the aspects and the events of that month.](docs/screenshot.svg)
 
-![Sextile at 144 columns. The solar eclipse of 12 August 2026 is chart 1, with Bodies, Aspects and the month's Timeline beside it.](docs/screenshot.svg)
+## What you see
 
-Astrolog, created by Walter D. Pullen, computes every astrological value you see. Sextile arranges what it says and
-keeps the commands in reach. Fuller credits are at the end.
+Every part of the screen follows the chart you point at.
 
-[Install and run](#install-and-run) · [Try one question](#try-one-question) · [Every key and setting](docs/REFERENCE.md) · [What changed](CHANGELOG.md)
+- **Status** names your session and your charts folder, and holds the credits.
+- **Chart** lists the charts you opened. One of them is always **Now**, the sky of this minute.
+- **Bodies** shows where each planet stands, with its sign and house.
+- **Aspects** shows the aspects, the strongest first. With two charts selected, it shows the aspects between them.
+- **Details** shows a full report on the chart, or the events of the month, day by day.
+- **Log** tells you what Sextile did for you.
 
-## Why try it
+A small window opens two of these and folds the others to a title line. There, `Enter` opens Details below the
+panel you are in.
 
-- **Two moments at once.** One chart holds a moment you opened. The floating chart holds now, or any moment you step
-  to. Select both, and the Aspects panel reads one in the other's houses and zodiac, saying whose body is whose.
-- **Time under your fingers.** Step the sky by a year, a month, a day or a minute. It moves as fast as you hold the
-  key. The Timeline lists the month's events. One key brings you back to now.
-- **Nothing hidden.** Every number comes from Astrolog. The log console lists the commands behind the screen, and
-  `Enter` copies one, so the same numbers come back wherever Astrolog is installed.
-- **Your judgement, your files.** Sextile adds no interpretation. Charts are Astrolog's own files, and a view you
-  change on screen never changes the file.
-- **Every key in sight.** `?` lists the keys that apply right there. `Ctrl+P` lists every command with its key.
+## A short tour
 
-*Why a terminal?* Astrolog is a command-line tool. The quickest way to learn what it can do is to watch its commands
-go by while you work.
+This picture plays one minute of Sextile. Its chart is the first public release of Sextile itself.
 
-### Before you install
+![The Sextile Tour. The cursor goes from a chart to Now, through the planets, and into the aspects.](docs/tour.svg)
 
-Sextile is operated from the keyboard, with no mouse. It opens Astrolog chart files you already have. New ones come
-from the floating chart: step it to a moment, choose a city, save. There is no birth-data form.
+1. `↓` moves from the chart to Now. `Enter` goes into Details, on the Timeline of the month. `]` shows the Moon,
+   a second `]` the report of the chart, and `Esc` goes back.
+2. `3` goes to Bodies, and Details shows the aspects of the planet under the cursor. `↓` walks through them all.
+3. `4` goes to Aspects, and Details lists every aspect.
+4. `Enter` goes into Details. `/` and the letters `ura` keep the rows with Uranus. `Esc` goes back.
 
-## Install and run
+## Before you start
 
-Docker is the supported route. It is tested on Linux and on Windows from a WSL terminal. macOS is expected to work
-but is untested, so feedback is welcome. The [native route](#without-docker) needs Linux.
+Sextile is young. This is where it stands today.
 
-You need `git`, `curl` and Docker 28 or newer, running. First, fetch Sextile:
+- **It runs in a terminal window**, a text window where you work with the keyboard.
+- **It needs Docker.** Docker is an app that runs Sextile with everything it needs. You install it once. Sextile
+  has no installer of its own for Mac or Windows.
+- **It is tested on Linux and on Windows.** On Windows it runs in a WSL terminal. A Mac is not tested yet.
+  It should work there with Docker. Please tell us what happened.
+- **Your chart files stay as they are.** Sextile's session and settings files may still change their form before
+  version 0.2.
+- **It asks before it writes** a chart into a folder that was yours before. Keep a backup of your charts folder,
+  as of any folder you care about.
+- **It has no form for birth data.** You make a chart from a moment and a city. Or you open a chart file of your
+  own, as [the reference](docs/REFERENCE.md#use-your-own-chart-files) shows.
+
+[Every limit, and what to do about it](docs/REFERENCE.md#limits) is in the reference.
+
+## Install
+
+You need `git`, `curl` and Docker 28 or newer. Start Docker first. Then paste this line into the terminal window:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.3/scripts/install | sh
+curl -fsSL https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.4/scripts/install | sh
 ```
 
-The [install script](scripts/install) is short and worth a read. It clones Sextile into
-`~/.local/share/sextile/app` and writes a small `sextile` command into `~/.local/bin`. It starts nothing and never
-edits your shell's settings. If `~/.local/bin` is not on your PATH, it prints the line to add. Other places and
-options are in the [reference](docs/REFERENCE.md#install-options).
+The [install script](scripts/install) is short, and you can read it first. It puts Sextile into
+`~/.local/share/sextile/app` and adds a `sextile` command. It starts nothing and changes no settings.
 
-Then check the machine and start:
+Now check your computer, and start:
 
 ```bash
 sextile doctor
 sextile
 ```
 
-`sextile doctor` checks Docker, the port and the charts folder, and says what is wrong without changing anything.
+`sextile doctor` looks at Docker and your charts folder. It tells you what is wrong and changes nothing.
 
-`sextile` asks which folder holds your charts the first time. It proposes `~/.local/share/sextile/charts` and offers
-your documents folder too. That is your charts folder from then on. The first start then builds a Docker image with
-Astrolog 8.00 and its Swiss Ephemeris files. That takes a few minutes. Later starts skip it.
+The first start asks where your charts are, and offers a new folder. Then it sets up the calculations, which takes a
+few minutes. Later starts are quick.
 
-Sextile opens on the floating chart, called Now. It shows the sky at this minute, in a city proposed from your time
-zone. `Ctrl+L` chooses another city. At 132 columns the Details panel and the Log sit beside the charts.
+## Your first chart
 
-**To update**, run the install line of the newer release again. It moves your copy to that release, and the next
-start builds its image. The planetary moons' files (about 240 MB) are left out unless you ask. Run `sextile --moons`
-once, and every later start remembers it.
+Sextile opens on Now, the sky of this minute. This walk takes about a minute. At its end you have a chart of your
+own, and the sky of today beside it.
 
-### Without Docker
+| Step | Press | What you see |
+|---|---|---|
+| 1 | `p` | Now moves to the next Moon phase. The date in the Chart panel changes. |
+| 2 | `,` then `s` | The comma shows the commands, and `s` is Save chart. Type a title when Sextile asks, such as `Full Moon`, and press `Enter`. The Moon phase is now a chart of yours, above Now. |
+| 3 | `n` | Now returns to this minute. Your chart stays at the Moon phase. |
+| 4 | `Space`, `↓`, `Space` | `Space` selects your chart, `↓` moves to Now, and `Space` selects Now too. Each selected chart carries a number, ① and ②. |
+| 5 | `4` | You are in the Aspects panel. It shows the sky of this minute against your Moon phase. |
+| 6 | `h`, a few times | The sky moves on, one hour at each press. Watch the aspects change. |
 
-```bash
-sextile --no-docker
+In step 2, Sextile may ask first, in a folder that was yours before Sextile. `y` saves this once, and `a` saves
+new charts there from now on.
+
+You made a chart, and you moved the sky past it. Everything else builds on these two things.
+
+## The comma key
+
+Press <kbd>,</kbd> and a letter, and the command runs. Most commands also answer to <kbd>Ctrl</kbd> and that letter.
+
+- You need not learn the letters. After <kbd>,</kbd> the bottom line lists those of the place you are in.
+- Over a popup, <kbd>,</kbd> offers the popup's own commands.
+- <kbd>,</kbd> <kbd>?</kbd> opens Keybindings, the list of every key and command. <kbd>?</kbd> alone opens it too.
+- <kbd>Esc</kbd> leaves, and nothing happens. There is no time limit.
+- Another key can take the place of <kbd>,</kbd>, as [the reference](docs/REFERENCE.md#the-leader-key) shows.
+
+```mermaid
+flowchart LR
+  L[","] --> K["a letter"] --> C["the command runs"]
+  L --> E["Esc"] --> N["nothing happens"]
 ```
 
-This runs Sextile on your machine. It needs Go and Astrolog 8.00, and `scripts/build-astrolog` expects Linux. If
-either is absent, Sextile says so and names the script. It never falls back to Docker on its own. The steps are in
-[Without Docker](docs/REFERENCE.md#without-docker).
+## The keys you need first
 
-## Try one question
+| Press | What it does |
+|---|---|
+| `y` `o` `w` `d` `h` `m` `p` | step a year, month, week, day, hour or minute, or go to the next Moon phase |
+| `Shift` with one of them | step back. `P` goes to the Moon phase before |
+| `n` | return to now |
+| `↑` `↓` | move between your charts |
+| `Space` | select a chart to compare |
+| `?` | show every key, in one list. Type to search it. |
+| `q` | quit |
 
-> What is this minute's sky doing to a fixed moment?
+## What you can do next
 
-The example is an event chart, Hamburg at noon on 24 October 2026, 12:00 CEST. The install script left a copy
-under `~/.local/share/sextile/app`. Copy it into your charts folder:
+Each of these goes on with the chart you made. The [reference](docs/REFERENCE.md) shows how.
 
-```bash
-cp ~/.local/share/sextile/app/examples/Demo-Hamburg-2026-10-24.as ~/.local/share/sextile/charts/
-```
+- **[Move through time.](docs/REFERENCE.md#move-through-time)** Hold a key and the days pass. Follow the Moon from
+  phase to phase, with its void-of-course times.
+- **[Compare two charts.](docs/REFERENCE.md#compare-two-charts)** Open a birth chart beside your Moon phase. Read one
+  in the houses of the other.
+- **[Change the view.](docs/REFERENCE.md#houses-and-zodiac)** Try Placidus, then Whole Sign, then a sidereal zodiac.
+  The chart file stays as it was.
+- **[Keep your table.](docs/REFERENCE.md#sessions)** The charts you have open are a session. Give it a name, and the
+  next start opens it again.
+- **[Draw the wheel.](docs/REFERENCE.md#the-wheel)** See the chart as a wheel in your browser. It redraws as the
+  sky moves.
 
-If you chose another charts folder, change the second path. The file is also
-[on GitHub](https://raw.githubusercontent.com/cruiserxyz/sextile/v0.1.3/examples/Demo-Hamburg-2026-10-24.as).
+## What Sextile keeps, and where
 
-1. Press `Ctrl+O`, type `Hamburg`, press `Enter`. "Hamburg noon" joins the Chart panel above the floating chart.
-   Nothing is selected yet, and opening a chart never moves the floating chart.
-2. With the cursor on "Hamburg noon", press `Space`. Press `↓` to put the cursor on the floating chart and press
-   `Space` again. Both are selected.
-3. With the cursor still on the floating chart, press `]`. The Aspects tab reads `② in ①` (`2 in 1` without colour):
-   this minute's bodies, read in Hamburg noon's houses and zodiac.
-4. Press `h` a few times. Each press moves the floating chart an hour on. Hamburg noon stays, and the aspects re-sort
-   as orbs close and open.
-5. Press `n`. The floating chart returns to now.
+- **Your charts** stay in your charts folder, as plain text chart files. Before every change to one, Sextile keeps
+  a dated copy.
+- **Everything else** is in your home folder, outside your charts folder: your session, your settings and the dated
+  copies. [Where files are](docs/REFERENCE.md#where-files-are) lists each place.
+- **Sextile sends nothing.** It never goes online itself. Only the install and the first start download things.
+  [What goes online](docs/REFERENCE.md#what-goes-online) lists them.
 
-Two more things, when you want them. Press `,` then `l` then `l` to see the Astrolog commands behind what you just
-saw. `Enter` copies one, `Esc` closes. To keep a stepped moment, choose its city with `Ctrl+L`. Then press `Ctrl+S`
-with the cursor on the floating chart and type a title. The moment is saved as a new chart file in your charts folder.
+## More
 
-`?` lists every key, including each popup's.
+- [The cheat sheet](docs/CHEATSHEET.md): one page to print
+- [The reference](docs/REFERENCE.md): every key, setting and file
+- [What changed in each release](CHANGELOG.md)
+- [What may come next](docs/ROADMAP.md)
 
-## What you can do
+## Tell us
 
-Each row of the Chart panel is a chart: one you opened, or the floating chart. The Chart, Bodies and Aspects panels
-move together. Change something in one, and the others follow.
+Did Sextile help with a question you had? Did it get in your way? A few lines are enough. Open a
+[GitHub issue](https://github.com/cruiserxyz/sextile/issues). You need a free GitHub account for that.
 
-### Compare
-
-Open a chart with `Ctrl+O`. Select it and the floating chart with `Space`, and the Aspects panel reads one in the
-other's houses and zodiac. `[` and `]` choose which. Now is never the chart others are read against. The rules are
-in [Comparison](docs/REFERENCE.md#comparison).
-
-### Move through time
-
-Step the floating chart by any unit from a year to a minute. `n` brings it back to now. Its Timeline tab lists the
-events of the month. `Enter` on a row moves the floating chart to that moment.
-
-### Change the view, not the file
-
-`Ctrl+H` chooses the house system and `Ctrl+Z` the zodiac for each chart. Every chart's row ends in a four-letter
-code for the pair. `WhTr` is Whole Sign houses in the tropical zodiac. All 22 house systems and 11 zodiacs are in
-[Frame codes](docs/REFERENCE.md#frame-codes). `Ctrl+A` chooses the aspects shown and `Ctrl+B` the bodies. The Help
-(`?`) lists the keys of every popup too.
-
-Aspects are sorted by Astrolog's strength and marked applying or separating. Which ones matter is yours to judge.
-
-### Keep a moment
-
-`Ctrl+S` on the floating chart saves it, with its city, as a new Astrolog chart file. It never writes over an
-existing one.
-
-### Keep a session
-
-A session remembers the charts you have open, their selection, their houses and zodiac, and the bodies you marked.
-Sextile updates it as you work and restores it when you start again. `,` `o` saves the open charts under a
-name and lists the sessions you saved. `,` `n` closes every chart and starts a new, unnamed session, after a second
-press. The details are in [Sessions](docs/REFERENCE.md#sessions).
-
-### See the calculation
-
-`,` `l` `l` opens the log console with the Astrolog commands behind the screen. More ways to get a result out are
-in [Getting a result out](docs/REFERENCE.md#getting-a-result-out).
-
-### Draw the wheel
-
-`Ctrl+X` draws the wheel as an image in your browser and redraws it as you move. It is served only on this machine,
-at 127.0.0.1. `Ctrl+X` again closes it.
-
-Every key, panel and setting is in the [reference](docs/REFERENCE.md).
-
-## Practical boundaries
-
-- **Install.** Docker is the supported route. There are no prebuilt binaries, and the native build expects Linux.
-- **What it writes.** Your charts folder holds only your chart files. Sextile saves a new chart there and never over
-  an existing one. Everything else stays in your home folder: the session, named sessions, backups of retitled
-  charts, and your preferences. The session holds the titles, dates, times and places of your open charts, so it is
-  chart data too. Sharing the charts folder shares your charts, not your sessions. The paths are in
-  [What Sextile keeps on disk](docs/REFERENCE.md#what-sextile-keeps-on-disk).
-- **No birth-data form.** A chart for another moment is the floating chart stepped there and saved, or an Astrolog
-  chart file you copy in.
-- **No interpretation.** Details shows Astrolog's own reports. Sextile adds none of its own.
-- **Bodies.** A body is drawn only within the dates its ephemeris file covers, and never without the file. The
-  planetary moons are off unless you run `sextile --moons`.
-- **Several windows.** A second window starts with no charts and keeps nothing until you save it as a named session.
-- **Keyboard only.** No mouse.
-
-The full list: [Limits](docs/REFERENCE.md#limits).
-
-## What comes next
-
-Everything above is released. What follows is direction, and none of it has a date. Sextile casts nothing. Astrolog
-does, and every idea below keeps that promise.
-
-- **Richer chart reading.** The everyday reads one key away, each as a tab: aspect patterns, dignities, midpoints,
-  the lunar phase.
-- **Searching through time.** When is an aspect exact, last and next, and a timeline over any span.
-- **Charts that belong together.** Progressions, returns and relocations linked to the chart they came from, and
-  sessions you can replay.
-
-The ideas in detail are in the [roadmap](docs/ROADMAP.md). Through 0.1.x the work goes mostly into how Sextile
-feels to use.
-
-## Feedback and contribution
-
-Most useful is a short account of your question, and where Sextile helped or got in the way. Open it as a
-[GitHub issue](https://github.com/cruiserxyz/sextile/issues). A chart that breaks something is welcome, but never a
-real person's birth data. [CONTRIBUTING.md](CONTRIBUTING.md) has the commit format and the check.
-[SECURITY.md](SECURITY.md) says how to report a vulnerability.
+To report a security problem, see [SECURITY.md](SECURITY.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits and licence
 
-Sextile has two inspirations. [Astrolog](https://www.astrolog.org/), Walter D. Pullen's free astrology program,
-computing charts since 1991, is the only thing here that computes the sky.
-Jesse Duffield's [lazygit](https://github.com/jesseduffield/lazygit) showed how a terminal program makes a tool
-visible, not replaced. Panels for the nouns, one key per verb, `?` for what applies here, a log of the
-commands it ran. Sextile makes that move for Astrolog.
+[Astrolog](https://www.astrolog.org/) by Walter D. Pullen calculates the charts. It dates from 1991, and it is the
+only part here that computes the sky. It uses the Swiss Ephemeris by Astrodienst AG, and its city list draws on
+GeoNames. Do you know Astrolog? [For Astrolog users](docs/ASTROLOG.md) gives your chart files, your settings and
+the switches in its terms.
 
-Astrolog calculates with the Swiss Ephemeris by Astrodienst AG. Its city atlas draws on GeoNames data. The interface is
-built on Charm's [Bubble Tea](https://github.com/charmbracelet/bubbletea). Sextile is MIT-licensed (see [LICENSE](LICENSE)
-and [CONTRIBUTORS](CONTRIBUTORS)). Astrolog, the Swiss Ephemeris and the atlas data keep their own licences.
+Jesse Duffield's [lazygit](https://github.com/jesseduffield/lazygit) showed how a terminal program can make a tool
+visible. Sextile follows that idea for Astrolog. The screen is built with Charm's
+[Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
-*Sextile: the aspect of ease, when two planets sit 60° apart and work flows. Also the tool.*
+Sextile is MIT-licensed. See [LICENSE](LICENSE). Astrolog, the Swiss Ephemeris and the city data
+keep their own licences.
+
+*Sextile: two planets 60° apart, and work flows.*

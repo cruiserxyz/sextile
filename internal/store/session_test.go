@@ -252,6 +252,10 @@ func TestSessionRoundTrip(t *testing.T) {
 	}
 	plain := fixtureChart()
 	empty := SessionChart{ID: "n-id", Name: "n", When: time.Unix(0, 0).UTC(), Place: location.PlaceInfo{Name: "p", TZ: "UTC"}}
+	// A chart file cast at sea: its place is the file's own, with no zone.
+	sea := SessionChart{ID: "ocean", Name: "Open sea", When: time.Date(2010, 5, 5, 15, 0, 0, 0, time.UTC),
+		Place:  location.PlaceInfo{Name: "South Atlantic", Lat: -40, Lon: -30},
+		Source: ChartSource{Kind: ChartKindFile, File: "Ocean.as"}}
 
 	cases := []struct {
 		name string
@@ -266,6 +270,7 @@ func TestSessionRoundTrip(t *testing.T) {
 			Slots: oneSlot(awkward, false, "Nadir"),
 		}},
 		{"anchored with no selections at all", Session{Slots: oneSlot(empty, false)}},
+		{"a chart file with no zone", Session{Slots: oneSlot(sea, true)}},
 		{"unanchored with a floating selection", Session{
 			FloatingBodies: []string{"Pluto", "Chiron"},
 		}},
@@ -598,21 +603,21 @@ func TestSessionChartUsableIsTheOneBar(t *testing.T) {
 		reason string
 	}{
 		{"no label", func(c SessionChart) SessionChart { c.Name = ""; return c }, "no name"},
-		{"no moment", func(c SessionChart) SessionChart { c.When = time.Time{}; return c }, "no birth time"},
-		{"no place name", func(c SessionChart) SessionChart { c.Place.Name = ""; return c }, "no birth place"},
+		{"no moment", func(c SessionChart) SessionChart { c.When = time.Time{}; return c }, "no time"},
+		{"no place name", func(c SessionChart) SessionChart { c.Place.Name = ""; return c }, "no place"},
 		{"a latitude that is not a number", func(c SessionChart) SessionChart {
 			c.Place.Lat = math.NaN()
 			return c
-		}, "no numeric coordinates"},
+		}, "no coordinates"},
 		{"an infinite longitude", func(c SessionChart) SessionChart {
 			c.Place.Lon = math.Inf(1)
 			return c
-		}, "no numeric coordinates"},
-		{"no timezone", func(c SessionChart) SessionChart { c.Place.TZ = ""; return c }, "an unknown timezone"},
+		}, "no coordinates"},
+		{"no timezone", func(c SessionChart) SessionChart { c.Place.TZ = ""; return c }, "an unknown time zone"},
 		{"a timezone the host does not have", func(c SessionChart) SessionChart {
 			c.Place.TZ = "Mars/Olympus_Mons"
 			return c
-		}, "an unknown timezone"},
+		}, "an unknown time zone"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

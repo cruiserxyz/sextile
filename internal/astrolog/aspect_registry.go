@@ -142,7 +142,9 @@ var gapRow = regexp.MustCompile(`^\s+No aspect\s+covers\s`)
 // abbreviation the binary uses is known. Matching against that set cannot be
 // hijacked by whatever a name or an abbreviation happens to contain: longest
 // first, so a longer abbreviation is never shadowed by a shorter one that
-// prefixes it.
+// prefixes it. The order is still needed: a user may rename an aspect's letters
+// to any text of three or more characters, so the abbreviations differ in
+// length and one can prefix another.
 func sectionAbbrev(line string, byAbbrev map[string]int, order []string) (int, bool) {
 	for _, ab := range order {
 		if strings.HasPrefix(line, ab+":") {
@@ -152,8 +154,20 @@ func sectionAbbrev(line string, byAbbrev map[string]int, order []string) (int, b
 	return 0, false
 }
 
+// NewAspectRegistry is the registry of rows as read from `-HA`, with the rows
+// whose letters do not fit the one form every list is read with
+// (astrologstyle.AspectLetters) recorded. A rename to such letters is read here
+// and is not an error: the lists refuse, naming the aspect (AspectRegistry.Refusal).
+func NewAspectRegistry(rows []aspect.RegistryAspect) aspect.AspectRegistry {
+	return aspect.NewAspectRegistryChecked(rows, astrologstyle.AspectLettersRE.MatchString)
+}
+
 // ParseAspectRegistry reads `astrolog -HA` output: the registry itself, and
-// then the trailing unrestricted section for each row's InForce.
+// then the trailing unrestricted section for each row's InForce. Every rename
+// the binary can print is read, whatever letters it gives an aspect; whether the
+// lists can be read with those letters is decided by NewAspectRegistry, and a
+// list refuses when they cannot. The registry is unreadable only when `-HA`
+// itself is.
 func ParseAspectRegistry(out string) ([]aspect.RegistryAspect, error) {
 	// The producer may COLOUR this output. `PrintAspects` emits an SGR change
 	// before every registry row and before the section's rows whenever the
@@ -226,11 +240,9 @@ func ParseAspectRegistry(out string) ([]aspect.RegistryAspect, error) {
 			return nil, fmt.Errorf("astrolog: -HA: row %d arrived where %d was expected. This registry is numbered contiguously from 1, so that line is not one the producer emitted here", idx, len(reg)+1)
 		}
 		reg = append(reg, aspect.RegistryAspect{
-			Index:  idx,
-			Name:   c.Name,
-			Abbrev: c.Abbrev,
-			Angle:  c.Angle,
-			Orb:    c.Orb,
+			Kind:  aspect.AspectKind{Index: idx, Name: c.Name, Abbrev: c.Abbrev},
+			Angle: c.Angle,
+			Orb:   c.Orb,
 		})
 	}
 	if len(reg) == 0 {
@@ -258,11 +270,11 @@ func readInForce(reg []aspect.RegistryAspect, lines []string, rest int) error {
 	byAbbrev := make(map[string]int, len(reg))
 	order := make([]string, 0, len(reg))
 	for _, r := range reg {
-		if _, dup := byAbbrev[r.Abbrev]; dup {
-			return fmt.Errorf("astrolog: -HA: abbreviation %q appears twice, so the unrestricted section is ambiguous", r.Abbrev)
+		if _, dup := byAbbrev[r.Kind.Abbrev]; dup {
+			return fmt.Errorf("astrolog: -HA: abbreviation %q appears twice, so the unrestricted section is ambiguous", r.Kind.Abbrev)
 		}
-		byAbbrev[r.Abbrev] = r.Index
-		order = append(order, r.Abbrev)
+		byAbbrev[r.Kind.Abbrev] = r.Kind.Index
+		order = append(order, r.Kind.Abbrev)
 	}
 	// Longest first: an abbreviation that prefixes another must never claim
 	// the other's row.
@@ -296,7 +308,7 @@ func readInForce(reg []aspect.RegistryAspect, lines []string, rest int) error {
 		in[idx] = true
 	}
 	for i := range reg {
-		reg[i].InForce = in[reg[i].Index]
+		reg[i].InForce = in[reg[i].Kind.Index]
 	}
 	return nil
 }

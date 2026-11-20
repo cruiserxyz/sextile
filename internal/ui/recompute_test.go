@@ -98,15 +98,15 @@ func TestChartSlotsBody_HeaderUsesSlotTimeNotLiveNow(t *testing.T) {
 	livelyNow := slotTime.Add(6 * time.Hour)
 	body := chartSlotsBody(slots, 0, true, livelyNow, testPlaceBerlin(), lookup.Hellenistic, 80, Config{})
 
-	// CEST is UTC+2 in April so 12:00 UTC = 14:00 CEST. The renderer
+	// Berlin is UTC+2 in April so 12:00 UTC = 14:00 local. The renderer
 	// formats the slot time in its own timezone (Europe/Berlin).
-	if !strings.Contains(body, "14:00 CEST") {
-		t.Errorf("expected slot time 14:00 CEST in header, got:\n%s", body)
+	if !strings.Contains(body, "14:00:00 +2 DT") {
+		t.Errorf("expected slot time 14:00:00 +2 DT in header, got:\n%s", body)
 	}
 	// 20:00 CEST is what would appear if the live `livelyNow` (slotTime+6h)
 	// had been used instead.
-	if strings.Contains(body, "20:00 CEST") {
-		t.Errorf("header advertised live clock time (20:00 CEST) instead of slot.Time; got:\n%s", body)
+	if strings.Contains(body, "20:00:00 +2 DT") {
+		t.Errorf("header advertised live clock time (20:00:00 +2 DT) instead of slot.Time; got:\n%s", body)
 	}
 }
 

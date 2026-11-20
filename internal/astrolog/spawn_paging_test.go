@@ -33,7 +33,7 @@ func TestEveryCallTurnsPagingOff(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		want := append(append([]string{"-YQ", "0"}, HookClearBand()...), c.own...)
+		want := append(CallHead(), c.own...)
 		if !reflect.DeepEqual(cmd.Args[1:], want) {
 			t.Errorf("%s: executed argv = %v, want %v", c.name, cmd.Args[1:], want)
 		}
@@ -55,7 +55,7 @@ func TestRecordedCommandIncludesNoPaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantArgs := strings.Join(append(append([]string{"-YQ", "0"}, HookClearBand()...), "hello"), " ")
+	wantArgs := strings.Join(append(CallHead(), "hello"), " ")
 	if got := strings.TrimSpace(out); got != wantArgs {
 		t.Fatalf("echo received %q, want %q", got, wantArgs)
 	}

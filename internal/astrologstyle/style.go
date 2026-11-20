@@ -52,6 +52,16 @@ type AspectRow struct {
 	Style                           AspectStyle
 }
 
+// AspectLetters is the pattern of an aspect's three letters as every Astrolog
+// list prints them: a capital, then two letters or digits (`Con`, `BQn`,
+// `Un1`). It is the one grammar: the list, pair, Timeline and colour readers
+// and the registry reader all build on it, so a registry row outside it is
+// refused where it is read and no reader can meet letters it cannot match.
+const AspectLetters = `[A-Z][A-Za-z0-9]{2}`
+
+// AspectLettersRE matches exactly one aspect's letters.
+var AspectLettersRE = regexp.MustCompile(`^` + AspectLetters + `$`)
+
 var sgrRE = regexp.MustCompile("\\x1b\\[[0-9;]*m")
 
 // 1 to 4, not 3 to 4: the name column is four cells wide and right-padded, and
@@ -61,8 +71,8 @@ var sgrRE = regexp.MustCompile("\\x1b\\[[0-9;]*m")
 var rowRE = regexp.MustCompile(`^(\w{1,4}\s*:)(\s+\d+[A-Z][a-z]{2}\d+)(.*?\[\s*\d+(?:st|nd|rd|th)\s+house\])`)
 var positionRE = regexp.MustCompile(`\d+[A-Z][a-z]{2}\d+`)
 var houseRE = regexp.MustCompile(`\[\s*\d+(?:st|nd|rd|th)\s+house\]`)
-var aspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(.+?)\s*-\s+orb:`)
-var crossAspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:`)
+var aspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(` + AspectLetters + `)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(.+?)\s*-\s+orb:`)
+var crossAspectRowRE = regexp.MustCompile(`^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(` + AspectLetters + `)\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:`)
 
 // ParseBodies reads the colored body rows of a `-v -k` positions chart, in
 // the order they print.

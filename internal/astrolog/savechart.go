@@ -38,11 +38,9 @@ type ChartToSave struct {
 // whole point: the dialect, the field order and the rounding are then astrolog's
 // own and cannot drift from what astrolog reads back.
 //
-// The coordinates in that record are whole arc-minutes, and the floor is
-// astrolog's: its writer cuts anything finer than a minute from -zl, so seconds
-// passed here never reach the file (13:24:59E is written 13:24E). Sextile
-// rounds to the nearest minute first, which keeps a reopened chart within half
-// an arc-minute of where it was saved.
+// The coordinates in that record are the whole arc-minutes every cast of the
+// floating chart sends (formatLon), so the saved chart is the chart that was on
+// screen, within half an arc-minute of the place's own coordinates.
 func ChartRecord(ctx context.Context, c ChartToSave) ([]byte, error) {
 	// A label carrying a control character is refused before anything is
 	// spawned. The record astrolog writes is LINE-BASED: a newline inside the
@@ -78,7 +76,7 @@ func ChartRecord(ctx context.Context, c ChartToSave) ([]byte, error) {
 	if err := Available(); err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp("", "sextile-save-*")
+	dir, err := privateTempDir("sextile-save-*")
 	if err != nil {
 		return nil, fmt.Errorf("astrolog: ChartRecord: %w", err)
 	}
@@ -124,54 +122,57 @@ func ChartRecord(ctx context.Context, c ChartToSave) ([]byte, error) {
 
 // saveArgv is the write invocation. The instant crosses into Astrolog as a
 // Julian Day; Astrolog, not Go, chooses the calendar label written into the
-// record. -zZ then adjusts that instant to the local civil time and effective
-// offset before -zi supplies the labels.
+// record, and `=b0` makes its writer keep the second.
+//
+// The instant is the second Sextile shows, by truncation (SlotJD), sent one
+// float above (sentJD): the saved row and the row it was saved from name the
+// same second. The writer keeps a zone only to the minute (Astrolog NEXT.md
+// BUG 10), so the zone handed to it is one it writes exactly (saveZone), and a
+// zone's seconds move into the clock: the moment stays exact.
+//
+// The zone comes after the place: `-zZ LMT` is the local mean time of the
+// longitude in force, so a zone before `-zl` would be the default place's.
+// Inside the 1582 window no zone is sent, as for every call (zoneArgs), and
+// the record is written in UT. The reform date is pinned first, as for every
+// read of a chart file.
 func saveArgv(c ChartToSave, dest string) []string {
-	// Rounded ONCE, here, and both the JD and zone below read that one value. astrolog
-	// records minutes, so a moment carrying seconds has to lose them somewhere;
-	// rounding to the nearest minute is at most 30 seconds out where truncating
-	// is at most 60. Rounding first also means the zone is the offset in effect
-	// at the moment actually written, not at one up to a minute before it.
-	when := c.When.Round(time.Minute)
-	// A whole minute is usually a repeating binary fraction. If its nearest
-	// float lies just below the boundary, Astrolog's minute formatter truncates
-	// it into the preceding minute. Move one float toward the chosen minute's
-	// interior; this is far below the record's precision and survives decimal
-	// serialization without changing the minute or its effective zone.
-	jd := math.Nextafter(GregorianToJD(when), math.Inf(1))
-	return []string{
+	when := c.When.Truncate(time.Second)
+	jd := sentJD(when.Unix())
+	argv := append([]string(nil), reformPin...)
+	argv = append(argv,
 		"-qj", strconv.FormatFloat(jd, 'f', -1, 64),
-		// -qj starts in zone zero. -zZ, unlike plain -z, both applies the
-		// zone and adjusts the civil clock while preserving the instant.
-		// Daylight stays 0 and the zone carries the offset IN EFFECT.
-		// The alternative — standard offset plus a daylight flag — cannot
-		// express a zone whose summer shift is not a whole hour, because
-		// astrolog's DT adds exactly one.
-		"-zZ", formatSaveZone(when), "0",
 		"-zl", formatLon(c.Lon), formatLat(c.Lat),
+	)
+	if zone, dst := saveZone(when); !jdWindow(jd, zoneOffset(when)) {
+		// -zZ, unlike plain -z, applies the zone and adjusts the civil clock
+		// while preserving the instant.
+		argv = append(argv, "-zZ", zone, dst)
+	}
+	return append(argv,
 		"-zi", c.Name, c.Place,
+		"=b0",
 		// =o, never -o: -o is a toggle (ast80src/astrolog.cpp:2214,
 		// SwitchF(us.fWriteFile)), so two of them write nothing and exit 0.
 		"=o", dest,
-	}
+	)
 }
 
-// formatSaveZone renders the offset in effect at t as astrolog's zone
-// parameter, which counts hours WEST of Greenwich as positive where Go counts
-// seconds EAST. Probed against astrolog 8.00 on 2026-09-20: "5:00" writes
-// "ST 5W", "-2:00" writes "ST 2E", "-5:30" writes "ST 5:30E".
-//
-// Minutes are the floor: a historical zone whose offset carries seconds is
-// written to the minute, which is the precision the rest of the record and
-// every fixture in this repository already use.
-func formatSaveZone(t time.Time) string {
-	_, east := t.Zone()
-	west := -east
-	sign := ""
-	if west < 0 {
-		sign, west = "-", -west
+// saveZone is the zone and daylight flag a save hands Astrolog's writer for
+// the instant t in its own zone. Before the zone's standard time (Go's `LMT`)
+// it is Astrolog's `LMT`: the local mean time of the chart's longitude. A
+// one-hour daylight shift is DT with the standard offset, as the chart call
+// sends it (localClock); any other offset is ST with the offset in effect.
+// The offset is rounded to the whole minute, the precision the writer keeps.
+func saveZone(t time.Time) (zone, dst string) {
+	if name, _ := t.Zone(); name == "LMT" {
+		return "LMT", "0"
 	}
-	return fmt.Sprintf("%s%d:%02d", sign, west/3600, (west%3600)/60)
+	offset, dst := zoneOffset(t), "0"
+	if DaylightHour(t) {
+		offset, dst = offset-3600, "1"
+	}
+	minutes := int(math.Round(float64(offset) / 60))
+	return formatSearchZone(minutes * 60), dst
 }
 
 // ErrLabelHasControlChar means a chart label carried a control character.

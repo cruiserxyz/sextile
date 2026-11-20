@@ -44,6 +44,29 @@ func TestLockIsTakenInTheFolderTheEnvironmentChose(t *testing.T) {
 	}
 }
 
+// An unusable --charts-dir refuses the launch before the instance lock is
+// taken: the flag is applied first, so a refused start makes nothing in the
+// state folder, neither the lock nor its folder.
+func TestUnusableChartsDirRefusesBeforeTheLock(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	prev := loadEnv
+	loadEnv = func() {}
+	t.Cleanup(func() { loadEnv = prev })
+
+	_, lock, refused, err := prepareLaunch(&options{chartsDir: "charts\x00dir"})
+	if err == nil {
+		t.Fatalf("prepareLaunch accepted a --charts-dir containing NUL (refused %v)", refused)
+	}
+	if lock != nil {
+		t.Errorf("a refused --charts-dir returned a held lock")
+	}
+	if _, statErr := os.Stat(filepath.Join(state, "sextile")); !os.IsNotExist(statErr) {
+		t.Errorf("a refused --charts-dir left %s behind (stat: %v): the lock was taken before the flag was applied",
+			filepath.Join(state, "sextile"), statErr)
+	}
+}
+
 // seedLegacyFolder writes 0.1.1's session and one backup into dir/.sextile,
 // tagged so a copy can be traced to its folder.
 func seedLegacyFolder(t *testing.T, dir, tag string) {

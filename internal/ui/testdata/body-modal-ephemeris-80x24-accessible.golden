@@ -1,8 +1,8 @@
 == unprobed row under the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -15,13 +15,12 @@
 |  [1m[7m> [✓] Moon                                                  [0m  |
 |                                                                |
 |  2 of 40 selected - ● all ◐ some ○ none                        |
-|                                                                |
 +-------------------------------------------------------10 of 47-+
 == marked row under the cursor (no room for the missing-file line at 80x24) ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -34,13 +33,12 @@
 |                                                                |
 |  Astrolog: SwissEph file 'se00010s.se1' not found in PATH      |
 |  '/usr/local/share/astrolog/'                                  |
-|                                                                |
 +-------------------------------------------------------20 of 47-+
 == marked row away from the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -53,13 +51,12 @@
 |  [1m[7m> [✓] Sun                                                   [0m  |
 |                                                                |
 |  2 of 40 selected - ● all ◐ some ○ none                        |
-|                                                                |
 +--------------------------------------------------------9 of 47-+
 == a long file name (no room for the line at 80x24) ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -72,13 +69,12 @@
 |                                                                |
 |  Astrolog: SwissEph file                                       |
 |  'se_a_very_long_ephemeris_file_name_for_one_asteroid.se1'...  |
-|                                                                |
 +-------------------------------------------------------20 of 47-+
 == scrolled list, marked row under the cursor ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -91,13 +87,12 @@
 |                                                                |
 |  Astrolog: SwissEph file 'se00010s.se1' not found in PATH      |
 |  '/usr/local/share/astrolog/'                                  |
-|                                                                |
 +-------------------------------------------------------38 of 47-+
 == marked row under the cursor, with the missing-file line (132x40) ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -126,13 +121,12 @@
 |                                                                |
 |  Astrolog: SwissEph file 'se00010s.se1' not found in PATH      |
 |  '/usr/local/share/astrolog/'                                  |
-|                                                                |
 +-------------------------------------------------------20 of 47-+
 == a long file name (132x40) ==
-+-[1m>Bodies[0m--------------------------------------------------------+
-|                                                                |
+[1m+-[0m[1m>Bodies[0m[1m--------------------------------------------------------+[0m
 |  Search bodies: █                                              |
 |  ------------------------------------------------------------  |
+|    + Restore the default bodies                                |
 |    [◐ ] Planets     (2/10)                                     |
 |    [○ ] Angles      (0/0)                                      |
 |    [○ ] Points      (0/0)                                      |
@@ -161,5 +155,4 @@
 |                                                                |
 |  Astrolog: SwissEph file                                       |
 |  'se_a_very_long_ephemeris_file_name_for_one_asteroid.se1'...  |
-|                                                                |
 +-------------------------------------------------------20 of 47-+

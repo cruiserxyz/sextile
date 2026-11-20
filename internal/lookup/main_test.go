@@ -20,6 +20,9 @@ func TestMain(m *testing.M) {
 			Hellenistic.Registry = reg
 		}
 	}
+	if reg, err := fixtureAspects(); err == nil {
+		Hellenistic.AspectRegistry = reg
+	}
 	os.Exit(testenv.Run(func() int {
 		// A started app holds the host's default object set before it casts
 		// anything (the ephemeris probe answered): the compiler has no other

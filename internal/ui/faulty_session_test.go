@@ -111,7 +111,7 @@ func TestFaultySessionNeverCastsBare(t *testing.T) {
 		if bare := bareLists(read()); len(bare) > 0 {
 			t.Errorf("%s: Astrolog was asked for no body: %q", step, bare)
 		}
-		if n := countLines(m, "Couldn't cast"); n != 0 {
+		if n := countLines(m, " not cast,"); n != 0 {
 			t.Errorf("%s: a cast failed:\n%s", step, strings.Join(logTexts(m), "\n"))
 		}
 	}
@@ -126,7 +126,7 @@ func TestFaultySessionNeverCastsBare(t *testing.T) {
 	}
 	check("minute tick", m)
 
-	const line = "Mercury, Mars are selected but not drawn, so all drawn bodies are shown"
+	const line = "the selected bodies are not drawn, all are shown" // two names do not fit the Log, so the general form
 	if n := countLines(m, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 	}

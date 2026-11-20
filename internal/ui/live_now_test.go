@@ -55,16 +55,17 @@ func TestFloatingAttachedFlag(t *testing.T) {
 			}
 		})
 	}
-	t.Run("N detaches", func(t *testing.T) {
+	t.Run("N does nothing", func(t *testing.T) {
 		m := readyModelWithSlots(t, berlinP)
 		m, _ = tpress(t, m, runes("d"))
-		m, _ = tpress(t, m, runes("n")) // attached again, with the stepped moment to go back to
+		m, _ = tpress(t, m, runes("n"))
 		if m.floatingDetached {
 			t.Fatal("fixture: n did not attach")
 		}
+		at := m.targetFloatingTime
 		m, _ = tpress(t, m, runes("N"))
-		if !m.floatingDetached {
-			t.Error("after N the floating chart is still attached")
+		if m.floatingDetached || !m.targetFloatingTime.Equal(at) {
+			t.Errorf("after N: detached=%v target %v, want it attached at %v", m.floatingDetached, m.targetFloatingTime, at)
 		}
 	})
 	t.Run("n attaches again", func(t *testing.T) {
@@ -140,7 +141,7 @@ func TestFloatingTitleFollowsFlag(t *testing.T) {
 					// The title opens the name column: itself, two spaces, the
 					// moment. Attached it is `~ Now`, or a shorter form when the
 					// whole one would cost the row its place (operator
-					// 2026-10-24, header.go floatTitleShorts); never `~`.
+					// 2026-10-24, chart_table.go floatTitles); never `~`.
 					wants := []string{"~ Now", "~Now", "Now"}
 					if detached {
 						wants = []string{"~"}
@@ -466,7 +467,7 @@ func TestTickIsQuietInTheLog(t *testing.T) {
 		}
 	}
 
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -620,7 +621,7 @@ func TestNowLineCopiesFullCommand(t *testing.T) {
 	m, _ = deliverTick(m)
 	m = commit(t, m, frameFor(m, clock.Now(), full))
 
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	at := -1
 	for i, l := range m.console.snapshot {
 		if l.lane == laneNow {
@@ -655,7 +656,7 @@ func TestNowLineIsAlwaysLastInTheConsole(t *testing.T) {
 	m, _ := liveModel(t, clock)
 	m = tickAt(t, m, clock, 1, "/bin/astrolog tick-1")
 	m = m.logCommands([]string{"/bin/astrolog user-one", "/bin/astrolog user-two"})
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -676,7 +677,7 @@ func TestOpenConsoleShowsEachTick(t *testing.T) {
 	m, _ := liveModel(t, clock)
 	m = tickAt(t, m, clock, 1, "/bin/astrolog tick-1")
 	m = m.logCommands([]string{"/bin/astrolog user-one"})
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	n, cursor := len(m.console.snapshot), m.console.cursor
 	for i := 2; i <= 3; i++ {
 		m = tickAt(t, m, clock, i, fmt.Sprintf("/bin/astrolog tick-%d", i))
@@ -713,7 +714,7 @@ func TestConsoleOpensOnTheNowLineWhileFollowing(t *testing.T) {
 		return m, clock
 	}
 	open := func(t *testing.T, m Model) consoleState {
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		if !m.console.open {
 			t.Fatal("the console did not open")
 		}

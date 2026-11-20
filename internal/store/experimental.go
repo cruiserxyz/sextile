@@ -112,7 +112,7 @@ func mergeExperimental(existing, id string, on bool) (string, error) {
 		return existing + experimentalBlock + ":\n  " + id + ": on\n", nil
 	}
 	if b.scalar {
-		return "", fmt.Errorf("store: preferences.yaml has '%s', not a block. The switch was not saved",
+		return "", fmt.Errorf("store: The settings file has a line '%s' where Sextile expects a list. Nothing was saved",
 			strings.TrimSpace(lines[b.start]))
 	}
 	if b.stray >= 0 {

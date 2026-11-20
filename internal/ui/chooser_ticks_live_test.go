@@ -23,7 +23,7 @@ import (
 // Vertex and East Point by default and has no ephemeris file for Chiron and the
 // asteroids. The default lens' first cast is
 //
-//	-Yn -R 11 -R 12 -R 13 -R 14 -R 15 -R 17 -R 18 -R 25 -R 28
+//	=Yn -R 11 -R 12 -R 13 -R 14 -R 15 -R 17 -R 18 -R 25 -R 28
 //
 // (the five flips off, then the lens' own four on). The chooser must tick what
 // that call draws, and one tick must change one body.
@@ -40,7 +40,7 @@ func ticksHost(t *testing.T) {
 func textArgv(argvs [][]string) []string {
 	for i := len(argvs) - 1; i >= 0; i-- {
 		a := argvs[i]
-		if slices.Contains(a, "-Yn") && slices.Contains(a, "-qj") &&
+		if (slices.Contains(a, "=Yn") || slices.Contains(a, "_Yn")) && slices.Contains(a, "-qj") &&
 			!slices.Contains(a, "-dm") && !slices.Contains(a, "-t") && !slices.Contains(a, "-tr") {
 			return a
 		}
@@ -80,9 +80,9 @@ func chooserLeftPanels(screen string) map[string]string {
 	into := ""
 	for _, l := range strings.Split(screen, "\n") {
 		switch {
-		case strings.Contains(l, "[2] Bodies"):
+		case strings.Contains(l, "[3] Bodies"):
 			into = "bodies"
-		case strings.Contains(l, "[3] [Aspects]"):
+		case strings.Contains(l, "[4] [Aspects]"):
 			into = "aspects"
 		}
 		if into == "" {
@@ -99,7 +99,7 @@ func chooserLeftPanels(screen string) map[string]string {
 // band is the part of an argv from the node switch on, the object band and what
 // follows it: the neutralising prefix every call carries is noise in a failure.
 func band(argv []string) []string {
-	if i := slices.Index(argv, "-Yn"); i >= 0 {
+	if i := slices.IndexFunc(argv, func(s string) bool { return s == "=Yn" || s == "_Yn" }); i >= 0 {
 		return argv[i:]
 	}
 	return argv
@@ -329,10 +329,10 @@ func TestOnlyDrainSaid(t *testing.T) {
 			t.Errorf("a bare -R0 went out: %v", band(argv))
 		}
 	}
-	if n := countLines(m, "Couldn't cast the chart"); n != 0 {
+	if n := countLines(m, " not cast,"); n != 0 {
 		t.Errorf("the selection of an undrawable body failed the cast:\n%s", strings.Join(logTexts(m), "\n"))
 	}
-	const line = "Chiron is selected but can't be drawn here, so all drawn bodies are shown"
+	const line = "Chiron selected but can't be drawn here, all are shown"
 	if n := countLines(m, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 	}
@@ -386,10 +386,10 @@ func TestStaleMarkLogsAndDrawsChart(t *testing.T) {
 	if only, only2 := sameSet(drawn, drawnByArgv(argv, m.ephemeris.Default)); len(only) != 0 || len(only2) != 0 {
 		t.Errorf("the marked chart draws a different set: without %v, extra %v (argv %v)", only, only2, band(argv))
 	}
-	if n := countLines(m, "Couldn't cast the chart"); n != 0 {
+	if n := countLines(m, " not cast,"); n != 0 {
 		t.Errorf("a mark on an undrawn object failed the cast:\n%s", strings.Join(logTexts(m), "\n"))
 	}
-	line := stale.Name + " is selected but not drawn, so all drawn bodies are shown"
+	line := stale.Name + " not among this chart's bodies, all are shown"
 	if n := countLines(m, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 	}

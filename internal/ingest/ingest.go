@@ -57,6 +57,8 @@ type StartupPerimeterReadMsg struct {
 	// it: which image the wheel server hosts. The UI decides whether the word is
 	// one of the two formats.
 	WheelFormat store.WheelFormatConfig
+	// WindowTitle is the top-level window_title: key exactly as the store read it.
+	WindowTitle store.WindowTitleConfig
 
 	// HouseDisplay is the top-level house_display: key exactly as the store
 	// read it: how the Bodies house column is drawn. The UI decides whether
@@ -93,6 +95,10 @@ type ChartFileRead struct {
 	When      time.Time
 	Houses    recipe.HouseSystem
 	HasHouses bool
+	// Nodes is the form of the Nodes and Lilith the file states; HasNodes is
+	// false when it states none.
+	Nodes    recipe.NodeForm
+	HasNodes bool
 }
 
 // HasLocationCandidate reports whether the location: block carried any
@@ -135,7 +141,7 @@ func ReadStartupPerimeterNamed(file string) tea.Cmd {
 func readStartupPerimeter(loadSession func() (store.Session, bool, store.SessionKeep, error)) tea.Cmd {
 	return func() tea.Msg {
 		preseed := location.PreseedFromIANA(location.HostIANA())
-		msg := StartupPerimeterReadMsg{IANAPreseed: preseed, Keys: store.Keys(), Display: store.Display(), WheelFormat: store.WheelFormat(), HouseDisplay: store.HouseDisplay(), Frame: store.Frame(), Clock: store.Clock(), Experimental: store.Experimental()}
+		msg := StartupPerimeterReadMsg{IANAPreseed: preseed, Keys: store.Keys(), Display: store.Display(), WheelFormat: store.WheelFormat(), WindowTitle: store.WindowTitle(), HouseDisplay: store.HouseDisplay(), Frame: store.Frame(), Clock: store.Clock(), Experimental: store.Experimental()}
 		if cand, ok := store.LocationCandidate(); ok {
 			msg.LocationCandidate = cand
 		}

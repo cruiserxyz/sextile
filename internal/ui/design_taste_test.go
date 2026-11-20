@@ -36,7 +36,7 @@ func TestDesignTasteV3(t *testing.T) {
 			return designStep(m, AspectRegistryLoadedMsg{Registry: testRegistry()})
 		}
 		writeDesignFrame(t, "design-nocolour-chart-80x24-"+mode.name, designStep(ready(80, 24), runes("1")).View())
-		// Enter from the Chart lands on the timeline; `]` shows the report, the frame this sheet pins.
-		writeDesignFrame(t, "design-nocolour-details-attached-144x40-"+mode.name, designStep(designStep(ready(144, 40), key(tea.KeyEnter)), runes("]")).View())
+		// Enter from the Chart lands on the timeline; `[` shows the report, the frame this sheet pins.
+		writeDesignFrame(t, "design-nocolour-details-attached-144x40-"+mode.name, designStep(designStep(ready(144, 40), key(tea.KeyEnter)), runes("[")).View())
 	}
 }

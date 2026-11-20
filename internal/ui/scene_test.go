@@ -403,8 +403,14 @@ func textComputeFollowsScene(m Model, sc scene) string {
 	return ""
 }
 
-func timelineFollowsScene(m Model, sc scene) string {
-	req, _, ok := m.timelineInputs()
+func timelineFollowsScene(m Model, sc scene) string { return listFollowsScene(m, sc, listTimeline) }
+
+// moonFollowsScene is the Moon list's projection: the same rules as the
+// Timeline's, asked of the Moon list's inputs.
+func moonFollowsScene(m Model, sc scene) string { return listFollowsScene(m, sc, listMoon) }
+
+func listFollowsScene(m Model, sc scene, k timelineList) string {
+	req, _, ok := m.timelineInputsFor(k)
 	if !ok {
 		return "timeline inputs unavailable"
 	}
@@ -496,6 +502,7 @@ var surfaceProjections = map[string]sceneProjection{
 	"surfaceImage":    wheelFollowsScene,
 	"surfaceText":     textComputeFollowsScene,
 	"surfaceTimeline": timelineFollowsScene,
+	"surfaceMoon":     moonFollowsScene,
 	// A body template's @now binds the floating moment, in every scene
 	// (the specification P12).
 	"surfaceTemplate": func(m Model, sc scene) string {
@@ -586,6 +593,9 @@ func TestEveryPanelFollowsTheScene(t *testing.T) {
 	var panels []string
 	for _, n := range constNames(t, "panel_id.go", "PanelID") {
 		if n == "PanelNone" { // not a panel
+			continue
+		}
+		if n == "PanelStatus" { // shows no chart content: the session's name and charts folder do not follow the scene
 			continue
 		}
 		panels = append(panels, n)

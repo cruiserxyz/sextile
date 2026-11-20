@@ -1,0 +1,2182 @@
+Fri  1/ 2/2026  8:09am    Moon (Gem) Squ (Pis) Saturn
+Fri  1/ 2/2026  1:23pm    Moon (Gem) Squ (Pis) Neptune (v/c 0:45)
+Fri  1/ 2/2026  2:09pm    Moon (Gem) --> Cancer
+Fri  1/ 2/2026  3:57pm    Moon (Can) Opp (Cap) Mercury
+Sat  1/ 3/2026  9:40am    Moon (Can) Opp (Cap) Venus
+Sat  1/ 3/2026 11:03am     Sun (Cap) Opp (Can) Moon (Full Moon)
+Sat  1/ 3/2026  1:37pm    Moon (Can) Opp (Cap) Mars
+Sat  1/ 3/2026 11:54pm    Moon (Can) Con [Can] Jupiter
+Sun  1/ 4/2026  8:44am    Moon (Can) Tri (Pis) Saturn
+Sun  1/ 4/2026 11:11am    Moon (Can) Sex [Tau] Uranus
+Sun  1/ 4/2026  1:59pm    Moon (Can) Tri (Pis) Neptune (v/c 0:44)
+Sun  1/ 4/2026  2:43pm    Moon (Can) --> Leo
+Sun  1/ 4/2026  7:25pm    Moon (Leo) Opp (Aqu) Pluto (Total Occultation)
+Tue  1/ 6/2026  2:04pm    Moon (Leo) Squ [Tau] Uranus (v/c 3:52)
+Tue  1/ 6/2026  5:56pm    Moon (Leo) --> Virgo
+Wed  1/ 7/2026  9:02am    Moon (Vir) Tri (Cap) Mercury
+Thu  1/ 8/2026  2:04am     Sun (Cap) Tri (Vir) Moon
+Thu  1/ 8/2026  2:44am    Moon (Vir) Tri (Cap) Venus
+Thu  1/ 8/2026  2:46am    Moon (Vir) Tri (Cap) Mars
+Thu  1/ 8/2026  6:59am    Moon (Vir) Sex [Can] Jupiter
+Thu  1/ 8/2026  6:45pm    Moon (Vir) Opp (Pis) Saturn
+Thu  1/ 8/2026  8:49pm    Moon (Vir) Tri [Tau] Uranus
+Fri  1/ 9/2026 12:22am    Moon (Vir) Opp (Pis) Neptune (v/c 0:43)
+Fri  1/ 9/2026  1:05am    Moon (Vir) --> Libra
+Fri  1/ 9/2026  6:46am    Moon (Lib) Tri (Aqu) Pluto
+Sat  1/10/2026  1:33am    Moon (Lib) Squ (Cap) Mercury
+Sat  1/10/2026  4:08pm    Moon (Lib) Squ [Can] Jupiter
+Sat  1/10/2026  4:11pm    Moon (Lib) Squ (Cap) Mars
+Sat  1/10/2026  4:48pm     Sun (Cap) Squ (Lib) Moon (Half Moon)
+Sat  1/10/2026  6:54pm    Moon (Lib) Squ (Cap) Venus (v/c 17:01)
+Sun  1/11/2026 11:55am    Moon (Lib) --> Scorpio
+Sun  1/11/2026  6:02pm    Moon (Sco) Squ (Aqu) Pluto
+Mon  1/12/2026 10:44pm    Moon (Sco) Sex (Cap) Mercury
+Tue  1/13/2026  3:45am    Moon (Sco) Tri [Can] Jupiter
+Tue  1/13/2026  8:42am    Moon (Sco) Sex (Cap) Mars
+Tue  1/13/2026 10:48am     Sun (Cap) Sex (Sco) Moon
+Tue  1/13/2026  2:26pm    Moon (Sco) Sex (Cap) Venus
+Tue  1/13/2026  6:32pm    Moon (Sco) Tri (Pis) Saturn
+Tue  1/13/2026  7:48pm    Moon (Sco) Opp [Tau] Uranus
+Tue  1/13/2026 11:58pm    Moon (Sco) Tri (Pis) Neptune (v/c 0:34)
+Wed  1/14/2026 12:33am    Moon (Sco) --> Sagittarius
+Wed  1/14/2026  6:53am    Moon (Sag) Sex (Aqu) Pluto
+Fri  1/16/2026  7:16am    Moon (Sag) Squ (Pis) Saturn
+Fri  1/16/2026 12:18pm    Moon (Sag) Squ (Pis) Neptune (v/c 0:28)
+Fri  1/16/2026 12:47pm    Moon (Sag) --> Capricorn
+Sun  1/18/2026  2:13am    Moon (Cap) Opp [Can] Jupiter
+Sun  1/18/2026  4:11pm    Moon (Cap) Con (Cap) Mars
+Sun  1/18/2026  4:47pm    Moon (Cap) Con (Cap) Mercury
+Sun  1/18/2026  6:21pm    Moon (Cap) Sex (Pis) Saturn
+Sun  1/18/2026  6:38pm    Moon (Cap) Tri [Tau] Uranus
+Sun  1/18/2026  8:51pm     Sun (Cap) Con (Cap) Moon (New Moon)
+Sun  1/18/2026 10:56pm    Moon (Cap) Sex (Pis) Neptune (v/c 0:21)
+Sun  1/18/2026 11:17pm    Moon (Cap) --> Aquarius
+Mon  1/19/2026  3:02am    Moon (Aqu) Con (Aqu) Venus
+Mon  1/19/2026  5:35am    Moon (Aqu) Con (Aqu) Pluto (Total Occultation)
+Wed  1/21/2026  3:16am    Moon (Aqu) Squ [Tau] Uranus (v/c 4:33)
+Wed  1/21/2026  7:49am    Moon (Aqu) --> Pisces
+Thu  1/22/2026  5:40pm    Moon (Pis) Tri [Can] Jupiter
+Fri  1/23/2026  9:59am    Moon (Pis) Sex [Tau] Uranus
+Fri  1/23/2026 10:32am    Moon (Pis) Con (Pis) Saturn
+Fri  1/23/2026  2:17pm    Moon (Pis) Con (Pis) Neptune (v/c 0:08)
+Fri  1/23/2026  2:25pm    Moon (Pis) --> Aries
+Fri  1/23/2026  2:41pm    Moon (Ari) Sex (Aqu) Mars
+Fri  1/23/2026  8:33pm    Moon (Ari) Sex (Aqu) Pluto
+Fri  1/23/2026  9:16pm     Sun (Aqu) Sex (Ari) Moon
+Sat  1/24/2026 12:16am    Moon (Ari) Sex (Aqu) Mercury
+Sat  1/24/2026  5:17am    Moon (Ari) Sex (Aqu) Venus
+Sat  1/24/2026 10:36pm    Moon (Ari) Squ [Can] Jupiter (v/c 20:29)
+Sun  1/25/2026  7:05pm    Moon (Ari) --> Taurus
+Sun  1/25/2026 10:27pm    Moon (Tau) Squ (Aqu) Mars
+Mon  1/26/2026  1:06am    Moon (Tau) Squ (Aqu) Pluto
+Mon  1/26/2026  5:47am     Sun (Aqu) Squ (Tau) Moon (Half Moon)
+Mon  1/26/2026 11:49am    Moon (Tau) Squ (Aqu) Mercury
+Mon  1/26/2026  2:31pm    Moon (Tau) Squ (Aqu) Venus
+Tue  1/27/2026  1:40am    Moon (Tau) Sex [Can] Jupiter
+Tue  1/27/2026  5:42pm    Moon (Tau) Con [Tau] Uranus
+Tue  1/27/2026  6:57pm    Moon (Tau) Sex (Pis) Saturn (v/c 2:57)
+Tue  1/27/2026  9:54pm    Moon (Tau) --> Gemini
+Tue  1/27/2026  9:57pm    Moon (Gem) Sex (Ari) Neptune
+Wed  1/28/2026  3:52am    Moon (Gem) Tri (Aqu) Pluto
+Wed  1/28/2026  4:04am    Moon (Gem) Tri (Aqu) Mars
+Wed  1/28/2026 12:06pm     Sun (Aqu) Tri (Gem) Moon
+Wed  1/28/2026  9:00pm    Moon (Gem) Tri (Aqu) Mercury
+Wed  1/28/2026  9:32pm    Moon (Gem) Tri (Aqu) Venus
+Thu  1/29/2026  8:56pm    Moon (Gem) Squ (Pis) Saturn (v/c 2:35)
+Thu  1/29/2026 11:31pm    Moon (Gem) --> Cancer
+Thu  1/29/2026 11:39pm    Moon (Can) Squ (Ari) Neptune
+Sat  1/31/2026  4:18am    Moon (Can) Con [Can] Jupiter
+Sat  1/31/2026  8:55pm    Moon (Can) Sex [Tau] Uranus
+Sat  1/31/2026 10:51pm    Moon (Can) Tri (Pis) Saturn (v/c 2:17)
+Sun  2/ 1/2026  1:09am    Moon (Can) --> Leo
+Sun  2/ 1/2026  1:23am    Moon (Leo) Tri (Ari) Neptune
+Sun  2/ 1/2026  7:21am    Moon (Leo) Opp (Aqu) Pluto (Partial Occultation)
+Sun  2/ 1/2026  1:06pm    Moon (Leo) Opp (Aqu) Mars
+Sun  2/ 1/2026 11:09pm     Sun (Aqu) Opp (Leo) Moon (Full Moon)
+Mon  2/ 2/2026 10:55am    Moon (Leo) Opp (Aqu) Venus (Total Occultation)
+Mon  2/ 2/2026  2:55pm    Moon (Leo) Opp (Aqu) Mercury (Total Occultation)
+Mon  2/ 2/2026 11:55pm    Moon (Leo) Squ [Tau] Uranus (v/c 4:26)
+Tue  2/ 3/2026  4:21am    Moon (Leo) --> Virgo
+Wed  2/ 4/2026 10:37am    Moon (Vir) Sex [Can] Jupiter
+Thu  2/ 5/2026  5:49am    Moon (Vir) Tri (Tau) Uranus
+Thu  2/ 5/2026  8:49am    Moon (Vir) Opp (Pis) Saturn (v/c 1:43)
+Thu  2/ 5/2026 10:32am    Moon (Vir) --> Libra
+Thu  2/ 5/2026 11:02am    Moon (Lib) Opp (Ari) Neptune
+Thu  2/ 5/2026  5:44pm    Moon (Lib) Tri (Aqu) Pluto
+Fri  2/ 6/2026  7:00am    Moon (Lib) Tri (Aqu) Mars
+Fri  2/ 6/2026  6:21pm    Moon (Lib) Squ [Can] Jupiter
+Fri  2/ 6/2026  8:49pm     Sun (Aqu) Tri (Lib) Moon
+Sat  2/ 7/2026 12:59pm    Moon (Lib) Tri (Aqu) Venus (v/c 7:13)
+Sat  2/ 7/2026  8:13pm    Moon (Lib) --> Scorpio
+Sat  2/ 7/2026 11:39pm    Moon (Sco) Tri (Pis) Mercury
+Sun  2/ 8/2026  3:58am    Moon (Sco) Squ (Aqu) Pluto
+Sun  2/ 8/2026  9:53pm    Moon (Sco) Squ (Aqu) Mars
+Mon  2/ 9/2026  5:10am    Moon (Sco) Tri [Can] Jupiter
+Mon  2/ 9/2026  1:43pm     Sun (Aqu) Squ (Sco) Moon (Half Moon)
+Tue  2/10/2026  3:15am    Moon (Sco) Opp (Tau) Uranus
+Tue  2/10/2026  7:32am    Moon (Sco) Tri (Pis) Saturn
+Tue  2/10/2026  8:00am    Moon (Sco) Squ (Aqu) Venus (v/c 0:20)
+Tue  2/10/2026  8:21am    Moon (Sco) --> Sagittarius
+Tue  2/10/2026  9:12am    Moon (Sag) Tri (Ari) Neptune
+Tue  2/10/2026  4:27pm    Moon (Sag) Sex (Aqu) Pluto
+Tue  2/10/2026 10:01pm    Moon (Sag) Squ (Pis) Mercury
+Wed  2/11/2026  2:42pm    Moon (Sag) Sex (Aqu) Mars
+Thu  2/12/2026  7:52am     Sun (Aqu) Sex (Sag) Moon
+Thu  2/12/2026  8:28pm    Moon (Sag) Squ (Pis) Saturn (v/c 0:15)
+Thu  2/12/2026  8:44pm    Moon (Sag) --> Capricorn
+Thu  2/12/2026  9:43pm    Moon (Cap) Squ (Ari) Neptune
+Fri  2/13/2026  3:22am    Moon (Cap) Sex (Pis) Venus
+Fri  2/13/2026  7:17pm    Moon (Cap) Sex (Pis) Mercury
+Sat  2/14/2026  4:27am    Moon (Cap) Opp [Can] Jupiter
+Sun  2/15/2026  2:31am    Moon (Cap) Tri (Tau) Uranus (v/c 4:45)
+Sun  2/15/2026  7:16am    Moon (Cap) --> Aquarius
+Sun  2/15/2026  7:32am    Moon (Aqu) Sex (Ari) Saturn
+Sun  2/15/2026  8:22am    Moon (Aqu) Sex (Ari) Neptune
+Sun  2/15/2026  3:09pm    Moon (Aqu) Con (Aqu) Pluto (Total Occultation)
+Mon  2/16/2026  7:09pm    Moon (Aqu) Con (Aqu) Mars (Total Occultation)
+Tue  2/17/2026 10:39am    Moon (Aqu) Squ (Tau) Uranus
+Tue  2/17/2026  1:01pm     Sun (Aqu) Con (Aqu) Moon (New Moon) (Annular Solar Eclipse) (v/c 2:08)
+Tue  2/17/2026  3:09pm    Moon (Aqu) --> Pisces
+Wed  2/18/2026  9:01am    Moon (Pis) Con (Pis) Venus
+Wed  2/18/2026  7:30pm    Moon (Pis) Tri [Can] Jupiter
+Thu  2/19/2026 12:08am    Moon (Pis) Con (Pis) Mercury (Total Occultation)
+Thu  2/19/2026  4:22pm    Moon (Pis) Sex (Tau) Uranus (v/c 4:16)
+Thu  2/19/2026  8:38pm    Moon (Pis) --> Aries
+Thu  2/19/2026  9:48pm    Moon (Ari) Con (Ari) Saturn
+Thu  2/19/2026  9:55pm    Moon (Ari) Con (Ari) Neptune
+Fri  2/20/2026  4:08am    Moon (Ari) Sex (Aqu) Pluto
+Fri  2/20/2026 11:49pm    Moon (Ari) Squ [Can] Jupiter
+Sat  2/21/2026 12:11pm    Moon (Ari) Sex (Aqu) Mars (v/c 12:19)
+Sun  2/22/2026 12:30am    Moon (Ari) --> Taurus
+Sun  2/22/2026  6:40am     Sun (Pis) Sex (Tau) Moon
+Sun  2/22/2026  7:56am    Moon (Tau) Squ (Aqu) Pluto
+Mon  2/23/2026  2:55am    Moon (Tau) Sex [Can] Jupiter
+Mon  2/23/2026  3:31am    Moon (Tau) Sex (Pis) Venus
+Mon  2/23/2026  1:51pm    Moon (Tau) Sex (Pis) Mercury
+Mon  2/23/2026  6:19pm    Moon (Tau) Squ (Aqu) Mars
+Mon  2/23/2026 11:28pm    Moon (Tau) Con (Tau) Uranus (v/c 4:00)
+Tue  2/24/2026  3:28am    Moon (Tau) --> Gemini
+Tue  2/24/2026  4:57am    Moon (Gem) Sex (Ari) Neptune
+Tue  2/24/2026  5:26am    Moon (Gem) Sex (Ari) Saturn
+Tue  2/24/2026 10:55am    Moon (Gem) Tri (Aqu) Pluto
+Tue  2/24/2026  1:27pm     Sun (Pis) Squ (Gem) Moon (Half Moon)
+Wed  2/25/2026 11:10am    Moon (Gem) Squ (Pis) Venus
+Wed  2/25/2026  5:33pm    Moon (Gem) Squ (Pis) Mercury
+Thu  2/26/2026 12:00am    Moon (Gem) Tri (Aqu) Mars (v/c 6:10)
+Thu  2/26/2026  6:11am    Moon (Gem) --> Cancer
+Thu  2/26/2026  7:47am    Moon (Can) Squ (Ari) Neptune
+Thu  2/26/2026  8:33am    Moon (Can) Squ (Ari) Saturn
+Thu  2/26/2026  8:03pm     Sun (Pis) Tri (Can) Moon
+Fri  2/27/2026  8:10am    Moon (Can) Con [Can] Jupiter
+Fri  2/27/2026  6:59pm    Moon (Can) Tri (Pis) Venus
+Fri  2/27/2026  8:13pm    Moon (Can) Tri [Pis] Mercury
+Sat  2/28/2026  5:21am    Moon (Can) Sex (Tau) Uranus (v/c 3:55)
+Sat  2/28/2026  9:16am    Moon (Can) --> Leo
+Sat  2/28/2026 11:02am    Moon (Leo) Tri (Ari) Neptune
+Sat  2/28/2026 12:08pm    Moon (Leo) Tri (Ari) Saturn
+Sat  2/28/2026  5:04pm    Moon (Leo) Opp (Aqu) Pluto (Partial Occultation)
+Mon  3/ 2/2026  9:36am    Moon (Leo) Squ (Tau) Uranus
+Mon  3/ 2/2026  1:27pm    Moon (Leo) Opp (Aqu) Mars (Total Occultation) (v/c 0:06)
+Mon  3/ 2/2026  1:33pm    Moon (Leo) --> Virgo
+Tue  3/ 3/2026 12:38pm     Sun (Pis) Opp (Vir) Moon (Full Moon) (Total Lunar Eclipse)
+Tue  3/ 3/2026  4:45pm    Moon (Vir) Sex [Can] Jupiter
+Wed  3/ 4/2026  1:39am    Moon (Vir) Opp [Pis] Mercury
+Wed  3/ 4/2026  3:41pm    Moon (Vir) Opp (Pis) Venus
+Wed  3/ 4/2026  3:53pm    Moon (Vir) Tri (Tau) Uranus (v/c 4:02)
+Wed  3/ 4/2026  7:55pm    Moon (Vir) --> Libra
+Wed  3/ 4/2026 10:07pm    Moon (Lib) Opp (Ari) Neptune
+Thu  3/ 5/2026 12:01am    Moon (Lib) Opp (Ari) Saturn
+Thu  3/ 5/2026  4:34am    Moon (Lib) Tri (Aqu) Pluto
+Fri  3/ 6/2026 12:22am    Moon (Lib) Squ [Can] Jupiter (v/c 28:39)
+Sat  3/ 7/2026  5:01am    Moon (Lib) --> Scorpio
+Sat  3/ 7/2026 12:33pm    Moon (Sco) Tri (Pis) Mars
+Sat  3/ 7/2026  2:13pm    Moon (Sco) Squ (Aqu) Pluto
+Sun  3/ 8/2026 10:46am    Moon (Sco) Tri [Can] Jupiter
+Sun  3/ 8/2026 12:16pm    Moon (Sco) Tri [Pis] Mercury
+Sun  3/ 8/2026  4:41pm     Sun (Pis) Tri (Sco) Moon
+Mon  3/ 9/2026 12:28pm    Moon (Sco) Opp (Tau) Uranus (v/c 4:08)
+Mon  3/ 9/2026  4:36pm    Moon (Sco) --> Sagittarius
+Mon  3/ 9/2026  7:21pm    Moon (Sag) Tri (Ari) Neptune
+Mon  3/ 9/2026 10:14pm    Moon (Sag) Tri (Ari) Saturn
+Tue  3/10/2026  1:34am    Moon (Sag) Tri (Ari) Venus
+Tue  3/10/2026  2:13am    Moon (Sag) Sex (Aqu) Pluto
+Tue  3/10/2026  4:36am    Moon (Sag) Squ (Pis) Mars
+Tue  3/10/2026  7:59pm    Moon (Sag) Squ [Pis] Mercury
+Wed  3/11/2026 10:38am     Sun (Pis) Squ (Sag) Moon (Half Moon) (v/c 18:28)
+Thu  3/12/2026  5:07am    Moon (Sag) --> Capricorn
+Thu  3/12/2026  8:02am    Moon (Cap) Squ (Ari) Neptune
+Thu  3/12/2026 11:21am    Moon (Cap) Squ (Ari) Saturn
+Thu  3/12/2026  8:58pm    Moon (Cap) Squ (Ari) Venus
+Thu  3/12/2026  9:15pm    Moon (Cap) Sex (Pis) Mars
+Fri  3/13/2026  4:07am    Moon (Cap) Sex [Pis] Mercury
+Fri  3/13/2026 11:10am    Moon (Cap) Opp (Can) Jupiter
+Sat  3/14/2026  3:41am     Sun (Pis) Sex (Cap) Moon
+Sat  3/14/2026 12:33pm    Moon (Cap) Tri (Tau) Uranus (v/c 3:40)
+Sat  3/14/2026  4:13pm    Moon (Cap) --> Aquarius
+Sat  3/14/2026  7:12pm    Moon (Aqu) Sex (Ari) Neptune
+Sat  3/14/2026 10:46pm    Moon (Aqu) Sex (Ari) Saturn
+Sun  3/15/2026  1:34am    Moon (Aqu) Con (Aqu) Pluto (Total Occultation)
+Sun  3/15/2026  1:41pm    Moon (Aqu) Sex (Ari) Venus
+Mon  3/16/2026  8:56pm    Moon (Aqu) Squ (Tau) Uranus (v/c 3:19)
+Tue  3/17/2026 12:15am    Moon (Aqu) --> Pisces
+Tue  3/17/2026  4:24pm    Moon (Pis) Con [Pis] Mercury
+Tue  3/17/2026  9:46pm    Moon (Pis) Con (Pis) Mars
+Wed  3/18/2026  3:18am    Moon (Pis) Tri (Can) Jupiter
+Thu  3/19/2026  2:02am    Moon (Pis) Sex (Tau) Uranus
+Thu  3/19/2026  2:23am     Sun (Pis) Con (Pis) Moon (New Moon) (v/c 2:39)
+Thu  3/19/2026  5:02am    Moon (Pis) --> Aries
+Thu  3/19/2026  7:59am    Moon (Ari) Con (Ari) Neptune
+Thu  3/19/2026 11:51am    Moon (Ari) Con (Ari) Saturn
+Thu  3/19/2026  1:33pm    Moon (Ari) Sex (Aqu) Pluto
+Fri  3/20/2026  6:52am    Moon (Ari) Squ (Can) Jupiter
+Fri  3/20/2026 10:23am    Moon (Ari) Con (Ari) Venus (v/c 21:11)
+Sat  3/21/2026  7:35am    Moon (Ari) --> Taurus
+Sat  3/21/2026  3:55pm    Moon (Tau) Squ (Aqu) Pluto
+Sat  3/21/2026  9:46pm    Moon (Tau) Sex (Pis) Mercury
+Sun  3/22/2026  8:56am    Moon (Tau) Sex (Can) Jupiter
+Sun  3/22/2026  9:22am    Moon (Tau) Sex (Pis) Mars
+Mon  3/23/2026  6:39am    Moon (Tau) Con (Tau) Uranus (v/c 2:38)
+Mon  3/23/2026  9:18am    Moon (Tau) --> Gemini
+Mon  3/23/2026 12:26pm    Moon (Gem) Sex (Ari) Neptune
+Mon  3/23/2026  2:08pm     Sun (Ari) Sex (Gem) Moon
+Mon  3/23/2026  4:47pm    Moon (Gem) Sex (Ari) Saturn
+Mon  3/23/2026  5:43pm    Moon (Gem) Tri (Aqu) Pluto
+Tue  3/24/2026 12:12am    Moon (Gem) Squ (Pis) Mercury
+Tue  3/24/2026  2:06pm    Moon (Gem) Squ (Pis) Mars
+Tue  3/24/2026 11:37pm    Moon (Gem) Sex (Ari) Venus (v/c 11:55)
+Wed  3/25/2026 11:33am    Moon (Gem) --> Cancer
+Wed  3/25/2026  2:52pm    Moon (Can) Squ (Ari) Neptune
+Wed  3/25/2026  7:39pm    Moon (Can) Squ (Ari) Saturn
+Wed  3/25/2026  8:17pm     Sun (Ari) Squ (Can) Moon (Half Moon)
+Thu  3/26/2026  4:12am    Moon (Can) Tri (Pis) Mercury
+Thu  3/26/2026  1:57pm    Moon (Can) Con (Can) Jupiter
+Thu  3/26/2026  8:07pm    Moon (Can) Tri (Pis) Mars
+Fri  3/27/2026  7:53am    Moon (Can) Squ (Ari) Venus
+Fri  3/27/2026 12:40pm    Moon (Can) Sex (Tau) Uranus (v/c 2:29)
+Fri  3/27/2026  3:10pm    Moon (Can) --> Leo
+Fri  3/27/2026  6:44pm    Moon (Leo) Tri (Ari) Neptune
+Sat  3/28/2026 12:01am    Moon (Leo) Tri (Ari) Saturn
+Sat  3/28/2026 12:12am    Moon (Leo) Opp (Aqu) Pluto (Partial Occultation)
+Sat  3/28/2026  4:16am     Sun (Ari) Tri (Leo) Moon
+Sun  3/29/2026  6:08pm    Moon (Leo) Squ (Tau) Uranus
+Sun  3/29/2026  6:27pm    Moon (Leo) Tri (Ari) Venus (v/c 2:05)
+Sun  3/29/2026  8:33pm    Moon (Leo) --> Virgo
+Mon  3/30/2026  7:44pm    Moon (Vir) Opp (Pis) Mercury
+Tue  3/31/2026  1:16am    Moon (Vir) Sex (Can) Jupiter
+Tue  3/31/2026  2:20pm    Moon (Vir) Opp (Pis) Mars
+Wed  4/ 1/2026  1:31am    Moon (Vir) Tri (Tau) Uranus (v/c 2:19)
+Wed  4/ 1/2026  3:50am    Moon (Vir) --> Libra
+Wed  4/ 1/2026  8:00am    Moon (Lib) Opp (Ari) Neptune
+Wed  4/ 1/2026  1:40pm    Moon (Lib) Tri (Aqu) Pluto
+Wed  4/ 1/2026  2:25pm    Moon (Lib) Opp (Ari) Saturn
+Thu  4/ 2/2026  3:12am     Sun (Ari) Opp (Lib) Moon (Full Moon)
+Thu  4/ 2/2026  9:55am    Moon (Lib) Squ (Can) Jupiter (v/c 27:15)
+Fri  4/ 3/2026  1:10pm    Moon (Lib) --> Scorpio
+Fri  4/ 3/2026 11:26pm    Moon (Sco) Opp (Tau) Venus
+Fri  4/ 3/2026 11:27pm    Moon (Sco) Squ (Aqu) Pluto
+Sat  4/ 4/2026  8:42pm    Moon (Sco) Tri (Can) Jupiter
+Sat  4/ 4/2026 11:24pm    Moon (Sco) Tri (Pis) Mercury
+Sun  4/ 5/2026  6:07pm    Moon (Sco) Tri (Pis) Mars
+Sun  4/ 5/2026 10:28pm    Moon (Sco) Opp (Tau) Uranus (v/c 2:02)
+Mon  4/ 6/2026 12:31am    Moon (Sco) --> Sagittarius
+Mon  4/ 6/2026  5:20am    Moon (Sag) Tri (Ari) Neptune
+Mon  4/ 6/2026 11:10am    Moon (Sag) Sex (Aqu) Pluto
+Mon  4/ 6/2026  1:02pm    Moon (Sag) Tri (Ari) Saturn
+Tue  4/ 7/2026 12:05pm     Sun (Ari) Tri (Sag) Moon
+Tue  4/ 7/2026  5:45pm    Moon (Sag) Squ (Pis) Mercury
+Wed  4/ 8/2026 10:51am    Moon (Sag) Squ (Pis) Mars (v/c 2:12)
+Wed  4/ 8/2026  1:04pm    Moon (Sag) --> Capricorn
+Wed  4/ 8/2026  6:05pm    Moon (Cap) Squ (Ari) Neptune
+Thu  4/ 9/2026  2:16am    Moon (Cap) Squ (Ari) Saturn
+Thu  4/ 9/2026  1:26pm    Moon (Cap) Tri (Tau) Venus
+Thu  4/ 9/2026 10:09pm    Moon (Cap) Opp (Can) Jupiter
+Fri  4/10/2026  5:51am     Sun (Ari) Squ (Cap) Moon (Half Moon)
+Fri  4/10/2026 12:43pm    Moon (Cap) Sex (Pis) Mercury
+Fri  4/10/2026 11:23pm    Moon (Cap) Tri (Tau) Uranus (v/c 1:31)
+Sat  4/11/2026 12:55am    Moon (Cap) --> Aquarius
+Sat  4/11/2026  2:50am    Moon (Aqu) Sex (Ari) Mars
+Sat  4/11/2026  5:57am    Moon (Aqu) Sex (Ari) Neptune
+Sat  4/11/2026 11:22am    Moon (Aqu) Con (Aqu) Pluto
+Sat  4/11/2026  2:15pm    Moon (Aqu) Sex (Ari) Saturn
+Sun  4/12/2026  6:42am    Moon (Aqu) Squ (Tau) Venus
+Sun  4/12/2026  8:47pm     Sun (Ari) Sex (Aqu) Moon
+Mon  4/13/2026  8:42am    Moon (Aqu) Squ (Tau) Uranus (v/c 1:13)
+Mon  4/13/2026  9:55am    Moon (Aqu) --> Pisces
+Tue  4/14/2026  4:22pm    Moon (Pis) Tri (Can) Jupiter
+Tue  4/14/2026  7:10pm    Moon (Pis) Sex (Tau) Venus
+Wed  4/15/2026  2:07pm    Moon (Pis) Sex (Tau) Uranus (v/c 0:56)
+Wed  4/15/2026  3:03pm    Moon (Pis) --> Aries
+Wed  4/15/2026  4:15pm    Moon (Ari) Con (Ari) Mercury
+Wed  4/15/2026  7:44pm    Moon (Ari) Con (Ari) Neptune
+Wed  4/15/2026 11:08pm    Moon (Ari) Con (Ari) Mars
+Thu  4/16/2026 12:15am    Moon (Ari) Sex (Aqu) Pluto
+Thu  4/16/2026  3:37am    Moon (Ari) Con (Ari) Saturn
+Thu  4/16/2026  7:53pm    Moon (Ari) Squ (Can) Jupiter
+Fri  4/17/2026 12:51pm     Sun (Ari) Con (Ari) Moon (New Moon) (v/c 4:05)
+Fri  4/17/2026  4:57pm    Moon (Ari) --> Taurus
+Sat  4/18/2026  1:46am    Moon (Tau) Squ (Aqu) Pluto
+Sat  4/18/2026  9:01pm    Moon (Tau) Sex (Can) Jupiter
+Sun  4/19/2026  7:43am    Moon (Tau) Con (Tau) Venus
+Sun  4/19/2026  4:44pm    Moon (Tau) Con (Tau) Uranus (v/c 0:32)
+Sun  4/19/2026  5:17pm    Moon (Tau) --> Gemini
+Sun  4/19/2026  9:56pm    Moon (Gem) Sex (Ari) Neptune
+Mon  4/20/2026  2:03am    Moon (Gem) Tri (Aqu) Pluto
+Mon  4/20/2026  5:18am    Moon (Gem) Sex (Ari) Mercury
+Mon  4/20/2026  6:00am    Moon (Gem) Sex (Ari) Saturn
+Mon  4/20/2026  6:17am    Moon (Gem) Sex (Ari) Mars (v/c 35:42)
+Tue  4/21/2026  6:00pm    Moon (Gem) --> Cancer
+Tue  4/21/2026  8:50pm     Sun (Tau) Sex (Can) Moon
+Tue  4/21/2026 10:53pm    Moon (Can) Squ (Ari) Neptune
+Wed  4/22/2026  7:30am    Moon (Can) Squ (Ari) Saturn
+Wed  4/22/2026 10:11am    Moon (Can) Squ (Ari) Mars
+Wed  4/22/2026 12:30pm    Moon (Can) Squ (Ari) Mercury
+Wed  4/22/2026 11:52pm    Moon (Can) Con (Can) Jupiter
+Thu  4/23/2026  7:52pm    Moon (Can) Sex (Tau) Venus
+Thu  4/23/2026  8:28pm    Moon (Can) Sex (Tau) Uranus (v/c 0:12)
+Thu  4/23/2026  8:40pm    Moon (Can) --> Leo
+Fri  4/24/2026  1:57am    Moon (Leo) Tri (Ari) Neptune
+Fri  4/24/2026  3:31am     Sun (Tau) Squ (Leo) Moon (Half Moon)
+Fri  4/24/2026  6:12am    Moon (Leo) Opp (Aqu) Pluto
+Fri  4/24/2026 11:20am    Moon (Leo) Tri (Ari) Saturn
+Fri  4/24/2026  4:49pm    Moon (Leo) Tri (Ari) Mars
+Fri  4/24/2026 11:21pm    Moon (Leo) Tri (Ari) Mercury (v/c 26:43)
+Sun  4/26/2026  2:04am    Moon (Leo) --> Virgo
+Sun  4/26/2026  2:04am    Moon (Vir) Squ (Gem) Uranus
+Sun  4/26/2026  6:40am    Moon (Vir) Squ (Gem) Venus
+Sun  4/26/2026  1:37pm     Sun (Tau) Tri (Vir) Moon
+Mon  4/27/2026 12:12pm    Moon (Vir) Sex (Can) Jupiter (v/c 21:50)
+Tue  4/28/2026 10:02am    Moon (Vir) --> Libra
+Tue  4/28/2026 10:17am    Moon (Lib) Tri (Gem) Uranus
+Tue  4/28/2026  4:06pm    Moon (Lib) Opp (Ari) Neptune
+Tue  4/28/2026  8:32pm    Moon (Lib) Tri (Aqu) Pluto
+Tue  4/28/2026  8:50pm    Moon (Lib) Tri (Gem) Venus
+Wed  4/29/2026  3:07am    Moon (Lib) Opp (Ari) Saturn
+Wed  4/29/2026  3:24pm    Moon (Lib) Opp (Ari) Mars
+Wed  4/29/2026 10:06pm    Moon (Lib) Squ (Can) Jupiter
+Thu  4/30/2026  9:51am    Moon (Lib) Opp (Ari) Mercury (v/c 10:10)
+Thu  4/30/2026  8:01pm    Moon (Lib) --> Scorpio
+Fri  5/ 1/2026  6:50am    Moon (Sco) Squ (Aqu) Pluto
+Fri  5/ 1/2026  6:23pm     Sun (Tau) Opp (Sco) Moon (Full Moon)
+Sat  5/ 2/2026  9:47am    Moon (Sco) Tri (Can) Jupiter (v/c 21:46)
+Sun  5/ 3/2026  7:33am    Moon (Sco) --> Sagittarius
+Sun  5/ 3/2026  8:21am    Moon (Sag) Opp (Gem) Uranus
+Sun  5/ 3/2026  2:15pm    Moon (Sag) Tri (Ari) Neptune
+Sun  5/ 3/2026  6:37pm    Moon (Sag) Sex (Aqu) Pluto
+Mon  5/ 4/2026  2:38am    Moon (Sag) Tri (Ari) Saturn
+Mon  5/ 4/2026  8:16am    Moon (Sag) Opp (Gem) Venus
+Mon  5/ 4/2026 10:33pm    Moon (Sag) Tri (Ari) Mars (v/c 21:32)
+Tue  5/ 5/2026  8:06pm    Moon (Sag) --> Capricorn
+Wed  5/ 6/2026  3:00am    Moon (Cap) Squ (Ari) Neptune
+Wed  5/ 6/2026  8:54am    Moon (Cap) Tri (Tau) Mercury
+Wed  5/ 6/2026  3:51pm    Moon (Cap) Squ (Ari) Saturn
+Thu  5/ 7/2026  5:44am     Sun (Tau) Tri (Cap) Moon
+Thu  5/ 7/2026 12:11pm    Moon (Cap) Opp (Can) Jupiter
+Thu  5/ 7/2026  3:18pm    Moon (Cap) Squ (Ari) Mars (v/c 17:08)
+Fri  5/ 8/2026  8:27am    Moon (Cap) --> Aquarius
+Fri  5/ 8/2026  9:49am    Moon (Aqu) Tri (Gem) Uranus
+Fri  5/ 8/2026  3:22pm    Moon (Aqu) Sex (Ari) Neptune
+Fri  5/ 8/2026  7:21pm    Moon (Aqu) Con [Aqu] Pluto
+Sat  5/ 9/2026  4:16am    Moon (Aqu) Sex (Ari) Saturn
+Sat  5/ 9/2026  9:07am    Moon (Aqu) Squ (Tau) Mercury
+Sat  5/ 9/2026  9:39pm    Moon (Aqu) Tri (Gem) Venus
+Sat  5/ 9/2026 10:10pm     Sun (Tau) Squ (Aqu) Moon (Half Moon)
+Sun  5/10/2026  6:08am    Moon (Aqu) Sex (Ari) Mars (v/c 12:30)
+Sun  5/10/2026  6:39pm    Moon (Aqu) --> Pisces
+Sun  5/10/2026  8:12pm    Moon (Pis) Squ (Gem) Uranus
+Tue  5/12/2026  4:42am    Moon (Pis) Sex (Tau) Mercury
+Tue  5/12/2026  8:29am    Moon (Pis) Tri (Can) Jupiter
+Tue  5/12/2026 10:22am     Sun (Tau) Sex (Pis) Moon
+Tue  5/12/2026 11:04am    Moon (Pis) Squ (Gem) Venus (v/c 13:59)
+Wed  5/13/2026  1:03am    Moon (Pis) --> Aries
+Wed  5/13/2026  2:43am    Moon (Ari) Sex (Gem) Uranus
+Wed  5/13/2026  7:20am    Moon (Ari) Con (Ari) Neptune
+Wed  5/13/2026 10:34am    Moon (Ari) Sex [Aqu] Pluto
+Wed  5/13/2026  7:10pm    Moon (Ari) Con (Ari) Saturn
+Thu  5/14/2026 12:40pm    Moon (Ari) Squ (Can) Jupiter
+Thu  5/14/2026  7:06pm    Moon (Ari) Sex (Gem) Venus
+Thu  5/14/2026 10:32pm    Moon (Ari) Con (Ari) Mars (v/c 4:58)
+Fri  5/15/2026  3:30am    Moon (Ari) --> Taurus
+Fri  5/15/2026 12:24pm    Moon (Tau) Squ [Aqu] Pluto
+Sat  5/16/2026  1:39pm    Moon (Tau) Sex (Can) Jupiter
+Sat  5/16/2026  9:00pm     Sun (Tau) Con (Tau) Moon (New Moon)
+Sun  5/17/2026  2:02am    Moon (Tau) Con (Tau) Mercury (v/c 1:20)
+Sun  5/17/2026  3:22am    Moon (Tau) --> Gemini
+Sun  5/17/2026  5:16am    Moon (Gem) Con (Gem) Uranus
+Sun  5/17/2026  9:15am    Moon (Gem) Sex (Ari) Neptune
+Sun  5/17/2026 12:00pm    Moon (Gem) Tri [Aqu] Pluto
+Sun  5/17/2026  8:35pm    Moon (Gem) Sex (Ari) Saturn (v/c 30:10)
+Tue  5/19/2026  2:46am    Moon (Gem) --> Cancer
+Tue  5/19/2026  2:49am    Moon (Can) Con (Can) Venus
+Tue  5/19/2026  2:56am    Moon (Can) Sex (Tau) Mars
+Tue  5/19/2026  8:49am    Moon (Can) Squ (Ari) Neptune
+Tue  5/19/2026  8:40pm    Moon (Can) Squ (Ari) Saturn
+Wed  5/20/2026  2:26pm    Moon (Can) Con (Can) Jupiter (v/c 13:21)
+Thu  5/21/2026  3:47am    Moon (Can) --> Leo
+Thu  5/21/2026  3:57am     Sun (Gem) Sex (Leo) Moon
+Thu  5/21/2026  6:12am    Moon (Leo) Sex (Gem) Uranus
+Thu  5/21/2026  6:42am    Moon (Leo) Squ (Tau) Mars
+Thu  5/21/2026 10:15am    Moon (Leo) Tri (Ari) Neptune
+Thu  5/21/2026  1:01pm    Moon (Leo) Opp [Aqu] Pluto
+Thu  5/21/2026  7:42pm    Moon (Leo) Sex (Gem) Mercury
+Thu  5/21/2026 11:05pm    Moon (Leo) Tri (Ari) Saturn (v/c 32:51)
+Sat  5/23/2026  7:57am    Moon (Leo) --> Virgo
+Sat  5/23/2026 10:46am    Moon (Vir) Squ (Gem) Uranus
+Sat  5/23/2026 12:11pm     Sun (Gem) Squ (Vir) Moon (Half Moon)
+Sat  5/23/2026  2:12pm    Moon (Vir) Tri (Tau) Mars
+Sat  5/23/2026  6:01pm    Moon (Vir) Sex (Can) Venus
+Sun  5/24/2026 11:06am    Moon (Vir) Squ (Gem) Mercury
+Mon  5/25/2026  1:54am    Moon (Vir) Sex (Can) Jupiter (v/c 13:39)
+Mon  5/25/2026  3:34pm    Moon (Vir) --> Libra
+Mon  5/25/2026  6:48pm    Moon (Lib) Tri (Gem) Uranus
+Mon  5/25/2026 11:05pm    Moon (Lib) Opp (Ari) Neptune
+Tue  5/26/2026 12:41am     Sun (Gem) Tri (Lib) Moon
+Tue  5/26/2026  1:56am    Moon (Lib) Tri [Aqu] Pluto
+Tue  5/26/2026  8:08am    Moon (Lib) Squ (Can) Venus
+Tue  5/26/2026  2:11pm    Moon (Lib) Opp (Ari) Saturn
+Wed  5/27/2026  7:10am    Moon (Lib) Tri (Gem) Mercury
+Wed  5/27/2026 12:32pm    Moon (Lib) Squ (Can) Jupiter (v/c 13:20)
+Thu  5/28/2026  1:52am    Moon (Lib) --> Scorpio
+Thu  5/28/2026 12:34pm    Moon (Sco) Squ [Aqu] Pluto
+Thu  5/28/2026  4:15pm    Moon (Sco) Opp (Tau) Mars
+Fri  5/29/2026  1:25am    Moon (Sco) Tri (Can) Venus
+Sat  5/30/2026  1:04am    Moon (Sco) Tri (Can) Jupiter (v/c 12:40)
+Sat  5/30/2026  1:44pm    Moon (Sco) --> Sagittarius
+Sat  5/30/2026  5:44pm    Moon (Sag) Opp (Gem) Uranus
+Sat  5/30/2026  9:52pm    Moon (Sag) Tri (Ari) Neptune
+Sun  5/31/2026 12:34am    Moon (Sag) Sex [Aqu] Pluto
+Sun  5/31/2026  9:45am     Sun (Gem) Opp (Sag) Moon (Full Moon)
+Sun  5/31/2026  2:21pm    Moon (Sag) Tri (Ari) Saturn (v/c 35:58)
+Tue  6/ 2/2026  2:19am    Moon (Sag) --> Capricorn
+Tue  6/ 2/2026  4:31am    Moon (Cap) Opp (Can) Mercury
+Tue  6/ 2/2026 10:35am    Moon (Cap) Squ (Ari) Neptune
+Wed  6/ 3/2026  1:02am    Moon (Cap) Tri (Tau) Mars
+Wed  6/ 3/2026  3:25am    Moon (Cap) Squ (Ari) Saturn
+Wed  6/ 3/2026  3:37pm    Moon (Cap) Opp (Can) Venus
+Thu  6/ 4/2026  4:04am    Moon (Cap) Opp (Can) Jupiter (v/c 10:41)
+Thu  6/ 4/2026  2:45pm    Moon (Cap) --> Aquarius
+Thu  6/ 4/2026  7:18pm    Moon (Aqu) Tri (Gem) Uranus
+Thu  6/ 4/2026 11:00pm    Moon (Aqu) Sex (Ari) Neptune
+Fri  6/ 5/2026  1:21am    Moon (Aqu) Con [Aqu] Pluto
+Fri  6/ 5/2026  3:50pm    Moon (Aqu) Sex (Ari) Saturn
+Fri  6/ 5/2026  4:59pm    Moon (Aqu) Squ (Tau) Mars
+Fri  6/ 5/2026  8:50pm     Sun (Gem) Tri (Aqu) Moon (v/c 28:52)
+Sun  6/ 7/2026  1:42am    Moon (Aqu) --> Pisces
+Sun  6/ 7/2026  6:21am    Moon (Pis) Squ (Gem) Uranus
+Sun  6/ 7/2026  8:14pm    Moon (Pis) Tri (Can) Mercury
+Mon  6/ 8/2026  6:15am    Moon (Pis) Sex (Tau) Mars
+Mon  6/ 8/2026 11:00am     Sun (Gem) Squ (Pis) Moon (Half Moon)
+Tue  6/ 9/2026 12:04am    Moon (Pis) Tri (Can) Venus
+Tue  6/ 9/2026  1:38am    Moon (Pis) Tri (Can) Jupiter (v/c 7:55)
+Tue  6/ 9/2026  9:33am    Moon (Pis) --> Aries
+Tue  6/ 9/2026  2:07pm    Moon (Ari) Sex (Gem) Uranus
+Tue  6/ 9/2026  5:04pm    Moon (Ari) Con (Ari) Neptune
+Tue  6/ 9/2026  6:55pm    Moon (Ari) Sex [Aqu] Pluto
+Wed  6/10/2026  8:29am    Moon (Ari) Con (Ari) Saturn
+Wed  6/10/2026  8:39am    Moon (Ari) Squ (Can) Mercury
+Wed  6/10/2026  8:28pm     Sun (Gem) Sex (Ari) Moon
+Thu  6/11/2026  6:51am    Moon (Ari) Squ (Can) Jupiter
+Thu  6/11/2026  9:22am    Moon (Ari) Squ (Can) Venus (v/c 4:05)
+Thu  6/11/2026  1:28pm    Moon (Ari) --> Taurus
+Thu  6/11/2026 10:07pm    Moon (Tau) Squ [Aqu] Pluto
+Fri  6/12/2026  3:25pm    Moon (Tau) Sex (Can) Mercury
+Fri  6/12/2026  7:37pm    Moon (Tau) Con (Tau) Mars
+Sat  6/13/2026  8:30am    Moon (Tau) Sex (Can) Jupiter (v/c 5:35)
+Sat  6/13/2026  2:06pm    Moon (Tau) --> Gemini
+Sat  6/13/2026  2:17pm    Moon (Gem) Sex (Leo) Venus
+Sat  6/13/2026  6:30pm    Moon (Gem) Con (Gem) Uranus
+Sat  6/13/2026  8:50pm    Moon (Gem) Sex (Ari) Neptune
+Sat  6/13/2026 10:18pm    Moon (Gem) Tri [Aqu] Pluto
+Sun  6/14/2026 11:00am    Moon (Gem) Sex (Ari) Saturn
+Mon  6/15/2026  3:54am     Sun (Gem) Con (Gem) Moon (New Moon) (v/c 9:20)
+Mon  6/15/2026  1:14pm    Moon (Gem) --> Cancer
+Mon  6/15/2026  7:59pm    Moon (Can) Squ (Ari) Neptune
+Tue  6/16/2026 10:23am    Moon (Can) Squ (Ari) Saturn
+Tue  6/16/2026  9:11pm    Moon (Can) Con (Can) Mercury
+Tue  6/16/2026 11:14pm    Moon (Can) Sex (Tau) Mars
+Wed  6/17/2026  8:40am    Moon (Can) Con (Can) Jupiter (v/c 4:24)
+Wed  6/17/2026  1:05pm    Moon (Can) --> Leo
+Wed  6/17/2026  6:00pm    Moon (Leo) Sex (Gem) Uranus
+Wed  6/17/2026  8:08pm    Moon (Leo) Tri (Ari) Neptune
+Wed  6/17/2026  9:28pm    Moon (Leo) Con (Leo) Venus (Total Occultation)
+Wed  6/17/2026  9:29pm    Moon (Leo) Opp [Aqu] Pluto
+Thu  6/18/2026 11:26am    Moon (Leo) Tri (Ari) Saturn
+Fri  6/19/2026  3:33am    Moon (Leo) Squ (Tau) Mars
+Fri  6/19/2026 12:30pm     Sun (Gem) Sex (Leo) Moon (v/c 3:06)
+Fri  6/19/2026  3:37pm    Moon (Leo) --> Virgo
+Fri  6/19/2026  9:05pm    Moon (Vir) Squ (Gem) Uranus
+Sun  6/21/2026 10:03am    Moon (Vir) Sex (Can) Mercury
+Sun  6/21/2026 12:05pm    Moon (Vir) Tri (Tau) Mars
+Sun  6/21/2026  6:33pm    Moon (Vir) Sex (Can) Jupiter (v/c 3:21)
+Sun  6/21/2026  9:55pm    Moon (Vir) --> Libra
+Sun  6/21/2026 10:55pm     Sun (Can) Squ (Lib) Moon (Half Moon)
+Mon  6/22/2026  4:01am    Moon (Lib) Tri (Gem) Uranus
+Mon  6/22/2026  6:06am    Moon (Lib) Opp (Ari) Neptune
+Mon  6/22/2026  7:25am    Moon (Lib) Tri [Aqu] Pluto
+Mon  6/22/2026  6:15pm    Moon (Lib) Sex (Leo) Venus
+Tue  6/23/2026 12:07am    Moon (Lib) Opp (Ari) Saturn
+Tue  6/23/2026  9:47pm    Moon (Lib) Squ (Can) Mercury
+Wed  6/24/2026  5:11am    Moon (Lib) Squ (Can) Jupiter (v/c 2:32)
+Wed  6/24/2026  7:43am    Moon (Lib) --> Scorpio
+Wed  6/24/2026  1:42pm     Sun (Can) Tri (Sco) Moon
+Wed  6/24/2026  5:36pm    Moon (Sco) Squ [Aqu] Pluto
+Thu  6/25/2026 11:12am    Moon (Sco) Squ (Leo) Venus
+Fri  6/26/2026 11:17am    Moon (Sco) Tri (Can) Mercury
+Fri  6/26/2026  4:33pm    Moon (Sco) Opp (Tau) Mars
+Fri  6/26/2026  6:10pm    Moon (Sco) Tri (Can) Jupiter (v/c 1:30)
+Fri  6/26/2026  7:40pm    Moon (Sco) --> Sagittarius
+Sat  6/27/2026  2:45am    Moon (Sag) Opp (Gem) Uranus
+Sat  6/27/2026  4:32am    Moon (Sag) Tri (Ari) Neptune
+Sat  6/27/2026  5:40am    Moon (Sag) Sex [Aqu] Pluto
+Sun  6/28/2026 12:03am    Moon (Sag) Tri (Ari) Saturn
+Sun  6/28/2026  6:04am    Moon (Sag) Tri (Leo) Venus (v/c 26:13)
+Mon  6/29/2026  8:18am    Moon (Sag) --> Capricorn
+Mon  6/29/2026  5:11pm    Moon (Cap) Squ (Ari) Neptune
+Tue  6/30/2026 12:56am     Sun (Can) Opp (Cap) Moon (Full Moon)
+Tue  6/30/2026 12:51pm    Moon (Cap) Squ (Ari) Saturn
+Wed  7/ 1/2026 12:50pm    Moon (Cap) Opp [Can] Mercury (v/c 7:42)
+Wed  7/ 1/2026  8:32pm    Moon (Cap) --> Aquarius
+Wed  7/ 1/2026  9:13pm    Moon (Aqu) Opp (Leo) Jupiter
+Thu  7/ 2/2026  1:04am    Moon (Aqu) Tri (Gem) Mars
+Thu  7/ 2/2026  4:02am    Moon (Aqu) Tri (Gem) Uranus
+Thu  7/ 2/2026  5:19am    Moon (Aqu) Sex (Ari) Neptune
+Thu  7/ 2/2026  6:11am    Moon (Aqu) Con [Aqu] Pluto
+Fri  7/ 3/2026 12:48am    Moon (Aqu) Sex (Ari) Saturn
+Fri  7/ 3/2026  6:27pm    Moon (Aqu) Opp (Leo) Venus (Partial Occultation) (v/c 13:02)
+Sat  7/ 4/2026  7:30am    Moon (Aqu) --> Pisces
+Sat  7/ 4/2026  2:59pm    Moon (Pis) Squ (Gem) Uranus
+Sat  7/ 4/2026  3:25pm    Moon (Pis) Squ (Gem) Mars
+Sun  7/ 5/2026  9:01am     Sun (Can) Tri (Pis) Moon
+Mon  7/ 6/2026  6:20am    Moon (Pis) Tri [Can] Mercury (v/c 9:45)
+Mon  7/ 6/2026  4:06pm    Moon (Pis) --> Aries
+Mon  7/ 6/2026  6:40pm    Moon (Ari) Tri (Leo) Jupiter
+Mon  7/ 6/2026 11:25pm    Moon (Ari) Sex (Gem) Uranus
+Tue  7/ 7/2026 12:11am    Moon (Ari) Con (Ari) Neptune
+Tue  7/ 7/2026 12:47am    Moon (Ari) Sex [Aqu] Pluto
+Tue  7/ 7/2026  2:48am    Moon (Ari) Sex (Gem) Mars
+Tue  7/ 7/2026  6:14pm    Moon (Ari) Con (Ari) Saturn
+Tue  7/ 7/2026  8:28pm     Sun (Can) Squ (Ari) Moon (Half Moon)
+Wed  7/ 8/2026 10:24am    Moon (Ari) Squ [Can] Mercury
+Wed  7/ 8/2026  7:41pm    Moon (Ari) Tri (Leo) Venus (v/c 1:48)
+Wed  7/ 8/2026  9:30pm    Moon (Ari) --> Taurus
+Thu  7/ 9/2026 12:45am    Moon (Tau) Squ (Leo) Jupiter
+Thu  7/ 9/2026  5:34am    Moon (Tau) Squ [Aqu] Pluto
+Fri  7/10/2026  3:46am     Sun (Can) Sex (Tau) Moon
+Fri  7/10/2026 11:13am    Moon (Tau) Sex [Can] Mercury (v/c 12:28)
+Fri  7/10/2026 11:41pm    Moon (Tau) --> Gemini
+Sat  7/11/2026  2:04am    Moon (Gem) Squ (Vir) Venus
+Sat  7/11/2026  3:30am    Moon (Gem) Sex (Leo) Jupiter
+Sat  7/11/2026  6:30am    Moon (Gem) Con (Gem) Uranus
+Sat  7/11/2026  6:51am    Moon (Gem) Sex [Ari] Neptune
+Sat  7/11/2026  7:14am    Moon (Gem) Tri [Aqu] Pluto
+Sat  7/11/2026  2:16pm    Moon (Gem) Con (Gem) Mars
+Sat  7/11/2026 11:11pm    Moon (Gem) Sex (Ari) Saturn (v/c 24:35)
+Sun  7/12/2026 11:46pm    Moon (Gem) --> Cancer
+Mon  7/13/2026  5:54am    Moon (Can) Sex (Vir) Venus
+Mon  7/13/2026  6:46am    Moon (Can) Squ [Ari] Neptune
+Mon  7/13/2026 10:57pm    Moon (Can) Squ (Ari) Saturn
+Tue  7/14/2026  7:26am    Moon (Can) Con [Can] Mercury
+Tue  7/14/2026 10:43am     Sun (Can) Con (Can) Moon (New Moon) (v/c 12:51)
+Tue  7/14/2026 11:35pm    Moon (Can) --> Leo
+Wed  7/15/2026  4:49am    Moon (Leo) Con (Leo) Jupiter
+Wed  7/15/2026  6:39am    Moon (Leo) Sex (Gem) Uranus
+Wed  7/15/2026  6:42am    Moon (Leo) Tri [Ari] Neptune
+Wed  7/15/2026  6:58am    Moon (Leo) Opp [Aqu] Pluto
+Wed  7/15/2026  6:58pm    Moon (Leo) Sex (Gem) Mars
+Wed  7/15/2026 11:26pm    Moon (Leo) Tri (Ari) Saturn (v/c 25:40)
+Fri  7/17/2026  1:07am    Moon (Leo) --> Virgo
+Fri  7/17/2026  8:44am    Moon (Vir) Squ (Gem) Uranus
+Fri  7/17/2026  4:05pm    Moon (Vir) Con (Vir) Venus
+Sat  7/18/2026 12:22am    Moon (Vir) Squ (Gem) Mars
+Sat  7/18/2026  7:49am    Moon (Vir) Sex [Can] Mercury
+Sat  7/18/2026 11:13pm     Sun (Can) Sex (Vir) Moon (v/c 6:43)
+Sun  7/19/2026  5:56am    Moon (Vir) --> Libra
+Sun  7/19/2026  1:39pm    Moon (Lib) Sex (Leo) Jupiter
+Sun  7/19/2026  1:58pm    Moon (Lib) Opp [Ari] Neptune
+Sun  7/19/2026  2:08pm    Moon (Lib) Tri [Aqu] Pluto
+Sun  7/19/2026  2:17pm    Moon (Lib) Tri (Gem) Uranus
+Mon  7/20/2026  9:16am    Moon (Lib) Opp (Ari) Saturn
+Mon  7/20/2026 10:03am    Moon (Lib) Tri (Gem) Mars
+Mon  7/20/2026  1:18pm    Moon (Lib) Squ [Can] Mercury
+Tue  7/21/2026 12:05pm     Sun (Can) Squ (Lib) Moon (Half Moon) (v/c 2:28)
+Tue  7/21/2026  2:34pm    Moon (Lib) --> Scorpio
+Tue  7/21/2026 11:11pm    Moon (Sco) Squ [Aqu] Pluto
+Tue  7/21/2026 11:49pm    Moon (Sco) Squ (Leo) Jupiter
+Wed  7/22/2026  6:37pm    Moon (Sco) Sex (Vir) Venus
+Wed  7/22/2026 10:48pm    Moon (Sco) Tri [Can] Mercury (v/c 27:18)
+Fri  7/24/2026  2:07am    Moon (Sco) --> Sagittarius
+Fri  7/24/2026  4:43am     Sun (Leo) Tri (Sag) Moon
+Fri  7/24/2026 10:52am    Moon (Sag) Tri [Ari] Neptune
+Fri  7/24/2026 10:53am    Moon (Sag) Sex [Aqu] Pluto
+Fri  7/24/2026 11:40am    Moon (Sag) Opp (Gem) Uranus
+Fri  7/24/2026 12:48pm    Moon (Sag) Tri (Leo) Jupiter
+Sat  7/25/2026  7:54am    Moon (Sag) Tri (Ari) Saturn
+Sat  7/25/2026 12:53pm    Moon (Sag) Squ (Vir) Venus
+Sat  7/25/2026  3:58pm    Moon (Sag) Opp (Gem) Mars (v/c 22:46)
+Sun  7/26/2026  2:44pm    Moon (Sag) --> Capricorn
+Sun  7/26/2026 11:26pm    Moon (Cap) Squ [Ari] Neptune
+Mon  7/27/2026  8:24pm    Moon (Cap) Squ [Ari] Saturn
+Tue  7/28/2026  1:08am    Moon (Cap) Opp (Can) Mercury
+Tue  7/28/2026  7:11am    Moon (Cap) Tri (Vir) Venus (v/c 19:35)
+Wed  7/29/2026  2:46am    Moon (Cap) --> Aquarius
+Wed  7/29/2026 11:07am    Moon (Aqu) Con [Aqu] Pluto
+Wed  7/29/2026 11:14am    Moon (Aqu) Sex [Ari] Neptune
+Wed  7/29/2026 12:29pm    Moon (Aqu) Tri (Gem) Uranus
+Wed  7/29/2026  3:27pm    Moon (Aqu) Opp (Leo) Jupiter
+Wed  7/29/2026  3:35pm     Sun (Leo) Opp (Aqu) Moon (Full Moon)
+Thu  7/30/2026  7:43am    Moon (Aqu) Sex [Ari] Saturn
+Thu  7/30/2026 10:26pm    Moon (Aqu) Tri (Gem) Mars (v/c 14:47)
+Fri  7/31/2026  1:13pm    Moon (Aqu) --> Pisces
+Fri  7/31/2026 10:47pm    Moon (Pis) Squ (Gem) Uranus
+Sun  8/ 2/2026  3:58am    Moon (Pis) Tri (Can) Mercury
+Sun  8/ 2/2026 10:32am    Moon (Pis) Squ (Gem) Mars
+Sun  8/ 2/2026  1:33pm    Moon (Pis) Opp (Vir) Venus (v/c 8:03)
+Sun  8/ 2/2026  9:36pm    Moon (Pis) --> Aries
+Mon  8/ 3/2026  5:10am    Moon (Ari) Sex [Aqu] Pluto
+Mon  8/ 3/2026  5:22am    Moon (Ari) Con [Ari] Neptune
+Mon  8/ 3/2026  6:55am    Moon (Ari) Sex (Gem) Uranus
+Mon  8/ 3/2026 11:20am    Moon (Ari) Tri (Leo) Jupiter
+Mon  8/ 3/2026  6:24pm     Sun (Leo) Tri (Ari) Moon
+Tue  8/ 4/2026 12:21am    Moon (Ari) Con [Ari] Saturn
+Tue  8/ 4/2026  3:16pm    Moon (Ari) Squ (Can) Mercury
+Tue  8/ 4/2026  7:51pm    Moon (Ari) Sex (Gem) Mars (v/c 7:43)
+Wed  8/ 5/2026  3:35am    Moon (Ari) --> Taurus
+Wed  8/ 5/2026 10:43am    Moon (Tau) Squ [Aqu] Pluto
+Wed  8/ 5/2026  5:33pm    Moon (Tau) Squ (Leo) Jupiter
+Thu  8/ 6/2026  3:21am     Sun (Leo) Squ (Tau) Moon (Half Moon)
+Fri  8/ 7/2026 12:25am    Moon (Tau) Sex (Can) Mercury (v/c 6:42)
+Fri  8/ 7/2026  7:07am    Moon (Tau) --> Gemini
+Fri  8/ 7/2026  7:57am    Moon (Gem) Tri (Lib) Venus
+Fri  8/ 7/2026  1:52pm    Moon (Gem) Tri [Aqu] Pluto
+Fri  8/ 7/2026  2:06pm    Moon (Gem) Sex [Ari] Neptune
+Fri  8/ 7/2026  3:51pm    Moon (Gem) Con (Gem) Uranus
+Fri  8/ 7/2026  9:18pm    Moon (Gem) Sex (Leo) Jupiter
+Sat  8/ 8/2026  7:29am    Moon (Gem) Sex [Ari] Saturn
+Sat  8/ 8/2026  9:29am     Sun (Leo) Sex (Gem) Moon
+Sun  8/ 9/2026  6:27am    Moon (Gem) Con (Gem) Mars (v/c 2:18)
+Sun  8/ 9/2026  8:45am    Moon (Gem) --> Cancer
+Sun  8/ 9/2026  1:11pm    Moon (Can) Squ (Lib) Venus
+Sun  8/ 9/2026  3:30pm    Moon (Can) Squ [Ari] Neptune
+Mon  8/10/2026  8:30am    Moon (Can) Squ [Ari] Saturn (v/c 25:07)
+Tue  8/11/2026  9:38am    Moon (Can) --> Leo
+Tue  8/11/2026  2:41pm    Moon (Leo) Con (Leo) Mercury
+Tue  8/11/2026  4:03pm    Moon (Leo) Opp [Aqu] Pluto
+Tue  8/11/2026  4:20pm    Moon (Leo) Tri [Ari] Neptune
+Tue  8/11/2026  5:36pm    Moon (Leo) Sex (Lib) Venus
+Tue  8/11/2026  6:20pm    Moon (Leo) Sex (Gem) Uranus
+Wed  8/12/2026  1:01am    Moon (Leo) Con (Leo) Jupiter
+Wed  8/12/2026  9:28am    Moon (Leo) Tri [Ari] Saturn
+Wed  8/12/2026  6:36pm     Sun (Leo) Con (Leo) Moon (New Moon) (Total Solar Eclipse) (v/c 16:41)
+Thu  8/13/2026 11:18am    Moon (Leo) --> Virgo
+Thu  8/13/2026  1:44pm    Moon (Vir) Sex (Can) Mars
+Thu  8/13/2026  8:23pm    Moon (Vir) Squ (Gem) Uranus (v/c 42:55)
+Sat  8/15/2026  3:19pm    Moon (Vir) --> Libra
+Sat  8/15/2026  8:36pm    Moon (Lib) Squ (Can) Mars
+Sat  8/15/2026 10:13pm    Moon (Lib) Tri [Aqu] Pluto
+Sat  8/15/2026 10:33pm    Moon (Lib) Opp [Ari] Neptune
+Sun  8/16/2026  1:04am    Moon (Lib) Tri (Gem) Uranus
+Sun  8/16/2026  8:10am    Moon (Lib) Con (Lib) Venus
+Sun  8/16/2026 10:02am    Moon (Lib) Sex (Leo) Jupiter
+Sun  8/16/2026  1:20pm    Moon (Lib) Sex (Leo) Mercury
+Sun  8/16/2026  5:27pm    Moon (Lib) Opp [Ari] Saturn
+Mon  8/17/2026 12:30pm     Sun (Leo) Sex (Lib) Moon (v/c 10:15)
+Mon  8/17/2026 10:46pm    Moon (Lib) --> Scorpio
+Tue  8/18/2026  6:01am    Moon (Sco) Squ [Aqu] Pluto
+Tue  8/18/2026  7:29am    Moon (Sco) Tri (Can) Mars
+Tue  8/18/2026  7:43pm    Moon (Sco) Squ (Leo) Jupiter
+Wed  8/19/2026  9:06am    Moon (Sco) Squ (Leo) Mercury
+Thu  8/20/2026  3:46am     Sun (Leo) Squ (Sco) Moon (Half Moon) (v/c 5:43)
+Thu  8/20/2026  9:30am    Moon (Sco) --> Sagittarius
+Thu  8/20/2026  4:58pm    Moon (Sag) Sex [Aqu] Pluto
+Thu  8/20/2026  5:21pm    Moon (Sag) Tri [Ari] Neptune
+Thu  8/20/2026  8:32pm    Moon (Sag) Opp (Gem) Uranus
+Fri  8/21/2026  8:26am    Moon (Sag) Tri (Leo) Jupiter
+Fri  8/21/2026  2:02pm    Moon (Sag) Tri [Ari] Saturn
+Fri  8/21/2026  2:04pm    Moon (Sag) Sex (Lib) Venus
+Sat  8/22/2026  9:21am    Moon (Sag) Tri (Leo) Mercury
+Sat  8/22/2026  9:30pm     Sun (Leo) Tri (Sag) Moon (v/c 0:28)
+Sat  8/22/2026  9:59pm    Moon (Sag) --> Capricorn
+Sun  8/23/2026  5:47am    Moon (Cap) Squ [Ari] Neptune
+Sun  8/23/2026  2:05pm    Moon (Cap) Opp (Can) Mars
+Mon  8/24/2026  2:21am    Moon (Cap) Squ [Ari] Saturn
+Mon  8/24/2026  7:29am    Moon (Cap) Squ (Lib) Venus (v/c 26:31)
+Tue  8/25/2026 10:01am    Moon (Cap) --> Aquarius
+Tue  8/25/2026  5:10pm    Moon (Aqu) Con [Aqu] Pluto
+Tue  8/25/2026  5:32pm    Moon (Aqu) Sex [Ari] Neptune
+Tue  8/25/2026  9:01pm    Moon (Aqu) Tri (Gem) Uranus
+Wed  8/26/2026 10:31am    Moon (Aqu) Opp (Leo) Jupiter (Partial Occultation)
+Wed  8/26/2026  1:21pm    Moon (Aqu) Sex [Ari] Saturn
+Wed  8/26/2026 10:59pm    Moon (Aqu) Tri (Lib) Venus (v/c 21:04)
+Thu  8/27/2026  8:03pm    Moon (Aqu) --> Pisces
+Fri  8/28/2026  5:18am     Sun (Vir) Opp (Pis) Moon (Full Moon) (Partial Lunar Eclipse)
+Fri  8/28/2026  6:20am    Moon (Pis) Opp (Vir) Mercury
+Fri  8/28/2026  6:39am    Moon (Pis) Squ (Gem) Uranus
+Fri  8/28/2026  5:13pm    Moon (Pis) Tri (Can) Mars (v/c 34:23)
+Sun  8/30/2026  3:37am    Moon (Pis) --> Aries
+Sun  8/30/2026 10:02am    Moon (Ari) Sex [Aqu] Pluto
+Sun  8/30/2026 10:19am    Moon (Ari) Con [Ari] Neptune
+Sun  8/30/2026  1:49pm    Moon (Ari) Sex (Gem) Uranus
+Mon  8/31/2026  2:38am    Moon (Ari) Squ (Can) Mars
+Mon  8/31/2026  3:55am    Moon (Ari) Tri (Leo) Jupiter
+Mon  8/31/2026  4:18am    Moon (Ari) Con [Ari] Saturn
+Mon  8/31/2026  8:47pm    Moon (Ari) Opp (Lib) Venus (Partial Occultation) (v/c 12:14)
+Tue  9/ 1/2026  9:01am    Moon (Ari) --> Taurus
+Tue  9/ 1/2026  3:08pm    Moon (Tau) Squ [Aqu] Pluto
+Wed  9/ 2/2026  1:43am     Sun (Vir) Tri (Tau) Moon
+Wed  9/ 2/2026  9:18am    Moon (Tau) Squ (Leo) Jupiter
+Wed  9/ 2/2026  9:47am    Moon (Tau) Sex (Can) Mars
+Wed  9/ 2/2026 11:46am    Moon (Tau) Tri (Vir) Mercury (v/c 25:00)
+Thu  9/ 3/2026 12:47pm    Moon (Tau) --> Gemini
+Thu  9/ 3/2026  6:41pm    Moon (Gem) Tri [Aqu] Pluto
+Thu  9/ 3/2026  6:54pm    Moon (Gem) Sex [Ari] Neptune
+Thu  9/ 3/2026 10:26pm    Moon (Gem) Con (Gem) Uranus
+Fri  9/ 4/2026  8:51am     Sun (Vir) Squ (Gem) Moon (Half Moon)
+Fri  9/ 4/2026 11:40am    Moon (Gem) Sex [Ari] Saturn
+Fri  9/ 4/2026  1:16pm    Moon (Gem) Sex (Leo) Jupiter
+Fri  9/ 4/2026 10:29pm    Moon (Gem) Squ (Vir) Mercury
+Sat  9/ 5/2026  9:39am    Moon (Gem) Tri (Lib) Venus (v/c 5:50)
+Sat  9/ 5/2026  3:30pm    Moon (Gem) --> Cancer
+Sat  9/ 5/2026  9:27pm    Moon (Can) Squ [Ari] Neptune
+Sun  9/ 6/2026  1:54pm    Moon (Can) Squ [Ari] Saturn
+Sun  9/ 6/2026  2:59pm     Sun (Vir) Sex (Can) Moon
+Sun  9/ 6/2026  8:05pm    Moon (Can) Con (Can) Mars
+Mon  9/ 7/2026  8:01am    Moon (Can) Sex (Vir) Mercury
+Mon  9/ 7/2026  2:39pm    Moon (Can) Squ (Lib) Venus (v/c 3:09)
+Mon  9/ 7/2026  5:49pm    Moon (Can) --> Leo
+Mon  9/ 7/2026 11:31pm    Moon (Leo) Opp [Aqu] Pluto
+Mon  9/ 7/2026 11:41pm    Moon (Leo) Tri [Ari] Neptune
+Tue  9/ 8/2026  3:23am    Moon (Leo) Sex (Gem) Uranus
+Tue  9/ 8/2026  4:04pm    Moon (Leo) Tri [Ari] Saturn
+Tue  9/ 8/2026  7:36pm    Moon (Leo) Con (Leo) Jupiter (Total Occultation)
+Wed  9/ 9/2026  7:57pm    Moon (Leo) Sex (Lib) Venus (v/c 0:37)
+Wed  9/ 9/2026  8:35pm    Moon (Leo) --> Virgo
+Thu  9/10/2026  6:21am    Moon (Vir) Squ (Gem) Uranus
+Fri  9/11/2026  4:27am     Sun (Vir) Con (Vir) Moon (New Moon)
+Fri  9/11/2026  6:52am    Moon (Vir) Sex (Can) Mars (v/c 17:59)
+Sat  9/12/2026 12:51am    Moon (Vir) --> Libra
+Sat  9/12/2026  5:21am    Moon (Lib) Con (Lib) Mercury
+Sat  9/12/2026  6:48am    Moon (Lib) Tri [Aqu] Pluto
+Sat  9/12/2026  6:53am    Moon (Lib) Opp [Ari] Neptune
+Sat  9/12/2026 11:03am    Moon (Lib) Tri [Gem] Uranus
+Sun  9/13/2026 12:08am    Moon (Lib) Opp [Ari] Saturn
+Sun  9/13/2026  6:07am    Moon (Lib) Sex (Leo) Jupiter
+Sun  9/13/2026  3:26pm    Moon (Lib) Squ (Can) Mars (v/c 16:17)
+Mon  9/14/2026  7:44am    Moon (Lib) --> Scorpio
+Mon  9/14/2026 12:32pm    Moon (Sco) Con (Sco) Venus (Total Occultation)
+Mon  9/14/2026  1:56pm    Moon (Sco) Squ [Aqu] Pluto
+Tue  9/15/2026  3:36pm    Moon (Sco) Squ (Leo) Jupiter
+Wed  9/16/2026  3:30am    Moon (Sco) Tri (Can) Mars
+Wed  9/16/2026  4:29am     Sun (Vir) Sex (Sco) Moon (v/c 13:11)
+Wed  9/16/2026  5:41pm    Moon (Sco) --> Sagittarius
+Thu  9/17/2026 12:07am    Moon (Sag) Tri [Ari] Neptune
+Thu  9/17/2026 12:09am    Moon (Sag) Sex [Aqu] Pluto
+Thu  9/17/2026  4:58am    Moon (Sag) Opp [Gem] Uranus
+Thu  9/17/2026  4:14pm    Moon (Sag) Sex (Lib) Mercury
+Thu  9/17/2026  6:47pm    Moon (Sag) Tri [Ari] Saturn
+Fri  9/18/2026  4:00am    Moon (Sag) Tri (Leo) Jupiter
+Fri  9/18/2026  9:43pm     Sun (Vir) Squ (Sag) Moon (Half Moon) (v/c 8:11)
+Sat  9/19/2026  5:54am    Moon (Sag) --> Capricorn
+Sat  9/19/2026 12:21pm    Moon (Cap) Squ [Ari] Neptune
+Sat  9/19/2026  4:27pm    Moon (Cap) Sex (Sco) Venus
+Sun  9/20/2026  6:59am    Moon (Cap) Squ [Ari] Saturn
+Sun  9/20/2026  1:48pm    Moon (Cap) Squ (Lib) Mercury
+Mon  9/21/2026 10:16am    Moon (Cap) Opp (Can) Mars
+Mon  9/21/2026  3:31pm     Sun (Vir) Tri (Cap) Moon (v/c 2:43)
+Mon  9/21/2026  6:14pm    Moon (Cap) --> Aquarius
+Tue  9/22/2026 12:24am    Moon (Aqu) Sex [Ari] Neptune
+Tue  9/22/2026 12:34am    Moon (Aqu) Con [Aqu] Pluto
+Tue  9/22/2026  5:23am    Moon (Aqu) Tri [Gem] Uranus
+Tue  9/22/2026  6:40am    Moon (Aqu) Squ (Sco) Venus
+Tue  9/22/2026  6:16pm    Moon (Aqu) Sex [Ari] Saturn
+Wed  9/23/2026  5:47am    Moon (Aqu) Opp (Leo) Jupiter (Total Occultation)
+Wed  9/23/2026  9:18am    Moon (Aqu) Tri (Lib) Mercury (v/c 19:05)
+Thu  9/24/2026  4:23am    Moon (Aqu) --> Pisces
+Thu  9/24/2026  2:55pm    Moon (Pis) Squ [Gem] Uranus
+Thu  9/24/2026  5:45pm    Moon (Pis) Tri (Sco) Venus
+Sat  9/26/2026  9:31am    Moon (Pis) Tri (Can) Mars (v/c 1:51)
+Sat  9/26/2026 11:22am    Moon (Pis) --> Aries
+Sat  9/26/2026  4:41pm    Moon (Ari) Con [Ari] Neptune
+Sat  9/26/2026  4:59pm    Moon (Ari) Sex [Aqu] Pluto
+Sat  9/26/2026  5:48pm     Sun (Lib) Opp (Ari) Moon (Full Moon)
+Sat  9/26/2026  9:17pm    Moon (Ari) Sex [Gem] Uranus
+Sun  9/27/2026  8:19am    Moon (Ari) Con [Ari] Saturn
+Sun  9/27/2026  8:46pm    Moon (Ari) Tri (Leo) Jupiter
+Mon  9/28/2026 10:50am    Moon (Ari) Opp (Lib) Mercury (v/c 4:49)
+Mon  9/28/2026  3:39pm    Moon (Ari) --> Taurus
+Mon  9/28/2026  4:11pm    Moon (Tau) Squ (Leo) Mars
+Mon  9/28/2026  9:01pm    Moon (Tau) Squ [Aqu] Pluto
+Tue  9/29/2026  5:35am    Moon (Tau) Opp (Sco) Venus
+Wed  9/30/2026 12:36am    Moon (Tau) Squ (Leo) Jupiter (v/c 17:49)
+Wed  9/30/2026  6:26pm    Moon (Tau) --> Gemini
+Wed  9/30/2026  9:06pm    Moon (Gem) Sex (Leo) Mars
+Wed  9/30/2026 11:14pm    Moon (Gem) Sex [Ari] Neptune
+Wed  9/30/2026 11:40pm    Moon (Gem) Tri [Aqu] Pluto
+Thu 10/ 1/2026  3:43am    Moon (Gem) Con [Gem] Uranus
+Thu 10/ 1/2026  8:05am     Sun (Lib) Tri (Gem) Moon
+Thu 10/ 1/2026  1:49pm    Moon (Gem) Sex [Ari] Saturn
+Fri 10/ 2/2026  3:41am    Moon (Gem) Sex (Leo) Jupiter (v/c 17:12)
+Fri 10/ 2/2026  8:54pm    Moon (Gem) --> Cancer
+Sat 10/ 3/2026  1:38am    Moon (Can) Squ [Ari] Neptune
+Sat 10/ 3/2026  2:35am    Moon (Can) Tri (Sco) Mercury
+Sat 10/ 3/2026 11:15am    Moon (Can) Tri [Sco] Venus
+Sat 10/ 3/2026  2:25pm     Sun (Lib) Squ (Can) Moon (Half Moon)
+Sat 10/ 3/2026  4:08pm    Moon (Can) Squ [Ari] Saturn (v/c 31:45)
+Sun 10/ 4/2026 11:54pm    Moon (Can) --> Leo
+Mon 10/ 5/2026  4:37am    Moon (Leo) Tri [Ari] Neptune
+Mon 10/ 5/2026  5:13am    Moon (Leo) Opp [Aqu] Pluto
+Mon 10/ 5/2026  7:01am    Moon (Leo) Con (Leo) Mars (Total Occultation)
+Mon 10/ 5/2026  9:15am    Moon (Leo) Sex [Gem] Uranus
+Mon 10/ 5/2026 10:43am    Moon (Leo) Squ (Sco) Mercury
+Mon 10/ 5/2026  2:19pm    Moon (Leo) Squ [Sco] Venus
+Mon 10/ 5/2026  7:11pm    Moon (Leo) Tri [Ari] Saturn
+Mon 10/ 5/2026  9:38pm     Sun (Lib) Sex (Leo) Moon
+Tue 10/ 6/2026 11:22am    Moon (Leo) Con (Leo) Jupiter (Total Occultation) (v/c 16:30)
+Wed 10/ 7/2026  3:52am    Moon (Leo) --> Virgo
+Wed 10/ 7/2026  1:21pm    Moon (Vir) Squ [Gem] Uranus
+Wed 10/ 7/2026  6:08pm    Moon (Vir) Sex [Sco] Venus
+Wed 10/ 7/2026  7:56pm    Moon (Vir) Sex (Sco) Mercury (v/c 37:13)
+Fri 10/ 9/2026  9:10am    Moon (Vir) --> Libra
+Fri 10/ 9/2026  1:55pm    Moon (Lib) Opp [Ari] Neptune
+Fri 10/ 9/2026  2:44pm    Moon (Lib) Tri [Aqu] Pluto
+Fri 10/ 9/2026  6:51pm    Moon (Lib) Tri [Gem] Uranus
+Fri 10/ 9/2026  9:26pm    Moon (Lib) Sex (Leo) Mars
+Sat 10/10/2026  4:53am    Moon (Lib) Opp [Ari] Saturn
+Sat 10/10/2026  4:50pm     Sun (Lib) Con (Lib) Moon (New Moon)
+Sun 10/11/2026 12:07am    Moon (Lib) Sex (Leo) Jupiter (v/c 16:14)
+Sun 10/11/2026  4:21pm    Moon (Lib) --> Scorpio
+Sun 10/11/2026 10:08pm    Moon (Sco) Squ [Aqu] Pluto
+Mon 10/12/2026  5:26am    Moon (Sco) Con [Sco] Venus
+Mon 10/12/2026  7:42am    Moon (Sco) Squ (Leo) Mars
+Mon 10/12/2026  7:48pm    Moon (Sco) Con (Sco) Mercury
+Tue 10/13/2026  9:45am    Moon (Sco) Squ (Leo) Jupiter (v/c 16:13)
+Wed 10/14/2026  1:59am    Moon (Sco) --> Sagittarius
+Wed 10/14/2026  6:55am    Moon (Sag) Tri [Ari] Neptune
+Wed 10/14/2026  8:02am    Moon (Sag) Sex [Aqu] Pluto
+Wed 10/14/2026 12:18pm    Moon (Sag) Opp [Gem] Uranus
+Wed 10/14/2026  8:51pm    Moon (Sag) Tri (Leo) Mars
+Wed 10/14/2026 10:44pm    Moon (Sag) Tri [Ari] Saturn
+Thu 10/15/2026  9:57pm    Moon (Sag) Tri (Leo) Jupiter
+Thu 10/15/2026 10:55pm     Sun (Lib) Sex (Sag) Moon (v/c 15:01)
+Fri 10/16/2026  1:57pm    Moon (Sag) --> Capricorn
+Fri 10/16/2026  6:53pm    Moon (Cap) Squ [Ari] Neptune
+Fri 10/16/2026 11:51pm    Moon (Cap) Sex [Sco] Venus
+Sat 10/17/2026 10:50am    Moon (Cap) Squ [Ari] Saturn
+Sun 10/18/2026  4:07am    Moon (Cap) Sex (Sco) Mercury
+Sun 10/18/2026  5:12pm     Sun (Lib) Squ (Cap) Moon (Half Moon) (v/c 9:27)
+Mon 10/19/2026  2:39am    Moon (Cap) --> Aquarius
+Mon 10/19/2026  7:25am    Moon (Aqu) Sex [Ari] Neptune
+Mon 10/19/2026  8:49am    Moon (Aqu) Con (Aqu) Pluto
+Mon 10/19/2026  9:52am    Moon (Aqu) Squ [Sco] Venus
+Mon 10/19/2026 12:51pm    Moon (Aqu) Tri [Gem] Uranus
+Mon 10/19/2026 10:51pm    Moon (Aqu) Sex [Ari] Saturn
+Tue 10/20/2026  3:24am    Moon (Aqu) Opp (Leo) Mars (Total Occultation)
+Tue 10/20/2026  6:41pm    Moon (Aqu) Squ (Sco) Mercury
+Tue 10/20/2026 11:49pm    Moon (Aqu) Opp (Leo) Jupiter (Total Occultation)
+Wed 10/21/2026  9:42am     Sun (Lib) Tri (Aqu) Moon (v/c 3:52)
+Wed 10/21/2026  1:35pm    Moon (Aqu) --> Pisces
+Wed 10/21/2026  5:51pm    Moon (Pis) Tri [Sco] Venus
+Wed 10/21/2026 11:06pm    Moon (Pis) Squ [Gem] Uranus
+Fri 10/23/2026  4:31am    Moon (Pis) Tri (Sco) Mercury (v/c 16:22)
+Fri 10/23/2026  8:53pm    Moon (Pis) --> Aries
+Sat 10/24/2026 12:54am    Moon (Ari) Con [Ari] Neptune
+Sat 10/24/2026  2:21am    Moon (Ari) Sex (Aqu) Pluto
+Sat 10/24/2026  5:38am    Moon (Ari) Sex [Gem] Uranus
+Sat 10/24/2026  2:05pm    Moon (Ari) Con [Ari] Saturn
+Sat 10/24/2026 11:05pm    Moon (Ari) Tri (Leo) Mars
+Sun 10/25/2026  1:36pm    Moon (Ari) Tri (Leo) Jupiter
+Sun 10/25/2026 11:59pm    Moon (Ari) Opp [Lib] Venus (v/c 0:35)
+Mon 10/26/2026 12:34am    Moon (Ari) --> Taurus
+Mon 10/26/2026  5:11am     Sun (Sco) Opp (Tau) Moon (Full Moon)
+Mon 10/26/2026  5:44am    Moon (Tau) Squ (Aqu) Pluto
+Tue 10/27/2026  3:18am    Moon (Tau) Squ (Leo) Mars
+Tue 10/27/2026 10:11am    Moon (Tau) Opp [Sco] Mercury
+Tue 10/27/2026  3:51pm    Moon (Tau) Squ (Leo) Jupiter (v/c 10:10)
+Wed 10/28/2026  2:01am    Moon (Tau) --> Gemini
+Wed 10/28/2026  5:33am    Moon (Gem) Sex [Ari] Neptune
+Wed 10/28/2026  7:05am    Moon (Gem) Tri (Aqu) Pluto
+Wed 10/28/2026  9:52am    Moon (Gem) Con [Gem] Uranus
+Wed 10/28/2026  5:31pm    Moon (Gem) Sex [Ari] Saturn
+Thu 10/29/2026  6:06am    Moon (Gem) Sex (Leo) Mars
+Thu 10/29/2026  5:17pm    Moon (Gem) Sex (Leo) Jupiter
+Thu 10/29/2026 10:43pm    Moon (Gem) Tri [Lib] Venus (v/c 4:22)
+Fri 10/30/2026  3:05am    Moon (Gem) --> Cancer
+Fri 10/30/2026  6:35am    Moon (Can) Squ [Ari] Neptune
+Fri 10/30/2026  2:55pm     Sun (Sco) Tri (Can) Moon
+Fri 10/30/2026  6:35pm    Moon (Can) Squ [Ari] Saturn
+Sat 10/31/2026  8:01am    Moon (Can) Tri [Sco] Mercury
+Sat 10/31/2026 10:59pm    Moon (Can) Squ [Lib] Venus (v/c 6:18)
+Sun 11/ 1/2026  5:18am    Moon (Can) --> Leo
+Sun 11/ 1/2026  8:50am    Moon (Leo) Tri [Ari] Neptune
+Sun 11/ 1/2026 10:39am    Moon (Leo) Opp (Aqu) Pluto
+Sun 11/ 1/2026  1:15pm    Moon (Leo) Sex [Gem] Uranus
+Sun 11/ 1/2026  9:08pm    Moon (Leo) Tri [Ari] Saturn
+Sun 11/ 1/2026  9:28pm     Sun (Sco) Squ (Leo) Moon (Half Moon)
+Mon 11/ 2/2026  7:25am    Moon (Leo) Squ [Sco] Mercury
+Mon 11/ 2/2026  2:48pm    Moon (Leo) Con (Leo) Mars (Total Occultation)
+Mon 11/ 2/2026 11:50pm    Moon (Leo) Con (Leo) Jupiter (Total Occultation)
+Tue 11/ 3/2026  1:10am    Moon (Leo) Sex [Lib] Venus (v/c 8:17)
+Tue 11/ 3/2026  9:27am    Moon (Leo) --> Virgo
+Tue 11/ 3/2026  5:36pm    Moon (Vir) Squ [Gem] Uranus
+Wed 11/ 4/2026  6:33am     Sun (Sco) Sex (Vir) Moon
+Wed 11/ 4/2026  7:57am    Moon (Vir) Sex [Sco] Mercury (v/c 31:40)
+Thu 11/ 5/2026  3:38pm    Moon (Vir) --> Libra
+Thu 11/ 5/2026  7:17pm    Moon (Lib) Opp [Ari] Neptune
+Thu 11/ 5/2026  9:28pm    Moon (Lib) Tri (Aqu) Pluto
+Thu 11/ 5/2026 11:54pm    Moon (Lib) Tri [Gem] Uranus
+Fri 11/ 6/2026  8:11am    Moon (Lib) Opp [Ari] Saturn
+Sat 11/ 7/2026  8:01am    Moon (Lib) Sex (Leo) Mars
+Sat 11/ 7/2026 11:49am    Moon (Lib) Con [Lib] Venus (Total Occultation)
+Sat 11/ 7/2026  2:19pm    Moon (Lib) Sex (Leo) Jupiter (v/c 9:20)
+Sat 11/ 7/2026 11:39pm    Moon (Lib) --> Scorpio
+Sun 11/ 8/2026  5:44am    Moon (Sco) Squ (Aqu) Pluto
+Sun 11/ 8/2026  2:01pm    Moon (Sco) Con [Sco] Mercury
+Mon 11/ 9/2026  8:02am     Sun (Sco) Con (Sco) Moon (New Moon)
+Mon 11/ 9/2026  7:43pm    Moon (Sco) Squ (Leo) Mars
+Tue 11/10/2026 12:25am    Moon (Sco) Squ (Leo) Jupiter (v/c 9:10)
+Tue 11/10/2026  9:35am    Moon (Sco) --> Sagittarius
+Tue 11/10/2026  1:20pm    Moon (Sag) Tri [Ari] Neptune
+Tue 11/10/2026  3:56pm    Moon (Sag) Sex (Aqu) Pluto
+Tue 11/10/2026  6:04pm    Moon (Sag) Opp [Gem] Uranus
+Wed 11/11/2026  2:47am    Moon (Sag) Tri [Ari] Saturn
+Thu 11/12/2026  7:11am    Moon (Sag) Sex [Lib] Venus
+Thu 11/12/2026  9:34am    Moon (Sag) Tri (Leo) Mars
+Thu 11/12/2026 12:29pm    Moon (Sag) Tri (Leo) Jupiter (v/c 8:58)
+Thu 11/12/2026  9:27pm    Moon (Sag) --> Capricorn
+Fri 11/13/2026  1:13am    Moon (Cap) Squ [Ari] Neptune
+Fri 11/13/2026  7:40am    Moon (Cap) Sex [Sco] Mercury
+Fri 11/13/2026  2:52pm    Moon (Cap) Squ [Ari] Saturn
+Sat 11/14/2026  6:54pm     Sun (Sco) Sex (Cap) Moon
+Sat 11/14/2026  7:55pm    Moon (Cap) Squ (Lib) Venus (v/c 14:28)
+Sun 11/15/2026 10:24am    Moon (Cap) --> Aquarius
+Sun 11/15/2026  2:05pm    Moon (Aqu) Sex [Ari] Neptune
+Sun 11/15/2026  5:04pm    Moon (Aqu) Con (Aqu) Pluto
+Sun 11/15/2026  6:42pm    Moon (Aqu) Tri [Gem] Uranus
+Sun 11/15/2026  9:27pm    Moon (Aqu) Squ (Sco) Mercury
+Mon 11/16/2026  3:33am    Moon (Aqu) Sex [Ari] Saturn
+Tue 11/17/2026  8:43am    Moon (Aqu) Tri (Lib) Venus
+Tue 11/17/2026 12:47pm     Sun (Sco) Squ (Aqu) Moon (Half Moon)
+Tue 11/17/2026  2:28pm    Moon (Aqu) Opp (Leo) Jupiter (Partial Occultation)
+Tue 11/17/2026  3:25pm    Moon (Aqu) Opp (Leo) Mars (v/c 6:53)
+Tue 11/17/2026 10:19pm    Moon (Aqu) --> Pisces
+Wed 11/18/2026  6:05am    Moon (Pis) Squ [Gem] Uranus
+Wed 11/18/2026 11:46am    Moon (Pis) Tri (Sco) Mercury
+Fri 11/20/2026  2:45am     Sun (Sco) Tri (Pis) Moon (v/c 4:06)
+Fri 11/20/2026  6:51am    Moon (Pis) --> Aries
+Fri 11/20/2026 10:02am    Moon (Ari) Con [Ari] Neptune
+Fri 11/20/2026 12:56pm    Moon (Ari) Sex (Aqu) Pluto
+Fri 11/20/2026  1:54pm    Moon (Ari) Sex [Gem] Uranus
+Fri 11/20/2026  9:44pm    Moon (Ari) Con [Ari] Saturn
+Sun 11/22/2026  1:09am    Moon (Ari) Opp (Lib) Venus
+Sun 11/22/2026  4:58am    Moon (Ari) Tri (Leo) Jupiter
+Sun 11/22/2026  8:38am    Moon (Ari) Tri (Leo) Mars (v/c 2:31)
+Sun 11/22/2026 11:09am    Moon (Ari) --> Taurus
+Sun 11/22/2026  4:50pm    Moon (Tau) Squ (Aqu) Pluto
+Mon 11/23/2026  6:27am    Moon (Tau) Opp (Sco) Mercury
+Tue 11/24/2026  6:28am    Moon (Tau) Squ (Leo) Jupiter
+Tue 11/24/2026 11:09am    Moon (Tau) Squ (Leo) Mars (v/c 1:00)
+Tue 11/24/2026 12:09pm    Moon (Tau) --> Gemini
+Tue 11/24/2026  2:53pm    Moon (Gem) Sex [Ari] Neptune
+Tue 11/24/2026  3:53pm     Sun (Sag) Opp (Gem) Moon (Full Moon)
+Tue 11/24/2026  5:38pm    Moon (Gem) Tri (Aqu) Pluto
+Tue 11/24/2026  6:06pm    Moon (Gem) Con [Gem] Uranus
+Wed 11/25/2026  1:10am    Moon (Gem) Sex [Ari] Saturn
+Thu 11/26/2026  4:51am    Moon (Gem) Tri (Lib) Venus
+Thu 11/26/2026  6:23am    Moon (Gem) Sex (Leo) Jupiter (v/c 5:27)
+Thu 11/26/2026 11:51am    Moon (Gem) --> Cancer
+Thu 11/26/2026 12:09pm    Moon (Can) Sex (Vir) Mars
+Thu 11/26/2026  2:32pm    Moon (Can) Squ [Ari] Neptune
+Fri 11/27/2026 12:48am    Moon (Can) Squ [Ari] Saturn
+Fri 11/27/2026  3:30pm    Moon (Can) Tri (Sco) Mercury
+Sat 11/28/2026  6:40am    Moon (Can) Squ (Lib) Venus (v/c 5:40)
+Sat 11/28/2026 12:20pm    Moon (Can) --> Leo
+Sat 11/28/2026  3:06pm    Moon (Leo) Tri [Ari] Neptune
+Sat 11/28/2026  6:09pm    Moon (Leo) Opp (Aqu) Pluto
+Sat 11/28/2026  6:14pm    Moon (Leo) Sex [Gem] Uranus
+Sat 11/28/2026 11:27pm     Sun (Sag) Tri (Leo) Moon
+Sun 11/29/2026  1:44am    Moon (Leo) Tri [Ari] Saturn
+Sun 11/29/2026 10:44pm    Moon (Leo) Squ (Sco) Mercury
+Mon 11/30/2026  9:34am    Moon (Leo) Con (Leo) Jupiter (Total Occultation)
+Mon 11/30/2026 11:10am    Moon (Leo) Sex (Lib) Venus (v/c 4:02)
+Mon 11/30/2026  3:12pm    Moon (Leo) --> Virgo
+Mon 11/30/2026  6:24pm    Moon (Vir) Con (Vir) Mars
+Mon 11/30/2026  9:17pm    Moon (Vir) Squ [Gem] Uranus
+Tue 12/ 1/2026  7:08am     Sun (Sag) Squ (Vir) Moon (Half Moon)
+Wed 12/ 2/2026 10:10am    Moon (Vir) Sex (Sco) Mercury (v/c 10:53)
+Wed 12/ 2/2026  9:04pm    Moon (Vir) --> Libra
+Thu 12/ 3/2026 12:05am    Moon (Lib) Opp [Ari] Neptune
+Thu 12/ 3/2026  3:18am    Moon (Lib) Tri [Gem] Uranus
+Thu 12/ 3/2026  3:43am    Moon (Lib) Tri (Aqu) Pluto
+Thu 12/ 3/2026 11:52am    Moon (Lib) Opp [Ari] Saturn
+Thu 12/ 3/2026  6:34pm     Sun (Sag) Sex (Lib) Moon
+Fri 12/ 4/2026 11:40pm    Moon (Lib) Sex (Leo) Jupiter (v/c 5:54)
+Sat 12/ 5/2026  5:35am    Moon (Lib) --> Scorpio
+Sat 12/ 5/2026  6:41am    Moon (Sco) Con (Sco) Venus
+Sat 12/ 5/2026 12:23pm    Moon (Sco) Sex (Vir) Mars
+Sat 12/ 5/2026 12:37pm    Moon (Sco) Squ (Aqu) Pluto
+Mon 12/ 7/2026 10:07am    Moon (Sco) Squ (Leo) Jupiter (v/c 5:58)
+Mon 12/ 7/2026  4:06pm    Moon (Sco) --> Sagittarius
+Mon 12/ 7/2026  7:19pm    Moon (Sag) Tri [Ari] Neptune
+Mon 12/ 7/2026  8:28pm    Moon (Sag) Con (Sag) Mercury
+Mon 12/ 7/2026 10:24pm    Moon (Sag) Opp [Gem] Uranus
+Mon 12/ 7/2026 11:27pm    Moon (Sag) Sex (Aqu) Pluto
+Tue 12/ 8/2026 12:47am    Moon (Sag) Squ (Vir) Mars
+Tue 12/ 8/2026  7:51am    Moon (Sag) Tri [Ari] Saturn
+Wed 12/ 9/2026  1:51am     Sun (Sag) Con (Sag) Moon (New Moon)
+Wed 12/ 9/2026 10:06pm    Moon (Sag) Tri (Leo) Jupiter (v/c 6:02)
+Thu 12/10/2026  4:08am    Moon (Sag) --> Capricorn
+Thu 12/10/2026  7:24am    Moon (Cap) Squ [Ari] Neptune
+Thu 12/10/2026 12:49pm    Moon (Cap) Sex (Sco) Venus
+Thu 12/10/2026  2:39pm    Moon (Cap) Tri (Vir) Mars
+Thu 12/10/2026  8:12pm    Moon (Cap) Squ [Ari] Saturn (v/c 44:53)
+Sat 12/12/2026  5:05pm    Moon (Cap) --> Aquarius
+Sat 12/12/2026  8:22pm    Moon (Aqu) Sex [Ari] Neptune
+Sat 12/12/2026 11:08pm    Moon (Aqu) Tri [Gem] Uranus
+Sun 12/13/2026 12:53am    Moon (Aqu) Con (Aqu) Pluto
+Sun 12/13/2026  6:05am    Moon (Aqu) Squ (Sco) Venus
+Sun 12/13/2026  9:13am    Moon (Aqu) Sex (Ari) Saturn
+Sun 12/13/2026  3:35pm    Moon (Aqu) Sex (Sag) Mercury
+Mon 12/14/2026  2:46pm     Sun (Sag) Sex (Aqu) Moon
+Mon 12/14/2026 11:39pm    Moon (Aqu) Opp [Leo] Jupiter (v/c 5:56)
+Tue 12/15/2026  5:35am    Moon (Aqu) --> Pisces
+Tue 12/15/2026 11:17am    Moon (Pis) Squ [Gem] Uranus
+Tue 12/15/2026  6:48pm    Moon (Pis) Opp (Vir) Mars
+Tue 12/15/2026 10:32pm    Moon (Pis) Tri (Sco) Venus
+Wed 12/16/2026 11:57am    Moon (Pis) Squ (Sag) Mercury
+Thu 12/17/2026  6:42am     Sun (Sag) Squ (Pis) Moon (Half Moon) (v/c 8:51)
+Thu 12/17/2026  3:34pm    Moon (Pis) --> Aries
+Thu 12/17/2026  6:35pm    Moon (Ari) Con (Ari) Neptune
+Thu 12/17/2026  8:45pm    Moon (Ari) Sex [Gem] Uranus
+Thu 12/17/2026 10:55pm    Moon (Ari) Sex (Aqu) Pluto
+Fri 12/18/2026  6:20am    Moon (Ari) Con (Ari) Saturn
+Sat 12/19/2026  3:13am    Moon (Ari) Tri (Sag) Mercury
+Sat 12/19/2026  4:12pm    Moon (Ari) Tri [Leo] Jupiter
+Sat 12/19/2026  5:39pm     Sun (Sag) Tri (Ari) Moon (v/c 3:49)
+Sat 12/19/2026  9:29pm    Moon (Ari) --> Taurus
+Sun 12/20/2026  4:23am    Moon (Tau) Squ (Aqu) Pluto
+Sun 12/20/2026 10:54am    Moon (Tau) Tri (Vir) Mars
+Sun 12/20/2026  7:13pm    Moon (Tau) Opp (Sco) Venus
+Mon 12/21/2026  6:26pm    Moon (Tau) Squ [Leo] Jupiter (v/c 5:00)
+Mon 12/21/2026 11:27pm    Moon (Tau) --> Gemini
+Tue 12/22/2026  2:05am    Moon (Gem) Sex (Ari) Neptune
+Tue 12/22/2026  3:41am    Moon (Gem) Con [Gem] Uranus
+Tue 12/22/2026  5:59am    Moon (Gem) Tri (Aqu) Pluto
+Tue 12/22/2026 12:21pm    Moon (Gem) Sex (Ari) Saturn
+Tue 12/22/2026 12:46pm    Moon (Gem) Squ (Vir) Mars
+Wed 12/23/2026  5:53pm    Moon (Gem) Opp (Sag) Mercury
+Wed 12/23/2026  6:01pm    Moon (Gem) Sex [Leo] Jupiter (v/c 4:57)
+Wed 12/23/2026 10:58pm    Moon (Gem) --> Cancer
+Thu 12/24/2026  1:33am    Moon (Can) Squ (Ari) Neptune
+Thu 12/24/2026  2:28am     Sun (Cap) Opp (Can) Moon (Full Moon)
+Thu 12/24/2026 11:39am    Moon (Can) Squ (Ari) Saturn
+Thu 12/24/2026 12:37pm    Moon (Can) Sex (Vir) Mars
+Fri 12/25/2026  1:09am    Moon (Can) Tri (Sco) Venus (v/c 21:02)
+Fri 12/25/2026 10:12pm    Moon (Can) --> Leo
+Sat 12/26/2026 12:51am    Moon (Leo) Tri (Ari) Neptune
+Sat 12/26/2026  2:11am    Moon (Leo) Sex [Gem] Uranus
+Sat 12/26/2026  4:53am    Moon (Leo) Opp (Aqu) Pluto
+Sat 12/26/2026 11:16am    Moon (Leo) Tri (Ari) Saturn
+Sun 12/27/2026  4:28am    Moon (Leo) Squ (Sco) Venus
+Sun 12/27/2026  5:38pm    Moon (Leo) Con [Leo] Jupiter (v/c 5:34)
+Sun 12/27/2026 11:12pm    Moon (Leo) --> Virgo
+Mon 12/28/2026  3:18am    Moon (Vir) Squ [Gem] Uranus
+Mon 12/28/2026  5:42am    Moon (Vir) Tri (Cap) Mercury
+Mon 12/28/2026 10:28am     Sun (Cap) Tri (Vir) Moon
+Mon 12/28/2026  3:13pm    Moon (Vir) Con (Vir) Mars
+Tue 12/29/2026 11:17am    Moon (Vir) Sex (Sco) Venus (v/c 16:08)
+Wed 12/30/2026  3:26am    Moon (Vir) --> Libra
+Wed 12/30/2026  6:31am    Moon (Lib) Opp (Ari) Neptune
+Wed 12/30/2026  7:42am    Moon (Lib) Tri [Gem] Uranus
+Wed 12/30/2026 11:14am    Moon (Lib) Tri (Aqu) Pluto
+Wed 12/30/2026  5:39pm    Moon (Lib) Squ (Cap) Mercury
+Wed 12/30/2026  6:31pm    Moon (Lib) Opp (Ari) Saturn
+Wed 12/30/2026  7:59pm     Sun (Cap) Squ (Lib) Moon (Half Moon)
+Fri  1/ 1/2027  4:27am    Moon (Lib) Sex [Leo] Jupiter (v/c 6:48)
+Fri  1/ 1/2027 11:16am    Moon (Lib) --> Scorpio
+Fri  1/ 1/2027  7:40pm    Moon (Sco) Squ (Aqu) Pluto
+Sat  1/ 2/2027  6:34am    Moon (Sco) Sex (Vir) Mars
+Sat  1/ 2/2027  9:54am     Sun (Cap) Sex (Sco) Moon
+Sat  1/ 2/2027 10:47am    Moon (Sco) Sex (Cap) Mercury
+Sun  1/ 3/2027  2:07pm    Moon (Sco) Con (Sco) Venus
+Sun  1/ 3/2027  2:33pm    Moon (Sco) Squ [Leo] Jupiter (v/c 7:23)
+Sun  1/ 3/2027  9:57pm    Moon (Sco) --> Sagittarius
+Mon  1/ 4/2027  1:26am    Moon (Sag) Tri (Ari) Neptune
+Mon  1/ 4/2027  2:21am    Moon (Sag) Opp [Gem] Uranus
+Mon  1/ 4/2027  6:49am    Moon (Sag) Sex (Aqu) Pluto
+Mon  1/ 4/2027  2:53pm    Moon (Sag) Tri (Ari) Saturn
+Mon  1/ 4/2027  6:22pm    Moon (Sag) Squ (Vir) Mars
+Wed  1/ 6/2027  2:23am    Moon (Sag) Tri [Leo] Jupiter (v/c 7:54)
+Wed  1/ 6/2027 10:17am    Moon (Sag) --> Capricorn
+Wed  1/ 6/2027  1:54pm    Moon (Cap) Squ (Ari) Neptune
+Thu  1/ 7/2027  3:43am    Moon (Cap) Squ (Ari) Saturn
+Thu  1/ 7/2027  7:18am    Moon (Cap) Tri (Vir) Mars
+Thu  1/ 7/2027  9:24pm     Sun (Cap) Con (Cap) Moon (New Moon)
+Fri  1/ 8/2027  6:11am    Moon (Cap) Con (Cap) Mercury (Total Occultation) (v/c 16:59)
+Fri  1/ 8/2027 11:10pm    Moon (Cap) --> Aquarius
+Sat  1/ 9/2027  2:47am    Moon (Aqu) Sex (Sag) Venus
+Sat  1/ 9/2027  2:52am    Moon (Aqu) Sex (Ari) Neptune
+Sat  1/ 9/2027  3:23am    Moon (Aqu) Tri [Gem] Uranus
+Sat  1/ 9/2027  8:30am    Moon (Aqu) Con (Aqu) Pluto
+Sat  1/ 9/2027  4:50pm    Moon (Aqu) Sex (Ari) Saturn
+Mon  1/11/2027  2:58am    Moon (Aqu) Opp [Leo] Jupiter (v/c 8:37)
+Mon  1/11/2027 11:35am    Moon (Aqu) --> Pisces
+Mon  1/11/2027  3:36pm    Moon (Pis) Squ [Gem] Uranus
+Mon  1/11/2027  8:56pm    Moon (Pis) Squ (Sag) Venus
+Tue  1/12/2027  8:12am    Moon (Pis) Opp [Vir] Mars
+Wed  1/13/2027  8:32am     Sun (Cap) Sex (Pis) Moon (v/c 13:41)
+Wed  1/13/2027 10:13pm    Moon (Pis) --> Aries
+Thu  1/14/2027 12:33am    Moon (Ari) Sex (Aqu) Mercury
+Thu  1/14/2027  1:51am    Moon (Ari) Con (Ari) Neptune
+Thu  1/14/2027  1:57am    Moon (Ari) Sex [Gem] Uranus
+Thu  1/14/2027  7:15am    Moon (Ari) Sex (Aqu) Pluto
+Thu  1/14/2027 12:30pm    Moon (Ari) Tri (Sag) Venus
+Thu  1/14/2027  3:15pm    Moon (Ari) Con (Ari) Saturn
+Fri  1/15/2027  9:08pm    Moon (Ari) Tri [Leo] Jupiter
+Fri  1/15/2027  9:34pm     Sun (Cap) Squ (Ari) Moon (Half Moon) (v/c 8:09)
+Sat  1/16/2027  5:43am    Moon (Ari) --> Taurus
+Sat  1/16/2027  2:18pm    Moon (Tau) Squ (Aqu) Pluto
+Sat  1/16/2027  3:46pm    Moon (Tau) Squ (Aqu) Mercury
+Sat  1/16/2027 11:41pm    Moon (Tau) Tri [Vir] Mars
+Mon  1/18/2027  1:09am    Moon (Tau) Squ [Leo] Jupiter
+Mon  1/18/2027  5:57am     Sun (Cap) Tri (Tau) Moon (v/c 3:35)
+Mon  1/18/2027  9:32am    Moon (Tau) --> Gemini
+Mon  1/18/2027 12:40pm    Moon (Gem) Con [Gem] Uranus
+Mon  1/18/2027 12:52pm    Moon (Gem) Sex (Ari) Neptune
+Mon  1/18/2027  5:40pm    Moon (Gem) Tri (Aqu) Pluto
+Tue  1/19/2027 12:54am    Moon (Gem) Sex (Ari) Saturn
+Tue  1/19/2027  1:37am    Moon (Gem) Tri (Aqu) Mercury
+Tue  1/19/2027  2:00am    Moon (Gem) Squ [Vir] Mars
+Tue  1/19/2027  6:31am    Moon (Gem) Opp (Sag) Venus
+Wed  1/20/2027  2:01am    Moon (Gem) Sex [Leo] Jupiter (v/c 8:19)
+Wed  1/20/2027 10:20am    Moon (Gem) --> Cancer
+Wed  1/20/2027  1:35pm    Moon (Can) Squ (Ari) Neptune
+Thu  1/21/2027  1:17am    Moon (Can) Squ (Ari) Saturn
+Thu  1/21/2027  1:45am    Moon (Can) Sex [Vir] Mars (v/c 31:59)
+Fri  1/22/2027  9:45am    Moon (Can) --> Leo
+Fri  1/22/2027 12:36pm    Moon (Leo) Sex [Gem] Uranus
+Fri  1/22/2027  1:02pm    Moon (Leo) Tri (Ari) Neptune
+Fri  1/22/2027  1:17pm     Sun (Aqu) Opp (Leo) Moon (Full Moon)
+Fri  1/22/2027  5:41pm    Moon (Leo) Opp (Aqu) Pluto
+Sat  1/23/2027 12:53am    Moon (Leo) Tri (Ari) Saturn
+Sat  1/23/2027  1:05pm    Moon (Leo) Opp (Aqu) Mercury (Partial Occultation)
+Sat  1/23/2027  1:29pm    Moon (Leo) Tri (Sag) Venus
+Sun  1/24/2027 12:33am    Moon (Leo) Con [Leo] Jupiter (v/c 9:11)
+Sun  1/24/2027  9:45am    Moon (Leo) --> Virgo
+Sun  1/24/2027 12:39pm    Moon (Vir) Squ [Gem] Uranus
+Mon  1/25/2027 12:39am    Moon (Vir) Con [Vir] Mars
+Mon  1/25/2027  6:56pm    Moon (Vir) Squ (Sag) Venus (v/c 17:16)
+Tue  1/26/2027 12:12pm    Moon (Vir) --> Libra
+Tue  1/26/2027  3:16pm    Moon (Lib) Tri [Gem] Uranus
+Tue  1/26/2027  4:00pm    Moon (Lib) Opp (Ari) Neptune
+Tue  1/26/2027  9:13pm    Moon (Lib) Tri (Aqu) Pluto
+Wed  1/27/2027 12:03am     Sun (Aqu) Tri (Lib) Moon
+Wed  1/27/2027  5:36am    Moon (Lib) Opp (Ari) Saturn
+Thu  1/28/2027  4:44am    Moon (Lib) Sex (Sag) Venus
+Thu  1/28/2027  6:53am    Moon (Lib) Sex [Leo] Jupiter
+Thu  1/28/2027  8:46am    Moon (Lib) Tri (Aqu) Mercury (v/c 9:35)
+Thu  1/28/2027  6:21pm    Moon (Lib) --> Scorpio
+Fri  1/29/2027  4:11am    Moon (Sco) Squ (Aqu) Pluto
+Fri  1/29/2027  9:39am    Moon (Sco) Sex [Vir] Mars
+Fri  1/29/2027 11:55am     Sun (Aqu) Squ (Sco) Moon (Half Moon)
+Sat  1/30/2027  3:29pm    Moon (Sco) Squ [Leo] Jupiter
+Sun  1/31/2027  1:36am    Moon (Sco) Squ (Aqu) Mercury (v/c 2:37)
+Sun  1/31/2027  4:13am    Moon (Sco) --> Sagittarius
+Sun  1/31/2027  7:37am    Moon (Sag) Opp [Gem] Uranus
+Sun  1/31/2027  8:46am    Moon (Sag) Tri (Ari) Neptune
+Sun  1/31/2027  2:46pm    Moon (Sag) Sex (Aqu) Pluto
+Sun  1/31/2027  7:07pm    Moon (Sag) Squ [Vir] Mars
+Mon  2/ 1/2027 12:41am    Moon (Sag) Tri (Ari) Saturn
+Mon  2/ 1/2027  4:11am     Sun (Aqu) Sex (Sag) Moon
+Tue  2/ 2/2027  2:47am    Moon (Sag) Tri [Leo] Jupiter
+Tue  2/ 2/2027  2:05pm    Moon (Sag) Con (Sag) Venus (v/c 2:27)
+Tue  2/ 2/2027  4:33pm    Moon (Sag) --> Capricorn
+Tue  2/ 2/2027  8:40pm    Moon (Cap) Sex (Pis) Mercury
+Tue  2/ 2/2027  9:21pm    Moon (Cap) Squ (Ari) Neptune
+Wed  2/ 3/2027  6:19am    Moon (Cap) Tri [Vir] Mars
+Wed  2/ 3/2027  1:52pm    Moon (Cap) Squ (Ari) Saturn (v/c 39:35)
+Fri  2/ 5/2027  5:28am    Moon (Cap) --> Aquarius
+Fri  2/ 5/2027  8:53am    Moon (Aqu) Tri [Gem] Uranus
+Fri  2/ 5/2027 10:23am    Moon (Aqu) Sex (Ari) Neptune
+Fri  2/ 5/2027  4:30pm    Moon (Aqu) Con (Aqu) Pluto
+Sat  2/ 6/2027  3:05am    Moon (Aqu) Sex (Ari) Saturn
+Sat  2/ 6/2027  4:56pm     Sun (Aqu) Con (Aqu) Moon (New Moon) (Annular Solar Eclipse)
+Sun  2/ 7/2027  2:46am    Moon (Aqu) Opp [Leo] Jupiter (v/c 14:44)
+Sun  2/ 7/2027  5:31pm    Moon (Aqu) --> Pisces
+Sun  2/ 7/2027  8:50pm    Moon (Pis) Squ [Gem] Uranus
+Mon  2/ 8/2027  3:43am    Moon (Pis) Opp [Vir] Mars
+Mon  2/ 8/2027  3:45am    Moon (Pis) Sex (Cap) Venus
+Mon  2/ 8/2027  4:52am    Moon (Pis) Con (Pis) Mercury (Total Occultation) (v/c 46:55)
+Wed  2/10/2027  3:48am    Moon (Pis) --> Aries
+Wed  2/10/2027  7:00am    Moon (Ari) Sex (Gem) Uranus
+Wed  2/10/2027  8:42am    Moon (Ari) Con (Ari) Neptune
+Wed  2/10/2027  2:28pm    Moon (Ari) Sex (Aqu) Pluto
+Wed  2/10/2027  7:28pm    Moon (Ari) Squ (Cap) Venus
+Thu  2/11/2027 12:57am    Moon (Ari) Con (Ari) Saturn
+Thu  2/11/2027  8:57pm    Moon (Ari) Tri [Leo] Jupiter
+Thu  2/11/2027 10:48pm     Sun (Aqu) Sex (Ari) Moon (v/c 12:55)
+Fri  2/12/2027 11:44am    Moon (Ari) --> Taurus
+Fri  2/12/2027  6:04pm    Moon (Tau) Tri [Vir] Mars
+Fri  2/12/2027  9:01pm    Moon (Tau) Sex [Pis] Mercury
+Fri  2/12/2027 10:02pm    Moon (Tau) Squ (Aqu) Pluto
+Sat  2/13/2027  7:55am    Moon (Tau) Tri (Cap) Venus
+Sun  2/14/2027  2:24am    Moon (Tau) Squ [Leo] Jupiter
+Sun  2/14/2027  8:58am     Sun (Aqu) Squ (Tau) Moon (Half Moon) (v/c 8:00)
+Sun  2/14/2027  4:58pm    Moon (Tau) --> Gemini
+Sun  2/14/2027  7:54pm    Moon (Gem) Con (Gem) Uranus
+Sun  2/14/2027  9:34pm    Moon (Gem) Squ [Vir] Mars
+Sun  2/14/2027  9:39pm    Moon (Gem) Sex (Ari) Neptune
+Sun  2/14/2027 11:15pm    Moon (Gem) Squ [Pis] Mercury
+Mon  2/15/2027  2:52am    Moon (Gem) Tri (Aqu) Pluto
+Mon  2/15/2027 12:53pm    Moon (Gem) Sex (Ari) Saturn
+Tue  2/16/2027  5:16am    Moon (Gem) Sex [Leo] Jupiter
+Tue  2/16/2027  3:49pm     Sun (Aqu) Tri (Gem) Moon (v/c 3:48)
+Tue  2/16/2027  7:38pm    Moon (Gem) --> Cancer
+Tue  2/16/2027 10:32pm    Moon (Can) Tri [Pis] Mercury
+Tue  2/16/2027 10:42pm    Moon (Can) Sex [Vir] Mars
+Wed  2/17/2027 12:14am    Moon (Can) Squ (Ari) Neptune
+Wed  2/17/2027  3:04pm    Moon (Can) Squ (Ari) Saturn
+Wed  2/17/2027 10:49pm    Moon (Can) Opp (Cap) Venus (v/c 21:41)
+Thu  2/18/2027  8:31pm    Moon (Can) --> Leo
+Thu  2/18/2027 11:18pm    Moon (Leo) Sex (Gem) Uranus
+Fri  2/19/2027  1:07am    Moon (Leo) Tri (Ari) Neptune
+Fri  2/19/2027  5:59am    Moon (Leo) Opp (Aqu) Pluto
+Fri  2/19/2027  3:56pm    Moon (Leo) Tri (Ari) Saturn
+Sat  2/20/2027  6:07am    Moon (Leo) Con [Leo] Jupiter (Total Occultation)
+Sat  2/20/2027  5:01pm    Moon (Leo) Opp [Aqu] Mercury (v/c 3:57)
+Sat  2/20/2027  8:59pm    Moon (Leo) --> Virgo
+Sat  2/20/2027  9:27pm    Moon (Vir) Con [Vir] Mars
+Sat  2/20/2027 11:50pm    Moon (Vir) Squ (Gem) Uranus
+Sun  2/21/2027 12:23am     Sun (Pis) Opp (Vir) Moon (Full Moon) (Penumbral Lunar Eclipse)
+Mon  2/22/2027  8:53am    Moon (Vir) Tri (Cap) Venus (v/c 13:50)
+Mon  2/22/2027 10:44pm    Moon (Vir) --> Libra
+Tue  2/23/2027  1:46am    Moon (Lib) Tri (Gem) Uranus
+Tue  2/23/2027  3:50am    Moon (Lib) Opp (Ari) Neptune
+Tue  2/23/2027  8:59am    Moon (Lib) Tri (Aqu) Pluto
+Tue  2/23/2027  8:15pm    Moon (Lib) Opp (Ari) Saturn
+Wed  2/24/2027  9:59am    Moon (Lib) Sex [Leo] Jupiter
+Wed  2/24/2027  4:01pm    Moon (Lib) Tri [Aqu] Mercury
+Wed  2/24/2027  5:36pm    Moon (Lib) Squ (Cap) Venus
+Thu  2/25/2027 12:58am    Moon (Lib) Sex [Leo] Mars (v/c 2:25)
+Thu  2/25/2027  3:24am    Moon (Lib) --> Scorpio
+Thu  2/25/2027  2:30pm    Moon (Sco) Squ (Aqu) Pluto
+Thu  2/25/2027  3:48pm     Sun (Pis) Tri (Sco) Moon
+Fri  2/26/2027  4:41pm    Moon (Sco) Squ [Leo] Jupiter
+Fri  2/26/2027  8:49pm    Moon (Sco) Squ [Aqu] Mercury
+Sat  2/27/2027  7:15am    Moon (Sco) Sex (Cap) Venus
+Sat  2/27/2027  7:35am    Moon (Sco) Squ [Leo] Mars (v/c 4:17)
+Sat  2/27/2027 11:52am    Moon (Sco) --> Sagittarius
+Sat  2/27/2027  3:28pm    Moon (Sag) Opp (Gem) Uranus
+Sat  2/27/2027  6:01pm    Moon (Sag) Tri (Ari) Neptune
+Sat  2/27/2027 11:51pm    Moon (Sag) Sex (Aqu) Pluto
+Sun  2/28/2027  6:16am     Sun (Pis) Squ (Sag) Moon (Half Moon)
+Sun  2/28/2027  1:29pm    Moon (Sag) Tri (Ari) Saturn
+Mon  3/ 1/2027  2:54am    Moon (Sag) Tri [Leo] Jupiter
+Mon  3/ 1/2027  5:53am    Moon (Sag) Sex [Aqu] Mercury
+Mon  3/ 1/2027  5:19pm    Moon (Sag) Tri [Leo] Mars (v/c 6:16)
+Mon  3/ 1/2027 11:35pm    Moon (Sag) --> Capricorn
+Tue  3/ 2/2027  6:09am    Moon (Cap) Squ (Ari) Neptune
+Wed  3/ 3/2027 12:14am     Sun (Pis) Sex (Cap) Moon
+Wed  3/ 3/2027  2:37am    Moon (Cap) Squ (Ari) Saturn (v/c 33:54)
+Thu  3/ 4/2027 12:31pm    Moon (Cap) --> Aquarius
+Thu  3/ 4/2027  4:27pm    Moon (Aqu) Tri (Gem) Uranus
+Thu  3/ 4/2027  7:15pm    Moon (Aqu) Sex (Ari) Neptune
+Thu  3/ 4/2027  9:05pm    Moon (Aqu) Con (Aqu) Venus
+Fri  3/ 5/2027  1:10am    Moon (Aqu) Con (Aqu) Pluto
+Fri  3/ 5/2027  3:55pm    Moon (Aqu) Sex (Ari) Saturn
+Sat  3/ 6/2027  3:02am    Moon (Aqu) Opp [Leo] Jupiter (Partial Occultation)
+Sat  3/ 6/2027  7:16am    Moon (Aqu) Con (Aqu) Mercury (Total Occultation)
+Sat  3/ 6/2027  3:00pm    Moon (Aqu) Opp [Leo] Mars (v/c 9:25)
+Sun  3/ 7/2027 12:25am    Moon (Aqu) --> Pisces
+Sun  3/ 7/2027  4:19am    Moon (Pis) Squ (Gem) Uranus
+Mon  3/ 8/2027 10:29am     Sun (Pis) Con (Pis) Moon (New Moon) (v/c 23:33)
+Tue  3/ 9/2027 10:02am    Moon (Pis) --> Aries
+Tue  3/ 9/2027  1:53pm    Moon (Ari) Sex (Gem) Uranus
+Tue  3/ 9/2027  4:37pm    Moon (Ari) Con (Ari) Neptune
+Tue  3/ 9/2027  9:59pm    Moon (Ari) Sex (Aqu) Pluto
+Wed  3/10/2027  5:52am    Moon (Ari) Sex (Aqu) Venus
+Wed  3/10/2027 12:24pm    Moon (Ari) Con (Ari) Saturn
+Wed  3/10/2027  8:42pm    Moon (Ari) Tri [Leo] Jupiter
+Thu  3/11/2027  5:50am    Moon (Ari) Sex (Aqu) Mercury
+Thu  3/11/2027  6:06am    Moon (Ari) Tri [Leo] Mars (v/c 11:09)
+Thu  3/11/2027  5:16pm    Moon (Ari) --> Taurus
+Fri  3/12/2027  4:51am    Moon (Tau) Squ (Aqu) Pluto
+Fri  3/12/2027  5:38pm    Moon (Tau) Squ (Aqu) Venus
+Sat  3/13/2027  2:15am    Moon (Tau) Squ [Leo] Jupiter
+Sat  3/13/2027  9:25am     Sun (Pis) Sex (Tau) Moon
+Sat  3/13/2027 10:43am    Moon (Tau) Squ [Leo] Mars
+Sat  3/13/2027  2:32pm    Moon (Tau) Squ (Aqu) Mercury (v/c 7:57)
+Sat  3/13/2027 10:30pm    Moon (Tau) --> Gemini
+Sun  3/14/2027  2:17am    Moon (Gem) Con (Gem) Uranus
+Sun  3/14/2027  4:54am    Moon (Gem) Sex (Ari) Neptune
+Sun  3/14/2027  9:49am    Moon (Gem) Tri (Aqu) Pluto
+Mon  3/15/2027 12:01am    Moon (Gem) Sex (Ari) Saturn
+Mon  3/15/2027  3:03am    Moon (Gem) Tri (Aqu) Venus
+Mon  3/15/2027  6:09am    Moon (Gem) Sex [Leo] Jupiter
+Mon  3/15/2027  1:51pm    Moon (Gem) Sex [Leo] Mars
+Mon  3/15/2027  5:25pm     Sun (Pis) Squ (Gem) Moon (Half Moon)
+Mon  3/15/2027  9:52pm    Moon (Gem) Tri (Aqu) Mercury (v/c 4:18)
+Tue  3/16/2027  2:10am    Moon (Gem) --> Cancer
+Tue  3/16/2027  8:33am    Moon (Can) Squ (Ari) Neptune
+Wed  3/17/2027  3:29am    Moon (Can) Squ (Ari) Saturn
+Wed  3/17/2027 11:51pm     Sun (Pis) Tri (Can) Moon (v/c 4:48)
+Thu  3/18/2027  4:40am    Moon (Can) --> Leo
+Thu  3/18/2027  8:30am    Moon (Leo) Sex (Gem) Uranus
+Thu  3/18/2027 11:04am    Moon (Leo) Tri (Ari) Neptune
+Thu  3/18/2027  3:40pm    Moon (Leo) Opp (Aqu) Pluto
+Fri  3/19/2027  6:02am    Moon (Leo) Tri (Ari) Saturn
+Fri  3/19/2027 10:33am    Moon (Leo) Con [Leo] Jupiter (Total Occultation)
+Fri  3/19/2027  5:16pm    Moon (Leo) Con [Leo] Mars
+Fri  3/19/2027  5:16pm    Moon (Leo) Opp (Aqu) Venus (Total Occultation) (v/c 13:20)
+Sat  3/20/2027  6:36am    Moon (Leo) --> Virgo
+Sat  3/20/2027 10:10am    Moon (Vir) Opp (Pis) Mercury
+Sat  3/20/2027 10:33am    Moon (Vir) Squ (Gem) Uranus (v/c 46:28)
+Mon  3/22/2027  9:01am    Moon (Vir) --> Libra
+Mon  3/22/2027 11:43am     Sun (Ari) Opp (Lib) Moon (Full Moon)
+Mon  3/22/2027  1:11pm    Moon (Lib) Tri (Gem) Uranus
+Mon  3/22/2027  3:51pm    Moon (Lib) Opp (Ari) Neptune
+Mon  3/22/2027  8:27pm    Moon (Lib) Tri (Aqu) Pluto
+Tue  3/23/2027 12:09pm    Moon (Lib) Opp (Ari) Saturn
+Tue  3/23/2027  3:28pm    Moon (Lib) Sex [Leo] Jupiter
+Tue  3/23/2027 10:03pm    Moon (Lib) Sex [Leo] Mars
+Wed  3/24/2027  8:58am    Moon (Lib) Tri (Aqu) Venus (v/c 4:19)
+Wed  3/24/2027  1:18pm    Moon (Lib) --> Scorpio
+Thu  3/25/2027  1:25am    Moon (Sco) Squ (Aqu) Pluto
+Thu  3/25/2027  3:28am    Moon (Sco) Tri (Pis) Mercury
+Thu  3/25/2027  9:14pm    Moon (Sco) Squ [Leo] Jupiter
+Fri  3/26/2027  4:04am    Moon (Sco) Squ [Leo] Mars (v/c 16:39)
+Fri  3/26/2027  8:43pm    Moon (Sco) --> Sagittarius
+Fri  3/26/2027  9:56pm    Moon (Sag) Squ (Pis) Venus
+Sat  3/27/2027  1:42am    Moon (Sag) Opp (Gem) Uranus
+Sat  3/27/2027  4:42am    Moon (Sag) Tri (Ari) Neptune
+Sat  3/27/2027  9:03am     Sun (Ari) Tri (Sag) Moon
+Sat  3/27/2027  9:43am    Moon (Sag) Sex (Aqu) Pluto
+Sat  3/27/2027  6:35pm    Moon (Sag) Squ (Pis) Mercury
+Sun  3/28/2027  4:22am    Moon (Sag) Tri (Ari) Saturn
+Sun  3/28/2027  6:27am    Moon (Sag) Tri [Leo] Jupiter
+Sun  3/28/2027  1:39pm    Moon (Sag) Tri [Leo] Mars (v/c 17:53)
+Mon  3/29/2027  7:33am    Moon (Sag) --> Capricorn
+Mon  3/29/2027  3:26pm    Moon (Cap) Sex (Pis) Venus
+Mon  3/29/2027  4:07pm    Moon (Cap) Squ (Ari) Neptune
+Tue  3/30/2027  1:54am     Sun (Ari) Squ (Cap) Moon (Half Moon)
+Tue  3/30/2027  2:28pm    Moon (Cap) Sex (Pis) Mercury
+Tue  3/30/2027  5:12pm    Moon (Cap) Squ (Ari) Saturn (v/c 27:07)
+Wed  3/31/2027  8:19pm    Moon (Cap) --> Aquarius
+Thu  4/ 1/2027  2:00am    Moon (Aqu) Tri (Gem) Uranus
+Thu  4/ 1/2027  5:09am    Moon (Aqu) Sex (Ari) Neptune
+Thu  4/ 1/2027 10:13am    Moon (Aqu) Con (Aqu) Pluto
+Thu  4/ 1/2027  8:15pm     Sun (Ari) Sex (Aqu) Moon
+Fri  4/ 2/2027  6:34am    Moon (Aqu) Sex (Ari) Saturn
+Fri  4/ 2/2027  6:59am    Moon (Aqu) Opp [Leo] Jupiter (Partial Occultation)
+Fri  4/ 2/2027  2:28pm    Moon (Aqu) Opp (Leo) Mars (v/c 17:56)
+Sat  4/ 3/2027  8:24am    Moon (Aqu) --> Pisces
+Sat  4/ 3/2027  2:06pm    Moon (Pis) Squ (Gem) Uranus
+Sun  4/ 4/2027  5:09am    Moon (Pis) Con (Pis) Venus
+Mon  4/ 5/2027  6:21am    Moon (Pis) Con (Pis) Mercury (v/c 11:26)
+Mon  4/ 5/2027  5:48pm    Moon (Pis) --> Aries
+Mon  4/ 5/2027 11:23pm    Moon (Ari) Sex (Gem) Uranus
+Tue  4/ 6/2027  2:12am    Moon (Ari) Con (Ari) Neptune
+Tue  4/ 6/2027  6:37am    Moon (Ari) Sex (Aqu) Pluto
+Wed  4/ 7/2027 12:51am     Sun (Ari) Con (Ari) Moon (New Moon)
+Wed  4/ 7/2027  1:02am    Moon (Ari) Tri [Leo] Jupiter
+Wed  4/ 7/2027  1:59am    Moon (Ari) Con (Ari) Saturn
+Wed  4/ 7/2027  8:21am    Moon (Ari) Tri (Leo) Mars (v/c 15:48)
+Thu  4/ 8/2027 12:09am    Moon (Ari) --> Taurus
+Thu  4/ 8/2027 12:26pm    Moon (Tau) Squ (Aqu) Pluto
+Fri  4/ 9/2027  5:24am    Moon (Tau) Sex (Pis) Venus
+Fri  4/ 9/2027  5:57am    Moon (Tau) Squ [Leo] Jupiter
+Fri  4/ 9/2027  1:22pm    Moon (Tau) Squ (Leo) Mars (v/c 14:59)
+Sat  4/10/2027  4:21am    Moon (Tau) --> Gemini
+Sat  4/10/2027  8:12am    Moon (Gem) Sex (Ari) Mercury
+Sat  4/10/2027  9:51am    Moon (Gem) Con (Gem) Uranus
+Sat  4/10/2027 12:25pm    Moon (Gem) Sex (Ari) Neptune
+Sat  4/10/2027  4:20pm    Moon (Gem) Tri (Aqu) Pluto
+Sun  4/11/2027  9:25am    Moon (Gem) Sex [Leo] Jupiter
+Sun  4/11/2027 11:21am    Moon (Gem) Sex (Ari) Saturn
+Sun  4/11/2027  1:45pm    Moon (Gem) Squ (Pis) Venus
+Sun  4/11/2027  5:07pm    Moon (Gem) Sex (Leo) Mars
+Sun  4/11/2027  5:10pm     Sun (Ari) Sex (Gem) Moon (v/c 14:21)
+Mon  4/12/2027  7:31am    Moon (Gem) --> Cancer
+Mon  4/12/2027  3:39pm    Moon (Can) Squ (Ari) Neptune
+Mon  4/12/2027  6:32pm    Moon (Can) Squ (Ari) Mercury
+Tue  4/13/2027  2:47pm    Moon (Can) Squ (Ari) Saturn
+Tue  4/13/2027  9:30pm    Moon (Can) Tri (Pis) Venus
+Tue  4/13/2027 11:56pm     Sun (Ari) Squ (Can) Moon (Half Moon) (v/c 10:33)
+Wed  4/14/2027 10:29am    Moon (Can) --> Leo
+Wed  4/14/2027  4:17pm    Moon (Leo) Sex (Gem) Uranus
+Wed  4/14/2027  6:45pm    Moon (Leo) Tri (Ari) Neptune
+Wed  4/14/2027 10:29pm    Moon (Leo) Opp (Aqu) Pluto
+Thu  4/15/2027  5:00am    Moon (Leo) Tri (Ari) Mercury
+Thu  4/15/2027  3:27pm    Moon (Leo) Con (Leo) Jupiter (Total Occultation)
+Thu  4/15/2027  6:18pm    Moon (Leo) Tri (Ari) Saturn
+Fri  4/16/2027 12:10am    Moon (Leo) Con (Leo) Mars
+Fri  4/16/2027  6:52am     Sun (Ari) Tri (Leo) Moon (v/c 6:47)
+Fri  4/16/2027  1:39pm    Moon (Leo) --> Virgo
+Fri  4/16/2027  7:40pm    Moon (Vir) Squ (Gem) Uranus
+Sun  4/18/2027  1:56pm    Moon (Vir) Opp (Pis) Venus (v/c 3:25)
+Sun  4/18/2027  5:21pm    Moon (Vir) --> Libra
+Sun  4/18/2027 11:40pm    Moon (Lib) Tri (Gem) Uranus
+Mon  4/19/2027  2:06am    Moon (Lib) Opp (Ari) Neptune
+Mon  4/19/2027  5:44am    Moon (Lib) Tri (Aqu) Pluto
+Mon  4/19/2027 11:17pm    Moon (Lib) Sex (Leo) Jupiter
+Tue  4/20/2027  3:06am    Moon (Lib) Opp (Ari) Saturn
+Tue  4/20/2027  5:10am    Moon (Lib) Opp (Ari) Mercury
+Tue  4/20/2027  9:39am    Moon (Lib) Sex (Leo) Mars (v/c 12:41)
+Tue  4/20/2027 10:20pm    Moon (Lib) --> Scorpio
+Tue  4/20/2027 11:27pm     Sun (Tau) Opp (Sco) Moon (Full Moon)
+Wed  4/21/2027 11:12am    Moon (Sco) Squ (Aqu) Pluto
+Thu  4/22/2027  5:33am    Moon (Sco) Squ (Leo) Jupiter
+Thu  4/22/2027  5:12pm    Moon (Sco) Squ (Leo) Mars (v/c 12:24)
+Fri  4/23/2027  5:37am    Moon (Sco) --> Sagittarius
+Fri  4/23/2027 12:56pm    Moon (Sag) Opp (Gem) Uranus
+Fri  4/23/2027  1:19pm    Moon (Sag) Tri (Ari) Venus
+Fri  4/23/2027  3:26pm    Moon (Sag) Tri (Ari) Neptune
+Fri  4/23/2027  7:11pm    Moon (Sag) Sex (Aqu) Pluto
+Sat  4/24/2027  2:39pm    Moon (Sag) Tri (Leo) Jupiter
+Sat  4/24/2027  7:44pm    Moon (Sag) Tri (Ari) Saturn
+Sun  4/25/2027  3:54am    Moon (Sag) Tri (Leo) Mars (v/c 11:57)
+Sun  4/25/2027  3:52pm    Moon (Sag) --> Capricorn
+Sun  4/25/2027  7:19pm    Moon (Cap) Tri (Tau) Mercury
+Mon  4/26/2027  2:21am    Moon (Cap) Squ (Ari) Neptune
+Mon  4/26/2027  3:07am     Sun (Tau) Tri (Cap) Moon
+Mon  4/26/2027  6:33am    Moon (Cap) Squ (Ari) Venus
+Tue  4/27/2027  8:19am    Moon (Cap) Squ (Ari) Saturn (v/c 20:04)
+Wed  4/28/2027  4:23am    Moon (Cap) --> Aquarius
+Wed  4/28/2027 12:46pm    Moon (Aqu) Tri (Gem) Uranus
+Wed  4/28/2027  3:14pm    Moon (Aqu) Sex (Ari) Neptune
+Wed  4/28/2027  6:56pm    Moon (Aqu) Con (Aqu) Pluto
+Wed  4/28/2027  9:10pm    Moon (Aqu) Squ (Tau) Mercury
+Wed  4/28/2027  9:17pm     Sun (Tau) Squ (Aqu) Moon (Half Moon)
+Thu  4/29/2027  2:16am    Moon (Aqu) Sex (Ari) Venus
+Thu  4/29/2027  3:41pm    Moon (Aqu) Opp (Leo) Jupiter (Partial Occultation)
+Thu  4/29/2027  9:45pm    Moon (Aqu) Sex (Ari) Saturn
+Fri  4/30/2027  7:31am    Moon (Aqu) Opp (Leo) Mars (v/c 9:20)
+Fri  4/30/2027  4:52pm    Moon (Aqu) --> Pisces
+Sat  5/ 1/2027  1:17am    Moon (Pis) Squ (Gem) Uranus
+Sat  5/ 1/2027  2:24pm     Sun (Tau) Sex (Pis) Moon
+Sat  5/ 1/2027  9:47pm    Moon (Pis) Sex (Tau) Mercury (v/c 28:55)
+Mon  5/ 3/2027  2:42am    Moon (Pis) --> Aries
+Mon  5/ 3/2027 10:51am    Moon (Ari) Sex (Gem) Uranus
+Mon  5/ 3/2027 12:54pm    Moon (Ari) Con (Ari) Neptune
+Mon  5/ 3/2027  3:59pm    Moon (Ari) Sex (Aqu) Pluto
+Tue  5/ 4/2027 10:18am    Moon (Ari) Con (Ari) Venus
+Tue  5/ 4/2027 11:04am    Moon (Ari) Tri (Leo) Jupiter
+Tue  5/ 4/2027  5:00pm    Moon (Ari) Con (Ari) Saturn
+Wed  5/ 5/2027  3:08am    Moon (Ari) Tri (Leo) Mars (v/c 5:43)
+Wed  5/ 5/2027  8:52am    Moon (Ari) --> Taurus
+Wed  5/ 5/2027  9:20pm    Moon (Tau) Squ (Aqu) Pluto
+Thu  5/ 6/2027 11:58am     Sun (Tau) Con (Tau) Moon (New Moon)
+Thu  5/ 6/2027  3:35pm    Moon (Tau) Squ (Leo) Jupiter
+Fri  5/ 7/2027  5:35am    Moon (Tau) Con (Tau) Mercury
+Fri  5/ 7/2027  7:48am    Moon (Tau) Squ (Leo) Mars (v/c 4:18)
+Fri  5/ 7/2027 12:06pm    Moon (Tau) --> Gemini
+Fri  5/ 7/2027  7:51pm    Moon (Gem) Con (Gem) Uranus
+Fri  5/ 7/2027  9:31pm    Moon (Gem) Sex (Ari) Neptune
+Sat  5/ 8/2027 12:06am    Moon (Gem) Tri (Aqu) Pluto
+Sat  5/ 8/2027  6:04pm    Moon (Gem) Sex (Leo) Jupiter
+Sat  5/ 8/2027 11:55pm    Moon (Gem) Sex (Ari) Saturn
+Sun  5/ 9/2027  2:15am    Moon (Gem) Sex (Ari) Venus
+Sun  5/ 9/2027 10:55am    Moon (Gem) Sex (Leo) Mars (v/c 3:04)
+Sun  5/ 9/2027  1:59pm    Moon (Gem) --> Cancer
+Sun  5/ 9/2027 11:26pm    Moon (Can) Squ (Ari) Neptune
+Mon  5/10/2027 11:18pm     Sun (Tau) Sex (Can) Moon
+Tue  5/11/2027  2:11am    Moon (Can) Squ (Ari) Saturn
+Tue  5/11/2027  8:45am    Moon (Can) Squ (Ari) Venus (v/c 7:15)
+Tue  5/11/2027  4:00pm    Moon (Can) --> Leo
+Wed  5/12/2027 12:13am    Moon (Leo) Sex (Gem) Uranus
+Wed  5/12/2027  1:42am    Moon (Leo) Tri (Ari) Neptune
+Wed  5/12/2027  1:47am    Moon (Leo) Sex (Gem) Mercury
+Wed  5/12/2027  4:06am    Moon (Leo) Opp [Aqu] Pluto
+Wed  5/12/2027 11:03pm    Moon (Leo) Con (Leo) Jupiter (Total Occultation)
+Thu  5/13/2027  5:21am    Moon (Leo) Tri (Ari) Saturn
+Thu  5/13/2027  5:43am     Sun (Tau) Squ (Leo) Moon (Half Moon)
+Thu  5/13/2027  4:31pm    Moon (Leo) Tri (Ari) Venus
+Thu  5/13/2027  6:31pm    Moon (Leo) Con (Leo) Mars (v/c 0:33)
+Thu  5/13/2027  7:05pm    Moon (Leo) --> Virgo
+Fri  5/14/2027  3:43am    Moon (Vir) Squ (Gem) Uranus
+Fri  5/14/2027  1:02pm    Moon (Vir) Squ (Gem) Mercury
+Sat  5/15/2027  1:48pm     Sun (Tau) Tri (Vir) Moon (v/c 9:45)
+Sat  5/15/2027 11:33pm    Moon (Vir) --> Libra
+Sun  5/16/2027  8:39am    Moon (Lib) Tri (Gem) Uranus
+Sun  5/16/2027 10:00am    Moon (Lib) Opp (Ari) Neptune
+Sun  5/16/2027 12:18pm    Moon (Lib) Tri [Aqu] Pluto
+Mon  5/17/2027  1:49am    Moon (Lib) Tri (Gem) Mercury
+Mon  5/17/2027  9:04am    Moon (Lib) Sex (Leo) Jupiter
+Mon  5/17/2027  3:55pm    Moon (Lib) Opp (Ari) Saturn (v/c 13:37)
+Tue  5/18/2027  5:33am    Moon (Lib) --> Scorpio
+Tue  5/18/2027  8:06am    Moon (Sco) Sex (Vir) Mars
+Tue  5/18/2027  1:41pm    Moon (Sco) Opp (Tau) Venus
+Tue  5/18/2027  6:41pm    Moon (Sco) Squ [Aqu] Pluto
+Wed  5/19/2027  4:38pm    Moon (Sco) Squ (Leo) Jupiter
+Thu  5/20/2027 11:59am     Sun (Tau) Opp (Sco) Moon (Full Moon) (v/c 1:28)
+Thu  5/20/2027  1:27pm    Moon (Sco) --> Sagittarius
+Thu  5/20/2027  5:55pm    Moon (Sag) Squ (Vir) Mars
+Thu  5/20/2027 11:44pm    Moon (Sag) Opp (Gem) Uranus
+Fri  5/21/2027 12:54am    Moon (Sag) Tri (Ari) Neptune
+Fri  5/21/2027  3:06am    Moon (Sag) Sex [Aqu] Pluto
+Sat  5/22/2027  2:30am    Moon (Sag) Tri (Leo) Jupiter
+Sat  5/22/2027  9:15am    Moon (Sag) Opp (Gem) Mercury
+Sat  5/22/2027  9:58am    Moon (Sag) Tri (Ari) Saturn (v/c 13:44)
+Sat  5/22/2027 11:42pm    Moon (Sag) --> Capricorn
+Sun  5/23/2027  6:24am    Moon (Cap) Tri (Vir) Mars
+Sun  5/23/2027 11:46am    Moon (Cap) Squ (Ari) Neptune
+Sun  5/23/2027  9:29pm    Moon (Cap) Tri (Tau) Venus
+Mon  5/24/2027 10:29pm    Moon (Cap) Squ (Ari) Saturn (v/c 13:35)
+Tue  5/25/2027 12:04pm    Moon (Cap) --> Aquarius
+Tue  5/25/2027  9:01pm     Sun (Gem) Tri (Aqu) Moon
+Tue  5/25/2027 11:38pm    Moon (Aqu) Tri (Gem) Uranus
+Wed  5/26/2027 12:32am    Moon (Aqu) Sex (Ari) Neptune
+Wed  5/26/2027  2:32am    Moon (Aqu) Con [Aqu] Pluto
+Wed  5/26/2027  5:17pm    Moon (Aqu) Squ (Tau) Venus
+Thu  5/27/2027  4:20am    Moon (Aqu) Opp (Leo) Jupiter
+Thu  5/27/2027 11:59am    Moon (Aqu) Sex (Ari) Saturn
+Thu  5/27/2027 11:23pm    Moon (Aqu) Tri (Gem) Mercury (v/c 1:31)
+Fri  5/28/2027 12:55am    Moon (Aqu) --> Pisces
+Fri  5/28/2027 12:06pm    Moon (Pis) Opp (Vir) Mars
+Fri  5/28/2027 12:34pm    Moon (Pis) Squ (Gem) Uranus
+Fri  5/28/2027  2:57pm     Sun (Gem) Squ (Pis) Moon (Half Moon)
+Sat  5/29/2027 12:03pm    Moon (Pis) Sex (Tau) Venus (v/c 23:35)
+Sun  5/30/2027 11:39am    Moon (Pis) --> Aries
+Sun  5/30/2027  2:47pm    Moon (Ari) Squ (Can) Mercury
+Sun  5/30/2027 10:55pm    Moon (Ari) Sex (Gem) Uranus
+Sun  5/30/2027 11:23pm    Moon (Ari) Con (Ari) Neptune
+Mon  5/31/2027 12:57am    Moon (Ari) Sex [Aqu] Pluto
+Mon  5/31/2027  5:32am     Sun (Gem) Sex (Ari) Moon
+Tue  6/ 1/2027  1:27am    Moon (Ari) Tri (Leo) Jupiter
+Tue  6/ 1/2027  8:01am    Moon (Ari) Con (Ari) Saturn (v/c 10:31)
+Tue  6/ 1/2027  6:32pm    Moon (Ari) --> Taurus
+Wed  6/ 2/2027 12:35am    Moon (Tau) Sex (Can) Mercury
+Wed  6/ 2/2027  6:51am    Moon (Tau) Squ [Aqu] Pluto
+Wed  6/ 2/2027  8:03am    Moon (Tau) Tri (Vir) Mars
+Thu  6/ 3/2027  6:11am    Moon (Tau) Squ (Leo) Jupiter
+Thu  6/ 3/2027 11:22am    Moon (Tau) Con (Tau) Venus (v/c 10:20)
+Thu  6/ 3/2027  9:43pm    Moon (Tau) --> Gemini
+Fri  6/ 4/2027  8:00am    Moon (Gem) Con (Gem) Uranus
+Fri  6/ 4/2027  8:08am    Moon (Gem) Sex (Ari) Neptune
+Fri  6/ 4/2027  9:17am    Moon (Gem) Tri [Aqu] Pluto
+Fri  6/ 4/2027 12:06pm    Moon (Gem) Squ (Vir) Mars
+Fri  6/ 4/2027  8:40pm     Sun (Gem) Con (Gem) Moon (New Moon)
+Sat  6/ 5/2027  8:04am    Moon (Gem) Sex (Leo) Jupiter
+Sat  6/ 5/2027  1:44pm    Moon (Gem) Sex (Ari) Saturn (v/c 8:54)
+Sat  6/ 5/2027 10:38pm    Moon (Gem) --> Cancer
+Sun  6/ 6/2027  7:40am    Moon (Can) Con (Can) Mercury
+Sun  6/ 6/2027  8:54am    Moon (Can) Squ (Ari) Neptune
+Sun  6/ 6/2027  2:19pm    Moon (Can) Sex (Vir) Mars
+Mon  6/ 7/2027  2:33pm    Moon (Can) Squ (Ari) Saturn
+Mon  6/ 7/2027  9:55pm    Moon (Can) Sex (Tau) Venus (v/c 1:17)
+Mon  6/ 7/2027 11:12pm    Moon (Can) --> Leo
+Tue  6/ 8/2027  9:40am    Moon (Leo) Tri (Ari) Neptune
+Tue  6/ 8/2027  9:48am    Moon (Leo) Sex (Gem) Uranus
+Tue  6/ 8/2027 10:37am    Moon (Leo) Opp [Aqu] Pluto
+Wed  6/ 9/2027  5:05am     Sun (Gem) Sex (Leo) Moon
+Wed  6/ 9/2027 10:50am    Moon (Leo) Con (Leo) Jupiter
+Wed  6/ 9/2027  4:21pm    Moon (Leo) Tri (Ari) Saturn (v/c 8:38)
+Thu  6/10/2027  1:00am    Moon (Leo) --> Virgo
+Thu  6/10/2027  4:21am    Moon (Vir) Squ (Gem) Venus
+Thu  6/10/2027 11:49am    Moon (Vir) Sex (Can) Mercury
+Thu  6/10/2027 12:13pm    Moon (Vir) Squ (Gem) Uranus
+Thu  6/10/2027  9:04pm    Moon (Vir) Con (Vir) Mars
+Fri  6/11/2027 11:56am     Sun (Gem) Squ (Vir) Moon (Half Moon) (v/c 17:00)
+Sat  6/12/2027  4:57am    Moon (Vir) --> Libra
+Sat  6/12/2027  1:38pm    Moon (Lib) Tri (Gem) Venus
+Sat  6/12/2027  4:02pm    Moon (Lib) Squ [Can] Mercury
+Sat  6/12/2027  4:26pm    Moon (Lib) Opp (Ari) Neptune
+Sat  6/12/2027  4:54pm    Moon (Lib) Tri (Gem) Uranus
+Sat  6/12/2027  5:15pm    Moon (Lib) Tri [Aqu] Pluto
+Sun  6/13/2027  9:01pm    Moon (Lib) Sex (Leo) Jupiter
+Sun  6/13/2027  9:42pm     Sun (Gem) Tri (Lib) Moon
+Mon  6/14/2027  2:33am    Moon (Lib) Opp (Ari) Saturn (v/c 8:43)
+Mon  6/14/2027 11:17am    Moon (Lib) --> Scorpio
+Mon  6/14/2027  9:57pm    Moon (Sco) Tri [Can] Mercury
+Tue  6/15/2027 12:03am    Moon (Sco) Squ [Aqu] Pluto
+Tue  6/15/2027  1:31pm    Moon (Sco) Sex (Vir) Mars
+Wed  6/16/2027  5:45am    Moon (Sco) Squ (Leo) Jupiter (v/c 14:07)
+Wed  6/16/2027  7:53pm    Moon (Sco) --> Sagittarius
+Thu  6/17/2027  8:28am    Moon (Sag) Tri (Ari) Neptune
+Thu  6/17/2027  9:05am    Moon (Sag) Sex [Aqu] Pluto
+Thu  6/17/2027  9:22am    Moon (Sag) Opp (Gem) Uranus
+Thu  6/17/2027  5:32pm    Moon (Sag) Opp (Gem) Venus
+Fri  6/18/2027  1:35am    Moon (Sag) Squ (Vir) Mars
+Fri  6/18/2027  4:44pm    Moon (Sag) Tri (Leo) Jupiter
+Fri  6/18/2027  9:59pm    Moon (Sag) Tri (Ari) Saturn
+Sat  6/19/2027  1:44am     Sun (Gem) Opp (Sag) Moon (Full Moon) (v/c 4:51)
+Sat  6/19/2027  6:35am    Moon (Sag) --> Capricorn
+Sat  6/19/2027  2:08pm    Moon (Cap) Opp [Can] Mercury
+Sat  6/19/2027  7:39pm    Moon (Cap) Squ (Ari) Neptune
+Sun  6/20/2027  3:55pm    Moon (Cap) Tri (Vir) Mars
+Mon  6/21/2027 10:37am    Moon (Cap) Squ (Ari) Saturn (v/c 8:23)
+Mon  6/21/2027  7:00pm    Moon (Cap) --> Aquarius
+Tue  6/22/2027  8:23am    Moon (Aqu) Sex (Ari) Neptune
+Tue  6/22/2027  8:44am    Moon (Aqu) Con [Aqu] Pluto
+Tue  6/22/2027  9:46am    Moon (Aqu) Tri (Gem) Uranus
+Wed  6/23/2027  7:39am    Moon (Aqu) Tri (Gem) Venus
+Wed  6/23/2027  7:34pm    Moon (Aqu) Opp (Leo) Jupiter
+Thu  6/24/2027 12:02am    Moon (Aqu) Sex (Ari) Saturn (v/c 7:58)
+Thu  6/24/2027  8:00am    Moon (Aqu) --> Pisces
+Thu  6/24/2027 10:09am    Moon (Pis) Tri [Can] Mercury
+Thu  6/24/2027  1:40pm     Sun (Can) Tri (Pis) Moon
+Thu  6/24/2027 10:55pm    Moon (Pis) Squ (Gem) Uranus
+Fri  6/25/2027 10:47pm    Moon (Pis) Opp (Vir) Mars
+Sat  6/26/2027  2:50am    Moon (Pis) Squ (Gem) Venus
+Sat  6/26/2027  7:08pm    Moon (Pis) Squ [Gem] Mercury (v/c 0:27)
+Sat  6/26/2027  7:35pm    Moon (Pis) --> Aries
+Sun  6/27/2027  5:54am     Sun (Can) Squ (Ari) Moon (Half Moon)
+Sun  6/27/2027  8:18am    Moon (Ari) Con (Ari) Neptune
+Sun  6/27/2027  8:23am    Moon (Ari) Sex [Aqu] Pluto
+Sun  6/27/2027 10:03am    Moon (Ari) Sex (Gem) Uranus
+Mon  6/28/2027  6:02pm    Moon (Ari) Sex (Gem) Venus
+Mon  6/28/2027  6:10pm    Moon (Ari) Tri (Leo) Jupiter
+Mon  6/28/2027  9:15pm    Moon (Ari) Con (Ari) Saturn
+Tue  6/29/2027  1:27am    Moon (Ari) Sex [Gem] Mercury (v/c 2:18)
+Tue  6/29/2027  3:46am    Moon (Ari) --> Taurus
+Tue  6/29/2027  3:36pm    Moon (Tau) Squ [Aqu] Pluto
+Tue  6/29/2027  5:34pm     Sun (Can) Sex (Tau) Moon
+Wed  6/30/2027  6:16pm    Moon (Tau) Tri (Vir) Mars
+Wed  6/30/2027 11:41pm    Moon (Tau) Squ (Leo) Jupiter (v/c 8:14)
+Thu  7/ 1/2027  7:55am    Moon (Tau) --> Gemini
+Thu  7/ 1/2027  6:53pm    Moon (Gem) Tri [Aqu] Pluto
+Thu  7/ 1/2027  7:00pm    Moon (Gem) Sex (Ari) Neptune
+Thu  7/ 1/2027  8:51pm    Moon (Gem) Con (Gem) Uranus
+Fri  7/ 2/2027  9:53pm    Moon (Gem) Squ (Vir) Mars
+Sat  7/ 3/2027  1:44am    Moon (Gem) Sex (Leo) Jupiter
+Sat  7/ 3/2027  3:39am    Moon (Gem) Sex (Ari) Saturn
+Sat  7/ 3/2027  5:05am    Moon (Gem) Con [Gem] Mercury (v/c 3:53)
+Sat  7/ 3/2027  8:58am    Moon (Gem) --> Cancer
+Sat  7/ 3/2027  9:30am    Moon (Can) Con (Can) Venus
+Sat  7/ 3/2027  7:35pm    Moon (Can) Squ (Ari) Neptune
+Sun  7/ 4/2027  4:02am     Sun (Can) Con (Can) Moon (New Moon)
+Sun  7/ 4/2027 11:30pm    Moon (Can) Sex (Vir) Mars
+Mon  7/ 5/2027  3:35am    Moon (Can) Squ (Ari) Saturn (v/c 5:04)
+Mon  7/ 5/2027  8:40am    Moon (Can) --> Leo
+Mon  7/ 5/2027  7:00pm    Moon (Leo) Opp [Aqu] Pluto
+Mon  7/ 5/2027  7:16pm    Moon (Leo) Tri (Ari) Neptune
+Mon  7/ 5/2027  9:22pm    Moon (Leo) Sex (Gem) Uranus
+Wed  7/ 7/2027  2:48am    Moon (Leo) Con (Leo) Jupiter
+Wed  7/ 7/2027  3:55am    Moon (Leo) Tri (Ari) Saturn
+Wed  7/ 7/2027  5:11am    Moon (Leo) Sex (Gem) Mercury (v/c 3:45)
+Wed  7/ 7/2027  8:57am    Moon (Leo) --> Virgo
+Wed  7/ 7/2027  6:17pm    Moon (Vir) Sex (Can) Venus
+Wed  7/ 7/2027 10:15pm    Moon (Vir) Squ (Gem) Uranus
+Thu  7/ 8/2027 11:37am     Sun (Can) Sex (Vir) Moon
+Fri  7/ 9/2027  5:30am    Moon (Vir) Con (Vir) Mars
+Fri  7/ 9/2027  8:28am    Moon (Vir) Squ (Gem) Mercury (v/c 2:55)
+Fri  7/ 9/2027 11:23am    Moon (Vir) --> Libra
+Fri  7/ 9/2027 10:32pm    Moon (Lib) Tri [Aqu] Pluto
+Fri  7/ 9/2027 10:59pm    Moon (Lib) Opp (Ari) Neptune
+Sat  7/10/2027  1:39am    Moon (Lib) Tri (Gem) Uranus
+Sat  7/10/2027  2:18am    Moon (Lib) Squ (Can) Venus
+Sat  7/10/2027  7:39pm     Sun (Can) Squ (Lib) Moon (Half Moon)
+Sun  7/11/2027 11:32am    Moon (Lib) Sex (Leo) Jupiter
+Sun  7/11/2027 11:41am    Moon (Lib) Opp (Ari) Saturn
+Sun  7/11/2027  3:49pm    Moon (Lib) Tri (Gem) Mercury (v/c 1:04)
+Sun  7/11/2027  4:54pm    Moon (Lib) --> Scorpio
+Mon  7/12/2027  4:39am    Moon (Sco) Squ [Aqu] Pluto
+Mon  7/12/2027  2:29pm    Moon (Sco) Tri (Can) Venus
+Tue  7/13/2027  7:39am     Sun (Can) Tri (Sco) Moon
+Tue  7/13/2027  8:46pm    Moon (Sco) Squ (Leo) Jupiter
+Wed  7/14/2027 12:08am    Moon (Sco) Sex (Vir) Mars (v/c 1:24)
+Wed  7/14/2027  1:32am    Moon (Sco) --> Sagittarius
+Wed  7/14/2027  1:46pm    Moon (Sag) Sex [Aqu] Pluto
+Wed  7/14/2027  2:28pm    Moon (Sag) Tri [Ari] Neptune
+Wed  7/14/2027  5:52pm    Moon (Sag) Opp (Gem) Uranus
+Fri  7/16/2027  7:23am    Moon (Sag) Tri (Ari) Saturn
+Fri  7/16/2027  8:41am    Moon (Sag) Tri (Leo) Jupiter (v/c 3:57)
+Fri  7/16/2027 12:39pm    Moon (Sag) --> Capricorn
+Fri  7/16/2027  2:09pm    Moon (Cap) Squ (Lib) Mars
+Fri  7/16/2027  7:39pm    Moon (Cap) Opp (Can) Mercury
+Sat  7/17/2027  1:59am    Moon (Cap) Squ [Ari] Neptune
+Sun  7/18/2027  1:33am    Moon (Cap) Opp (Can) Venus
+Sun  7/18/2027  4:44pm     Sun (Can) Opp (Cap) Moon (Full Moon)
+Sun  7/18/2027  8:06pm    Moon (Cap) Squ (Ari) Saturn (v/c 5:09)
+Mon  7/19/2027  1:15am    Moon (Cap) --> Aquarius
+Mon  7/19/2027  5:53am    Moon (Aqu) Tri (Lib) Mars
+Mon  7/19/2027  1:50pm    Moon (Aqu) Con [Aqu] Pluto
+Mon  7/19/2027  2:45pm    Moon (Aqu) Sex [Ari] Neptune
+Mon  7/19/2027  6:47pm    Moon (Aqu) Tri (Gem) Uranus
+Wed  7/21/2027  9:17am    Moon (Aqu) Sex (Ari) Saturn
+Wed  7/21/2027 12:17pm    Moon (Aqu) Opp (Leo) Jupiter (v/c 1:56)
+Wed  7/21/2027  2:14pm    Moon (Aqu) --> Pisces
+Thu  7/22/2027  7:50am    Moon (Pis) Squ (Gem) Uranus
+Thu  7/22/2027 11:15am    Moon (Pis) Tri (Can) Mercury
+Fri  7/23/2027  4:47pm    Moon (Pis) Tri (Can) Venus (v/c 9:21)
+Sat  7/24/2027  2:09am    Moon (Pis) --> Aries
+Sat  7/24/2027  4:11am     Sun (Leo) Tri (Ari) Moon
+Sat  7/24/2027 12:37pm    Moon (Ari) Opp (Lib) Mars
+Sat  7/24/2027  2:00pm    Moon (Ari) Sex [Aqu] Pluto
+Sat  7/24/2027  3:02pm    Moon (Ari) Con [Ari] Neptune
+Sat  7/24/2027  7:21pm    Moon (Ari) Sex (Gem) Uranus
+Sun  7/25/2027  6:45am    Moon (Ari) Squ (Can) Mercury
+Mon  7/26/2027  7:11am    Moon (Ari) Con (Ari) Saturn
+Mon  7/26/2027  8:43am    Moon (Ari) Squ (Can) Venus (v/c 2:44)
+Mon  7/26/2027 11:27am    Moon (Ari) --> Taurus
+Mon  7/26/2027 11:33am    Moon (Tau) Tri (Vir) Jupiter
+Mon  7/26/2027  5:54pm     Sun (Leo) Squ (Tau) Moon (Half Moon)
+Mon  7/26/2027 10:31pm    Moon (Tau) Squ [Aqu] Pluto
+Tue  7/27/2027 10:27pm    Moon (Tau) Sex (Can) Mercury (v/c 18:41)
+Wed  7/28/2027  5:09pm    Moon (Tau) --> Gemini
+Wed  7/28/2027  6:03pm    Moon (Gem) Squ (Vir) Jupiter
+Wed  7/28/2027  7:51pm    Moon (Gem) Sex (Leo) Venus
+Thu  7/29/2027  3:04am     Sun (Leo) Sex (Gem) Moon
+Thu  7/29/2027  3:24am    Moon (Gem) Tri [Aqu] Pluto
+Thu  7/29/2027  4:25am    Moon (Gem) Sex [Ari] Neptune
+Thu  7/29/2027  7:11am    Moon (Gem) Tri (Lib) Mars
+Thu  7/29/2027  8:34am    Moon (Gem) Con (Gem) Uranus
+Fri  7/30/2027  3:48pm    Moon (Gem) Sex (Ari) Saturn (v/c 3:36)
+Fri  7/30/2027  7:24pm    Moon (Gem) --> Cancer
+Fri  7/30/2027  8:57pm    Moon (Can) Sex (Vir) Jupiter
+Sat  7/31/2027  6:00am    Moon (Can) Squ [Ari] Neptune
+Sat  7/31/2027 10:44am    Moon (Can) Squ (Lib) Mars
+Sun  8/ 1/2027  3:58pm    Moon (Can) Squ (Ari) Saturn
+Sun  8/ 1/2027  4:54pm    Moon (Can) Con (Can) Mercury (Total Occultation) (v/c 2:30)
+Sun  8/ 1/2027  7:24pm    Moon (Can) --> Leo
+Mon  8/ 2/2027  4:41am    Moon (Leo) Opp [Aqu] Pluto
+Mon  8/ 2/2027  5:42am    Moon (Leo) Tri [Ari] Neptune
+Mon  8/ 2/2027  6:32am    Moon (Leo) Con (Leo) Venus (Total Occultation)
+Mon  8/ 2/2027  9:53am    Moon (Leo) Sex (Gem) Uranus
+Mon  8/ 2/2027 11:05am     Sun (Leo) Con (Leo) Moon (New Moon) (Total Solar Eclipse)
+Mon  8/ 2/2027 12:21pm    Moon (Leo) Sex (Lib) Mars
+Tue  8/ 3/2027  3:30pm    Moon (Leo) Tri (Ari) Saturn (v/c 3:26)
+Tue  8/ 3/2027  6:57pm    Moon (Leo) --> Virgo
+Tue  8/ 3/2027  9:49pm    Moon (Vir) Con (Vir) Jupiter
+Wed  8/ 4/2027  9:46am    Moon (Vir) Squ (Gem) Uranus (v/c 34:08)
+Thu  8/ 5/2027  7:54pm    Moon (Vir) --> Libra
+Fri  8/ 6/2027  5:38am    Moon (Lib) Tri [Aqu] Pluto
+Fri  8/ 6/2027  6:49am    Moon (Lib) Opp [Ari] Neptune
+Fri  8/ 6/2027  9:27am    Moon (Lib) Sex (Leo) Mercury
+Fri  8/ 6/2027 11:38am    Moon (Lib) Tri (Gem) Uranus
+Fri  8/ 6/2027  5:09pm    Moon (Lib) Sex (Leo) Venus
+Fri  8/ 6/2027  6:32pm    Moon (Lib) Con (Lib) Mars
+Fri  8/ 6/2027  7:53pm     Sun (Leo) Sex (Lib) Moon
+Sat  8/ 7/2027  8:04pm    Moon (Lib) Opp (Ari) Saturn (v/c 3:47)
+Sat  8/ 7/2027 11:52pm    Moon (Lib) --> Scorpio
+Sun  8/ 8/2027  4:44am    Moon (Sco) Sex (Vir) Jupiter
+Sun  8/ 8/2027 10:13am    Moon (Sco) Squ [Aqu] Pluto
+Mon  8/ 9/2027 12:25am    Moon (Sco) Squ (Leo) Mercury
+Mon  8/ 9/2027  4:18am    Moon (Sco) Squ (Leo) Venus
+Mon  8/ 9/2027  5:54am     Sun (Leo) Squ (Sco) Moon (Half Moon) (v/c 25:41)
+Tue  8/10/2027  7:35am    Moon (Sco) --> Sagittarius
+Tue  8/10/2027  1:46pm    Moon (Sag) Squ (Vir) Jupiter
+Tue  8/10/2027  6:31pm    Moon (Sag) Sex [Aqu] Pluto
+Tue  8/10/2027  7:56pm    Moon (Sag) Tri [Ari] Neptune
+Wed  8/11/2027  1:50am    Moon (Sag) Opp (Gem) Uranus
+Wed  8/11/2027  3:21pm    Moon (Sag) Sex (Lib) Mars
+Wed  8/11/2027  8:21pm    Moon (Sag) Tri (Leo) Venus
+Wed  8/11/2027  8:29pm     Sun (Leo) Tri (Sag) Moon
+Wed  8/11/2027  9:23pm    Moon (Sag) Tri (Leo) Mercury
+Thu  8/12/2027  2:18pm    Moon (Sag) Tri [Ari] Saturn (v/c 4:15)
+Thu  8/12/2027  6:34pm    Moon (Sag) --> Capricorn
+Fri  8/13/2027  2:05am    Moon (Cap) Tri (Vir) Jupiter
+Fri  8/13/2027  7:21am    Moon (Cap) Squ [Ari] Neptune
+Sat  8/14/2027  6:51am    Moon (Cap) Squ (Lib) Mars
+Sun  8/15/2027  2:57am    Moon (Cap) Squ [Ari] Saturn (v/c 4:21)
+Sun  8/15/2027  7:19am    Moon (Cap) --> Aquarius
+Sun  8/15/2027  6:38pm    Moon (Aqu) Con [Aqu] Pluto
+Sun  8/15/2027  8:10pm    Moon (Aqu) Sex [Ari] Neptune
+Mon  8/16/2027  2:47am    Moon (Aqu) Tri (Gem) Uranus
+Mon  8/16/2027 11:15pm    Moon (Aqu) Tri (Lib) Mars
+Tue  8/17/2027  8:28am     Sun (Leo) Opp (Aqu) Moon (Full Moon) (Penumbral Lunar Eclipse)
+Tue  8/17/2027 11:46am    Moon (Aqu) Opp (Leo) Venus
+Tue  8/17/2027  3:48pm    Moon (Aqu) Sex [Ari] Saturn (v/c 4:22)
+Tue  8/17/2027  8:11pm    Moon (Aqu) --> Pisces
+Tue  8/17/2027 10:58pm    Moon (Pis) Opp (Vir) Mercury
+Wed  8/18/2027  5:57am    Moon (Pis) Opp (Vir) Jupiter
+Wed  8/18/2027  3:32pm    Moon (Pis) Squ (Gem) Uranus (v/c 40:22)
+Fri  8/20/2027  7:54am    Moon (Pis) --> Aries
+Fri  8/20/2027  6:33pm    Moon (Ari) Sex [Aqu] Pluto
+Fri  8/20/2027  8:02pm    Moon (Ari) Con [Ari] Neptune
+Sat  8/21/2027  2:46am    Moon (Ari) Sex (Gem) Uranus
+Sun  8/22/2027  4:12am    Moon (Ari) Opp (Lib) Mars
+Sun  8/22/2027  1:17pm    Moon (Ari) Con [Ari] Saturn
+Sun  8/22/2027  4:15pm     Sun (Leo) Tri (Ari) Moon (v/c 1:16)
+Sun  8/22/2027  5:32pm    Moon (Ari) --> Taurus
+Sun  8/22/2027 10:20pm    Moon (Tau) Tri (Vir) Venus
+Mon  8/23/2027  3:38am    Moon (Tau) Squ [Aqu] Pluto
+Mon  8/23/2027  4:36am    Moon (Tau) Tri (Vir) Jupiter
+Mon  8/23/2027  3:42pm    Moon (Tau) Tri (Vir) Mercury (v/c 32:44)
+Wed  8/25/2027 12:26am    Moon (Tau) --> Gemini
+Wed  8/25/2027  3:27am     Sun (Vir) Squ (Gem) Moon (Half Moon)
+Wed  8/25/2027  9:55am    Moon (Gem) Tri [Aqu] Pluto
+Wed  8/25/2027 10:27am    Moon (Gem) Squ (Vir) Venus
+Wed  8/25/2027 11:15am    Moon (Gem) Sex [Ari] Neptune
+Wed  8/25/2027 11:47am    Moon (Gem) Squ (Vir) Jupiter
+Wed  8/25/2027  5:40pm    Moon (Gem) Con (Gem) Uranus
+Thu  8/26/2027  5:11am    Moon (Gem) Squ (Vir) Mercury
+Thu  8/26/2027  9:31pm    Moon (Gem) Tri (Lib) Mars
+Fri  8/27/2027 12:20am    Moon (Gem) Sex [Ari] Saturn (v/c 4:00)
+Fri  8/27/2027  4:20am    Moon (Gem) --> Cancer
+Fri  8/27/2027 10:55am     Sun (Vir) Sex (Can) Moon
+Fri  8/27/2027  2:30pm    Moon (Can) Squ [Ari] Neptune
+Fri  8/27/2027  3:52pm    Moon (Can) Sex (Vir) Jupiter
+Fri  8/27/2027  6:39pm    Moon (Can) Sex (Vir) Venus
+Sat  8/28/2027  2:12pm    Moon (Can) Sex (Vir) Mercury
+Sun  8/29/2027  1:26am    Moon (Can) Squ (Lib) Mars
+Sun  8/29/2027  1:46am    Moon (Can) Squ [Ari] Saturn (v/c 3:56)
+Sun  8/29/2027  5:42am    Moon (Can) --> Leo
+Sun  8/29/2027  2:12pm    Moon (Leo) Opp [Aqu] Pluto
+Sun  8/29/2027  3:24pm    Moon (Leo) Tri [Ari] Neptune
+Sun  8/29/2027  9:31pm    Moon (Leo) Sex (Gem) Uranus
+Tue  8/31/2027  1:43am    Moon (Leo) Tri [Ari] Saturn
+Tue  8/31/2027  3:41am    Moon (Leo) Sex (Lib) Mars (v/c 2:02)
+Tue  8/31/2027  5:43am    Moon (Leo) --> Virgo
+Tue  8/31/2027  6:10pm    Moon (Vir) Con (Vir) Jupiter
+Tue  8/31/2027  6:41pm     Sun (Vir) Con (Vir) Moon (New Moon)
+Tue  8/31/2027  9:30pm    Moon (Vir) Squ (Gem) Uranus
+Wed  9/ 1/2027  4:10am    Moon (Vir) Con (Vir) Venus
+Thu  9/ 2/2027  2:28am    Moon (Vir) Con (Vir) Mercury (v/c 3:38)
+Thu  9/ 2/2027  6:07am    Moon (Vir) --> Libra
+Thu  9/ 2/2027  2:40pm    Moon (Lib) Tri [Aqu] Pluto
+Thu  9/ 2/2027  3:53pm    Moon (Lib) Opp [Ari] Neptune
+Thu  9/ 2/2027 10:28pm    Moon (Lib) Tri (Gem) Uranus
+Sat  9/ 4/2027  4:06am    Moon (Lib) Opp [Ari] Saturn (v/c 4:38)
+Sat  9/ 4/2027  8:44am    Moon (Lib) --> Scorpio
+Sat  9/ 4/2027 11:26am    Moon (Sco) Con (Sco) Mars
+Sat  9/ 4/2027  5:47pm    Moon (Sco) Squ [Aqu] Pluto
+Sun  9/ 5/2027 12:03am    Moon (Sco) Sex (Vir) Jupiter
+Sun  9/ 5/2027  6:48am     Sun (Vir) Sex (Sco) Moon
+Sun  9/ 5/2027  8:06pm    Moon (Sco) Sex (Vir) Venus (v/c 18:55)
+Mon  9/ 6/2027  3:01pm    Moon (Sco) --> Sagittarius
+Tue  9/ 7/2027 12:41am    Moon (Sag) Sex [Aqu] Pluto
+Tue  9/ 7/2027  1:03am    Moon (Sag) Sex (Lib) Mercury
+Tue  9/ 7/2027  2:01am    Moon (Sag) Tri [Ari] Neptune
+Tue  9/ 7/2027  8:30am    Moon (Sag) Squ (Vir) Jupiter
+Tue  9/ 7/2027  9:52am    Moon (Sag) Opp (Gem) Uranus
+Tue  9/ 7/2027  7:31pm     Sun (Vir) Squ (Sag) Moon (Half Moon)
+Wed  9/ 8/2027 11:28am    Moon (Sag) Squ (Vir) Venus
+Wed  9/ 8/2027  7:28pm    Moon (Sag) Tri [Ari] Saturn (v/c 5:43)
+Thu  9/ 9/2027  1:11am    Moon (Sag) --> Capricorn
+Thu  9/ 9/2027 10:51am    Moon (Cap) Sex (Sco) Mars
+Thu  9/ 9/2027 12:42pm    Moon (Cap) Squ [Ari] Neptune
+Thu  9/ 9/2027  7:54pm    Moon (Cap) Squ (Lib) Mercury
+Thu  9/ 9/2027  8:45pm    Moon (Cap) Tri (Vir) Jupiter
+Fri  9/10/2027 12:31pm     Sun (Vir) Tri (Cap) Moon
+Sat  9/11/2027  6:49am    Moon (Cap) Tri (Vir) Venus
+Sat  9/11/2027  7:42am    Moon (Cap) Squ [Ari] Saturn (v/c 6:07)
+Sat  9/11/2027  1:49pm    Moon (Cap) --> Aquarius
+Sun  9/12/2027 12:05am    Moon (Aqu) Con [Aqu] Pluto
+Sun  9/12/2027  1:25am    Moon (Aqu) Sex [Ari] Neptune
+Sun  9/12/2027  3:18am    Moon (Aqu) Squ (Sco) Mars
+Sun  9/12/2027 10:05am    Moon (Aqu) Tri (Gem) Uranus
+Sun  9/12/2027  4:54pm    Moon (Aqu) Tri (Lib) Mercury
+Mon  9/13/2027  8:19pm    Moon (Aqu) Sex [Ari] Saturn (v/c 6:19)
+Tue  9/14/2027  2:38am    Moon (Aqu) --> Pisces
+Tue  9/14/2027  7:27pm    Moon (Pis) Tri (Sco) Mars
+Tue  9/14/2027 10:32pm    Moon (Pis) Squ (Gem) Uranus
+Wed  9/15/2027 12:21am    Moon (Pis) Opp (Vir) Jupiter
+Thu  9/16/2027 12:03am     Sun (Vir) Opp (Pis) Moon (Full Moon) (v/c 13:52)
+Thu  9/16/2027  1:56pm    Moon (Pis) --> Aries
+Thu  9/16/2027  8:40pm    Moon (Ari) Opp (Lib) Venus
+Thu  9/16/2027 11:33pm    Moon (Ari) Sex [Aqu] Pluto
+Fri  9/17/2027 12:41am    Moon (Ari) Con [Ari] Neptune
+Fri  9/17/2027  9:08am    Moon (Ari) Sex [Gem] Uranus
+Sat  9/18/2027  4:56am    Moon (Ari) Opp (Lib) Mercury
+Sat  9/18/2027  4:39pm    Moon (Ari) Con [Ari] Saturn (v/c 6:25)
+Sat  9/18/2027 11:05pm    Moon (Ari) --> Taurus
+Sun  9/19/2027  8:16am    Moon (Tau) Squ [Aqu] Pluto
+Sun  9/19/2027  9:01pm    Moon (Tau) Opp (Sco) Mars
+Sun  9/19/2027  9:10pm    Moon (Tau) Tri (Vir) Jupiter
+Tue  9/21/2027  2:13am     Sun (Vir) Tri (Tau) Moon (v/c 3:52)
+Tue  9/21/2027  6:05am    Moon (Tau) --> Gemini
+Tue  9/21/2027  2:53pm    Moon (Gem) Tri [Aqu] Pluto
+Tue  9/21/2027  3:49pm    Moon (Gem) Sex [Ari] Neptune
+Tue  9/21/2027 11:41pm    Moon (Gem) Tri (Lib) Venus
+Tue  9/21/2027 11:51pm    Moon (Gem) Con [Gem] Uranus
+Wed  9/22/2027  4:13am    Moon (Gem) Squ (Vir) Jupiter
+Thu  9/23/2027  4:00am    Moon (Gem) Tri (Lib) Mercury
+Thu  9/23/2027  4:35am    Moon (Gem) Sex [Ari] Saturn (v/c 6:26)
+Thu  9/23/2027 11:02am    Moon (Gem) --> Cancer
+Thu  9/23/2027 11:20am     Sun (Lib) Squ (Can) Moon (Half Moon)
+Thu  9/23/2027  8:18pm    Moon (Can) Squ [Ari] Neptune
+Fri  9/24/2027  9:01am    Moon (Can) Squ (Lib) Venus
+Fri  9/24/2027  9:07am    Moon (Can) Sex (Vir) Jupiter
+Fri  9/24/2027 12:44pm    Moon (Can) Tri (Sco) Mars
+Sat  9/25/2027  7:32am    Moon (Can) Squ [Ari] Saturn
+Sat  9/25/2027 11:03am    Moon (Can) Squ (Lib) Mercury (v/c 2:56)
+Sat  9/25/2027  2:00pm    Moon (Can) --> Leo
+Sat  9/25/2027  6:01pm     Sun (Lib) Sex (Leo) Moon
+Sat  9/25/2027 10:06pm    Moon (Leo) Opp [Aqu] Pluto
+Sat  9/25/2027 10:51pm    Moon (Leo) Tri [Ari] Neptune
+Sun  9/26/2027  6:27am    Moon (Leo) Sex [Gem] Uranus
+Sun  9/26/2027  3:57pm    Moon (Leo) Sex (Lib) Venus
+Sun  9/26/2027  5:20pm    Moon (Leo) Squ (Sco) Mars
+Mon  9/27/2027  8:55am    Moon (Leo) Tri [Ari] Saturn (v/c 6:32)
+Mon  9/27/2027  3:28pm    Moon (Leo) --> Virgo
+Mon  9/27/2027  3:47pm    Moon (Vir) Sex (Sco) Mercury
+Tue  9/28/2027  7:36am    Moon (Vir) Squ [Gem] Uranus
+Tue  9/28/2027  1:54pm    Moon (Vir) Con (Vir) Jupiter
+Tue  9/28/2027  8:48pm    Moon (Vir) Sex (Sco) Mars (v/c 19:41)
+Wed  9/29/2027  4:30pm    Moon (Vir) --> Libra
+Thu  9/30/2027 12:27am    Moon (Lib) Tri [Aqu] Pluto
+Thu  9/30/2027  1:04am    Moon (Lib) Opp [Ari] Neptune
+Thu  9/30/2027  3:36am     Sun (Lib) Con (Lib) Moon (New Moon)
+Thu  9/30/2027  8:48am    Moon (Lib) Tri [Gem] Uranus
+Fri 10/ 1/2027  3:51am    Moon (Lib) Con (Lib) Venus
+Fri 10/ 1/2027 11:24am    Moon (Lib) Opp [Ari] Saturn (v/c 7:20)
+Fri 10/ 1/2027  6:45pm    Moon (Lib) --> Scorpio
+Sat 10/ 2/2027 12:22am    Moon (Sco) Con (Sco) Mercury
+Sat 10/ 2/2027  3:02am    Moon (Sco) Squ [Aqu] Pluto
+Sat 10/ 2/2027  8:15pm    Moon (Sco) Sex (Vir) Jupiter
+Sun 10/ 3/2027  7:42am    Moon (Sco) Con (Sco) Mars (v/c 16:13)
+Sun 10/ 3/2027 11:55pm    Moon (Sco) --> Sagittarius
+Mon 10/ 4/2027  8:47am    Moon (Sag) Sex [Aqu] Pluto
+Mon 10/ 4/2027  9:18am    Moon (Sag) Tri [Ari] Neptune
+Mon 10/ 4/2027  6:08pm    Moon (Sag) Opp [Gem] Uranus
+Mon 10/ 4/2027  9:06pm     Sun (Lib) Sex (Sag) Moon
+Tue 10/ 5/2027  4:12am    Moon (Sag) Squ (Vir) Jupiter
+Tue 10/ 5/2027 11:55pm    Moon (Sag) Tri [Ari] Saturn
+Wed 10/ 6/2027  4:01am    Moon (Sag) Sex (Lib) Venus (v/c 4:57)
+Wed 10/ 6/2027  8:59am    Moon (Sag) --> Capricorn
+Wed 10/ 6/2027  6:37pm    Moon (Cap) Sex (Sco) Mercury
+Wed 10/ 6/2027  6:52pm    Moon (Cap) Squ [Ari] Neptune
+Thu 10/ 7/2027 12:47pm     Sun (Lib) Squ (Cap) Moon (Half Moon)
+Thu 10/ 7/2027  4:04pm    Moon (Cap) Tri (Vir) Jupiter
+Fri 10/ 8/2027 10:16am    Moon (Cap) Sex (Sco) Mars
+Fri 10/ 8/2027 11:21am    Moon (Cap) Squ [Ari] Saturn (v/c 9:48)
+Fri 10/ 8/2027  9:09pm    Moon (Cap) --> Aquarius
+Fri 10/ 8/2027 11:03pm    Moon (Aqu) Squ (Sco) Venus
+Sat 10/ 9/2027  6:51am    Moon (Aqu) Squ [Sco] Mercury
+Sat 10/ 9/2027  6:51am    Moon (Aqu) Con [Aqu] Pluto
+Sat 10/ 9/2027  7:13am    Moon (Aqu) Sex [Ari] Neptune
+Sat 10/ 9/2027  4:55pm    Moon (Aqu) Tri [Gem] Uranus
+Sun 10/10/2027  7:11am     Sun (Lib) Tri (Aqu) Moon
+Sun 10/10/2027 11:53pm    Moon (Aqu) Sex [Ari] Saturn
+Mon 10/11/2027  3:03am    Moon (Aqu) Squ (Sco) Mars (v/c 6:58)
+Mon 10/11/2027 10:01am    Moon (Aqu) --> Pisces
+Mon 10/11/2027  5:46pm    Moon (Pis) Tri [Sco] Mercury
+Mon 10/11/2027  6:57pm    Moon (Pis) Tri (Sco) Venus
+Tue 10/12/2027  5:19am    Moon (Pis) Squ [Gem] Uranus
+Tue 10/12/2027  7:10pm    Moon (Pis) Opp (Vir) Jupiter
+Wed 10/13/2027  6:03pm    Moon (Pis) Tri (Sco) Mars (v/c 3:05)
+Wed 10/13/2027  9:09pm    Moon (Pis) --> Aries
+Thu 10/14/2027  6:16am    Moon (Ari) Sex [Aqu] Pluto
+Thu 10/14/2027  6:23am    Moon (Ari) Con [Ari] Neptune
+Thu 10/14/2027  3:31pm    Moon (Ari) Sex [Gem] Uranus
+Fri 10/15/2027  2:46pm     Sun (Lib) Opp (Ari) Moon (Full Moon)
+Fri 10/15/2027  7:37pm    Moon (Ari) Con [Ari] Saturn (v/c 9:59)
+Sat 10/16/2027  5:36am    Moon (Ari) --> Taurus
+Sat 10/16/2027  5:50am    Moon (Tau) Opp [Sco] Mercury
+Sat 10/16/2027  2:19pm    Moon (Tau) Squ [Aqu] Pluto
+Sun 10/17/2027  1:43am    Moon (Tau) Opp (Sco) Venus
+Sun 10/17/2027  1:36pm    Moon (Tau) Tri (Vir) Jupiter (v/c 22:10)
+Mon 10/18/2027 11:46am    Moon (Tau) --> Gemini
+Mon 10/18/2027  3:05pm    Moon (Gem) Opp (Sag) Mars
+Mon 10/18/2027  8:05pm    Moon (Gem) Sex [Ari] Neptune
+Mon 10/18/2027  8:11pm    Moon (Gem) Tri (Aqu) Pluto
+Tue 10/19/2027  4:33am    Moon (Gem) Con [Gem] Uranus
+Tue 10/19/2027  7:32pm    Moon (Gem) Squ (Vir) Jupiter
+Wed 10/20/2027  6:23am    Moon (Gem) Sex [Ari] Saturn
+Wed 10/20/2027  8:06am    Moon (Gem) Tri [Lib] Mercury
+Wed 10/20/2027 10:48am     Sun (Lib) Tri (Gem) Moon (v/c 5:35)
+Wed 10/20/2027  4:24pm    Moon (Gem) --> Cancer
+Thu 10/21/2027 12:27am    Moon (Can) Squ [Ari] Neptune
+Thu 10/21/2027  9:49pm    Moon (Can) Tri (Sco) Venus
+Fri 10/22/2027 12:16am    Moon (Can) Sex (Vir) Jupiter
+Fri 10/22/2027  7:57am    Moon (Can) Squ [Lib] Mercury
+Fri 10/22/2027  9:54am    Moon (Can) Squ [Ari] Saturn
+Fri 10/22/2027  6:29pm     Sun (Lib) Squ (Can) Moon (Half Moon) (v/c 1:33)
+Fri 10/22/2027  8:02pm    Moon (Can) --> Leo
+Sat 10/23/2027  3:51am    Moon (Leo) Tri [Ari] Neptune
+Sat 10/23/2027  4:09am    Moon (Leo) Opp (Aqu) Pluto
+Sat 10/23/2027  4:49am    Moon (Leo) Tri (Sag) Mars
+Sat 10/23/2027 11:59am    Moon (Leo) Sex [Gem] Uranus
+Sun 10/24/2027  5:53am    Moon (Leo) Squ (Sco) Venus
+Sun 10/24/2027  7:48am    Moon (Leo) Sex [Lib] Mercury
+Sun 10/24/2027 12:36pm    Moon (Leo) Tri [Ari] Saturn (v/c 10:17)
+Sun 10/24/2027 10:53pm    Moon (Leo) --> Virgo
+Mon 10/25/2027  1:10am     Sun (Sco) Sex (Vir) Moon
+Mon 10/25/2027 10:16am    Moon (Vir) Squ (Sag) Mars
+Mon 10/25/2027  2:33pm    Moon (Vir) Squ [Gem] Uranus
+Tue 10/26/2027  7:16am    Moon (Vir) Con (Vir) Jupiter
+Tue 10/26/2027  1:13pm    Moon (Vir) Sex (Sco) Venus (v/c 12:08)
+Wed 10/27/2027  1:21am    Moon (Vir) --> Libra
+Wed 10/27/2027  8:54am    Moon (Lib) Opp [Ari] Neptune
+Wed 10/27/2027  9:23am    Moon (Lib) Tri (Aqu) Pluto
+Wed 10/27/2027  3:28pm    Moon (Lib) Sex (Sag) Mars
+Wed 10/27/2027  4:56pm    Moon (Lib) Tri [Gem] Uranus
+Thu 10/28/2027 10:03am    Moon (Lib) Con [Lib] Mercury
+Thu 10/28/2027  5:19pm    Moon (Lib) Opp [Ari] Saturn (v/c 11:02)
+Fri 10/29/2027  4:22am    Moon (Lib) --> Scorpio
+Fri 10/29/2027 12:39pm    Moon (Sco) Squ (Aqu) Pluto
+Fri 10/29/2027  2:36pm     Sun (Sco) Con (Sco) Moon (New Moon)
+Sat 10/30/2027  3:28pm    Moon (Sco) Sex (Vir) Jupiter
+Sun 10/31/2027  7:00am    Moon (Sco) Con (Sco) Venus (v/c 2:23)
+Sun 10/31/2027  9:24am    Moon (Sco) --> Sagittarius
+Sun 10/31/2027  5:24pm    Moon (Sag) Tri [Ari] Neptune
+Sun 10/31/2027  6:09pm    Moon (Sag) Sex (Aqu) Pluto
+Mon 11/ 1/2027  2:04am    Moon (Sag) Opp [Gem] Uranus
+Mon 11/ 1/2027  7:01am    Moon (Sag) Con (Sag) Mars
+Mon 11/ 1/2027 11:22pm    Moon (Sag) Squ (Vir) Jupiter
+Tue 11/ 2/2027 12:22am    Moon (Sag) Sex (Lib) Mercury
+Tue 11/ 2/2027  4:40am    Moon (Sag) Tri [Ari] Saturn (v/c 13:00)
+Tue 11/ 2/2027  5:40pm    Moon (Sag) --> Capricorn
+Wed 11/ 3/2027  2:06am    Moon (Cap) Squ [Ari] Neptune
+Wed 11/ 3/2027  3:02pm     Sun (Sco) Sex (Cap) Moon
+Thu 11/ 4/2027 10:50am    Moon (Cap) Tri (Vir) Jupiter
+Thu 11/ 4/2027  3:12pm    Moon (Cap) Squ [Ari] Saturn
+Thu 11/ 4/2027  3:44pm    Moon (Cap) Squ (Lib) Mercury (v/c 13:28)
+Fri 11/ 5/2027  5:13am    Moon (Cap) --> Aquarius
+Fri 11/ 5/2027  1:53pm    Moon (Aqu) Sex [Ari] Neptune
+Fri 11/ 5/2027  3:00pm    Moon (Aqu) Con (Aqu) Pluto
+Fri 11/ 5/2027  4:04pm    Moon (Aqu) Sex (Sag) Venus
+Fri 11/ 5/2027 11:18pm    Moon (Aqu) Tri [Gem] Uranus
+Sat 11/ 6/2027  9:00am     Sun (Sco) Squ (Aqu) Moon (Half Moon)
+Sat 11/ 6/2027 12:55pm    Moon (Aqu) Sex (Sag) Mars
+Sun 11/ 7/2027  3:41am    Moon (Aqu) Sex [Ari] Saturn
+Sun 11/ 7/2027 11:09am    Moon (Aqu) Tri (Lib) Mercury (v/c 6:59)
+Sun 11/ 7/2027  6:08pm    Moon (Aqu) --> Pisces
+Mon 11/ 8/2027 11:54am    Moon (Pis) Squ [Gem] Uranus
+Mon 11/ 8/2027 11:59am    Moon (Pis) Squ (Sag) Venus
+Tue 11/ 9/2027  3:04am     Sun (Sco) Tri (Pis) Moon
+Tue 11/ 9/2027  5:20am    Moon (Pis) Squ (Sag) Mars
+Tue 11/ 9/2027  1:31pm    Moon (Pis) Opp (Vir) Jupiter (v/c 16:06)
+Wed 11/10/2027  5:38am    Moon (Pis) --> Aries
+Wed 11/10/2027  1:42pm    Moon (Ari) Con [Ari] Neptune
+Wed 11/10/2027  3:01pm    Moon (Ari) Sex (Aqu) Pluto
+Wed 11/10/2027 10:22pm    Moon (Ari) Sex [Gem] Uranus
+Thu 11/11/2027  5:00am    Moon (Ari) Tri (Sag) Venus
+Thu 11/11/2027  6:35pm    Moon (Ari) Tri (Sag) Mars
+Fri 11/12/2027 12:16am    Moon (Ari) Con [Ari] Saturn (v/c 13:41)
+Fri 11/12/2027  1:57pm    Moon (Ari) --> Taurus
+Fri 11/12/2027  9:22pm    Moon (Tau) Opp (Sco) Mercury
+Fri 11/12/2027 10:51pm    Moon (Tau) Squ (Aqu) Pluto
+Sun 11/14/2027  4:25am     Sun (Sco) Opp (Tau) Moon (Full Moon)
+Sun 11/14/2027  6:06am    Moon (Tau) Tri (Vir) Jupiter (v/c 13:07)
+Sun 11/14/2027  7:14pm    Moon (Tau) --> Gemini
+Mon 11/15/2027  2:21am    Moon (Gem) Sex [Ari] Neptune
+Mon 11/15/2027  3:47am    Moon (Gem) Tri (Aqu) Pluto
+Mon 11/15/2027 10:01am    Moon (Gem) Con [Gem] Uranus
+Tue 11/16/2027  2:45am    Moon (Gem) Opp (Sag) Venus
+Tue 11/16/2027  9:29am    Moon (Gem) Sex [Ari] Saturn
+Tue 11/16/2027 10:26am    Moon (Gem) Squ (Vir) Jupiter
+Tue 11/16/2027 10:40am    Moon (Gem) Opp (Sag) Mars (v/c 11:58)
+Tue 11/16/2027 10:39pm    Moon (Gem) --> Cancer
+Wed 11/17/2027  5:34am    Moon (Can) Squ [Ari] Neptune
+Wed 11/17/2027  6:12pm    Moon (Can) Tri (Sco) Mercury
+Thu 11/18/2027 12:08pm    Moon (Can) Squ [Ari] Saturn
+Thu 11/18/2027  1:50pm    Moon (Can) Sex (Vir) Jupiter
+Thu 11/18/2027  6:57pm     Sun (Sco) Tri (Can) Moon (v/c 6:30)
+Fri 11/19/2027  1:27am    Moon (Can) --> Leo
+Fri 11/19/2027  8:18am    Moon (Leo) Tri [Ari] Neptune
+Fri 11/19/2027  9:55am    Moon (Leo) Opp (Aqu) Pluto
+Fri 11/19/2027  3:39pm    Moon (Leo) Sex [Gem] Uranus
+Sat 11/20/2027  3:20am    Moon (Leo) Squ (Sco) Mercury
+Sat 11/20/2027  2:48pm    Moon (Leo) Tri [Ari] Saturn
+Sat 11/20/2027  6:19pm    Moon (Leo) Tri (Sag) Venus
+Sat 11/20/2027 10:07pm    Moon (Leo) Tri (Sag) Mars
+Sun 11/21/2027  1:48am     Sun (Sco) Squ (Leo) Moon (Half Moon) (v/c 2:36)
+Sun 11/21/2027  4:25am    Moon (Leo) --> Virgo
+Sun 11/21/2027  6:35pm    Moon (Vir) Squ [Gem] Uranus
+Mon 11/22/2027  1:01pm    Moon (Vir) Sex (Sco) Mercury
+Mon 11/22/2027  9:06pm    Moon (Vir) Con (Vir) Jupiter
+Tue 11/23/2027  2:40am    Moon (Vir) Squ (Sag) Venus
+Tue 11/23/2027  4:26am    Moon (Vir) Squ (Sag) Mars (v/c 3:25)
+Tue 11/23/2027  7:52am    Moon (Vir) --> Libra
+Tue 11/23/2027  9:15am     Sun (Sag) Sex (Lib) Moon
+Tue 11/23/2027  2:46pm    Moon (Lib) Opp [Ari] Neptune
+Tue 11/23/2027  4:37pm    Moon (Lib) Tri (Aqu) Pluto
+Tue 11/23/2027 10:04pm    Moon (Lib) Tri [Gem] Uranus
+Wed 11/24/2027  9:43pm    Moon (Lib) Opp [Ari] Saturn
+Thu 11/25/2027 11:43am    Moon (Lib) Sex (Sag) Mars
+Thu 11/25/2027 12:05pm    Moon (Lib) Sex (Sag) Venus (v/c 0:04)
+Thu 11/25/2027 12:10pm    Moon (Lib) --> Scorpio
+Thu 11/25/2027  9:11pm    Moon (Sco) Squ (Aqu) Pluto
+Sat 11/27/2027  7:42am    Moon (Sco) Sex (Vir) Jupiter
+Sat 11/27/2027 12:21pm    Moon (Sco) Con (Sco) Mercury (v/c 5:38)
+Sat 11/27/2027  6:00pm    Moon (Sco) --> Sagittarius
+Sun 11/28/2027  1:14am    Moon (Sag) Tri [Ari] Neptune
+Sun 11/28/2027  3:27am    Moon (Sag) Sex (Aqu) Pluto
+Sun 11/28/2027  4:24am     Sun (Sag) Con (Sag) Moon (New Moon)
+Sun 11/28/2027  8:47am    Moon (Sag) Opp [Gem] Uranus
+Mon 11/29/2027 10:11am    Moon (Sag) Tri [Ari] Saturn
+Mon 11/29/2027  4:02pm    Moon (Sag) Squ (Vir) Jupiter (v/c 10:15)
+Tue 11/30/2027  2:18am    Moon (Sag) --> Capricorn
+Tue 11/30/2027  8:58am    Moon (Cap) Con (Cap) Mars
+Tue 11/30/2027  9:52am    Moon (Cap) Squ [Ari] Neptune
+Tue 11/30/2027  2:26pm    Moon (Cap) Con (Cap) Venus (Total Occultation)
+Wed 12/ 1/2027  8:21pm    Moon (Cap) Squ [Ari] Saturn
+Thu 12/ 2/2027  3:17am    Moon (Cap) Tri (Vir) Jupiter (v/c 10:08)
+Thu 12/ 2/2027  1:26pm    Moon (Cap) --> Aquarius
+Thu 12/ 2/2027  9:17pm    Moon (Aqu) Sex [Ari] Neptune
+Thu 12/ 2/2027 11:59pm    Moon (Aqu) Con (Aqu) Pluto
+Fri 12/ 3/2027 12:43am    Moon (Aqu) Sex (Sag) Mercury
+Fri 12/ 3/2027  5:12am    Moon (Aqu) Tri [Gem] Uranus
+Fri 12/ 3/2027 11:43am     Sun (Sag) Sex (Aqu) Moon
+Sat 12/ 4/2027  8:46am    Moon (Aqu) Sex [Ari] Saturn (v/c 17:33)
+Sun 12/ 5/2027  2:20am    Moon (Aqu) --> Pisces
+Sun 12/ 5/2027  5:38pm    Moon (Pis) Sex (Cap) Mars
+Sun 12/ 5/2027  5:58pm    Moon (Pis) Squ [Gem] Uranus
+Sun 12/ 5/2027 11:01pm    Moon (Pis) Squ (Sag) Mercury
+Mon 12/ 6/2027  5:05am    Moon (Pis) Sex (Cap) Venus
+Mon 12/ 6/2027  6:22am     Sun (Sag) Squ (Pis) Moon (Half Moon)
+Tue 12/ 7/2027  5:39am    Moon (Pis) Opp (Vir) Jupiter (v/c 8:50)
+Tue 12/ 7/2027  2:30pm    Moon (Pis) --> Aries
+Tue 12/ 7/2027 10:04pm    Moon (Ari) Con [Ari] Neptune
+Wed 12/ 8/2027 12:56am    Moon (Ari) Sex (Aqu) Pluto
+Wed 12/ 8/2027  5:19am    Moon (Ari) Sex [Gem] Uranus
+Wed 12/ 8/2027  9:07am    Moon (Ari) Squ (Cap) Mars
+Wed 12/ 8/2027  6:50pm    Moon (Ari) Tri (Sag) Mercury
+Wed 12/ 8/2027 10:29pm     Sun (Sag) Tri (Ari) Moon
+Wed 12/ 8/2027 10:31pm    Moon (Ari) Squ (Cap) Venus
+Thu 12/ 9/2027  7:17am    Moon (Ari) Con [Ari] Saturn (v/c 16:18)
+Thu 12/ 9/2027 11:35pm    Moon (Ari) --> Taurus
+Fri 12/10/2027  9:27am    Moon (Tau) Squ (Aqu) Pluto
+Fri 12/10/2027  8:23pm    Moon (Tau) Tri (Cap) Mars
+Sat 12/11/2027 10:58am    Moon (Tau) Tri (Cap) Venus
+Sat 12/11/2027  9:57pm    Moon (Tau) Tri (Vir) Jupiter (v/c 6:56)
+Sun 12/12/2027  4:54am    Moon (Tau) --> Gemini
+Sun 12/12/2027 11:31am    Moon (Gem) Sex [Ari] Neptune
+Sun 12/12/2027  2:14pm    Moon (Gem) Tri (Aqu) Pluto
+Sun 12/12/2027  5:35pm    Moon (Gem) Con [Gem] Uranus
+Mon 12/13/2027  4:39pm    Moon (Gem) Sex [Ari] Saturn
+Mon 12/13/2027  5:08pm     Sun (Sag) Opp (Gem) Moon (Full Moon)
+Mon 12/13/2027  6:57pm    Moon (Gem) Opp (Sag) Mercury
+Tue 12/14/2027  1:04am    Moon (Gem) Squ (Vir) Jupiter (v/c 6:20)
+Tue 12/14/2027  7:24am    Moon (Gem) --> Cancer
+Tue 12/14/2027  1:45pm    Moon (Can) Squ [Ari] Neptune
+Wed 12/15/2027  7:57am    Moon (Can) Opp (Cap) Mars (Total Occultation)
+Wed 12/15/2027  6:04pm    Moon (Can) Squ [Ari] Saturn
+Thu 12/16/2027  1:03am    Moon (Can) Opp (Cap) Venus (Partial Occultation)
+Thu 12/16/2027  2:42am    Moon (Can) Sex (Vir) Jupiter (v/c 5:58)
+Thu 12/16/2027  8:41am    Moon (Can) --> Leo
+Thu 12/16/2027  3:00pm    Moon (Leo) Tri (Ari) Neptune
+Thu 12/16/2027  5:47pm    Moon (Leo) Opp (Aqu) Pluto
+Thu 12/16/2027  8:35pm    Moon (Leo) Sex [Gem] Uranus
+Fri 12/17/2027  7:23pm    Moon (Leo) Tri [Ari] Saturn
+Sat 12/18/2027  3:28am     Sun (Sag) Tri (Leo) Moon
+Sat 12/18/2027  9:56am    Moon (Leo) Tri (Sag) Mercury (v/c 0:20)
+Sat 12/18/2027 10:16am    Moon (Leo) --> Virgo
+Sat 12/18/2027 10:18pm    Moon (Vir) Squ [Gem] Uranus
+Sun 12/19/2027  5:10pm    Moon (Vir) Tri (Cap) Mars
+Mon 12/20/2027  7:29am    Moon (Vir) Con (Vir) Jupiter
+Mon 12/20/2027 10:10am     Sun (Sag) Squ (Vir) Moon (Half Moon) (v/c 3:02)
+Mon 12/20/2027  1:13pm    Moon (Vir) --> Libra
+Mon 12/20/2027  2:55pm    Moon (Lib) Tri (Aqu) Venus
+Mon 12/20/2027  7:27pm    Moon (Lib) Squ (Cap) Mercury
+Mon 12/20/2027  7:54pm    Moon (Lib) Opp (Ari) Neptune
+Mon 12/20/2027 11:01pm    Moon (Lib) Tri (Aqu) Pluto
+Tue 12/21/2027  1:31am    Moon (Lib) Tri [Gem] Uranus
+Wed 12/22/2027 12:21am    Moon (Lib) Squ (Cap) Mars
+Wed 12/22/2027  2:00am    Moon (Lib) Opp [Ari] Saturn (v/c 15:59)
+Wed 12/22/2027  6:00pm    Moon (Lib) --> Scorpio
+Wed 12/22/2027  7:11pm     Sun (Cap) Sex (Sco) Moon
+Thu 12/23/2027  1:08am    Moon (Sco) Squ (Aqu) Venus
+Thu 12/23/2027  4:17am    Moon (Sco) Squ (Aqu) Pluto
+Thu 12/23/2027  7:42am    Moon (Sco) Sex (Cap) Mercury
+Fri 12/24/2027  9:55am    Moon (Sco) Sex (Cap) Mars
+Fri 12/24/2027  7:11pm    Moon (Sco) Sex (Vir) Jupiter (v/c 5:38)
+Sat 12/25/2027 12:50am    Moon (Sco) --> Sagittarius
+Sat 12/25/2027  8:05am    Moon (Sag) Tri (Ari) Neptune
+Sat 12/25/2027 11:38am    Moon (Sag) Sex (Aqu) Pluto
+Sat 12/25/2027  1:47pm    Moon (Sag) Opp [Gem] Uranus
+Sat 12/25/2027  2:06pm    Moon (Sag) Sex (Aqu) Venus
+Sun 12/26/2027  4:33pm    Moon (Sag) Tri (Ari) Saturn
+Mon 12/27/2027  4:13am    Moon (Sag) Squ (Vir) Jupiter (v/c 5:37)
+Mon 12/27/2027  9:50am    Moon (Sag) --> Capricorn
+Mon 12/27/2027  5:25pm    Moon (Cap) Squ (Ari) Neptune
+Mon 12/27/2027  9:12pm     Sun (Cap) Con (Cap) Moon (New Moon)
+Tue 12/28/2027  5:45pm    Moon (Cap) Con (Cap) Mercury (Total Occultation)
+Wed 12/29/2027  3:10am    Moon (Cap) Squ (Ari) Saturn
+Wed 12/29/2027 12:58pm    Moon (Cap) Con (Cap) Mars (Total Occultation)
+Wed 12/29/2027  3:28pm    Moon (Cap) Tri (Vir) Jupiter (v/c 5:35)
+Wed 12/29/2027  9:04pm    Moon (Cap) --> Aquarius
+Thu 12/30/2027  4:56am    Moon (Aqu) Sex (Ari) Neptune
+Thu 12/30/2027  8:58am    Moon (Aqu) Con (Aqu) Pluto
+Thu 12/30/2027 10:39am    Moon (Aqu) Tri [Gem] Uranus
+Fri 12/31/2027 12:52am    Moon (Aqu) Con (Aqu) Venus
+Fri 12/31/2027  3:41pm    Moon (Aqu) Sex (Ari) Saturn

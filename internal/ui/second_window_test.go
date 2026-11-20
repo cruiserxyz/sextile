@@ -128,39 +128,36 @@ func TestSecondWindowSaysSoOnce(t *testing.T) {
 	}
 }
 
-// A rename in a second window of a chart whose file names a house system is
-// refused, even when this window holds a record for it: the rewrite drops the
-// file's house line, and only the first window can keep the system.
-func TestSecondWindowRefusesARenameThatNeedsTheSession(t *testing.T) {
+// A rename in a second window of a chart whose file names a house system
+// succeeds: the rewrite keeps the file's house line, and the window writes no
+// session.
+func TestSecondWindowRenamesAChartWithAHouseLine(t *testing.T) {
 	sessionSandbox(t)
 	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
-	before := fileText(t, filepath.Join(dir, "K.as"))
 	m := openedPicker(t)
 	m.cfg.SecondWindow = true
-	m.frames.records = []store.FrameRecord{{File: "K.as", When: frameWhenUI, Houses: recipe.Koch, HasHouses: true, From: store.FrameFromChosen}}
 	for i, c := range m.picker.Matches {
 		if c.Source.File == "K.as" {
 			m.picker.Cursor = i
 		}
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-	m = typeText(t, m, "Client Kay")
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = typeText(t, clearField(t, m, 20), "Client Kay")
+	m, cmd := submit(t, m)
 	m, _ = finishRename(t, m, cmd)
-	if got := fileText(t, filepath.Join(dir, "K.as")); got != before {
-		t.Errorf("the chart file was rewritten by a window that cannot keep its houses:\n%s", got)
+	if m.title.Refusal != "" {
+		t.Errorf("the rename was refused: %q", m.title.Refusal)
 	}
-	noBackup(t, filepath.Join(dir, "K.as"))
-	if !strings.Contains(m.title.Refusal, "first Sextile window") {
-		t.Errorf("refusal = %q, want it to name the first window", m.title.Refusal)
+	if got := fileText(t, filepath.Join(dir, "K.as")); !strings.Contains(got, `"Client Kay"`) {
+		t.Errorf("the rename did not happen:\n%s", got)
 	}
+	fileKeepsItsSystem(t, dir, "K.as")
 	if _, err := os.Stat(store.SessionPath()); !os.IsNotExist(err) {
 		t.Errorf("a session was written (%v)", err)
 	}
 }
 
-// A chart whose file names no house system needs nothing kept: a second
-// window renames it.
+// A chart whose file names no house system: a second window renames it too.
 func TestSecondWindowRenamesAChartWithNoHouseLine(t *testing.T) {
 	sessionSandbox(t)
 	dir := titleLibrary(t, nil, map[string]string{"N.as": kochChart("Client N", false)})
@@ -173,7 +170,7 @@ func TestSecondWindowRenamesAChartWithNoHouseLine(t *testing.T) {
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
 	m = typeText(t, m, "Client Nan")
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := submit(t, m)
 	_, _ = finishRename(t, m, cmd)
 	if got := fileText(t, filepath.Join(dir, "N.as")); !strings.Contains(got, "Client Nan") {
 		t.Errorf("the rename did not happen:\n%s", got)

@@ -13,7 +13,7 @@ import (
 func popupChrome(cfg Config) dialog.Chrome {
 	return dialog.Chrome{
 		TopEdge: func(width int, title string, frame lipgloss.Color, leftCorner, rightCorner, dash string) string {
-			return renderTopBorder(width, tabStrip{tabs: []Tab{{Title: title}}}, frame, cfg.FocusColour(), true, cfg, leftCorner, rightCorner, dash)
+			return renderTopBorderEdge(width, tabStrip{tabs: []Tab{{Title: title}}}, frame, cfg.FocusColour(), true, true, cfg, leftCorner, rightCorner, dash)
 		},
 		ASCIIBorder: asciiBorder,
 		Dim:         func(text string) string { return panel.RenderDim(text, true) },

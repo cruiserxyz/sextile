@@ -1,6 +1,11 @@
 package menu
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"slices"
+
+	"github.com/cruiserxyz/sextile/internal/ui/term"
+)
 
 // fuzzy_checklist.go is the filtered-list chassis: the search buffer and its
 // editor, the cursor and its clamping, and the pinned blocks a checklist modal
@@ -24,13 +29,52 @@ import tea "github.com/charmbracelet/bubbletea"
 // and how — and hands the result back through SetMatches.
 type FuzzyList[T any] struct {
 	FilterText string
-	Cursor     int
+	// Cursor is the row the cursor is on. With a Lead row it can also be
+	// LeadCursor, the row above row 0.
+	Cursor int
 	// Offset is the first visible row. It is REMEMBERED rather than derived
 	// from the cursor, which is what lets the window hold still while the
 	// cursor moves through its middle — see ScrollMargin.
 	Offset    int
 	Matches   []T
 	Truncated bool
+
+	// Lead is the text of the one action row this list can carry above its
+	// matches ("" for none). It stays first whatever the search line holds, the
+	// cursor can rest on it (Cursor is LeadCursor), and Enter on it runs its
+	// action; the owner draws it (LeadRow) and acts on it.
+	Lead string
+}
+
+// LeadCursor is the cursor's place while it rests on the lead row.
+const LeadCursor = -1
+
+// HasLead says whether the list carries a lead row.
+func (l *FuzzyList[T]) HasLead() bool { return l.Lead != "" }
+
+// LeadRows is how many rows the lead row takes: one, or none.
+func (l *FuzzyList[T]) LeadRows() int {
+	if l.HasLead() {
+		return 1
+	}
+	return 0
+}
+
+// OnLead says whether the cursor rests on the lead row.
+func (l *FuzzyList[T]) OnLead() bool { return l.HasLead() && l.Cursor == LeadCursor }
+
+// HomeCursor is the first place the cursor can take: the lead row, else row 0.
+func (l *FuzzyList[T]) HomeCursor() int {
+	if l.HasLead() {
+		return LeadCursor
+	}
+	return 0
+}
+
+// LeadRow draws the lead row: its text, with the cursor treatment while the
+// cursor rests on it. It is the one drawing the lead row uses.
+func LeadRow(text string, onCursor bool, cfg term.Style, width int) string {
+	return Row(RowSpec{Left: text, Cursor: onCursor}, cfg, width)
 }
 
 // SetMatches installs a filter result and clamps the cursor into it. Sending
@@ -66,7 +110,7 @@ func (l *FuzzyList[T]) ResetFilter() {
 
 // MoveUp and moveDown walk the cursor without wrapping.
 func (l *FuzzyList[T]) MoveUp() {
-	if l.Cursor > 0 {
+	if l.Cursor > l.HomeCursor() {
 		l.Cursor--
 	}
 }
@@ -82,6 +126,10 @@ func (l *FuzzyList[T]) MoveDown() {
 // render shows: the SMALLEST count it can show when that depends on the window
 // itself, so the cursor is never outside what is drawn.
 func (l *FuzzyList[T]) Page(op PageOp, visible int) {
+	if l.Cursor < 0 {
+		// A page key leaves the lead row for the list.
+		l.Cursor = 0
+	}
 	if len(l.Matches) == 0 {
 		return
 	}
@@ -93,7 +141,8 @@ func (l *FuzzyList[T]) Page(op PageOp, visible int) {
 // the cursor minus pinned, and the pinned rows are an always-visible header.
 // Page down from a pinned row lands on the last visible list row; page up from
 // the list's first row (nothing above it to scroll to) lands on pinned row 0;
-// Home is pinned row 0, End the last list row.
+// Home is pinned row 0, End the last list row. None of them stops on a lead
+// row: the cursor reaches it with the up key and leaves it with any page key.
 func (l *FuzzyList[T]) PageBelow(pinned int, op PageOp, visible int) {
 	n := len(l.Matches)
 	if n == 0 {
@@ -156,7 +205,9 @@ func (l *FuzzyList[T]) AppendRunes(runes []rune) bool {
 }
 
 // TypeKey is the search line's text entry: printable characters and Space
-// type, Backspace deletes. It reports whether the filter text changed, so the
+// type, Backspace deletes. A comma is never text in a filter: the leader key
+// opens the command line before a key reaches here, and a comma that is not the
+// leader is dropped. It reports whether the filter text changed, so the
 // caller re-filters only then. Every other key is its owner's table's
 // (the specification); a checklist's Space is
 // matched as Toggle before it could reach this.
@@ -167,7 +218,7 @@ func (l *FuzzyList[T]) TypeKey(msg tea.KeyMsg) bool {
 	case tea.KeySpace:
 		return l.AppendRunes([]rune{' '})
 	case tea.KeyRunes:
-		return l.AppendRunes(msg.Runes)
+		return l.AppendRunes(slices.DeleteFunc(slices.Clone(msg.Runes), func(r rune) bool { return r == ',' }))
 	}
 	return false
 }

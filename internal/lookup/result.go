@@ -2,6 +2,7 @@ package lookup
 
 import (
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -36,6 +37,9 @@ type Result struct {
 	// HousesUsed is the house system Astrolog's own header says it used, ""
 	// when it printed none (the specification C7).
 	HousesUsed string
+	// Nodes is the form of the Nodes and Lilith the call cast (the two switches
+	// of its argv), which the Bodies letters and the Details title name.
+	Nodes recipe.NodeForm
 }
 
 // Empty reports whether the arrangement has no data to render. An empty

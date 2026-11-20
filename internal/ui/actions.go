@@ -3,16 +3,17 @@ package ui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 )
 
 // actions.go is where a command runs by its id, and where the one reason it
-// cannot run now is written. The main keys, the leader and (next) the Actions
-// palette all come here, so an action is written once and asked the same
+// cannot run now is written. The main keys, the leader and the Keybindings
+// popup all come here, so an action is written once and asked the same
 // question wherever it is started.
 //
-// runAction is the one switch of the commands: the 24 ids whose table entry
-// carries Palette.
+// runAction is the one switch of the commands: the ids whose table entry
+// carries Palette, and the two doors to the Keybindings popup.
 // Motion, paging, tab switching and the time steps are not commands and stay
 // with the key that presses them (dispatchMainBinding).
 //
@@ -29,16 +30,15 @@ const (
 	whyLoading        = "the chart is still loading"
 	whyNoChart        = "no chart under the cursor"
 	whyOnlyNow        = "only Now can be saved"
-	whyNoBack         = "no earlier time to go back to"
-	whyNotOnOpened    = "focus a chart you opened"
+	whyNotOnOpened    = "put the cursor on an open chart"
 	whyNoneAbove      = "no chart above this one"
 	whyNoneBelow      = "no chart below this one"
 	whyNoDetails      = "the Details panel is not shown"
 	whyNothingToPick  = "nothing here to select"
 	whyAspectsUnread  = "aspect list could not be read"
 	whyBodiesUnread   = "body list could not be read"
-	whyDrawnUnread    = "drawn bodies could not be read"
-	whyNotFirstWindow = "this window keeps no session"
+	whyDrawnUnread    = "the bodies could not be read"
+	whyNotFirstWindow = "this window keeps nothing"
 	whySessionEmpty   = "the session is already empty"
 )
 
@@ -51,11 +51,9 @@ func ran(tm tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd, bool) { return tm, cmd,
 func (m Model) runAction(id keys.BindingID) (tea.Model, tea.Cmd, bool) {
 	switch id {
 	case keys.BindingQuit:
-		return ran(m.quit())
+		return ran(m.quitOrAsk())
 	case keys.BindingHelp:
-		m.helpOpen = true
-		m.help = keys.HelpState{}
-		return ran(m, nil)
+		return ran(openKeybindings(m, false))
 	case keys.BindingOpenAtlas:
 		return ran(m.openCityPicker())
 	case keys.BindingOpenCharts:
@@ -70,6 +68,11 @@ func (m Model) runAction(id keys.BindingID) (tea.Model, tea.Cmd, bool) {
 		return ran(openHouseFinder(m))
 	case keys.BindingZodiac:
 		return ran(openZodiacFinder(m))
+	case keys.BindingNodes:
+		return ran(openNodesFinder(m))
+	case keys.BindingActions:
+		// The same popup, opened at the commands: `, p` and Ctrl+P.
+		return ran(openKeybindings(m, true))
 	case keys.BindingAttach:
 		return ran(m.attachDetails())
 	case keys.BindingSelect:
@@ -84,8 +87,6 @@ func (m Model) runAction(id keys.BindingID) (tea.Model, tea.Cmd, bool) {
 		return ran(m.dispatchRenderWheel())
 	case keys.BindingJumpNow:
 		return ran(m.jumpFloatingToNow())
-	case keys.BindingToggleBack:
-		return ran(m.toggleFloatingBack())
 	case keys.BindingLogConsole:
 		return ran(m.focusLog())
 	case keys.BindingConsole:
@@ -94,12 +95,10 @@ func (m Model) runAction(id keys.BindingID) (tea.Model, tea.Cmd, bool) {
 		return ran(m.copyAll())
 	case keys.BindingSaveCity:
 		return ran(m.saveDefaultCity())
-	case keys.BindingHouseDisplay:
-		return ran(openHouseDisplay(m))
 	case keys.BindingSessions:
 		return ran(openSessionsList(m))
-	case keys.BindingNewSession:
-		return ran(resetSession(m))
+	case keys.BindingOriginals:
+		return ran(m.pressOriginals(store.ChartsDir()))
 	}
 	return m, nil, false
 }
@@ -141,13 +140,6 @@ func (m Model) blocked(id keys.BindingID) string {
 		if m.slots == nil {
 			return whyNoCity
 		}
-	case keys.BindingToggleBack:
-		switch {
-		case m.slots == nil:
-			return whyNoCity
-		case m.previousFloatingTime.IsZero():
-			return whyNoBack
-		}
 	case keys.BindingOpenCharts:
 		// The picker sets the natal anchor of an overlay on a resolved
 		// workspace; before the location resolves there is nothing to anchor to.
@@ -164,7 +156,7 @@ func (m Model) blocked(id keys.BindingID) string {
 		}
 	case keys.BindingRenderWheel:
 		return m.withoutChart()
-	case keys.BindingHouses, keys.BindingZodiac:
+	case keys.BindingHouses, keys.BindingZodiac, keys.BindingNodes:
 		// `startup` names the phase and which modal is open, so a modal opened
 		// before the first frame commits is overwritten by that commit.
 		if m.startup != startupReady {
@@ -197,10 +189,6 @@ func (m Model) blocked(id keys.BindingID) string {
 		if _, err := m.lens.VisibleObjectNumbers(); err != nil {
 			return whyDrawnUnread
 		}
-	case keys.BindingHouseDisplay:
-		if m.startup != startupReady {
-			return whyLoading
-		}
 	case keys.BindingSessions:
 		if m.startup != startupReady {
 			return whyLoading
@@ -217,6 +205,10 @@ func (m Model) blocked(id keys.BindingID) string {
 		}
 		if !m.named.running() && m.sessionIsEmpty() {
 			return whySessionEmpty
+		}
+	case keys.BindingOriginals:
+		if m.startup != startupReady {
+			return whyLoading
 		}
 	case keys.BindingCopy:
 		return m.copyBlocked()

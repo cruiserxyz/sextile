@@ -25,8 +25,7 @@ import (
 
 // astrologShim points PATH at a fake `astrolog` that records every invocation.
 // See the twin in internal/lookup for why this is a PATH shim and not a seam
-// in production code, and what invariants.TestAstrologSpawnChokePoint (C22)
-// has to hold for it to be able to fail for the right reason.
+// in production code.
 func astrologShim(t *testing.T) (count func() int, clear func()) {
 	t.Helper()
 	dir := t.TempDir()
@@ -181,19 +180,17 @@ func TestApplyChartPicked_AnchorChartMatchesPreLazyBaseline(t *testing.T) {
 			if !got.When.Equal(wantWhen) {
 				t.Errorf("When = %v, want the pre-lazy %v", got.When.UTC(), wantWhen)
 			}
-			wantPlace := location.PlaceInfo{
-				Name: b.Place.Name, Country: b.Place.Country,
-				Lat: b.Place.Lat, Lon: b.Place.Lon, TZ: b.Place.TZ,
-			}
-			if got.Place != wantPlace {
-				t.Errorf("Place = %+v, want the pre-lazy %+v", got.Place, wantPlace)
+			// The coordinates are the baseline's; the place's words are the
+			// file's own now, where the baseline named the nearest atlas city.
+			if got.Place.Lat != b.Place.Lat || got.Place.Lon != b.Place.Lon {
+				t.Errorf("Place = %+v, want the pre-lazy coordinates %v %v", got.Place, b.Place.Lat, b.Place.Lon)
 			}
 			anchor := firstAnchor(m.slots)
 			if anchor == nil {
 				t.Fatal("the pick set no anchored slot")
 			}
-			if !anchor.Time.Equal(wantWhen) || anchor.Location != wantPlace {
-				t.Errorf("anchored slot = {%v %+v}, want {%v %+v}", anchor.Time.UTC(), anchor.Location, wantWhen, wantPlace)
+			if !anchor.Time.Equal(wantWhen) || anchor.Location != got.Place {
+				t.Errorf("anchored slot = {%v %+v}, want {%v %+v}", anchor.Time.UTC(), anchor.Location, wantWhen, got.Place)
 			}
 		})
 	}
@@ -294,12 +291,12 @@ func TestApplyChartPicked_ResolveFailureKeepsAnchor(t *testing.T) {
 		t.Error("the picker must remember that the pick failed")
 	}
 	logged := strings.Join(got.logPanelLines(), "\n")
-	if !strings.Contains(logged, "Couldn't open that chart.") {
+	if !strings.Contains(logged, "chart not opened") {
 		t.Errorf("the failure is not on the error lane; Log reads:\n%s", logged)
 	}
 	onConsole := false
 	for _, l := range got.consoleLines() {
-		if l.lane == laneError && strings.Contains(l.text, "Couldn't open that chart.") {
+		if l.lane == laneError && strings.Contains(l.text, "chart not opened") {
 			onConsole = true
 		}
 	}
@@ -402,7 +399,7 @@ func TestApplyChartPicked_VanishedFileFailsSafely(t *testing.T) {
 	if m.picker.resolveErr == nil {
 		t.Error("a vanished file must report a failed pick")
 	}
-	if !strings.Contains(strings.Join(m.logPanelLines(), "\n"), "Couldn't open that chart.") {
+	if !strings.Contains(strings.Join(m.logPanelLines(), "\n"), "chart not opened") {
 		t.Error("a vanished file must be reported on the error lane")
 	}
 }

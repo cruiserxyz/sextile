@@ -127,6 +127,13 @@ func wideGlyphFaults(frame string) []string {
 			if i+1 < len(cells) && cells[i+1].r == ' ' && cells[i+1].style == c.style {
 				continue
 			}
+			var after []rune
+			for _, cc := range cells[i+1 : min(i+5, len(cells))] {
+				after = append(after, cc.r)
+			}
+			if term.IsAspectLettersCell(c.r, after) {
+				continue
+			}
 			from, to := max(i-6, 0), min(i+4, len(cells))
 			var near strings.Builder
 			for _, cc := range cells[from:to] {

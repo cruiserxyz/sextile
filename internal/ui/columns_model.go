@@ -24,10 +24,12 @@ type chartKey struct {
 	// chart is not the chart a cached report was made for
 	// (the specification N10, N21).
 	label store.ReportLabel
+	// record is the file's text the chart is cast from (AnchorChart.Record).
+	record string
 }
 
 func anchoredKey(a store.AnchorChart) chartKey {
-	return chartKey{when: a.When, place: a.Place, label: a.Label}
+	return chartKey{when: a.When, place: a.Place, label: a.Label, record: a.Record}
 }
 
 func floatingKey(when time.Time, place location.PlaceInfo) chartKey {
@@ -35,11 +37,11 @@ func floatingKey(when time.Time, place location.PlaceInfo) chartKey {
 }
 
 func (k chartKey) anchor() store.AnchorChart {
-	return store.AnchorChart{When: k.when, Place: k.place, Label: k.label}
+	return store.AnchorChart{When: k.when, Place: k.place, Label: k.label, Record: k.record}
 }
 
 func (k chartKey) equal(o chartKey) bool {
-	return k.floating == o.floating && k.when.Equal(o.when) && k.place == o.place && k.label == o.label
+	return k.floating == o.floating && k.when.Equal(o.when) && k.place == o.place && k.label == o.label && k.record == o.record
 }
 
 // columnID is one shown column's identity: what it was computed from, the
@@ -54,6 +56,9 @@ type columnID struct {
 	houses recipe.HouseSystem
 	// zodiac is the zodiac the column is cast in, for the same reason.
 	zodiac recipe.Zodiac
+	// nodes is the form of the Nodes and Lilith the column is cast in: the
+	// base's while comparing, the chart's own alone.
+	nodes recipe.NodeForm
 }
 
 // columnsFor is the shown set a frame's columns were computed for, in numeral
@@ -65,7 +70,7 @@ func (c columnsFor) equal(o columnsFor) bool {
 		return false
 	}
 	for i := range c {
-		if !c[i].key.equal(o[i].key) || c[i].houses != o[i].houses || c[i].zodiac != o[i].zodiac {
+		if !c[i].key.equal(o[i].key) || c[i].houses != o[i].houses || c[i].zodiac != o[i].zodiac || c[i].nodes != o[i].nodes {
 			return false
 		}
 	}
@@ -91,7 +96,11 @@ func (m Model) shownColumns(sc scene, floatTime time.Time) columnsFor {
 		if sc.pair != nil {
 			zodiac = m.ownZodiac(sc.frame)
 		}
-		out = append(out, columnID{key: key, label: slotLabel(i+1, s, m.cfg), houses: m.ownHouses(s).hs, zodiac: zodiac})
+		nodes, _ := m.ownNodes(s)
+		if sc.mode == sceneComparing {
+			nodes = m.sceneNodes(sc)
+		}
+		out = append(out, columnID{key: key, label: slotLabel(i+1, s, m.cfg), houses: m.ownHouses(s).hs, zodiac: zodiac, nodes: nodes})
 	}
 	return out
 }
@@ -277,7 +286,7 @@ func (m Model) commitColumns(msg FirstFrameReadyMsg) Model {
 	}
 	for _, c := range msg.Columns {
 		if c.Err != nil {
-			m = m.noteEphemeris(c.Err).logError("Couldn't cast %s. %s", c.Label, m.failureReason(c.Err, m.consolePointer(len(msg.Commands) > 0))).logWarnings(c.Err)
+			m = m.noteEphemeris(c.Err).logError("astrolog", "%s not cast, %s", c.Label, m.failureReason(c.Err, m.consolePointer(len(msg.Commands) > 0))).logWarnings(c.Err)
 		}
 	}
 	return m

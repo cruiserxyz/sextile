@@ -7,7 +7,9 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -31,6 +33,9 @@ import (
 // place. Two equal keys mean the
 // same searches; nothing else may make the timeline recompute (C25).
 type timelineKey struct {
+	// list is the list the key asks for: the Timeline's and the Moon list's keys
+	// hold the same inputs and differ only here (M6a).
+	list  timelineList
 	year  int
 	month time.Month
 	zone  string
@@ -45,7 +50,7 @@ type timelineKey struct {
 	// and node mode the searches carry (C13). They are strings so the key
 	// stays comparable: a policy holds maps and slices.
 	objects, aspects string
-	trueNode         bool
+	nodes            recipe.NodeForm
 	// skyMarks is the floating slot's sorted marks, which narrow the sky
 	// search; each natal's own are in natals. A mark change re-asks, a tick-only
 	// change is objects (F14).
@@ -68,11 +73,11 @@ type timelineKey struct {
 // an explicit one to a common set (that needs Astrolog's defaults), so a modal
 // that re-confirms the same visible bodies as an explicit selection re-runs the
 // searches once.
-func chooserKey(l lookup.Lens) (objects, aspects string, trueNode bool) {
+func chooserKey(l lookup.Lens) (objects, aspects string, nodes recipe.NodeForm) {
 	o := l.Objects
 	objects = fmt.Sprintf("%d|%v|%v|%v", int(o.Baseline), o.Add.Members(), o.Remove.Members(), o.Selected())
 	aspects = fmt.Sprintf("%t|%v", l.Aspects.Explicit, l.Aspects.Selected())
-	return objects, aspects, o.TrueNodeMode
+	return objects, aspects, o.Nodes
 }
 
 // timelineObjects is the object policy of one slot's searches: the committed
@@ -171,12 +176,13 @@ func markOf(r lookup.TimelineRow) timelineMark {
 func (m Model) toggleTimelineMark() Model {
 	rows := m.timelineShown()
 	c := m.details.cursor
-	if m.activeTabID(PanelDetails) != TabDetailsTimeline || c < 0 || c >= len(rows) {
+	if !isListTab(m.activeTabID(PanelDetails)) || c < 0 || c >= len(rows) {
 		return m
 	}
+	l := m.list(m.shownList())
 	mk := markOf(rows[c])
-	next := make(map[timelineMark]bool, len(m.timeline.marks)+1)
-	for k := range m.timeline.marks {
+	next := make(map[timelineMark]bool, len(l.marks)+1)
+	for k := range l.marks {
 		next[k] = true
 	}
 	if next[mk] {
@@ -184,11 +190,11 @@ func (m Model) toggleTimelineMark() Model {
 	} else {
 		next[mk] = true
 	}
-	m.timeline.marks = next
+	l.marks = next
 	return m
 }
 
-// timelinePayload is surfaceTimeline's result, stamped with the key it was
+// timelinePayload is a list's result, stamped with the key it was
 // computed for so a late result for inputs the operator has since left is
 // discarded at commit (§ Failure modes, the stale-result guard).
 type timelinePayload struct {
@@ -200,6 +206,31 @@ type timelinePayload struct {
 	// when the search was asked for (C17).
 	failures []lookup.TimelineFailure
 	labels   map[int]string
+	// voids are the void searches this search spawned, with the keys they
+	// were asked under; commitTimeline remembers them on success only.
+	voids []voidLanding
+	// leftOut is what the searches left out for want of ephemeris data; the
+	// console says so, no screen does.
+	leftOut lookup.LeftOut
+}
+
+// voidMemory is the void searches that landed, by what they were asked. It is
+// declared here, beside the timeline that asks, so memory.go keeps naming no
+// package but slices and bubbletea.
+type voidMemory = lru[lookup.VoidKey, lookup.VoidResult]
+
+// rememberVoids keeps the void searches a landed timeline search ran.
+func (m Model) rememberVoids(p timelinePayload) Model {
+	for _, v := range p.voids {
+		m.mem.voids = m.mem.voids.put(v.key, v.res)
+	}
+	return m
+}
+
+// voidLanding is one void search's answer under its key.
+type voidLanding struct {
+	key lookup.VoidKey
+	res lookup.VoidResult
 }
 
 func (timelinePayload) isRefreshPayload() {}
@@ -210,24 +241,29 @@ func (timelinePayload) isRefreshPayload() {}
 // before any compute commits and before syncTimeline runs — so gating on the
 // live key rather than on a clear somewhere downstream is what keeps the
 // previous client's rows off the screen on every path (C44).
-func (m Model) timelineRows() []lookup.TimelineRow {
-	if !m.timeline.keyed {
+func (m Model) timelineRows() []lookup.TimelineRow { return m.timelineRowsFor(m.shownList()) }
+
+// timelineRowsFor is timelineRows for list k.
+func (m Model) timelineRowsFor(k timelineList) []lookup.TimelineRow {
+	l := m.list(k)
+	if !l.keyed {
 		return nil
 	}
-	if _, key, ok := m.timelineInputs(); !ok || key != m.timeline.key {
+	if _, key, ok := m.timelineInputsFor(k); !ok || key != l.key {
 		return nil
 	}
-	return m.timeline.rows
+	return l.rows
 }
 
 // timelineStale is the last complete list when it is NOT for the current
 // inputs: what the timeline tab keeps on screen, dimmed, while the new list is
 // searched. Nil when there is none to keep (a first load, rule 9).
-func (m Model) timelineStale() []lookup.TimelineRow {
-	if m.timeline.complete {
-		return m.timeline.rows
+func (m Model) timelineStale(k timelineList) []lookup.TimelineRow {
+	l := m.list(k)
+	if l.complete {
+		return l.rows
 	}
-	return m.timeline.kept
+	return l.kept
 }
 
 // timelineStaleFor is timelineStale for a search about to be asked for key: the
@@ -235,33 +271,40 @@ func (m Model) timelineStale() []lookup.TimelineRow {
 // for the same charts). Another subject's rows are never kept — the previous
 // client's transits stay off screen, as C44 requires.
 func (m Model) timelineStaleFor(key timelineKey) []lookup.TimelineRow {
-	if !m.timeline.keyed || m.timeline.key.natals != key.natals {
+	l := m.list(key.list)
+	if !l.keyed || l.key.natals != key.natals {
 		return nil
 	}
-	return m.timelineStale()
+	return m.timelineStale(key.list)
 }
 
 // timelineWaiting is detailsTabWaiting's timeline case: a search is owed or in
 // flight for the current inputs. A search that failed awaits nothing.
-func (m Model) timelineWaiting() bool {
-	_, key, ok := m.timelineInputs()
+func (m Model) timelineWaiting() bool { return m.timelineWaitingFor(m.shownList()) }
+
+// timelineWaitingFor is timelineWaiting for list k.
+func (m Model) timelineWaitingFor(k timelineList) bool {
+	l := m.list(k)
+	_, key, ok := m.timelineInputsFor(k)
 	if !ok {
 		return false
 	}
-	if !m.timeline.keyed || m.timeline.key != key {
+	if !l.keyed || l.key != key {
 		return true
 	}
-	return !m.timeline.complete && !m.timeline.failed
+	return !l.complete && !l.failed
 }
 
 // timelineDisplayRows is what the timeline body DRAWS: the current list, or,
 // while the tab waits, the previous one kept for the dimmed look.
 func (m Model) timelineDisplayRows() []lookup.TimelineRow {
-	if m.timelineWaiting() {
-		if _, key, ok := m.timelineInputs(); ok && m.timeline.keyed && m.timeline.key == key {
-			return m.timeline.kept
+	k := m.shownList()
+	l := m.list(k)
+	if m.timelineWaitingFor(k) {
+		if _, key, ok := m.timelineInputsFor(k); ok && l.keyed && l.key == key {
+			return l.kept
 		}
-		if _, key, ok := m.timelineInputs(); ok {
+		if _, key, ok := m.timelineInputsFor(k); ok {
 			return m.timelineStaleFor(key)
 		}
 		return nil
@@ -275,14 +318,15 @@ func (m Model) timelineDisplayRows() []lookup.TimelineRow {
 // rules 2 and 6). With no query it is the list itself.
 func (m Model) timelineShown() []lookup.TimelineRow {
 	rows := m.timelineRows()
-	if m.timeline.query == "" {
+	query := m.list(m.shownList()).query
+	if query == "" {
 		return rows
 	}
 	lines := make([]string, len(rows))
 	for i, r := range rows {
 		lines[i] = panel.DisplayRow(r, m.cfg)
 	}
-	kept, _, _ := menu.Filter{Query: m.timeline.query}.Apply(lines, 0)
+	kept, _, _ := menu.Filter{Query: query}.Apply(lines, 0)
 	out := make([]lookup.TimelineRow, 0, len(kept))
 	for _, i := range kept {
 		out = append(out, rows[i])
@@ -293,8 +337,9 @@ func (m Model) timelineShown() []lookup.TimelineRow {
 // timelineSearchLine says whether the panel's last row is the search line:
 // open for typing (only while Details has the keyboard) or showing a kept query.
 func (m Model) timelineSearchLine() bool {
-	return m.activeTabID(PanelDetails) == TabDetailsTimeline &&
-		((m.timeline.searching && m.details.attached) || m.timeline.query != "")
+	l := m.list(m.shownList())
+	return isListTab(m.activeTabID(PanelDetails)) &&
+		((l.searching && m.details.attached) || l.query != "")
 }
 
 // timelineHeight is how many rows the timeline can show: the panel's inner
@@ -309,77 +354,79 @@ func (m Model) timelineHeight() int {
 
 // openTimelineSearch is `/`: the line opens, prefilled with the kept query.
 func (m Model) openTimelineSearch() Model {
-	m.timeline.searching = true
-	return m.rememberSearch(m.timeline.query).clampTimelineCursor()
+	l := m.list(m.shownList())
+	l.searching = true
+	return m.rememberSearch(l.query).clampTimelineCursor()
 }
 
-// closeTimelineSearch is Enter in the line: it closes and the query stays.
+// closeTimelineSearch is Enter in the line: it closes and the query stays. The
+// row cursor comes back on the row it was on before `/` when that row is still
+// shown, else on the next event after the floating chart's moment, else on the
+// last row shown.
 func (m Model) closeTimelineSearch() Model {
-	m.timeline.searching = false
-	return m.clampTimelineCursor()
+	m.list(m.shownList()).searching = false
+	rows := m.timelineShown()
+	if len(rows) == 0 {
+		return m.clampTimelineCursor()
+	}
+	at := -1
+	if b := m.searchBefore; b.cursorSet {
+		for i, r := range rows {
+			if markOf(r) == b.cursorAt {
+				at = i
+				break
+			}
+		}
+	}
+	if at < 0 {
+		if at = m.nearestRow(rows); at < 0 {
+			at = len(rows) - 1
+		}
+	}
+	m.details.followNow = false
+	m.details.cursor = at
+	if visible := m.timelineHeight(); visible > 0 {
+		m.details.rowOffset = menu.ScrollToShow(m.details.rowOffset, at, len(rows), visible)
+	}
+	return m.recordTimelineCursor()
 }
 
 // cancelTimelineSearch is Esc in the line: it closes, and the query and the
 // row cursor it opened with come back.
 func (m Model) cancelTimelineSearch() Model {
-	m.timeline.searching = false
-	m.timeline.query = m.searchBefore.query
+	l := m.list(m.shownList())
+	l.searching = false
+	l.query = m.searchBefore.query
 	return m.restoreTimelineCursor().clampTimelineCursor()
 }
 
 // timelineSearchBindings is the bar while the search line is open: the line
-// types, the arrows move, Enter applies and Esc goes back.
+// types, Enter closes it with its query and Esc goes back. It takes no arrow
+// and no paging key.
 func timelineSearchBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{
-		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true},
-		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down")), BarKey: "↓"},
-		{ID: keys.BindingConfirm, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Jump", BarKey: "enter", Bar: true},
+	return keys.TitledLocal([]keys.BindingEntry{
+		{ID: keys.BindingConfirm, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Apply", BarKey: "enter", Bar: true},
 		{ID: keys.BindingClose, Binding: key.NewBinding(key.WithKeys("esc")), Title: "Back", BarKey: "esc", Bar: true},
-		// ⇞ ⇟ page the cursor, as the arrows move it; Home, End, g and G are text
-		// or nothing in the line. Ctrl+⇞ ⇟ pass through to the Details scroll.
-		{ID: keys.BindingPageUp, Title: "Page list", HelpKey: "⇞/⇟", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "⇞"},
-		{ID: keys.BindingPageDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
-		{ID: keys.BindingScrollUp, Binding: key.NewBinding(key.WithKeys("ctrl+pgup")), BarKey: "⌃⇞"},
-		{ID: keys.BindingScrollDown, Binding: key.NewBinding(key.WithKeys("ctrl+pgdown")), BarKey: "⌃⇟"},
+		// Home, End, g and G are text or nothing in the line.
+		{ID: keys.BindingCopy, Binding: key.NewBinding(), Title: "Copy", BarKeyFn: chordKey("y"), BarKey: ", y", Chord: true, HelpWhen: func(keys.Context) bool { return false }},
 	})
 }
 
-// updateTimelineSearchKey is the line's own key state: letters, Space and
-// Backspace edit the query (the fuzzy popups' typing helper), the arrows move
-// the cursor, Enter jumps to the row under it and Esc goes back. Nothing else
-// is read, so j, k, y, d and the comma are text here.
+// updateTimelineSearchKey is the line's own key state (filterLineKey): letters,
+// Space and Backspace edit the query, Enter closes the line with its query,
+// Backspace on an empty query closes it too, and Esc goes back. The arrows and
+// the paging keys do nothing while it is open, and the list draws no cursor
+// row. Nothing else is read, so j, k, y, d and the comma are text here.
 func (m Model) updateTimelineSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch keys.MatchBinding(msg, timelineSearchBindings()) {
-	case keys.BindingScrollUp:
-		return m.scrollDetailsTab(-detailsScrollStep), nil
-	case keys.BindingScrollDown:
-		return m.scrollDetailsTab(detailsScrollStep), nil
-	case keys.BindingPageUp:
-		return m.pageTimeline(menu.PageUp), nil
-	case keys.BindingPageDown:
-		return m.pageTimeline(menu.PageDown), nil
-	}
-	switch msg.Type {
-	case tea.KeyEnter:
-		// The arrows move the row cursor in the open line, so Enter is the
-		// row's Enter too: the line closes with its query and the row under
-		// the cursor is jumped to, as with the line closed (operator,
-		// 2026-11-06: the first Enter only closed the line, the second jumped).
-		m = m.closeTimelineSearch()
-		if m.detailsRowKeysBlocked() {
-			return m, nil
-		}
-		return m.jumpToTimelineRow()
-	case tea.KeyEsc:
+	shown := m.list(m.shownList())
+	query, act := filterLineKey(msg, shown.query)
+	switch act {
+	case filterClose:
+		return m.closeTimelineSearch(), nil
+	case filterCancel:
 		return m.cancelTimelineSearch(), nil
-	case tea.KeyUp:
-		return m.moveTimelineCursor(-1), nil
-	case tea.KeyDown:
-		return m.moveTimelineCursor(+1), nil
-	}
-	l := menu.FuzzyList[struct{}]{FilterText: m.timeline.query}
-	if l.TypeKey(msg) {
-		m.timeline.query = l.FilterText
+	case filterEdited:
+		shown.query = query
 		m = m.placeTimelineCursor().clampTimelineCursor()
 	}
 	return m, nil
@@ -389,11 +436,17 @@ func (m Model) updateTimelineSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // floating slot's committed Time (the one the Chart panel shows) and place,
 // and the anchor record. ok is false before a workspace with a zone exists.
 func (m Model) timelineInputs() (lookup.TimelineRequest, timelineKey, bool) {
+	return m.timelineInputsFor(m.shownList())
+}
+
+// timelineInputsFor is timelineInputs for list k. The two lists ask the same
+// inputs; the Moon list also limits the search to the Moon and its key names it.
+func (m Model) timelineInputsFor(k timelineList) (lookup.TimelineRequest, timelineKey, bool) {
 	if m.slots == nil {
 		return lookup.TimelineRequest{}, timelineKey{}, false
 	}
 	floating := m.slots.Floating()
-	loc, err := time.LoadLocation(floating.Location.TZ)
+	loc, err := lookup.PlaceZone(floating.Time, floating.Location)
 	if err != nil || floating.Location.TZ == "" || floating.Time.IsZero() {
 		return lookup.TimelineRequest{}, timelineKey{}, false
 	}
@@ -409,18 +462,18 @@ func (m Model) timelineInputs() (lookup.TimelineRequest, timelineKey, bool) {
 		return lookup.TimelineRequest{}, timelineKey{}, false
 	}
 	view := m.viewLens()
-	lens.Houses, lens.Zodiac = view.Houses, view.Zodiac
+	lens.Houses, lens.Zodiac, lens.Objects.Nodes = view.Houses, view.Zodiac, view.Objects.Nodes
 	// The sky search takes the floating slot's marks, each natal its own
 	// (F14): the committed lens's objects with the slot's selected objects as
 	// Only, the way showLens narrows the Aspects list.
 	all := m.slots.All()
 	lens.Objects = m.timelineObjects(lens, all[len(all)-1])
-	req := lookup.TimelineRequest{When: floating.Time, Place: floating.Location, Lens: lens}
+	req := lookup.TimelineRequest{When: floating.Time, Place: floating.Location, Lens: lens, Moon: k.moon()}
 	// The month is Astrolog's, in its own calendar: a Julian 29 February 1500
 	// is February whatever Go's calendar calls the day (the specification N8).
 	year, month := lookup.TimelineMonth(floating.Time, loc)
-	key := timelineKey{year: year, month: month, zone: floating.Location.TZ}
-	key.objects, key.aspects, key.trueNode = chooserKey(lens)
+	key := timelineKey{list: k, year: year, month: month, zone: floating.Location.TZ}
+	key.objects, key.aspects, key.nodes = chooserKey(lens)
 	key.skyMarks = fmt.Sprint(lens.Objects.Only.Members())
 	key.zodiac = lens.Zodiac
 	// Transit and return rows (-t, -tr) are about the selected charts: they
@@ -455,34 +508,44 @@ func (m Model) timelineInputs() (lookup.TimelineRequest, timelineKey, bool) {
 // view; like every Details request, it starts nothing while Details is not
 // in the layout.
 func (m Model) syncTimeline() (Model, tea.Cmd) {
+	return m.syncTimelineFor(m.shownList())
+}
+
+// syncTimelineFor is syncTimeline for list k: it searches only while k's tab is
+// the active one (M7).
+func (m Model) syncTimelineFor(k timelineList) (Model, tea.Cmd) {
 	// Hidden tabs do no work (the specification rule 3):
-	// the search is owed only while the timeline tab is the active one.
-	if !m.detailsVisible() || m.focused != PanelChart || m.activeTabID(PanelDetails) != TabDetailsTimeline {
+	// the search is owed only while the list's tab is the active one.
+	if !m.detailsVisible() || m.focused != PanelChart || m.activeTabID(PanelDetails) != k.tab() {
 		return m, nil
 	}
-	_, key, ok := m.timelineInputs()
-	if !ok || (m.timeline.keyed && m.timeline.key == key) {
+	_, key, ok := m.timelineInputsFor(k)
+	l := m.list(k)
+	if !ok || (l.keyed && l.key == key) {
 		return m, nil
 	}
-	prev := m.timeline
-	m.timeline = timelineState{key: key, keyed: true, kept: m.timelineStaleFor(key)}
-	if m.timeline.kept != nil {
-		m.timeline.content, m.timeline.hasContent = prev.content, prev.hasContent
+	prev := *l
+	*l = timelineState{key: key, keyed: true, kept: m.timelineStaleFor(key)}
+	if l.kept != nil {
+		l.content, l.hasContent = prev.content, prev.hasContent
 	}
 	m.details.cursor, m.details.rowOffset = 0, 0
 	// A list already searched for these inputs is drawn now, from memory.
 	if nm, ok := m.adoptTimelineFromMemory(key); ok {
 		return nm, nil
 	}
-	return m.bumpIdentity(surfaceTimeline)
+	return m.bumpIdentity(k.surface())
 }
 
 // timelineKeyFor is the key of the search the Model would ask for now; ok is
 // false when there is no request. The same key syncTimeline and
 // buildTimelineCmd compare, so the row's inputs and the commit gate cannot
 // disagree.
-func (m Model) timelineKeyFor() (timelineKey, bool) {
-	_, key, ok := m.timelineInputs()
+func (m Model) timelineKeyFor() (timelineKey, bool) { return m.timelineKeyForList(m.shownList()) }
+
+// timelineKeyForList is timelineKeyFor for list k.
+func (m Model) timelineKeyForList(k timelineList) (timelineKey, bool) {
+	_, key, ok := m.timelineInputsFor(k)
 	return key, ok
 }
 
@@ -494,29 +557,31 @@ func (m Model) timelineKeyFor() (timelineKey, bool) {
 // defensive retry tick of textDebounce. The key is not in accept:
 // commitTimeline logs the argv lines first and then drops a result for a
 // left key, so such a search still writes its argv line.
-func newTimelineRow() surfaceRow {
+func newTimelineRow(k timelineList) surfaceRow {
 	return surfaceRow{
 		inputs: func(m Model) (refreshKey, bool) {
-			k, ok := m.timelineKeyFor()
-			return k, ok
+			key, ok := m.timelineKeyForList(k)
+			return key, ok
 		},
 		trigger:   triggerIdentity,
 		supersede: supersedeHard,
 		debounce:  textDebounce,
-		build:     buildTimelineCmd,
-		accept:    acceptExactWant,
-		commit:    (Model).commitTimeline,
-		suspend:   forgetIncompleteTimeline,
-		spawn:     rowSpawns{timeline: lookup.Timeline},
+		build: func(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
+			return buildTimelineCmdFor(m, k, ctx, runID, wantID)
+		},
+		accept:  acceptExactWant,
+		commit:  func(m Model, msg refreshResultMsg) (Model, tea.Cmd) { return m.commitTimelineFor(k, msg) },
+		suspend: func(m Model) Model { return forgetIncompleteTimeline(m, k) },
+		spawn:   rowSpawns{timeline: lookup.Timeline, voids: lookup.RunVoidSearch, voidsAhead: lookup.RunVoidSearch},
 	}
 }
 
 // forgetIncompleteTimeline is the row's suspend: a list that never completed
 // forgets its key, so the searches run again when Details returns; a complete
 // one stays, for the same inputs.
-func forgetIncompleteTimeline(m Model) Model {
-	if !m.timeline.complete {
-		m.timeline = timelineState{}
+func forgetIncompleteTimeline(m Model, k timelineList) Model {
+	if l := m.list(k); !l.complete {
+		*l = timelineState{}
 	}
 	return m
 }
@@ -524,28 +589,61 @@ func forgetIncompleteTimeline(m Model) Model {
 // suspendTimeline cancels an in-flight search when Details leaves the
 // layout; suspendSurface fences the surface and asks the row to forget.
 func (m Model) suspendTimeline() Model {
-	return m.suspendSurface(surfaceTimeline)
+	for _, k := range allLists {
+		m = m.suspendSurface(k.surface())
+	}
+	return m
 }
 
 func buildTimelineCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
-	req, key, ok := m.timelineInputs()
-	if !ok || !m.timeline.keyed || key != m.timeline.key {
+	return buildTimelineCmdFor(m, m.shownList(), ctx, runID, wantID)
+}
+
+// buildTimelineCmdFor is buildTimelineCmd for list k.
+func buildTimelineCmdFor(m Model, k timelineList, ctx context.Context, runID, wantID uint64) tea.Cmd {
+	req, key, ok := m.timelineInputsFor(k)
+	if l := m.list(k); !ok || !l.keyed || key != l.key {
 		return nil
 	}
-	compute := m.rows[surfaceTimeline].spawn.timeline
+	compute := m.rows[k.surface()].spawn.timeline
 	labels := map[int]string{}
 	sc := m.deriveScene()
 	for i, slot := range sc.set {
 		n := i + 1
 		labels[n] = slotLabel(n, slot, m.cfg)
 	}
+	// The remembered void searches are copied here, on the Update goroutine; the
+	// cmd reads the copy and appends what it spawns under its own lock.
+	remembered := slices.Clone(m.mem.voids.items)
+	voidSpawn := m.rows[k.surface()].spawn.voids
+	var mu sync.Mutex
+	var spawned []voidLanding
+	req.Voids = func(ctx context.Context, vr lookup.VoidRequest) (lookup.VoidResult, bool, error) {
+		vk := lookup.VoidKeyFor(vr)
+		for _, it := range remembered {
+			if it.key == vk {
+				return it.val, false, nil
+			}
+		}
+		res, err := voidSpawn(ctx, vr)
+		if err != nil {
+			return res, true, err
+		}
+		mu.Lock()
+		spawned = append(spawned, voidLanding{key: vk, res: res})
+		mu.Unlock()
+		return res, true, nil
+	}
 	return func() tea.Msg {
 		res, err := compute(ctx, req)
+		mu.Lock()
+		landed := slices.Clone(spawned)
+		mu.Unlock()
 		return refreshResultMsg{
-			surface: surfaceTimeline,
+			surface: k.surface(),
 			runID:   runID,
 			wantID:  wantID,
-			payload: timelinePayload{key: key, rows: res.Rows, commands: res.Commands, failures: res.Failures, labels: labels},
+			payload: timelinePayload{key: key, rows: res.Rows, commands: res.Commands, failures: res.Failures, labels: labels, voids: landed, leftOut: res.LeftOut},
 			err:     err,
 		}
 	}
@@ -554,11 +652,18 @@ func buildTimelineCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cm
 // commitTimeline adopts a completed search. Its commands become argv lines
 // here, at the commit gate, on success and failure alike.
 func (m Model) commitTimeline(msg refreshResultMsg) (Model, tea.Cmd) {
+	return m.commitTimelineFor(m.shownList(), msg)
+}
+
+// commitTimelineFor is commitTimeline for list k.
+func (m Model) commitTimelineFor(k timelineList, msg refreshResultMsg) (Model, tea.Cmd) {
 	p, _ := msg.payload.(timelinePayload)
-	m = m.logCommandsFor(surfaceTimeline, msg.wantID, p.commands, failedLast(msg.err, p.commands)...)
+	m = m.logCommandsFor(k.surface(), msg.wantID, p.commands, failedLast(msg.err, p.commands)...)
+	m = m.logLeftOut("timeline", p.leftOut)
+	l := m.list(k)
 	// A result for inputs the operator has left paints nothing — a late
 	// search for the previous client must never replace the current list.
-	if p.key != m.timeline.key {
+	if p.key != l.key {
 		return m, nil
 	}
 	if msg.err != nil {
@@ -568,29 +673,45 @@ func (m Model) commitTimeline(msg refreshResultMsg) (Model, tea.Cmd) {
 		// lane: the search the operator's navigation asked for failed (C41).
 		// The dimmed list was for other inputs: it goes, and nothing is
 		// awaited any more (the specification rule 8).
-		m.timeline.kept, m.timeline.failed = nil, true
-		if !m.timeline.complete {
-			m.timeline.hasContent = false // the dimmed list goes; a complete list for these inputs stays
+		l.kept, l.failed = nil, true
+		if !l.complete {
+			l.hasContent = false // the dimmed list goes; a complete list for these inputs stays
 		}
 		if len(p.failures) > 0 {
 			// Every search of a comparing timeline failed: each is named (C17).
-			return m.logTimelineFailures(p), nil
+			return m.logTimelineFailures(k, p), nil
+		}
+		if text, ok := lookup.AspectsRefusal(msg.err); ok {
+			// The aspect list's own refusal, said as the Aspects panel says it.
+			return m.logError("aspects", "%s", aspectRefusalWords(text)), nil
 		}
 		m = m.noteEphemeris(msg.err)
-		return m.logTimelineError(m.timelineReason(msg.err, p.commands)).logWarnings(msg.err), nil
+		return m.logTimelineError(k, m.timelineReason(msg.err, p.commands)).logWarnings(msg.err), nil
 	}
 	// Searches that failed beside others that did not: the rows of the others
 	// are shown, and each failure is one Log line naming its search (C17, C17a).
-	m = m.logTimelineFailures(p)
-	return m.landTimeline(p).rememberTimeline(p), nil
+	m = m.logTimelineFailures(k, p)
+	return m.landTimeline(p).rememberTimeline(p).rememberVoids(p), nil
 }
 
 // landTimeline puts a searched list on screen under its key. A fresh result and
 // one adopted from memory land by it alike.
 func (m Model) landTimeline(p timelinePayload) Model {
-	m.timeline.rows, m.timeline.complete, m.timeline.kept = p.rows, true, nil
-	m.timeline.content, m.timeline.hasContent = p.key, true
+	l := m.list(p.key.list)
+	l.rows, l.complete, l.kept = p.rows, true, nil
+	l.content, l.hasContent = p.key, true
 	return m.placeTimelineCursor().clampTimelineCursor()
+}
+
+// aspectRefusalWords is the aspect list's refusal as the Log says it: what did
+// not happen, then why, with no closing full stop. The Aspects panel keeps the
+// refusal's own sentences.
+func aspectRefusalWords(text string) string {
+	const lead = "Can't read the aspect list. "
+	if rest, ok := strings.CutPrefix(text, lead); ok {
+		return "the aspect list was not read, " + strings.TrimSuffix(rest, ".")
+	}
+	return text
 }
 
 // timelineReason is why a search failed, in the Log's words: the refusal's own
@@ -610,32 +731,32 @@ func timelineRefusal(err error, line string) string {
 		// The sets that let the searches honour the body selector could not
 		// be read, so none ran: the timeline is refused, not shown unfiltered
 		// (C12a).
-		return line + " The timeline is not shown rather than shown with bodies you hid."
+		return line + ", the timeline is not shown rather than shown with bodies you hid"
 	}
-	return fmt.Sprintf("Astrolog printed a line it could not place: %q", line)
+	return fmt.Sprintf("a line of Astrolog's list could not be read, %q", line)
 }
 
-// logTimelineError is the one writer of the timeline's error line.
-func (m Model) logTimelineError(reason string) Model {
-	return m.logError("Couldn't read the timeline. %s", reason)
+// logTimelineError is the one writer of a list's error line.
+func (m Model) logTimelineError(k timelineList, reason string) Model {
+	return m.logError(k.scope(), "%s not read, %s", k.noun(), reason)
 }
 
 // logTimelineFailures writes one error line per failed search, in spawn order:
 // the sky search by name, a transit or return search by its slot (numeral and
 // chart name) and Astrolog's own switch for it.
-func (m Model) logTimelineFailures(p timelinePayload) Model {
+func (m Model) logTimelineFailures(k timelineList, p timelinePayload) Model {
 	for _, f := range p.failures {
 		m = m.noteEphemeris(f.Err)
 		reason := m.timelineReason(f.Err, p.commands)
 		if f.Numeral == 0 {
-			m = m.logTimelineError(fmt.Sprintf("The sky search (%s) failed. %s", f.Search, reason)).logWarnings(f.Err)
+			m = m.logError(k.scope(), "the events of the sky (%s) not listed, %s", f.Search, reason).logWarnings(f.Err)
 			continue
 		}
 		label := p.labels[f.Numeral]
 		if label == "" {
 			label = panel.NumeralForColour(f.Numeral, m.cfg)
 		}
-		m = m.logTimelineError(fmt.Sprintf("The %s search for %s failed. %s", f.Search, label, reason)).logWarnings(f.Err)
+		m = m.logError(k.scope(), "the %s events for %s not listed, %s", f.Search, label, reason).logWarnings(f.Err)
 	}
 	return m
 }
@@ -653,10 +774,13 @@ func (m Model) clampTimelineCursor() Model {
 		m.details.cursor, m.details.rowOffset = 0, 0
 		return m
 	}
-	if !m.details.attached && m.activeTabID(PanelDetails) == TabDetailsTimeline {
+	if (!m.details.attached || m.details.followNow) && isListTab(m.activeTabID(PanelDetails)) {
 		if n := m.nearestRow(rows); n >= 0 {
 			m.details.cursor = n
-			if visible > 0 {
+			// Outside Details the window always centres the nearest row. Inside,
+			// after a move of Now, it scrolls only when that row is out of sight.
+			inSight := n >= m.details.rowOffset && n < m.details.rowOffset+visible
+			if visible > 0 && (!m.details.attached || !inSight) {
 				m.details.rowOffset = centreOffset(n, total, visible)
 			}
 			m.details.cursorAt, m.details.cursorSet = markOf(rows[n]), true
@@ -691,6 +815,7 @@ func (m Model) recordTimelineCursor() Model {
 // (the search line takes one when it is there). The offset it returns is the
 // one stored, exactly.
 func (m Model) pageTimeline(op menu.PageOp) Model {
+	m.details.followNow = false
 	total, visible := len(m.timelineShown()), m.timelineHeight()
 	if total == 0 || visible <= 0 {
 		return m
@@ -786,6 +911,7 @@ func (m Model) placeTimelineCursor() Model {
 // moveTimelineCursor moves the row cursor by step, stopping at the first and
 // last rows (C30). It changes nothing else: no slot, no time, no compute.
 func (m Model) moveTimelineCursor(step int) Model {
+	m.details.followNow = false
 	m.details.cursor += step
 	return m.clampTimelineCursor()
 }
@@ -816,6 +942,7 @@ func (m Model) leadBodiesTo(row lookup.TimelineRow) Model {
 // cursor into it, so the row Enter would act on is always a row the
 // operator can see (C29).
 func (m Model) scrollTimeline(delta int) Model {
+	m.details.followNow = false
 	total, visible := len(m.timelineShown()), m.timelineHeight()
 	if total == 0 || visible <= 0 {
 		return m
@@ -830,14 +957,14 @@ func (m Model) scrollTimeline(delta int) Model {
 // lines, the timeline by rows. The page keys and the mouse wheel both come
 // here, attached or not (C19).
 func (m Model) scrollDetailsTab(delta int) Model {
-	if m.activeTabID(PanelDetails) == TabDetailsTimeline {
+	if isListTab(m.activeTabID(PanelDetails)) {
 		return m.scrollTimeline(delta)
 	}
 	return m.scrollDetails(delta)
 }
 
 // attachTab is the Details tab Enter will show: from the Chart the default tab
-// becomes the timeline and any other choice stays; from Bodies and Aspects the
+// becomes the Timeline and any other choice stays; from Bodies and Aspects the
 // tab already chosen stays.
 func (m Model) attachTab() TabID {
 	active := m.activeTabID(PanelDetails)
@@ -849,21 +976,18 @@ func (m Model) attachTab() TabID {
 	return active
 }
 
-// attachTitle is Enter's title: the tab attachDetails shows.
-func (m Model) attachTitle() string {
-	if m.attachTab() == TabDetailsTimeline {
-		return "Timeline"
-	}
-	return "Report"
-}
+// attachTitle is Enter's title on the bar: Details, at every size.
+func (m Model) attachTitle() string { return "Details" }
 
-// canAttachDetails is whether Enter has a Details to open from here.
+// canAttachDetails is whether Enter has a Details to open from here: any panel
+// of the left column, at any size the layout draws.
 func (m Model) canAttachDetails() bool {
-	return isFocusable(m.focused) && m.detailsVisible()
+	return isFocusable(m.focused) && m.layout() != nil
 }
 
-// attachDetails is Enter from a ring panel (C15): Details takes row
-// navigation, focus does not move, and nothing computes.
+// attachDetails is Enter from a ring panel (C15): Details opens, beside the
+// panels or right below this one, and takes row navigation. Focus does not
+// move, and nothing computes here: the reconciler asks for what Details owes.
 func (m Model) attachDetails() (Model, tea.Cmd) {
 	if m.blocked(keys.BindingAttach) != "" {
 		return m, nil
@@ -878,11 +1002,17 @@ func (m Model) attachDetails() (Model, tea.Cmd) {
 			m = m.withDetailsTab(PanelChart, tab)
 		}
 	}
-	if m.activeTabID(PanelDetails) == TabDetailsTimeline {
+	return m.placeDetailsCursor(), nil
+}
+
+// placeDetailsCursor puts the timeline's row cursor where attaching puts it,
+// for the subject Details now belongs to.
+func (m Model) placeDetailsCursor() Model {
+	if isListTab(m.activeTabID(PanelDetails)) {
 		m.details.cursorSet = false
 		m = m.placeTimelineCursor()
 	}
-	return m.clampTimelineCursor(), nil
+	return m.clampTimelineCursor()
 }
 
 // restorePreEnterTab puts the Chart's Details tab back to the one Enter found,
@@ -896,39 +1026,32 @@ func (m Model) restorePreEnterTab() Model {
 }
 
 // detachDetails is Esc while attached (C16). The focused panel never moved,
-// so it is the subject's panel already.
+// so it is the subject's panel already. Where Details stood right below the
+// panel it goes with the Esc, and what was computed for it goes too.
 func (m Model) detachDetails() (Model, tea.Cmd) {
 	m.details.attached = false
 	m = m.restorePreEnterTab()
-	m.timeline.searching, m.details.searching = false, false
+	for _, k := range allLists {
+		m.list(k).searching = false
+	}
+	m.details.searching = false
 	m = m.clampTimelineCursor()
+	if !m.detailsVisible() {
+		return m.suspendDetails(), nil
+	}
 	// Rule 6 of the specification.
 	return m.catchUpDetails()
 }
 
-// detachAndFocus is rule 7: 1, 2 or 3 from attached Details leaves it and
-// focuses that panel, as the same digit does from the ring. A different panel
-// is a new subject, which the focus change itself requests for; the same panel
-// gets the catch-up.
-func (m Model) detachAndFocus(p PanelID) (Model, tea.Cmd) {
-	m.details.attached = false
-	m = m.restorePreEnterTab()
-	m.timeline.searching, m.details.searching = false, false
-	m = m.clampTimelineCursor()
-	if p == m.focused {
-		return m.catchUpDetails()
-	}
-	m.details.stale = false
-	return m.setFocusedPanel(p)
-}
-
 // updateDetailsKey owns the keyboard while Details is attached (D18), the
 // way updateConsoleKey does for the console: Details resolves each key from
-// its own table, and everything else — `q` included — is swallowed, so neither
-// the ring nor the slot can move behind an attached panel, and in particular
-// a key Details does not name never reaches the ring or the slot (C48).
+// its own table. A key it does not name goes on to the main screen unless
+// detailsRefused names it, so no key that would move, select, reorder or remove
+// something in a panel under Details acts (C48). The number keys, Tab and
+// Shift+Tab are the exception: they move the focus, and Details goes with it.
+// Left leaves Details and Right does nothing.
 func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.timeline.searching && m.timelineSearchLine() {
+	if m.list(m.shownList()).searching && m.timelineSearchLine() {
 		return m.updateTimelineSearchKey(msg)
 	}
 	if m.details.searching && m.detailsReportSearchLine() {
@@ -947,6 +1070,9 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if id == keys.BindingSearch && m.detailsReportFilterBlocked() {
 		return m, nil
 	}
+	if tm, cmd, ok := m.pressTimeStep(id); ok {
+		return tm, cmd
+	}
 	switch id {
 	case keys.BindingToggle:
 		return m.toggleTimelineMark(), nil
@@ -957,6 +1083,8 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openTimelineSearch(), nil
 	case keys.BindingClose:
 		return m.detachDetails()
+	case keys.BindingNextView:
+		return m, nil
 	case keys.BindingListUp:
 		return m.stepDetailsRow(-1), nil
 	case keys.BindingListDown:
@@ -983,31 +1111,15 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.pageTimeline(menu.PageHome), nil
 	case keys.BindingPageEnd:
 		return m.pageTimeline(menu.PageEnd), nil
-	// The timeline's own navigation: the list is cut to the floating slot's
-	// month, and these are the keys that move it. `o`/`O` step the month
-	// (C57, operator 2026-09-30, reversing pass-7 P2); `n` jumps to now and
-	// `N` toggles back (C58, operator 2026-10-01). Each takes its ordinary
-	// path, so the commit that re-keys the searches (C10, C25) is untouched.
-	// The table offers them on both tabs and from any cursor position (D37,
-	// operator 2026-10-13, reversing C59 and the floating-only rule).
-	case keys.BindingTimeStepYear:
-		return m.advanceTime(unitYear, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepMonth:
-		return m.advanceTime(unitMonth, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepWeek:
-		return m.advanceTime(unitWeek, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepDay:
-		return m.advanceTime(unitDay, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepHour:
-		return m.advanceTime(unitHour, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepMinute:
-		return m.advanceTime(unitMinute, stepDirectionFromRune(msg))
+	// The lists are cut to the floating slot's month, and the step keys move
+	// it: `o`/`O` step a month, `p`/`P` jump to a Moon phase and `n` jumps to
+	// now. Each takes its ordinary path, so the commit that
+	// re-keys the searches is untouched. The table offers them on both tabs and
+	// from any cursor position.
 	case keys.BindingJumpNow:
 		return m.jumpFloatingToNow()
-	case keys.BindingToggleBack:
-		return m.toggleFloatingBack()
-	case keys.BindingFocusChart, keys.BindingFocusBodies, keys.BindingFocusAspects:
-		return m.detachAndFocus(panelDigits[id])
+	case keys.BindingFocusSession, keys.BindingFocusChart, keys.BindingFocusBodies, keys.BindingFocusAspects:
+		return m.setFocusedPanel(panelDigits[id])
 	case keys.BindingTabNext, keys.BindingDetailsTab:
 		return m.cycleTab(PanelDetails, +1)
 	case keys.BindingTabPrev:
@@ -1021,8 +1133,6 @@ func (m Model) updateDetailsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // underneath it (operator, 2026-10-24). Every other main key works from Details
 // exactly as on the main screen.
 var detailsRefused = map[keys.BindingID]string{
-	keys.BindingNextView:      "moves the focus to another main panel",
-	keys.BindingPrevView:      "moves the focus to another main panel",
 	keys.BindingSelect:        "selects a chart or a body in the focused panel",
 	keys.BindingSlotCycleUp:   "moves the Chart or Bodies cursor",
 	keys.BindingSlotCycleDown: "moves the Chart or Bodies cursor",
@@ -1031,8 +1141,7 @@ var detailsRefused = map[keys.BindingID]string{
 	keys.BindingSlotMoveUp:    "reorders the charts",
 	keys.BindingSlotMoveDown:  "reorders the charts",
 	keys.BindingSlotDelete:    "removes a chart",
-	keys.BindingAttach:        "Details is already attached. Attaching again resets what leaving restores",
-	keys.BindingActions:       "opens the Actions list, whose commands act on the main screen underneath Details",
+	keys.BindingAttach:        "Details is open already",
 }
 
 // passDetailsKeyToMain is a key Details does not answer itself: the main
@@ -1042,11 +1151,6 @@ var detailsRefused = map[keys.BindingID]string{
 func (m Model) passDetailsKeyToMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	id := keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys)))
 	if _, refused := detailsRefused[id]; refused {
-		if id == keys.BindingActions {
-			// The one refusal that says so (operator, 2026-11-07): the others stay
-			// silent as the 2026-10-24 list has them.
-			return m.showNotice(noticeActionsInDetails)
-		}
 		return m, nil
 	}
 	return m.dispatchMainBinding(id, msg)
@@ -1055,7 +1159,7 @@ func (m Model) passDetailsKeyToMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // stepDetailsRow is ↑/↓/j/k while attached: the row cursor on the timeline
 // tab (C17), one report line on the report tab (C26). Neither moves a slot.
 func (m Model) stepDetailsRow(step int) Model {
-	if m.activeTabID(PanelDetails) == TabDetailsTimeline {
+	if isListTab(m.activeTabID(PanelDetails)) {
 		return m.moveTimelineCursor(step)
 	}
 	return m.scrollDetails(step)
@@ -1070,8 +1174,7 @@ func landedAt(instant time.Time) time.Time { return instant.Add(59 * time.Second
 
 // landsEarly says Enter puts the moment on the FIRST second of the row's
 // minute: an S/R station, where the body is still direct (C14 of
-// the specification; the node rows are relabelled by lookup first,
-// so the word is true for them too). Every other row lands on the last.
+// the specification). Every other row lands on the last.
 func landsEarly(r lookup.TimelineRow) bool {
 	return r.Kind == lookup.TimelineKindStation && r.Station == "S/R"
 }
@@ -1091,10 +1194,12 @@ func landedFor(r lookup.TimelineRow) time.Time {
 // key takes, and the slot's Time follows when that compute commits. The
 // Chart-panel cursor goes to the row's chart (a sky row: the floating slot), so
 // the screen shows the row where it was found (the specification
-// C2, C3). Details stays attached, on the timeline, with the row cursor where it
-// was. On the report tab, or with no row under the cursor, nothing moves.
+// C2, C3). Then Details closes, as Esc closes it: the jump is what Enter was
+// for, on every list tab that travels in time; the enter-stays experiment
+// keeps it open. On the report tab, or with no row under the cursor, nothing
+// moves and Details stays.
 func (m Model) jumpToTimelineRow() (Model, tea.Cmd) {
-	if m.activeTabID(PanelDetails) != TabDetailsTimeline {
+	if !isListTab(m.activeTabID(PanelDetails)) {
 		return m, nil
 	}
 	c := m.details.cursor
@@ -1150,10 +1255,10 @@ func (m Model) jumpToTimelineRow() (Model, tea.Cmd) {
 	// shows (a cursor on the unselected floating slot lists the sky rows
 	// alone); the row is Enter's own and stays where it was.
 	m.details.cursor = c
-	m.targetFloatingTime = instant
-	m.floatingDetached = true
+	m = m.aimNow(instant)
 	// The pressed row is set after the presses, which each end it (rule 8).
 	m.details.pressedAt, m.details.pressedSet = markOf(row), true
+	m.details.followNow = false
 	m.details.pressedChart = rowChart
 	// Enter stores what it shows (S4a A19): with the floating slot selected, a
 	// chart row's tab is "now in that chart" (the base is the chart) and a sky
@@ -1162,13 +1267,21 @@ func (m Model) jumpToTimelineRow() (Model, tea.Cmd) {
 	if floatSelected {
 		m = m.withBase(rowChart)
 	}
+	// The jump moves the moment: every filter ends, and the cursor stays on the row.
+	m.details.cursorAt, m.details.cursorSet = markOf(row), true
 	var cmd tea.Cmd
 	if moved || m.comparisonSig() != before {
 		m, cmd = m.afterFocusChange()
+		m = m.clearDetailsFilters()
 	} else {
 		m, cmd = m.setFloatingTarget(instant)
 	}
-	return m.clampTimelineCursor(), cmd
+	m = m.clampTimelineCursor()
+	if !m.details.attached || m.experiment(expEnterStays) {
+		return m, cmd
+	}
+	m, closed := m.detachDetails()
+	return m, tea.Batch(cmd, closed)
 }
 
 // copiedRows is what `,y` copies on the timeline tab: the marked rows in time
@@ -1178,8 +1291,9 @@ func (m Model) copiedRows() []string {
 	var out []string
 	shown := m.timelineShown()
 	pad := panel.AnyJulian(shown)
+	marks := m.list(m.shownList()).marks
 	for _, r := range shown {
-		if len(m.timeline.marks) == 0 || m.timeline.marks[markOf(r)] {
+		if len(marks) == 0 || marks[markOf(r)] {
 			out = append(out, panel.DisplayRowPad(r, m.cfg, pad))
 		}
 	}
@@ -1191,21 +1305,21 @@ func (m Model) copiedRows() []string {
 // the console's copy uses, and one Log note saying what went.
 func (m Model) yankDetails() (Model, tea.Cmd) {
 	var text, scope, what string
-	if m.activeTabID(PanelDetails) == TabDetailsTimeline {
+	if isListTab(m.activeTabID(PanelDetails)) {
 		rows := m.copiedRows()
 		noun := "rows"
 		if len(rows) == 1 {
 			noun = "row"
 		}
-		text, scope, what = strings.Join(rows, "\n"), "timeline", fmt.Sprintf("copied %d %s", len(rows), noun)
+		text, scope, what = strings.Join(rows, "\n"), m.shownList().scope(), fmt.Sprintf("%d %s copied", len(rows), noun)
 	} else {
-		text, scope, what = m.detailsBodyShown(), "details", "copied the report"
+		text, scope, what = m.detailsBodyShown(), "details", "the report copied"
 	}
 	if text == "" {
 		return m.showNotice(noticeNothingCopy)
 	}
 	if err := yankLine(text); err != nil {
-		return m.logError("Couldn't copy the Details panel to the clipboard.").showNotice(noticeCopyFailed)
+		return m.logError(scope, "the copy did not reach the clipboard").showNotice(noticeCopyFailed)
 	}
 	m = m.logNote(scope, "%s", what)
 	m.yank.gen++

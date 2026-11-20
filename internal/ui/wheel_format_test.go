@@ -89,7 +89,7 @@ func TestWheelFormatRefusesUnknown(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("startup with wheel_format: gif wrote %q, want one note", notes)
 	}
-	for _, want := range []string{"wheel_format", `"gif"`, "svg", "png"} {
+	for _, want := range []string{"wheel_format", `"gif"`, "svg"} {
 		if !strings.Contains(notes[0], want) {
 			t.Errorf("the note %q does not name %s", notes[0], want)
 		}

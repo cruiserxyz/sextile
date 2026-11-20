@@ -26,12 +26,12 @@ func TestCompiledArgvCarriesAnUntypedMark(t *testing.T) {
 
 	t.Run("delta baseline", func(t *testing.T) {
 		p := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Only: recipe.NewObjectSet(19)}
-		want := []string{"-R0", "19"}
+		want := []string{"_Yn", "_Ynn", "-R0", "19"}
 		if got := objectBandOf(t, p); !reflect.DeepEqual(got, want) {
 			t.Errorf("object band = %v, want %v (the marked Fortune alone)", got, want)
 		}
 		p.Only = recipe.NewObjectSet(19, 1, 3)
-		want = []string{"-R0", "1", "3", "19"}
+		want = []string{"_Yn", "_Ynn", "-R0", "1", "3", "19"}
 		if got := objectBandOf(t, p); !reflect.DeepEqual(got, want) {
 			t.Errorf("object band = %v, want %v", got, want)
 		}
@@ -39,7 +39,7 @@ func TestCompiledArgvCarriesAnUntypedMark(t *testing.T) {
 
 	t.Run("delta baseline, a mark the host does not draw is not drawn", func(t *testing.T) {
 		p := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Only: recipe.NewObjectSet(19, 60)}
-		want := []string{"-R0", "19"}
+		want := []string{"_Yn", "_Ynn", "-R0", "19"}
 		if got := objectBandOf(t, p); !reflect.DeepEqual(got, want) {
 			t.Errorf("object band = %v, want %v", got, want)
 		}
@@ -47,7 +47,7 @@ func TestCompiledArgvCarriesAnUntypedMark(t *testing.T) {
 
 	t.Run("explicit baseline", func(t *testing.T) {
 		p := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 19, 23}, Only: recipe.NewObjectSet(19, 23)}
-		want := []string{"-R0", "19", "23"}
+		want := []string{"_Yn", "_Ynn", "-R0", "19", "23"}
 		if got := objectBandOf(t, p); !reflect.DeepEqual(got, want) {
 			t.Errorf("object band = %v, want %v", got, want)
 		}
@@ -104,11 +104,11 @@ func TestMarkNeverDrawsAnUndrawnObject(t *testing.T) {
 
 			t.Run("delta baseline: the Moon is removed, the mark on the Moon adds nothing", func(t *testing.T) {
 				p := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Remove: recipe.NewObjectSet(2), Only: recipe.NewObjectSet(1, 2)}
-				if band, want := objectBandOf(t, p), []string{"-R0", "1"}; !reflect.DeepEqual(band, want) {
+				if band, want := objectBandOf(t, p), []string{"_Yn", "_Ynn", "-R0", "1"}; !reflect.DeepEqual(band, want) {
 					t.Errorf("chart band = %v, want %v (the Moon is not drawn, so its mark is kept and not drawn)", band, want)
 				}
 				p.Only = recipe.NewObjectSet(2)
-				if band, want := objectBandOf(t, p), []string{"-R", "2"}; !reflect.DeepEqual(band, want) {
+				if band, want := objectBandOf(t, p), []string{"_Yn", "_Ynn", "-R", "2"}; !reflect.DeepEqual(band, want) {
 					t.Errorf("chart band with only the Moon marked = %v, want the baseline's %v (a mark that leaves nothing narrows nothing, never a bare -R0)", band, want)
 				}
 				// The wheel: the highlight's selected and cursor tiers are cut by the same drawn set.
@@ -124,7 +124,7 @@ func TestMarkNeverDrawsAnUndrawnObject(t *testing.T) {
 
 			t.Run("delta baseline: an object the lens does not add is not drawn by its mark", func(t *testing.T) {
 				p := recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Only: recipe.NewObjectSet(1, 11, 60)}
-				if band, want := objectBandOf(t, p), []string{"-R0", "1"}; !reflect.DeepEqual(band, want) {
+				if band, want := objectBandOf(t, p), []string{"_Yn", "_Ynn", "-R0", "1"}; !reflect.DeepEqual(band, want) {
 					t.Errorf("chart band = %v, want %v (Chiron and Iapetus are not in the lens)", band, want)
 				}
 				if got := mustHighlightMembers(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.NewHighlight([]int{11, 60, 1}, objChiron)); !slices.Equal(got, []int{1}) {
@@ -134,11 +134,11 @@ func TestMarkNeverDrawsAnUndrawnObject(t *testing.T) {
 
 			t.Run("explicit baseline: Mars is not selected, the mark on Mars adds nothing", func(t *testing.T) {
 				p := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 19}, Only: recipe.NewObjectSet(5, 19)}
-				if band, want := objectBandOf(t, p), []string{"-R0", "19"}; !reflect.DeepEqual(band, want) {
+				if band, want := objectBandOf(t, p), []string{"_Yn", "_Ynn", "-R0", "19"}; !reflect.DeepEqual(band, want) {
 					t.Errorf("chart band = %v, want %v", band, want)
 				}
 				p.Only = recipe.NewObjectSet(5)
-				if band, want := objectBandOf(t, p), []string{"-R0", "1", "2", "19"}; !reflect.DeepEqual(band, want) {
+				if band, want := objectBandOf(t, p), []string{"_Yn", "_Ynn", "-R0", "1", "2", "19"}; !reflect.DeepEqual(band, want) {
 					t.Errorf("chart band with only Mars marked = %v, want the selection's %v (a mark that leaves nothing narrows nothing, never a bare -R0)", band, want)
 				}
 				plan := mustCompile(t, onlySpec(t, p), recipe.WheelImage{Render: highlightRenderObjects([]int{5}, objMars)})

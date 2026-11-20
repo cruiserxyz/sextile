@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -44,26 +45,51 @@ import (
 // fallback says the truest thing it can about ITS operation.
 func (m Model) failureReason(err error, fallback string) string {
 	var unresolved *unresolvedHouses
+	var temp *lookup.PrivateTempError
+	var refused *lookup.ChartRefused
 	switch {
 	case err == nil:
-		return "Nothing came back."
+		return "nothing came back"
 	case errors.As(err, &unresolved):
 		return unresolved.reason()
+	case errors.As(err, &refused):
+		// A chart file holding a switch that acts outside the chart, or one
+		// Sextile cannot vouch for, never reaches Astrolog.
+		if refused.Asks != "" {
+			// The Log keeps its line short; the chart list's reason names
+			// the switch too.
+			return "it asks for " + refused.Asks
+		}
+		if refused.Long {
+			return "its title or place is longer than Astrolog can read"
+		}
+		return "its file holds " + refused.Switch + ", Sextile gives Astrolog only the lines that describe a chart"
+	case errors.As(err, &temp):
+		// Sextile's own folder, not Astrolog: every chart read, rename and
+		// wheel needs it. The system's words go to the large log.
+		if errors.Is(err, lookup.ErrHomeNotAbsolute) {
+			return "Sextile has no folder for its working files, HOME must be a full path"
+		}
+		return "Sextile could not make its temp folder in " + temp.Dir
 	case errors.Is(err, lookup.ErrAstrologNotInstalled):
-		return "Astrolog is not installed."
+		return "Astrolog is not installed"
+	case len(warningTexts(err)) > 0 && lookup.NoDataBody(warningTexts(err)[0]) != "":
+		// A body whose ephemeris does not reach the date, in the operator's
+		// words; Astrolog's own line is in the console (logWarnings).
+		return "Astrolog has no data for " + lookup.NoDataBody(warningTexts(err)[0]) + " at this date"
 	case len(warningTexts(err)) > 0:
 		// A chart call Astrolog warned on is refused, not shown. The reason is
 		// Astrolog's own first line; the rest is in the console (logWarnings).
-		return "Astrolog warned: " + warningTexts(err)[0]
+		return "Astrolog warned " + strconv.Quote(warningTexts(err)[0])
 	case errors.Is(err, lookup.ErrAstrologCrashed):
 		// A named cause, so it carries no console pointer (the pointer is the
 		// fallback for a failure that cannot be named, where the command is the
 		// reason). The command is in the console all the same.
-		return "Astrolog crashed."
+		return "Astrolog crashed"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		// The refresh coordinator drops superseded runs before they reach a
 		// log line, so arriving here means a cancellation nobody expected.
-		return "It stopped before it finished."
+		return "it stopped before it finished"
 	default:
 		return fallback
 	}
@@ -83,12 +109,9 @@ func (m Model) failureReason(err error, fallback string) string {
 // wrong key is worse than one naming none.
 func (m Model) consolePointer(recorded bool) string {
 	if !recorded {
-		return "Astrolog could not be started."
+		return "Astrolog could not be started"
 	}
-	if m.leaderKey == "" {
-		return "Astrolog returned nothing usable."
-	}
-	return "Press " + m.leaderKey + "l l for what Astrolog ran."
+	return "Astrolog returned nothing usable"
 }
 
 // The per-site fallbacks for the surfaces that record no command. Each says
@@ -96,9 +119,9 @@ func (m Model) consolePointer(recorded bool) string {
 // wheel that rendered and then failed to reach a browser is not Astrolog's
 // failure, and saying so would send the operator to check the wrong thing.
 const (
-	pickFallback         = "Astrolog could not read the file."
-	wheelRenderFallback  = "Astrolog could not render it."
-	wheelPublishFallback = "The image could not be opened."
+	pickFallback         = "Astrolog could not read the file"
+	wheelRenderFallback  = "Astrolog could not render it"
+	wheelPublishFallback = "the picture did not open in an image viewer"
 )
 
 // The startup probe's line (applyAstrologProbe) is the only place that says
@@ -109,8 +132,8 @@ const (
 
 // atlasModalHint is the same fact inside the place picker, where it explains an
 // empty list rather than a failed load. It names the FILE, because that is the
-// thing to go and find; the paths searched are in the README.
-const atlasModalHint = "(no places to search — Astrolog's atlas.as was not found)"
+// thing to go and find; the paths searched are in internal/location/atlas.go.
+const atlasModalHint = "(no list of cities: Astrolog's file atlas.as was not found)"
 
 // warningTexts are the warning lines of a refused Astrolog call, each with its
 // terminal control sequences and control bytes removed and empty results
@@ -129,4 +152,42 @@ func warningTexts(err error) []string {
 		}
 	}
 	return out
+}
+
+// logFileNotes says once per kind which of a chart file's own lines Astrolog
+// does not get, and what Sextile shows instead (moment-design.md, "The file's
+// own settings"). A file that asks for what is shown anyway gets no line.
+func (m Model) logFileNotes(name string, notes []lookup.FileNote) Model {
+	said := map[lookup.FileSwitchClass]bool{}
+	for _, n := range notes {
+		if said[n.Class] {
+			continue
+		}
+		var line string
+		switch n.Class {
+		case lookup.SwitchLens:
+			line = name + "'s file asks for its own bodies or aspects (" + n.Switch + "), Sextile shows yours"
+		default:
+			continue
+		}
+		said[n.Class] = true
+		m = m.logNote("chart", "%s", line)
+	}
+	return m
+}
+
+// refusedReason is why a chart file the chart guard refuses does not open, as
+// the chart list says it under the cursor (the operator, 2026-11-15: a red !
+// and its reason inside the list).
+func refusedReason(err error) string {
+	var refused *lookup.ChartRefused
+	switch {
+	case errors.As(err, &refused) && refused.Asks != "":
+		return "Its file asks for " + refused.Asks + " (" + refused.Switch + "). Sextile does not show that yet, so it does not open."
+	case errors.As(err, &refused) && refused.Long:
+		return "Its title or place is longer than Astrolog can read, so it does not open."
+	case errors.As(err, &refused):
+		return "Its file holds " + refused.Switch + ". Sextile opens only a file that describes a chart and does nothing more."
+	}
+	return "Its file cannot be read as a chart, so it does not open."
 }

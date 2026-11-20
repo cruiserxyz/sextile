@@ -138,7 +138,7 @@ func TestSlotRowNameColumn(t *testing.T) {
 
 	t.Run("short name sets N to its width", func(t *testing.T) {
 		rows := stripRows(slots, "Constructed One", 78)
-		const want = "Constructed One  Sat Feb  3, 2001  4:05 UTC"
+		const want = "Constructed One  Sat Feb  3, 2001  4:05:00 +0"
 		if got := cellOf(rows[0], want); got != prefixW {
 			t.Errorf("anchored row = %q, want %q right after the %d-cell prefix", rows[0], want, prefixW)
 		}
@@ -161,9 +161,10 @@ func TestSlotRowNameColumn(t *testing.T) {
 	t.Run("an empty name renders as before names", func(t *testing.T) {
 		// Written out, not rendered by the code under test: the row exactly as
 		// it was before names existed.
-		// Changed by selected-charts-compare C14: the selected row's marker is
-		// its numeral, `1` in this ASCII-mode fixture, no longer `*`.
-		const left, place = "1 Sat Feb  3, 2001  4:05 UTC ", "Test Bay, TS"
+		// The selected row's marker is its numeral, `1` in this ASCII-mode
+		// fixture. The zone cell is padded to the widest zone of the table
+		// (the floating row's `+2 DT`).
+		const left, place = "1 Sat Feb  3, 2001  4:05:00 +0    ", "Test Bay, TS"
 		want := left + place + strings.Repeat(" ", 78-len(left)-len(place)-len("WhTr")) + "WhTr"
 		for _, name := range []string{"", "   "} {
 			rows := stripRows(slots, name, 78)
@@ -208,7 +209,8 @@ func TestSlotRowsAlignMoment(t *testing.T) {
 	slots := twoSlots(t, time.Date(2001, 2, 3, 4, 5, 0, 0, time.UTC), nameColUTC)
 	for _, width := range []int{64, 78} {
 		rows := stripRows(slots, "Constructed One", width)
-		a, f := cellOf(rows[0], "Sat Feb  3"), cellOf(rows[1], "Sat Apr 25")
+		// At 64 cells the table has dropped the weekday from every row.
+		a, f := cellOf(rows[0], "Feb  3, 2001"), cellOf(rows[1], "Apr 25, 2026")
 		if a < 0 || a != f {
 			t.Errorf("width %d: moments start at cells %d and %d:\n%q\n%q", width, a, f, rows[0], rows[1])
 		}
@@ -216,11 +218,11 @@ func TestSlotRowsAlignMoment(t *testing.T) {
 }
 
 func TestSlotRowsAlignPlace(t *testing.T) {
-	// UTC (3 cells) against Berlin in summer, CEST (4 cells).
+	// A zone offset (`+0`) against Berlin in summer (`+2 DT`).
 	slots := twoSlots(t, time.Date(2001, 2, 3, 4, 5, 0, 0, time.UTC), nameColUTC)
 	rows := stripRows(slots, "Constructed One", 78)
-	if !strings.Contains(rows[0], " UTC ") || !strings.Contains(rows[1], " CEST ") {
-		t.Fatalf("fixture zones are not UTC and CEST:\n%q\n%q", rows[0], rows[1])
+	if !strings.Contains(rows[0], " +0 ") || !strings.Contains(rows[1], " +2 DT ") {
+		t.Fatalf("fixture zones are not +0 and +2 DT:\n%q\n%q", rows[0], rows[1])
 	}
 	a, f := cellOf(rows[0], nameColUTC.Display()), cellOf(rows[1], testPlaceBerlin().Display())
 	if a < 0 || a != f {
@@ -229,9 +231,9 @@ func TestSlotRowsAlignPlace(t *testing.T) {
 }
 
 func TestSlotRowWidth64(t *testing.T) {
-	// A summer birth in Berlin: a four-letter zone, CEST.
+	// A summer birth in Berlin: the widest zone cell, `+2 DT`.
 	slots := twoSlots(t, time.Date(2001, 7, 3, 4, 5, 0, 0, time.UTC), nameColLongPlace)
-	rows := stripRows(slots, "Fixture-Constructed-Longname", 64) // N = 20
+	rows := stripRows(slots, "Fixture-Constructed-Longname", 64)
 	for _, row := range rows {
 		if w := ansi.StringWidth(row); w != 64 {
 			t.Errorf("row width %d, want 64: %q", w, row)
@@ -241,11 +243,12 @@ func TestSlotRowWidth64(t *testing.T) {
 		}
 	}
 	row := rows[0]
-	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
-	if got := cellOf(row, "Tue Jul  3, 2001  6:05 CEST "); got != prefixW+nameColumnMax+2 {
-		t.Fatalf("fixture is not N = 20 with a CEST anchored zone: moment at cell %d in %q", got, row)
+	// At 64 cells the table has cut the name and dropped the weekday; the clock
+	// and its zone stay whole.
+	if !strings.Contains(row, "Fixture-Constr...  Jul  3, 2001  6:05:00 +2 DT ") {
+		t.Fatalf("the name is not cut with ... before the whole clock and zone: %q", row)
 	}
-	start := strings.Index(row, "CEST ") + len("CEST ")
+	start := strings.Index(row, "+2 DT ") + len("+2 DT ")
 	place := strings.TrimRight(strings.TrimSuffix(row, "WhTr"), " ")[start:]
 	if w := ansi.StringWidth(place); w < 7 {
 		t.Errorf("place kept %d cells (%q), want at least 7", w, place)

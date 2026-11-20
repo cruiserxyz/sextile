@@ -19,8 +19,20 @@ import (
 
 var (
 	keyCtrlHMain = tea.KeyMsg{Type: tea.KeyCtrlH}
-	keyRuneH     = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+	keyRuneU     = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")}
+	// keysOpenHouses is `, u`, the comma way to the house finder.
+	keysOpenHouses = []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune(",")}, keyRuneU}
 )
+
+// openHouses presses `, u`.
+func openHouses(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	var cmd tea.Cmd
+	for _, k := range keysOpenHouses {
+		m, cmd = tpress(t, m, k)
+	}
+	return m, cmd
+}
 
 // finderModel is a ready workspace of n anchored charts with the cursor on
 // list index cursor, in colours-off ASCII so the cursor row shows as "> ".
@@ -36,9 +48,9 @@ func finderModel(t *testing.T, n, cursor int) Model {
 
 func openFinder(t *testing.T, m Model) Model {
 	t.Helper()
-	m, _ = tpress(t, m, keyCtrlHMain)
+	m, _ = openHouses(t, m)
 	if m.startup != startupHouseOpen {
-		t.Fatalf("Ctrl+H did not open the finder: startup = %q", m.startup)
+		t.Fatalf("`, u` did not open the finder: startup = %q", m.startup)
 	}
 	return m
 }
@@ -98,33 +110,47 @@ func systemNamed(t *testing.T, name string) recipe.HouseSystem {
 	return 0
 }
 
-// C13. Positive control: removing the Ctrl+H binding fails this test.
+// C13.
 func TestHouseFinderKeys(t *testing.T) {
-	t.Run("ctrl+h opens it for the focused chart, esc closes", func(t *testing.T) {
+	t.Run("`, u` opens it for the focused chart, esc closes", func(t *testing.T) {
 		m := openFinder(t, finderModel(t, 2, 1))
 		m, _ = tpress(t, m, keyEsc)
 		if m.startup != startupReady {
 			t.Errorf("esc left startup = %q", m.startup)
 		}
 	})
-	t.Run("the leader sequence , h opens it", func(t *testing.T) {
+	t.Run("the leader sequence , u opens it", func(t *testing.T) {
 		m := finderModel(t, 2, 0)
-		m, _ = press(t, m, ",", "h")
+		m, _ = press(t, m, ",", "u")
 		if m.startup != startupHouseOpen {
-			t.Errorf(", h left startup = %q", m.startup)
+			t.Errorf(", u left startup = %q", m.startup)
 		}
 	})
-	t.Run("Help lists both, the key bar neither", func(t *testing.T) {
+	t.Run("Ctrl+U opens it", func(t *testing.T) {
+		m := finderModel(t, 2, 0)
+		m, _ = tpress(t, m, tea.KeyMsg{Type: tea.KeyCtrlU})
+		if m.startup != startupHouseOpen {
+			t.Errorf("Ctrl+U left startup = %q", m.startup)
+		}
+	})
+	t.Run("`, h` cancels and does nothing", func(t *testing.T) {
+		base := finderModel(t, 2, 0)
+		m, _ := press(t, base, ",", "h")
+		if m.startup != base.startup || m.leader.pending {
+			t.Errorf(", h left startup %q, pending %v", m.startup, m.leader.pending)
+		}
+	})
+	t.Run("Help lists the Ctrl key, the key bar nothing", func(t *testing.T) {
 		m := finderModel(t, 2, 0)
 		var key, seq bool
-		for _, l := range m.helpLines() {
+		for _, l := range keybindingLines(m) {
 			if strings.Contains(l.Text, "Choose houses") {
-				key = key || strings.Contains(l.Text, "⌃h")
-				seq = seq || strings.Contains(l.Text, ",h")
+				key = key || strings.HasSuffix(l.Text, "  <ctrl+u>")
+				seq = seq || strings.Contains(l.Text, "<ctrl+h>") || strings.HasSuffix(l.Text, "  u")
 			}
 		}
-		if !key || !seq {
-			t.Errorf("Help lists ctrl+h = %v and the leader sequence = %v", key, seq)
+		if !key || seq {
+			t.Errorf("Help lists <ctrl+u> = %v and ctrl+h or the bare letter = %v, want only <ctrl+u>", key, seq)
 		}
 		for _, e := range m.keyBarEntries() {
 			if e.Bar && (e.ID == keys.BindingHouses || e.Binding.Help().Desc == "Choose houses") {
@@ -134,14 +160,14 @@ func TestHouseFinderKeys(t *testing.T) {
 	})
 }
 
-// Pass 7: h is the hour step; after the leader it opens the finder instead.
+// Pass 7: h is the hour step; after the leader, u opens the finder instead.
 func TestLeaderHOpensFinderWithoutSteppingTime(t *testing.T) {
 	m := finderModel(t, 1, 1) // the floating slot, where h steps the hour
 	before := m.slots.Floating().Time
 	target := m.targetFloatingTime
-	m, _ = press(t, m, ",", "h")
+	m, _ = press(t, m, ",", "u")
 	if m.startup != startupHouseOpen {
-		t.Fatalf(", h left startup = %q", m.startup)
+		t.Fatalf(", u left startup = %q", m.startup)
 	}
 	if got := m.slots.Floating().Time; !got.Equal(before) || !m.targetFloatingTime.Equal(target) {
 		t.Errorf("the hour stepped: %v -> %v", before, got)
@@ -435,31 +461,31 @@ func TestHouseFinderDoesNotStealOtherOwners(t *testing.T) {
 	t.Run("help", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
 		m, _ = press(t, m, "?")
-		if !m.helpOpen {
+		if !m.keybindingsOpen {
 			t.Fatal("setup: help did not open")
 		}
-		m, _ = tpress(t, m, keyCtrlHMain)
-		if m.startup == startupHouseOpen || !m.helpOpen {
-			t.Errorf("ctrl+h over help: startup %q, help open %v", m.startup, m.helpOpen)
+		m, _ = openHouses(t, m)
+		if m.startup == startupHouseOpen || !m.keybindingsOpen {
+			t.Errorf("`, u` over help: startup %q, help open %v", m.startup, m.keybindingsOpen)
 		}
 	})
 	t.Run("console", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		if !m.console.open {
 			t.Fatal("setup: console did not open")
 		}
-		m, _ = tpress(t, m, keyCtrlHMain)
+		m, _ = openHouses(t, m)
 		if m.startup == startupHouseOpen {
-			t.Error("ctrl+h over the console opened the finder")
+			t.Error("`, u` over the console opened the finder")
 		}
 	})
 	t.Run("another popup", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
 		m.startup = startupAtlasOpen
-		m, _ = tpress(t, m, keyCtrlHMain)
+		m, _ = openHouses(t, m)
 		if m.startup != startupAtlasOpen {
-			t.Errorf("ctrl+h over the atlas left startup = %q", m.startup)
+			t.Errorf("`, u` over the atlas left startup = %q", m.startup)
 		}
 	})
 	t.Run("a pending leader", func(t *testing.T) {

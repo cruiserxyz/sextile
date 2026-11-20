@@ -17,18 +17,18 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 )
 
-// actions_test.go holds the seam under the Actions palette (palette P1): the 24
+// actions_test.go holds the seam under the Actions palette (palette P1): the 22
 // commands run by their id (runAction) and each one's single reason for not
 // running now (blocked). Nothing here is on screen.
 
 // paletteIDs are the commands: the entries whose table row carries Palette.
 var paletteIDs = []keys.BindingID{
 	keys.BindingAttach, keys.BindingSelect, keys.BindingSlotMoveUp, keys.BindingSlotMoveDown, keys.BindingSlotDelete,
-	keys.BindingJumpNow, keys.BindingToggleBack,
+	keys.BindingJumpNow,
 	keys.BindingOpenAtlas, keys.BindingOpenCharts, keys.BindingSaveChart,
-	keys.BindingBodies, keys.BindingHouses, keys.BindingZodiac, keys.BindingAspects,
+	keys.BindingBodies, keys.BindingHouses, keys.BindingZodiac, keys.BindingNodes, keys.BindingAspects,
 	keys.BindingRenderWheel, keys.BindingLogConsole, keys.BindingConsole, keys.BindingSaveCity,
-	keys.BindingHouseDisplay, keys.BindingSessions, keys.BindingNewSession,
+	keys.BindingSessions, keys.BindingOriginals,
 	keys.BindingCopy, keys.BindingHelp, keys.BindingQuit,
 }
 
@@ -71,7 +71,6 @@ type actionSnap struct {
 	help     bool
 	floating time.Time
 	target   time.Time
-	previous time.Time
 	order    []string // each slot's chart id ("" is Now), in list order
 	selected int
 	cursor   int
@@ -84,7 +83,7 @@ type actionSnap struct {
 
 func snapOf(m Model) actionSnap {
 	s := actionSnap{
-		startup: m.startup, help: m.helpOpen, target: m.targetFloatingTime, previous: m.previousFloatingTime,
+		startup: m.startup, help: m.keybindingsOpen, target: m.targetFloatingTime,
 		cursor: m.cursorIdx, focused: m.focused, logs: m.logPanelLines(), notice: m.yank.notice,
 		console: m.console.open, wheel: m.previewActive,
 	}
@@ -100,7 +99,7 @@ func snapOf(m Model) actionSnap {
 
 func (a actionSnap) equal(b actionSnap) bool {
 	if a.startup != b.startup || a.help != b.help || !a.floating.Equal(b.floating) || !a.target.Equal(b.target) ||
-		!a.previous.Equal(b.previous) || a.selected != b.selected || a.cursor != b.cursor || a.focused != b.focused ||
+		a.selected != b.selected || a.cursor != b.cursor || a.focused != b.focused ||
 		a.notice != b.notice || a.console != b.console || a.wheel != b.wheel ||
 		len(a.order) != len(b.order) || len(a.logs) != len(b.logs) {
 		return false
@@ -128,7 +127,7 @@ func commandTitle(id keys.BindingID) string {
 	return strconv.Itoa(int(id))
 }
 
-// The ids are the 24 commands and no other table row says it is one.
+// The ids are the 22 commands and no other table row says it is one.
 func TestPaletteRowsAreTheCommands(t *testing.T) {
 	got := map[keys.BindingID]int{}
 	for _, e := range append(mainBindings(keys.DefaultKeys()), leaderOnlyBindings()...) {
@@ -140,8 +139,8 @@ func TestPaletteRowsAreTheCommands(t *testing.T) {
 	for _, id := range paletteIDs {
 		want[id] = true
 	}
-	if len(want) != 24 {
-		t.Fatalf("the test lists %d distinct commands, want 24", len(want))
+	if len(want) != 23 {
+		t.Fatalf("the test lists %d distinct commands, want 23", len(want))
 	}
 	for id := range want {
 		if got[id] != 1 {
@@ -150,7 +149,7 @@ func TestPaletteRowsAreTheCommands(t *testing.T) {
 	}
 	for id, n := range got {
 		if !want[id] {
-			t.Errorf("binding %d (%d rows) is marked Palette but is not one of the 24 commands", int(id), n)
+			t.Errorf("binding %d (%d rows) is marked Palette but is not one of the 22 commands", int(id), n)
 		}
 	}
 	// No popup's, the console's or Details' own table lists a command.
@@ -171,6 +170,7 @@ func TestPaletteRowsAreTheCommands(t *testing.T) {
 // page, a tab or a time step is not one.
 func TestRunActionRunsEveryPaletteRow(t *testing.T) {
 	stubQuitCleanup(t)
+	sessionSandbox(t) // Quit and Save defaults write the session and the config: not the operator's
 	for _, id := range append(append([]keys.BindingID(nil), paletteIDs...), keys.BindingCopy) {
 		m := paletteModel(t)
 		if _, _, ok := m.runAction(id); !ok {
@@ -218,7 +218,7 @@ func TestBlockedActionOpensNothing(t *testing.T) {
 		log     func(Model) Model // today's Log line, when the guard says one
 		notice  string            // today's footer notice, when the guard says one
 	}{
-		{"Details is not shown", keys.BindingAttach, whyNoDetails, func(t *testing.T, m Model) Model { m.width, m.height = 80, 24; return m }, nil, ""},
+		{"No layout (too small for any panel)", keys.BindingAttach, whyNoDetails, func(t *testing.T, m Model) Model { m.width, m.height = 65, 14; return m }, nil, ""},
 		{"only Now is open", keys.BindingSelect, whyNothingToPick, func(t *testing.T, _ Model) Model { return floatingOnly(t) }, nil, ""},
 		{"Bodies has no row", keys.BindingSelect, whyNothingToPick, func(t *testing.T, m Model) Model { m.focused = PanelBodies; m.chart = chartViewState{}; return m }, nil, ""},
 		{"first opened chart", keys.BindingSlotMoveUp, whyNoneAbove, onCursor(0), nil, ""},
@@ -230,8 +230,6 @@ func TestBlockedActionOpensNothing(t *testing.T) {
 		{"cursor on Now", keys.BindingSlotDelete, whyNotOnOpened, onCursor(3), nil, ""},
 		{"Bodies has the focus", keys.BindingSlotDelete, whyNotOnOpened, func(t *testing.T, m Model) Model { m.focused = PanelBodies; return m }, nil, ""},
 		{"no workspace", keys.BindingJumpNow, whyNoCity, noWorkspace, nil, ""},
-		{"no workspace", keys.BindingToggleBack, whyNoCity, noWorkspace, nil, ""},
-		{"nothing to go back to", keys.BindingToggleBack, whyNoBack, func(t *testing.T, m Model) Model { return m }, nil, ""},
 		{"no workspace", keys.BindingOpenCharts, whyNoCity, noWorkspace, nil, ""},
 		{"city without a time zone", keys.BindingOpenCharts, whyNoCity, func(t *testing.T, m Model) Model { m.place = location.PlaceInfo{}; return m }, nil, ""},
 		{"no workspace", keys.BindingSaveChart, whyNoCity, noWorkspace, nil, ""},
@@ -242,6 +240,8 @@ func TestBlockedActionOpensNothing(t *testing.T) {
 		{"no workspace", keys.BindingHouses, whyNoCity, noWorkspace, nil, ""},
 		{"loading", keys.BindingZodiac, whyLoading, loading, nil, ""},
 		{"no workspace", keys.BindingZodiac, whyNoCity, noWorkspace, nil, ""},
+		{"loading", keys.BindingNodes, whyLoading, loading, nil, ""},
+		{"no workspace", keys.BindingNodes, whyNoCity, noWorkspace, nil, ""},
 		{"loading", keys.BindingAspects, whyLoading, loading, nil, ""},
 		{"registry unreadable", keys.BindingAspects, whyAspectsUnread, func(t *testing.T, m Model) Model {
 			m.aspectRegistry, m.aspectRegErr = nil, errors.New("astrolog exited 1")
@@ -254,21 +254,16 @@ func TestBlockedActionOpensNothing(t *testing.T) {
 		}, nil, ""},
 		{"drawn set unreadable", keys.BindingBodies, whyDrawnUnread, noHostDefault, func(m Model) Model {
 			_, err := m.lens.VisibleObjectNumbers()
-			return m.logNote("bodies", "the body list cannot open: %v", err)
+			return m.logTrace("bodies", "the list of bodies: %v", err).logNote("bodies", "the list of bodies did not open")
 		}, ""},
-		{"loading", keys.BindingHouseDisplay, whyLoading, loading, nil, ""},
 		{"loading", keys.BindingSessions, whyLoading, loading, nil, ""},
 		{"no workspace", keys.BindingSessions, whyNoCity, noWorkspace, nil, ""},
-		{"loading", keys.BindingNewSession, whyLoading, loading, nil, ""},
-		{"no workspace", keys.BindingNewSession, whyNoCity, noWorkspace, nil, ""},
-		{"nothing to put away", keys.BindingNewSession, whySessionEmpty, func(t *testing.T, _ Model) Model { return floatingOnly(t) }, func(m Model) Model {
-			return m.logNote("session", "new, unnamed")
-		}, ""},
+		{"loading", keys.BindingOriginals, whyLoading, loading, nil, ""},
 		{"second window", keys.BindingSaveCity, whyNotFirstWindow, func(t *testing.T, m Model) Model { m.cfg.SecondWindow = true; return m }, func(m Model) Model {
-			return m.logErrorLine("Save defaults is for the first window, which keeps the session. This window keeps nothing")
+			return m.logErrorLine("settings", saveDefaultsSecondWindow)
 		}, ""},
 		{"city without a time zone", keys.BindingSaveCity, whyNoCity, func(t *testing.T, m Model) Model { m.place = location.PlaceInfo{}; return m }, func(m Model) Model {
-			return m.logErrorLine("default city not saved: no city chosen yet")
+			return m.logErrorLine("settings", "the city was not kept as the default, no city is chosen yet")
 		}, ""},
 	}
 	guarded := map[keys.BindingID]bool{}
@@ -326,8 +321,9 @@ func TestBlockedActionOpensNothing(t *testing.T) {
 func TestKeyAndRunActionAgree(t *testing.T) {
 	stubQuitCleanup(t)
 	leaderOnly := map[keys.BindingID]bool{
-		keys.BindingLogConsole: true, keys.BindingSaveCity: true, keys.BindingHouseDisplay: true,
-		keys.BindingSessions: true, keys.BindingNewSession: true, keys.BindingConsole: true, keys.BindingCopy: true,
+		keys.BindingLogConsole: true, keys.BindingSaveCity: true,
+		keys.BindingSessions: true, keys.BindingConsole: true, keys.BindingHouses: true,
+		keys.BindingOriginals: true,
 	}
 	isCommand := map[keys.BindingID]bool{}
 	for _, id := range paletteIDs {
@@ -351,16 +347,16 @@ func TestKeyAndRunActionAgree(t *testing.T) {
 			continue
 		}
 		run := tm.(Model)
-		if pressed.startup != run.startup || pressed.helpOpen != run.helpOpen || (pressCmd == nil) != (runCmd == nil) {
+		if pressed.startup != run.startup || pressed.keybindingsOpen != run.keybindingsOpen || (pressCmd == nil) != (runCmd == nil) {
 			t.Errorf("%s: the key leaves startup %q, help %v, cmd %v but runAction leaves %q, %v, %v",
-				e.Title, pressed.startup, pressed.helpOpen, pressCmd != nil, run.startup, run.helpOpen, runCmd != nil)
+				e.Title, pressed.startup, pressed.keybindingsOpen, pressCmd != nil, run.startup, run.keybindingsOpen, runCmd != nil)
 		}
 		if !snapOf(pressed).equal(snapOf(run)) {
 			t.Errorf("%s: the key and runAction leave different slots, cursor, selection, Log or notice", e.Title)
 		}
 	}
 	if n != 17 {
-		t.Errorf("%d of the commands have a main key in the table, want 17 (the other five are reached through the leader)", n)
+		t.Errorf("%d of the commands have a main key in the table, want 17 (the others have no Ctrl key)", n)
 	}
 }
 
@@ -457,8 +453,8 @@ func TestCommandsRunThroughRunActionAndAskBlocked(t *testing.T) {
 	for _, name := range paletteNames(t) {
 		commandNames[name] = true
 	}
-	if len(commandNames) != 24 {
-		t.Fatalf("found %d command names in keys.go, want the 24 commands", len(commandNames))
+	if len(commandNames) != 23 {
+		t.Fatalf("found %d command names in keys.go, want the 23 commands", len(commandNames))
 	}
 	dispatch, ok := funcs["dispatchMainBinding"]
 	if !ok {
@@ -506,11 +502,11 @@ func TestCommandsRunThroughRunActionAndAskBlocked(t *testing.T) {
 		"attachDetails": {"BindingAttach"}, "toggleFocusedSelection": {"BindingSelect"},
 		"moveFocusedSlot": {"BindingSlotMoveUp", "BindingSlotMoveDown"}, "removeFocusedSlot": {"BindingSlotDelete"},
 		"dispatchRenderWheel": {"BindingRenderWheel"}, "jumpFloatingToNow": {"BindingJumpNow"},
-		"toggleFloatingBack": {"BindingToggleBack"}, "openChartPicker": {"BindingOpenCharts"},
-		"openSavePrompt": {"BindingSaveChart"}, "openAspectChooser": {"BindingAspects"},
+		"openChartPicker": {"BindingOpenCharts"},
+		"openSavePrompt":  {"BindingSaveChart"}, "openAspectChooser": {"BindingAspects"},
 		"openBodySelector": {"BindingBodies"}, "openHouseFinder": {"BindingHouses"},
-		"openZodiacFinder": {"BindingZodiac"}, "openHouseDisplay": {"BindingHouseDisplay"},
-		"openSessionsList": {"BindingSessions"}, "resetSession": {"BindingNewSession"},
+		"openZodiacFinder": {"BindingZodiac"}, "openNodesFinder": {"BindingNodes"},
+		"openSessionsList": {"BindingSessions"}, "leaveForNewSession": {"BindingNewSession"}, "pressOriginals": {"BindingOriginals"},
 		"saveDefaultCity": {"BindingSaveCity"}, "applyAspectRegistryLoaded": {"BindingAspects"},
 		"applyObjectRegistryLoaded": {"BindingBodies"},
 	}

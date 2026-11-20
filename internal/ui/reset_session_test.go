@@ -18,13 +18,13 @@ import (
 
 // All chart values in this file are constructed synthetic test inputs.
 
-// `, n` starts a new, unnamed session (specs/reset-session.md): the open
-// charts go, the saved choices go, the named session that was open stays as
-// last saved.
+// The Sessions list's New row starts a new, unnamed session (specs/reset-session.md): the open
+// charts go, the saved choices go, the named session that was open is written
+// first and then left alone.
 
 const resetNamed = "Weekly review"
 
-const resetLogLine = "session: new and unnamed, " + resetNamed + " stays as it was saved"
+const resetLogLine = "session: new session with no name, " + resetNamed + " stays as saved"
 
 // namedResetModel is a window running the named session "Weekly review" with
 // three charts, a house choice made in it, and the file written.
@@ -78,7 +78,7 @@ func TestResetClosesEveryChart(t *testing.T) {
 	}
 	m = resetKey(t, m)
 	if got := len(m.slots.All()); got != 1 || m.slots.AnchoredCount() != 0 {
-		t.Errorf("after `, n` the Chart panel lists %d slot(s), %d anchored, want the floating slot alone", got, m.slots.AnchoredCount())
+		t.Errorf("after the New row the Chart panel lists %d slot(s), %d anchored, want the floating slot alone", got, m.slots.AnchoredCount())
 	}
 	if m.slots.SlotSelected(0) {
 		t.Error("the floating slot is still selected")
@@ -102,7 +102,7 @@ func TestResetKeepsTheFloatingMomentAndDropsTheCursorChartAtOnce(t *testing.T) {
 		t.Errorf("floating slot moved: %v %+v -> %v %+v", before.Time, before.Location, after.Time, after.Location)
 	}
 	if v := m.View(); strings.Contains(v, "Synthetic") {
-		t.Errorf("a closed chart is still on screen right after `, n`:\n%s", v)
+		t.Errorf("a closed chart is still on screen right after the New row:\n%s", v)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestResetLogsOneLineAndNothingElse(t *testing.T) {
 	u := sessionsModel(t, 1)
 	t.Cleanup(store.ReleaseInstanceLock)
 	n := len(logTexts(u))
-	u, _ = press(t, u, ",", "n", ",", "n")
-	if got := logTexts(u); len(got) != n+1 || got[len(got)-1] != "session: new, unnamed" {
+	u, _ = pressNewSession(t, u)
+	if got := logTexts(u); len(got) != n+1 || got[len(got)-1] != "session: new session with no name" {
 		t.Errorf("unnamed window Log = %v", got[min(n, len(got)):])
 	}
 }
@@ -186,7 +186,7 @@ func TestResetThenQuitSavesTheUnnamedSessionWithTheFloatingSlotAlone(t *testing.
 }
 
 // 6
-func TestResetLeavesTheNamedSessionUnwritten(t *testing.T) {
+func TestResetWritesTheNamedSessionOnceThenLeavesItAlone(t *testing.T) {
 	m := namedResetModel(t)
 	saved := fileText(t, namedResetPath())
 	ino, mod := fileIdentity(t, namedResetPath())
@@ -197,15 +197,20 @@ func TestResetLeavesTheNamedSessionUnwritten(t *testing.T) {
 		}
 	}
 	m = resetKey(t, m)
-	untouched("by `, n`")
+	// The New row saves the session it leaves: the same text, written again.
 	if got := fileText(t, namedResetPath()); got != saved {
-		t.Errorf("`, n` wrote the named session:\n--- before ---\n%s--- after ---\n%s", saved, got)
+		t.Errorf("the New row changed the named session:\n--- before ---\n%s--- after ---\n%s", saved, got)
+	}
+	if i, mt := fileIdentity(t, namedResetPath()); i == ino && mt.Equal(mod) {
+		t.Error("the New row did not write the named session")
+	} else {
+		ino, mod = i, mt
 	}
 	// A choice made afterwards belongs to the unnamed session.
 	m, cmd := m.chooseHouseSystem(0, recipe.Regiomontanus)
 	m = pump(t, m, cmd)
 	if got := fileText(t, namedResetPath()); got != saved {
-		t.Errorf("a choice after `, n` reached the named session:\n%s", got)
+		t.Errorf("a choice after the New row reached the named session:\n%s", got)
 	}
 	untouched("by a later choice")
 	quitWindow(t, m)
@@ -231,13 +236,13 @@ func TestSessionsListAfterResetOpensTheSavedSessionAsSaved(t *testing.T) {
 	m = resetKey(t, m)
 	m = openSessions(t, m)
 	rows := sessionsRows(m)
-	if len(rows) != 2 || !strings.Contains(rows[0].Left, "Save this session as") {
-		t.Fatalf("rows = %+v, want the Save row then Weekly review", rows)
+	if len(rows) != 3 || !strings.Contains(rows[0].Left, "Save this session as") {
+		t.Fatalf("rows = %+v, want the Save row, the New row, then Weekly review", rows)
 	}
-	if rows[1].Left != resetNamed || slices.Contains(rows[1].Right, "this window") {
-		t.Errorf("row 2 = %+v, want %q without \"this window\"", rows[1], resetNamed)
+	if rows[2].Left != resetNamed || slices.Contains(rows[2].Right, "this window") {
+		t.Errorf("row 3 = %+v, want %q without \"this window\"", rows[2], resetNamed)
 	}
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	if cmd == nil {
 		t.Fatal("Enter on the saved session started nothing")
@@ -272,29 +277,20 @@ func TestResetOnAnEmptyUnnamedWindowOnlyLogs(t *testing.T) {
 	slots, startup, n := m.slots, m.startup, len(logTexts(m))
 	m, cmd := pressReset(t, m)
 	if cmd != nil || m.slots != slots || m.startup != startup {
-		t.Errorf("`, n` did work on an empty unnamed window: cmd %v, slots rebuilt %v, startup %q", cmd != nil, m.slots != slots, m.startup)
+		t.Errorf("the New row did work on an empty unnamed window: cmd %v, slots rebuilt %v, startup %q", cmd != nil, m.slots != slots, m.startup)
 	}
-	if got := logTexts(m); len(got) != n+1 || got[len(got)-1] != "session: new, unnamed" {
+	if got := logTexts(m); len(got) != n+1 || got[len(got)-1] != "session: new session with no name" {
 		t.Errorf("Log = %v", got[min(n, len(got)):])
 	}
 }
 
 // 9
-func TestHelpListsResetAndAMistypedSecondKeyStillCancels(t *testing.T) {
+func TestAMistypedLetterAfterTheCommaStillCancels(t *testing.T) {
 	m := namedResetModel(t)
-	found := false
-	for _, l := range m.helpLines() {
-		if strings.Contains(l.Text, ",n") && strings.Contains(strings.ToLower(l.Text), "new session") {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("the Keys popup does not list `,n` with a new-session description")
-	}
 	n := len(logTexts(m))
-	m, _ = press(t, m, ",", "x")
+	m, _ = press(t, m, ",", "d")
 	if m.leader.pending || m.slots.AnchoredCount() != 3 || len(logTexts(m)) != n {
-		t.Errorf("`, x` did not cancel quietly: pending %v, charts %d, log %d -> %d", m.leader.pending, m.slots.AnchoredCount(), n, len(logTexts(m)))
+		t.Errorf("`, d` did not cancel quietly: pending %v, charts %d, log %d -> %d", m.leader.pending, m.slots.AnchoredCount(), n, len(logTexts(m)))
 	}
 }
 
@@ -303,12 +299,12 @@ func TestResetGivesTheNamedLockBackAndTakesTheUnnamedOne(t *testing.T) {
 	m := namedResetModel(t)
 	m = resetKey(t, m)
 	if m.named.running() || m.cfg.SecondWindow {
-		t.Fatalf("after `, n`: named %v, second window %v", m.named.running(), m.cfg.SecondWindow)
+		t.Fatalf("after the New row: named %v, second window %v", m.named.running(), m.cfg.SecondWindow)
 	}
 	_, err := store.AcquireInstanceLock()
 	var held *store.LockHeldError
 	if !errors.As(err, &held) {
-		t.Errorf("the unnamed session's lock is free after `, n` (err %v): this window does not hold it", err)
+		t.Errorf("the unnamed session's lock is free after the New row (err %v): this window does not hold it", err)
 	}
 	_, _, lock, err := store.OpenNamedSession("weekly-review.yaml", store.FolderID(store.ChartsDir()))
 	if err != nil {
@@ -327,22 +323,22 @@ func TestResetWhenAnotherWindowOwnsTheUnnamedSessionKeepsNothing(t *testing.T) {
 	}
 	m, _ = pressReset(t, m)
 	if got := len(m.slots.All()); got != 1 {
-		t.Errorf("`, n` left %d slots", got)
+		t.Errorf("the New row left %d slots", got)
 	}
 	if !m.cfg.SecondWindow || m.ownsSession() {
-		t.Error("the window still claims the unnamed session another window owns")
+		t.Error("the window still claims the unnamed session Another window holds")
 	}
-	want := "session: new: another window owns the unnamed session, this one keeps nothing"
+	want := "session: new session, another window holds the unnamed session, this one keeps nothing"
 	if got := logTexts(m); got[len(got)-1] != want {
 		t.Errorf("last Log line = %q, want %q", got[len(got)-1], want)
 	}
 	quitWindow(t, m)
 	if got := fileText(t, store.SessionPath()); got != general {
-		t.Errorf("the window wrote the unnamed session another window owns:\n%s", got)
+		t.Errorf("the window wrote the unnamed session Another window holds:\n%s", got)
 	}
 }
 
-// The Chart panel after `, n` from a named session with three charts, at
+// The Chart panel after the New row from a named session with three charts, at
 // 80x24 with colours off: the floating slot alone, its "1 of 1" counter.
 func TestResetChartPanelFrame(t *testing.T) {
 	forceColor(t)
@@ -356,7 +352,7 @@ func TestResetChartPanelFrame(t *testing.T) {
 }
 
 // Review round 1 (fix 1): a window with no chart but a selected floating slot
-// is not empty; `, n` clears the selection and the quit saves none.
+// is not empty; the New row clears the selection and the quit saves none.
 func TestResetClearsAFloatingSelectionWithNoCharts(t *testing.T) {
 	m := sessionsModel(t, 0)
 	t.Cleanup(store.ReleaseInstanceLock)
@@ -366,7 +362,7 @@ func TestResetClearsAFloatingSelectionWithNoCharts(t *testing.T) {
 	}
 	m = resetKey(t, m)
 	if m.slots.SlotSelected(0) {
-		t.Error("the floating slot is still selected after `, n`")
+		t.Error("the floating slot is still selected after the New row")
 	}
 	quitWindow(t, m)
 	if s, ok, err := store.LoadSession(); err != nil || !ok || s.FloatingSelected {
@@ -405,7 +401,7 @@ func TestResetShowsNoFormerChartBeforeTheRecompute(t *testing.T) {
 	m.cursorIdx = 0
 	// What only the former chart's frame paints: a Bodies row and the Aspects
 	// panel's text (the name is in the Chart panel and proves nothing here).
-	const bodyRow, aspectText = "Vir 11°00'", "(no aspects in orb)"
+	const bodyRow, aspectText = "Vir 11°00'", "(no aspects within orb)"
 	before := m.View()
 	if !strings.Contains(before, bodyRow) || !strings.Contains(before, aspectText) {
 		t.Fatalf("fixture: the frame paints neither %q nor %q:\n%s", bodyRow, aspectText, before)
@@ -450,13 +446,18 @@ func TestResetLockFailureIsNamedInTheLog(t *testing.T) {
 	}
 	want := firstLine(lockErr.Error())
 	m, _ = pressReset(t, m)
-	got := logTexts(m)
-	last := got[len(got)-1]
-	if !strings.Contains(last, want) {
-		t.Errorf("last Log line = %q, want the lock error's own text %q", last, want)
+	// The screen says what it means for the operator; the lock error's own
+	// text goes to the large log.
+	last := m.logLines[len(m.logLines)-1]
+	if last.lane != laneNote || last.text != "session: new session, this window keeps nothing after quit" {
+		t.Errorf("last Log line = %+v, want the plain note", last)
 	}
-	if strings.Contains(last, "another window owns") || !strings.HasPrefix(last, "session: new, this window keeps nothing: ") {
-		t.Errorf("last Log line = %q, want the lock failure's own text", last)
+	traced := false
+	for _, l := range m.logLines {
+		traced = traced || (l.lane == laneTrace && strings.Contains(l.text, want))
+	}
+	if !traced {
+		t.Errorf("the lock error's own text %q is not in the large log: %v", want, logTexts(m))
 	}
 	if m.ownsSession() {
 		t.Error("the window keeps writing the unnamed session it could not lock")

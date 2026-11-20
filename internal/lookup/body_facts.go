@@ -117,7 +117,7 @@ const sunObject = 1
 // SearchCycle runs the cycle search of the Sun and the object over the span.
 func SearchCycle(ctx context.Context, o aspect.Object, span CycleSpan, lens Lens, search astrolog.TimelineSearcher) (CycleResult, error) {
 	res := CycleResult{Span: span}
-	call, err := astrolog.CycleCall(astrolog.CycleRequest{StartYear: span.StartYear, Years: span.Years, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry})
+	call, err := astrolog.CycleCall(astrolog.CycleRequest{StartYear: span.StartYear, Years: span.Years, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry, AspectRegistry: lens.AspectRegistry, Nodes: lens.Objects.Nodes})
 	if err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
@@ -128,7 +128,7 @@ func SearchCycle(ctx context.Context, o aspect.Object, span CycleSpan, lens Lens
 	if err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
-	if res.Events, err = astrolog.ParseCycleEvents(out, call.Registry); err != nil {
+	if res.Events, err = astrolog.ParseCycleEvents(out, call.Registry, call.Aspects); err != nil {
 		return res, fmt.Errorf("lookup: SearchCycle: %w", err)
 	}
 	return res, nil
@@ -143,7 +143,7 @@ type SunPairResult struct {
 // SunPair runs the precise positions call for the moment.
 func SunPair(ctx context.Context, o aspect.Object, when time.Time, place location.PlaceInfo, lens Lens, search astrolog.TimelineSearcher) (SunPairResult, error) {
 	var res SunPairResult
-	call, err := astrolog.SunPairCall(astrolog.SunPairRequest{When: when, Lon: place.Lon, Lat: place.Lat, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry})
+	call, err := astrolog.SunPairCall(astrolog.SunPairRequest{When: when, Lon: place.Lon, Lat: place.Lat, Other: o, Houses: lens.Houses, Zodiac: lens.Zodiac, Registry: lens.Registry, AspectRegistry: lens.AspectRegistry, Nodes: lens.Objects.Nodes})
 	if err != nil {
 		return res, fmt.Errorf("lookup: SunPair: %w", err)
 	}
@@ -272,7 +272,7 @@ func magnitudeText(m float64) string {
 // listItem is a list entry: the date in the zone, the body's degree and sign.
 func listItem(ev astrolog.CycleEvent, zone *time.Location) string {
 	d := ev.Instant.In(zone)
-	return fmt.Sprintf("%s  %2d°%02d′ %s", CivilDate(d.Year(), int(d.Month()), d.Day(), HeldClock()), ev.OtherAt.Deg, ev.OtherAt.Min, ev.OtherAt.Sign)
+	return fmt.Sprintf("%s  %2d°%02d' %s", CivilDate(d.Year(), int(d.Month()), d.Day(), HeldClock()), ev.OtherAt.Deg, ev.OtherAt.Min, ev.OtherAt.Sign)
 }
 
 // instantFact is an event as @now shows it: its date and clock in the
@@ -285,7 +285,7 @@ func instantFact(ev astrolog.CycleEvent, o aspect.Object, zone *time.Location) B
 	if ev.Kind == astrolog.CycleConjunction && ev.OtherObject.Number == o.Number {
 		at = ev.OtherAt
 	}
-	f := BodyFact{Kind: FactInstant, Text: fmt.Sprintf("%s %d°%02d′ %s", heldDateClock(ev.Instant.Round(time.Minute).In(zone)), at.Deg, at.Min, at.Sign)}
+	f := BodyFact{Kind: FactInstant, Text: fmt.Sprintf("%s %d°%02d' %s", heldDateClock(ev.Instant.Round(time.Minute).In(zone)), at.Deg, at.Min, at.Sign)}
 	switch ev.Station {
 	case "S/R":
 		f.Term = "station-retrograde"
@@ -408,10 +408,10 @@ func EightYearDrift(newest, sixth astrolog.CyclePoint) float64 {
 }
 
 // degMin is a non-negative angle as whole degrees and arc-minutes, the
-// seconds dropped as Astrolog drops them (it prints 4Ari57 for 4°57′41″).
+// seconds dropped as Astrolog drops them (it prints 4Ari57 for 4°57'41").
 func degMin(deg float64) string {
 	totalMin := int(math.Floor(deg*60 + 1e-9))
-	return fmt.Sprintf("%d°%02d′", totalMin/60, totalMin%60)
+	return fmt.Sprintf("%d°%02d'", totalMin/60, totalMin%60)
 }
 
 // Elongation is the body's longitude minus the Sun's, normalised to
@@ -496,7 +496,7 @@ func BodyNowFacts(ctx context.Context, req BodyFactsRequest) (BodyFactsResult, e
 
 func bodyNowFactsWith(ctx context.Context, req BodyFactsRequest, search astrolog.TimelineSearcher) (BodyFactsResult, error) {
 	var res BodyFactsResult
-	zone, err := time.LoadLocation(req.Place.TZ)
+	zone, err := PlaceZone(req.When, req.Place)
 	if err != nil || req.Place.TZ == "" {
 		return res, fmt.Errorf("lookup: BodyNowFacts: timezone %q does not load", req.Place.TZ)
 	}

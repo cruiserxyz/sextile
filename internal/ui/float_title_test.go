@@ -10,8 +10,8 @@ import (
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
-// The floating row's title gives way to its place (operator 2026-10-24): in the
-// one-chart layout `~ Now` shortens to `~Now`, then `Now`, when the full title
+// The floating row's title gives way to its place (operator 2026-10-24):
+// `~ Now` shortens to `~Now`, then `Now`, when the full title
 // would push the place off the row and a short one would not, and stays whole
 // when it costs nothing. It never becomes `~`, which means the chart was moved.
 func TestFloatTitleGivesWayToThePlace(t *testing.T) {
@@ -23,12 +23,12 @@ func TestFloatTitleGivesWayToThePlace(t *testing.T) {
 	}
 	cfg := Config{Accessible: true}
 	s := slots.All()[0]
-	used := ansi.StringWidth(slotMoment(s.Time, s.Location)) + 1 + ansi.StringWidth(slotZone(s.Time, s.Location)) +
-		1 + ansi.StringWidth(place.Display()) + 1 + len("WhTr")
+	// The row's width past its name: date, clock, zone, place, one space, tag.
+	used := len([]rune(strings.Join(strings.Fields(rowText(s.Time, s.Location, "", "WhTr", 200, cfg)), " ")))
 	prefixW := ansi.StringWidth(menu.ChartRowPrefix(false, true, "", false, cfg))
 	sawShort, sawWhole := false, false
 	for width := prefixW + used; width <= prefixW+used+12; width++ {
-		row := ansi.Strip(chartSlotsBodyLayout(slots, 0, false, testFrozenTime(), place, lookup.Hellenistic, width, cfg, nil, "~ Now", true))
+		row := ansi.Strip(chartSlotsBodyLayout(slots, 0, false, testFrozenTime(), place, lookup.Hellenistic, width, cfg, nil, "~ Now", nil))
 		if !strings.Contains(row, place.Display()) && width >= prefixW+len("Now")+nameGutter+used {
 			t.Errorf("width %d: the floating row lost its place %q:\n%q", width, place.Display(), row)
 		}

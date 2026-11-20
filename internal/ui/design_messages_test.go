@@ -33,17 +33,17 @@ func messagesModel(t *testing.T, cfg Config) Model {
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: fullChartPositions()})
 	m = withSceneColumns(m)
 	m.logLines = nil
-	m = m.logNote("save", "%q saved to %s", "Constructed", "charts/constructed.as")
-	m = m.logError("Couldn't cast the chart. %s", "Astrolog could not be started")
-	m = m.logNote("session", "natal not restored")
-	m = m.logError("Couldn't copy that line to the clipboard.")
+	m = m.logNote("save", "%q saved as %s", "Constructed", "charts/constructed.as")
+	m = m.logError("astrolog", "the chart not cast, %s", "Astrolog could not be started")
+	m = m.logNote("session", "the chart of the last session did not open")
+	m = m.logError("log", "the line did not reach the clipboard")
 	return m
 }
 
 const (
-	messagesErrOne = "Couldn't cast the chart. Astrolog could not be started."
-	messagesErrTwo = "Couldn't copy that line to the clipboard."
-	messagesNote   = "save: \"Constructed\" saved to charts/constructed.as"
+	messagesErrOne = "the chart not cast, Astrolog could not be started"
+	messagesErrTwo = "the line did not reach the clipboard"
+	messagesNote   = "\"Constructed\" saved as charts/constructed.as"
 )
 
 // cellsOf is the cells of the first occurrence of sub on screen row y, or nil.
@@ -120,7 +120,7 @@ func TestErrorLinesStandOut(t *testing.T) {
 
 		// The console opens with its cursor on the newest line, an error;
 		// the other error is off the cursor row.
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		r, ok := m.consoleRect()
 		if !ok {
 			t.Fatal("no console")
@@ -136,12 +136,12 @@ func TestErrorLinesStandOut(t *testing.T) {
 	t.Run("no colour", func(t *testing.T) {
 		m := messagesModel(t, Config{Accessible: true, Color: ColorNever})
 		rows := logPanelRows(t, m)
-		want := map[string]bool{"! " + messagesErrOne: false, "! " + messagesErrTwo: false}
+		want := map[string]bool{"Astrolog ! " + messagesErrOne: false, "Sextile  ! " + messagesErrTwo: false}
 		for _, r := range rows {
 			if _, ok := want[strings.TrimSpace(r)]; ok {
 				want[strings.TrimSpace(r)] = true
 			}
-			if strings.HasPrefix(strings.TrimSpace(r), "! save:") || strings.HasPrefix(strings.TrimSpace(r), "! session:") {
+			if strings.HasPrefix(r, "Chart ") && strings.Contains(r, " ! ") || strings.HasPrefix(r, "Session ") && strings.Contains(r, " ! ") {
 				t.Errorf("a note carries the error mark: %q", r)
 			}
 		}
@@ -153,14 +153,14 @@ func TestErrorLinesStandOut(t *testing.T) {
 
 		last, _, restore := stubYankRecording(t, nil)
 		defer restore()
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		body := strings.Join(consoleBodyLines(t, m), "\n")
-		if !strings.Contains(body, "! "+messagesErrTwo) || strings.Contains(body, "! "+messagesNote) {
+		if !strings.Contains(body, "! log: "+messagesErrTwo) || strings.Contains(body, "! save: "+messagesNote) {
 			t.Errorf("console rows:\n%s", body)
 		}
 		m, _ = press(t, m, "enter")
-		if *last != messagesErrTwo {
-			t.Errorf("Enter copied %q, want the stored line %q", *last, messagesErrTwo)
+		if *last != "log: "+messagesErrTwo {
+			t.Errorf("Enter copied %q, want the stored line %q", *last, "log: "+messagesErrTwo)
 		}
 	})
 }
@@ -184,9 +184,9 @@ func TestLogNoteForm(t *testing.T) {
 	for _, c := range []struct {
 		name, arg, want string
 	}{
-		{"plain", "kept", "chart: titled kept"},
-		{"closing stop", "kept.", "chart: titled kept"},
-		{"line break", "kept\nand more", "chart: titled kept and more"},
+		{"plain", "kept", "Chart    titled kept"},
+		{"closing stop", "kept.", "Chart    titled kept"},
+		{"line break", "kept\nand more", "Chart    titled kept and more"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := messagesModel(t, Config{Accessible: true, Color: ColorNever})
@@ -198,7 +198,7 @@ func TestLogNoteForm(t *testing.T) {
 	}
 }
 
-// A4: an error ends with exactly one full stop and holds no line break.
+// A4: an error ends with no full stop and holds no line break.
 func TestLogErrorForm(t *testing.T) {
 	for _, c := range []struct {
 		name, arg string
@@ -210,8 +210,8 @@ func TestLogErrorForm(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := messagesModel(t, Config{Accessible: true, Color: ColorNever})
-			m = m.logError("Couldn't cast the chart. %s", c.arg)
-			want := "! Couldn't cast the chart. It stopped before it finished."
+			m = m.logError("astrolog", "the chart not cast, %s", c.arg)
+			want := "Astrolog ! the chart not cast, It stopped before it finished"
 			if got := newestLogRow(t, m); got != want {
 				t.Errorf("Log shows %q, want %q", got, want)
 			}
@@ -270,7 +270,7 @@ func TestSettledEmptyStatesSayWhy(t *testing.T) {
 	t.Run("console", func(t *testing.T) {
 		m := base(t)
 		m.logLines = nil
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		if got := strings.TrimSpace(strings.Join(consoleBodyLines(t, m), "\n")); got != consoleEmptyLine {
 			t.Errorf("the empty console shows %q, want %q", got, consoleEmptyLine)
 		}
@@ -283,8 +283,8 @@ func TestSettledEmptyStatesSayWhy(t *testing.T) {
 	for _, overlay := range []bool{false, true} {
 		t.Run(fmt.Sprintf("failed frame, overlay %v", overlay), func(t *testing.T) {
 			m, _ := applyTextCommit(base(t), FirstFrameReadyMsg{Overlay: overlay, Err: errors.New("boom")})
-			if got := aspectsPanelText(t, m); got != "" {
-				t.Errorf("Aspects shows %q after a failed frame", got)
+			if got, want := aspectsPanelText(t, m), failedCastLine("Now"); got != want {
+				t.Errorf("Aspects shows %q after a failed frame, want %q", got, want)
 			}
 		})
 	}
@@ -371,15 +371,15 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m := saving(t)
 		gen := m.saveGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
-		land(t, m, SaveChartDoneMsg{Gen: gen, Name: "Constructed", Saved: lookup.SavedChart{Name: "Constructed", Path: "/charts/constructed.as", AtlasPlaced: true}},
-			`save: "Constructed" saved to /charts/constructed.as`)
+		land(t, m, SaveChartDoneMsg{Gen: gen, Name: "Constructed", Saved: lookup.SavedChart{Name: "Constructed", Path: "/charts/constructed.as"}},
+			`Chart    "Constructed" saved as /charts/constructed.as`)
 	})
 	t.Run("save failed", func(t *testing.T) {
 		m := saving(t)
 		gen := m.saveGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
 		land(t, m, SaveChartDoneMsg{Gen: gen, Name: "Constructed", Err: &lookup.ErrSlugTaken{Slug: "constructed"}},
-			`Couldn't save "Constructed". That name is taken.`)
+			`Chart    "Constructed" was not saved, the name is taken`)
 	})
 	t.Run("two abandoned saves", func(t *testing.T) {
 		m := saving(t)
@@ -388,10 +388,10 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m, _ = escSend(t, m, escKey(tea.KeyEnter))
 		second := m.saveGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
-		land(t, m, SaveChartDoneMsg{Gen: second, Name: "Second", Saved: lookup.SavedChart{Name: "Second", Path: "/c/second.as", AtlasPlaced: true}},
-			`save: "Second" saved to /c/second.as`)
-		land(t, m, SaveChartDoneMsg{Gen: first, Name: "Constructed", Saved: lookup.SavedChart{Name: "Constructed", Path: "/c/constructed.as", AtlasPlaced: true}},
-			`save: "Constructed" saved to /c/constructed.as`)
+		land(t, m, SaveChartDoneMsg{Gen: second, Name: "Second", Saved: lookup.SavedChart{Name: "Second", Path: "/c/second.as"}},
+			`Chart    "Second" saved as /c/second.as`)
+		land(t, m, SaveChartDoneMsg{Gen: first, Name: "Constructed", Saved: lookup.SavedChart{Name: "Constructed", Path: "/c/constructed.as"}},
+			`Chart    "Constructed" saved as /c/constructed.as`)
 	})
 
 	titling := func(t *testing.T) Model {
@@ -399,9 +399,8 @@ func TestLateWorkStillLogs(t *testing.T) {
 		m, _ = escSend(t, m, escKey(tea.KeyCtrlO))
 		m, _ = escSend(t, m, ChartsLoadedMsg{Charts: listRowsCharts(), Gen: m.pickerGen}, ChartPickedMsg{Chart: keysUntitled()})
 		m, _ = escSend(t, m, escRunes("Constructed"), escKey(tea.KeyTab), escRunes("Berlin"))
-		m, _ = escSend(t, m, escKey(tea.KeyEnter)) // the second step
 		var cmd tea.Cmd
-		m, cmd = escSend(t, m, escKey(tea.KeyEnter))
+		m, cmd = submit(t, m)
 		if cmd == nil || !m.title.Saving {
 			t.Fatalf("the title write did not start (startup %s)", m.startup)
 		}
@@ -412,14 +411,14 @@ func TestLateWorkStillLogs(t *testing.T) {
 		gen := m.titleGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
 		land(t, m, TitleWrittenMsg{Gen: gen, Chart: keysUntitled(), Result: lookup.Retitled{File: "keys-untitled.as", Name: "Constructed", Backup: "/data/op/.local/share/sextile/backup/0f/keys-untitled.as"}},
-			`chart: titled keys-untitled.as as "Constructed" (original kept as /data/op/.local/share/sextile/backup/0f/keys-untitled.as)`)
+			`Chart    keys-untitled.as titled as "Constructed" (original kept as /data/op/.local/share/sextile/backup/0f/keys-untitled.as)`)
 	})
 	t.Run("title failed", func(t *testing.T) {
 		m := titling(t)
 		gen := m.titleGen
 		m, _ = escSend(t, m, escKey(tea.KeyEsc))
 		land(t, m, TitleWrittenMsg{Gen: gen, Chart: keysUntitled(), Err: &fs.PathError{Op: "rename", Path: "x", Err: fs.ErrPermission}},
-			"Couldn't title that chart. rename x: permission denied.")
+			"Chart    chart not titled, rename x: permission denied")
 	})
 	t.Run("superseded title write", func(t *testing.T) {
 		m := titling(t)
@@ -452,10 +451,10 @@ func TestReportFailureMarkSaysViewUnchanged(t *testing.T) {
 	if want := keys.ErrorMarkTextView(",", m.cfg, true); got != want {
 		t.Fatalf("footer = %q, want %q", got, want)
 	}
-	if !keys.IsErrorMark(got) || !strings.Contains(ansi.Strip(got), "view unchanged") {
+	if !keys.IsErrorMark(got) || !strings.Contains(ansi.Strip(got), "the screen is as before") {
 		t.Errorf("mark %q is not the kept-view error mark", got)
 	}
-	if a := ansi.Strip(keys.ErrorMarkTextView(",", Config{Accessible: true}, true)); a != "! error - view unchanged - ,l" {
+	if a := ansi.Strip(keys.ErrorMarkTextView(",", Config{Accessible: true}, true)); a != "! that failed, the screen is as before - ,L" {
 		t.Errorf("ASCII mark = %q", a)
 	}
 }
@@ -466,13 +465,13 @@ func TestOtherErrorsKeepThePlainMark(t *testing.T) {
 	m := detailsTestModel(t)
 	m.width, m.height = 80, 24
 	m.logLines = nil
-	m = m.logError("Couldn't cast the chart. %s", "boom")
-	if got := ansi.Strip(m.footerIndicator()); got != "! error · ,l" {
+	m = m.logError("astrolog", "the chart not cast, %s", "boom")
+	if got := ansi.Strip(m.footerIndicator()); got != "! see the Log · ,L" {
 		t.Errorf("mark = %q, want the plain mark", got)
 	}
 	// A later error from another site retires the kept-view claim.
-	k := reportFailed(t).logError("Couldn't cast the chart. %s", "boom")
-	if got := ansi.Strip(k.footerIndicator()); got != "! error · ,l" {
+	k := reportFailed(t).logError("astrolog", "the chart not cast, %s", "boom")
+	if got := ansi.Strip(k.footerIndicator()); got != "! see the Log · ,L" {
 		t.Errorf("mark after another error = %q, want the plain mark", got)
 	}
 	r := reportFailed(t)

@@ -23,12 +23,12 @@ const (
 )
 
 func RenderAspectWaterfallStyled(aspects []aspect.Aspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style) string {
-	return renderAspectWaterfallMarked(aspects, styles, innerWidth, innerHeight, cfg, EnteredMark{})
+	return renderAspectWaterfallMarked(aspects, styles, innerWidth, innerHeight, cfg, EnteredMark{}, false)
 }
 
 // renderAspectWaterfallMarked is the waterfall with the entered row's cell, if
 // the list holds it, drawn bold.
-func renderAspectWaterfallMarked(aspects []aspect.Aspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style, mark EnteredMark) string {
+func renderAspectWaterfallMarked(aspects []aspect.Aspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style, mark EnteredMark, dot bool) string {
 	if len(aspects) == 0 {
 		return ""
 	}
@@ -51,10 +51,10 @@ func renderAspectWaterfallMarked(aspects []aspect.Aspect, styles astrologstyle.A
 			style = styles[astrologstyle.AspectIdentity{First: a.AObject, Second: a.BObject, Kind: a.Kind}]
 		}
 		if mark.ownCell(a) {
-			entries[i] = BoldCell(formatAspectEntryCells(a, style, cfg, cells, room, mark.Colour))
+			entries[i] = BoldCell(formatAspectEntryCells(a, style, cfg, cells, room, mark.Colour, dot))
 			keep = i
 		} else {
-			entries[i] = formatAspectEntryCells(a, style, cfg, cells, room, "")
+			entries[i] = formatAspectEntryCells(a, style, cfg, cells, room, "", dot)
 		}
 	}
 	return layoutWaterfallGridKeeping(entries, keep, entryWidth(cells)+room, innerWidth, innerHeight)
@@ -69,12 +69,12 @@ func RenderCrossAspectWaterfallStyled(aspects []lookup.OverlayAspect, styles ast
 // with the natal chart held still); phase=false is a pair of two anchored
 // charts, whose Astrolog verdict is a synthetic one and is never displayed.
 func renderCrossAspectWaterfallPair(aspects []lookup.OverlayAspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style, phase bool) string {
-	return renderCrossAspectWaterfallMarked(aspects, styles, innerWidth, innerHeight, cfg, phase, EnteredMark{})
+	return renderCrossAspectWaterfallMarked(aspects, styles, innerWidth, innerHeight, cfg, phase, EnteredMark{}, false)
 }
 
 // renderCrossAspectWaterfallMarked is the cross waterfall with the entered
 // row's cell, if the list holds it, drawn bold.
-func renderCrossAspectWaterfallMarked(aspects []lookup.OverlayAspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style, phase bool, mark EnteredMark) string {
+func renderCrossAspectWaterfallMarked(aspects []lookup.OverlayAspect, styles astrologstyle.Aspects, innerWidth, innerHeight int, cfg term.Style, phase bool, mark EnteredMark, dot bool) string {
 	if len(aspects) == 0 {
 		return ""
 	}
@@ -97,10 +97,10 @@ func renderCrossAspectWaterfallMarked(aspects []lookup.OverlayAspect, styles ast
 			style = styles[astrologstyle.AspectIdentity{First: a.NatalObject, Second: a.TransitObject, Kind: a.Kind}]
 		}
 		if mark.crossCell(a) {
-			entries[i] = BoldCell(formatCrossAspectEntryCells(a, style, cfg, phase, cells, room, mark.Colour))
+			entries[i] = BoldCell(formatCrossAspectEntryCells(a, style, cfg, phase, cells, room, mark.Colour, dot))
 			keep = i
 		} else {
-			entries[i] = formatCrossAspectEntryCells(a, style, cfg, phase, cells, room, "")
+			entries[i] = formatCrossAspectEntryCells(a, style, cfg, phase, cells, room, "", dot)
 		}
 	}
 	return layoutWaterfallGridKeeping(entries, keep, entryWidth(cells)+room, innerWidth, innerHeight)
@@ -154,14 +154,20 @@ func layoutWaterfallGridKeeping(entries []string, keep, colWidth, innerWidth, in
 }
 
 func FormatAspectEntryStyled(a aspect.Aspect, style astrologstyle.AspectStyle, cfg term.Style) string {
-	return formatAspectEntryCells(a, style, cfg, 1, orbRoom(a.BObject, a.Orb), "")
+	return formatAspectEntryCells(a, style, cfg, 1, orbRoom(a.BObject, a.Orb), "", false)
+}
+
+// FormatAspectEntryDot is FormatAspectEntryStyled with the experiment that draws
+// an aspect without a glyph as a dot.
+func FormatAspectEntryDot(a aspect.Aspect, style astrologstyle.AspectStyle, cfg term.Style) string {
+	return formatAspectEntryCells(a, style, cfg, 1, orbRoom(a.BObject, a.Orb), "", true)
 }
 
 // formatAspectEntryCells is the entry with each side's glyph in `cells`
 // cells: 1 as always, 2 when a cusp 11 or 12 is in the list; room is the
 // list's orbRoom. orb, when set and colours are on, draws the orb text
 // `(d°mm'X)` in that SGR (the enter-colour experiment); "" draws it plain.
-func formatAspectEntryCells(a aspect.Aspect, style astrologstyle.AspectStyle, cfg term.Style, cells, room int, orb astrologstyle.SGR) string {
+func formatAspectEntryCells(a aspect.Aspect, style astrologstyle.AspectStyle, cfg term.Style, cells, room int, orb astrologstyle.SGR, dot bool) string {
 	deg := int(float64(a.Orb))
 	min := int((float64(a.Orb) - float64(deg)) * 60)
 	sep := " "
@@ -176,14 +182,14 @@ func formatAspectEntryCells(a aspect.Aspect, style astrologstyle.AspectStyle, cf
 	if cfg.UseColor() {
 		orbText = RenderSGR(orb, orbText)
 	}
-	first, kind, second := aspectSideGlyph(a.AObject), AspectGlyph(a.Kind), aspectSideGlyph(a.BObject)
+	first, kind, second := aspectSideGlyph(a.AObject), aspectMark(a.Kind, dot), aspectSideGlyph(a.BObject)
 	if cfg.UseColor() {
 		first = RenderSGR(style.First, first)
 		kind = RenderSGR(style.Kind, kind)
 		second = RenderSGR(style.Second, second)
 	}
 	first, second = alignSides(first, second, cells)
-	entry := fmt.Sprintf("%s %s %s%s%s", first, kind, second, sep, orbText)
+	entry := aspectCell(first, kind, second, a.Kind, dot) + sep + orbText
 	colWidth := entryWidth(cells) + room
 	switch w := ansi.StringWidth(entry); {
 	case w < colWidth:
@@ -201,12 +207,12 @@ func FormatCrossAspectEntryStyled(a lookup.OverlayAspect, style astrologstyle.As
 // formatCrossAspectEntryPhased is the cell with its A/S suffix on (a transit
 // pair) or off (a pair of two anchored charts: "(1°23')").
 func formatCrossAspectEntryPhased(a lookup.OverlayAspect, style astrologstyle.AspectStyle, cfg term.Style, phase bool) string {
-	return formatCrossAspectEntryCells(a, style, cfg, phase, 1, orbRoom(a.NatalObject, a.Orb), "")
+	return formatCrossAspectEntryCells(a, style, cfg, phase, 1, orbRoom(a.NatalObject, a.Orb), "", false)
 }
 
 // formatCrossAspectEntryCells is formatCrossAspectEntryPhased with each side's
 // glyph in `cells` cells and the list's room (formatAspectEntryCells).
-func formatCrossAspectEntryCells(a lookup.OverlayAspect, style astrologstyle.AspectStyle, cfg term.Style, phase bool, cells, room int, orb astrologstyle.SGR) string {
+func formatCrossAspectEntryCells(a lookup.OverlayAspect, style astrologstyle.AspectStyle, cfg term.Style, phase bool, cells, room int, orb astrologstyle.SGR, dot bool) string {
 	deg := int(float64(a.Orb))
 	min := int((float64(a.Orb) - float64(deg)) * 60)
 	sep := " "
@@ -224,7 +230,7 @@ func formatCrossAspectEntryCells(a lookup.OverlayAspect, style astrologstyle.Asp
 	if cfg.UseColor() {
 		orbText = RenderSGR(orb, orbText)
 	}
-	natal, kind, transit := aspectSideGlyph(a.NatalObject), AspectGlyph(a.Kind), aspectSideGlyph(a.TransitObject)
+	natal, kind, transit := aspectSideGlyph(a.NatalObject), aspectMark(a.Kind, dot), aspectSideGlyph(a.TransitObject)
 	if cfg.UseColor() {
 		// Style.First belongs to Astrolog's primary/natal body; Style.Second
 		// to its secondary/transit body, wherever the cell prints them.
@@ -237,7 +243,7 @@ func formatCrossAspectEntryCells(a lookup.OverlayAspect, style astrologstyle.Asp
 	// it, `trans Sun Tri natal Pollux` (operator, 2026-11-06: "make it
 	// consistent"); each side keeps its own colour.
 	transit, natal = alignSides(transit, natal, cells)
-	entry := fmt.Sprintf("%s %s %s%s%s", transit, kind, natal, sep, orbText)
+	entry := aspectCell(transit, kind, natal, a.Kind, dot) + sep + orbText
 	colWidth := entryWidth(cells) + room
 	switch w := ansi.StringWidth(entry); {
 	case w < colWidth:
@@ -246,6 +252,31 @@ func formatCrossAspectEntryCells(a lookup.OverlayAspect, style astrologstyle.Asp
 		entry = term.CutRight(entry, colWidth, cfg)
 	}
 	return entry
+}
+
+// aspectDot stands in an aspect cell for an aspect with no glyph, when the
+// experiment that shows a dot is on.
+const aspectDot = "·"
+
+// aspectMark is what the cell draws between the two sides: the aspect's glyph;
+// for an aspect without one, its three letters, or the dot with the experiment on.
+func aspectMark(k aspect.AspectKind, dot bool) string {
+	if dot && k.Known() && !HasGlyph(k) {
+		return aspectDot
+	}
+	return AspectGlyph(k)
+}
+
+// aspectCell joins the two sides and the mark. A glyph's cell is `a ⚹ b`. An
+// aspect without a glyph, drawn by its letters, is `aSepb`: the sides and the
+// three letters with no space, the same five cells, so no column depends on
+// which aspects are shown (term.IsAspectLettersCell is the one form the
+// glyph-room rule lets stand without a space after the first glyph).
+func aspectCell(first, mark, second string, k aspect.AspectKind, dot bool) string {
+	if k.Known() && !HasGlyph(k) && !dot {
+		return first + mark + second
+	}
+	return first + " " + mark + " " + second
 }
 
 // aspectSideGlyph is one side of an aspect cell. A plain cusp point Astrolog
@@ -294,4 +325,29 @@ func alignSides(left, right string, cells int) (string, string) {
 		right += strings.Repeat(" ", pad)
 	}
 	return left, right
+}
+
+// AspectRowsHeld is how many rows the waterfall needs to show every entry of
+// the bag's own list (cross false) or its pair list (cross true) at innerWidth:
+// the panel's scroll bar compares it with the rows the panel shows.
+func AspectRowsHeld(bag AspectsBag, cross bool, innerWidth int) int {
+	cells, room, n := 1, 0, 0
+	if cross {
+		n = len(bag.Cross)
+		for _, a := range bag.Cross {
+			cells = max(cells, sideCells(a.NatalObject), sideCells(a.TransitObject))
+			room = max(room, orbRoom(a.NatalObject, a.Orb))
+		}
+	} else {
+		n = len(bag.Rows)
+		for _, a := range bag.Rows {
+			cells = max(cells, sideCells(a.AObject), sideCells(a.BObject))
+			room = max(room, orbRoom(a.BObject, a.Orb))
+		}
+	}
+	if n == 0 || innerWidth <= 0 {
+		return 0
+	}
+	cols := max((innerWidth+aspectGutter)/(entryWidth(cells)+room+aspectGutter), 1)
+	return (n + cols - 1) / cols
 }

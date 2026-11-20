@@ -52,7 +52,7 @@ func TestReportListHoldsExactlyAstrologsRowsLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	reports = append(reports, report{"cross body report", astrolog.GrammarCrossAspects, cross})
-	syn, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, when, place, store.ReportLabel{}, objMoon)
+	syn, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, store.AnchorChart{When: when, Place: place}, objMoon)
 	if err != nil {
 		t.Fatal(err)
 	}

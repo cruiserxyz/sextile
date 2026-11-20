@@ -253,7 +253,7 @@ func TestPrefetchOneKeyAway(t *testing.T) {
 	// that is asked at a day on and a day back, and not the report's.
 	t.Run("the_active_template_tab_is_asked_a_day_on_and_back", func(t *testing.T) {
 		m, _, b := prefetchBed(t)
-		m, cmd := pressOnly(t, m, runes("2")) // Bodies
+		m, cmd := pressOnly(t, m, runes("3")) // Bodies
 		m = pump(t, m, cmd)
 		for i := 0; i < 8; i++ { // down to a row that offers a template tab
 			if _, ok := m.templateKeyFor(); ok {
@@ -464,7 +464,7 @@ func TestPrefetchStops(t *testing.T) {
 	})
 	t.Run("a_modal_owns_the_keyboard", func(t *testing.T) {
 		m, _, b := prefetchBed(t)
-		m.helpOpen = true
+		m = openedKeybindings(m)
 		idleStartsNothing(t, m, b)
 	})
 	t.Run("a_chooser_owns_the_keyboard", func(t *testing.T) {
@@ -587,7 +587,7 @@ func TestPrefetchFailureIsQuiet(t *testing.T) {
 	// It becomes the wanted key: the normal run happens, and the failure is
 	// drawn and logged as C6 says.
 	calls := b.count()
-	m, cmd := tpress(t, m, runes("2")) // Bodies: the Sun's report, which failed ahead
+	m, cmd := tpress(t, m, runes("3")) // Bodies: the Sun's report, which failed ahead
 	m = pump(t, m, cmd)
 	if got := b.count() - calls; got != 1 {
 		t.Errorf("the failed key, once wanted, made %d calls, want its one normal run", got)
@@ -596,7 +596,7 @@ func TestPrefetchFailureIsQuiet(t *testing.T) {
 		t.Errorf("Details is %v, want the failure drawn", m.detailsReportState())
 	}
 	if !slices.ContainsFunc(m.logLines, func(l logLine) bool {
-		return l.lane == laneError && strings.Contains(l.text, "Couldn't read the full report")
+		return l.lane == laneError && strings.Contains(l.text, "report not read")
 	}) {
 		t.Errorf("the normal run's failure is not on the Log's error lane: %v", m.logLines[len(logBefore):])
 	}
@@ -604,7 +604,7 @@ func TestPrefetchFailureIsQuiet(t *testing.T) {
 
 // The first idle period of a run begins when startup reaches ready, not only
 // after a key: the operator's first key after launch may be the one that asks
-// for what that period computes (`2`, the Sun's report).
+// for what that period computes (`3`, the Sun's report).
 func TestPrefetchStartsAfterStartup(t *testing.T) {
 	m, _, b := prefetchBed(t)
 	// Back to a launch: nothing shown, nothing remembered, startup computing.
@@ -644,14 +644,14 @@ func TestPrefetchStartsAfterStartup(t *testing.T) {
 		t.Fatalf("the first call of the first period is %v, want the report of the first reportable Bodies row (%s)", got, panel.BodyName(first))
 	}
 
-	// `2`: the Sun's report is drawn from memory, no call.
+	// `3`: the Sun's report is drawn from memory, no call.
 	calls := b.count()
-	m, cmd = tpress(t, m, runes("2"))
+	m, cmd = tpress(t, m, runes("3"))
 	if m.detailsReportState() != paneCurrent || !strings.Contains(m.details.body, "SUBJECT body Sun") {
-		t.Errorf("after 2, Details is %v and holds %q, want the Sun's report drawn at the key", m.detailsReportState(), m.details.body)
+		t.Errorf("after 3, Details is %v and holds %q, want the Sun's report drawn at the key", m.detailsReportState(), m.details.body)
 	}
 	m = pump(t, m, cmd)
 	if b.count() != calls {
-		t.Errorf("2 made %d Astrolog calls for a report computed ahead: %v", b.count()-calls, b.list()[calls:])
+		t.Errorf("3 made %d Astrolog calls for a report computed ahead: %v", b.count()-calls, b.list()[calls:])
 	}
 }

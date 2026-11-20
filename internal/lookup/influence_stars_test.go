@@ -61,8 +61,8 @@ func TestInfluenceChartHasNoStars(t *testing.T) {
 	forms := map[string]recipe.ObjectPolicy{
 		"explicit":      {Baseline: recipe.Explicit, Selection: []int{0, 1, 2, capella, acrux}},
 		"explicit-only": {Baseline: recipe.Explicit, Selection: []int{capella, acrux}},
-		"delta-add":     {Baseline: recipe.AstrologDefault, Add: recipe.NewObjectSet(11, capella, acrux), TrueNodeMode: true},
-		"only":          {Baseline: recipe.AstrologDefault, Only: recipe.NewObjectSet(1, capella), TrueNodeMode: true},
+		"delta-add":     {Baseline: recipe.AstrologDefault, Add: recipe.NewObjectSet(11, capella, acrux), Nodes: recipe.NodesTrue},
+		"only":          {Baseline: recipe.AstrologDefault, Only: recipe.NewObjectSet(1, capella), Nodes: recipe.NodesTrue},
 	}
 	for name, policy := range forms {
 		got := numbersAfterR(influenceCommand(t, RawReportRequest{Kind: RawReportChart}, policy))
@@ -101,7 +101,7 @@ func TestChartReportWithEveryStar(t *testing.T) {
 		}
 	}
 	l := Hellenistic
-	l.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: pick, TrueNodeMode: true}
+	l.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: pick, Nodes: recipe.NodesTrue}
 	place := location.PlaceInfo{Name: "London", Country: "GB", Lat: 51.5074, Lon: -0.1278, TZ: "Europe/London"}
 	raw, _, err := ComputeRawReport(context.Background(), time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC), place, l, RawReportRequest{Kind: RawReportChart})
 	if err != nil {

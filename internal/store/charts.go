@@ -95,13 +95,14 @@ type NamedChart struct {
 }
 
 // IsValid reports whether the chart carries the minimum to be a usable row: a
-// label and a place with an IANA timezone. An untitled chart carries its file
-// stem as its label, so it passes. It deliberately does NOT require a
-// moment — the row does not hold one. LoadCharts drops files that don't satisfy
-// this rather than surfacing half-charts, and names each one it drops
-// (ChartDrop) rather than dropping it in silence.
+// label, and a place with an IANA timezone unless it is a chart file, which
+// Astrolog casts from its own record and shows in its own clock. An untitled
+// chart carries its file stem as its label, so it passes. It deliberately does
+// NOT require a moment — the row does not hold one. LoadCharts drops files that
+// don't satisfy this rather than surfacing half-charts, and names each one it
+// drops (ChartDrop) rather than dropping it in silence.
 func (c NamedChart) IsValid() bool {
-	return c.Name != "" && c.Place.HasTimezone()
+	return c.IncompleteReason() == ""
 }
 
 // IncompleteReason names what IsValid found missing, in the operator's own
@@ -113,7 +114,7 @@ func (c NamedChart) IncompleteReason() string {
 	if c.Name == "" {
 		missing = append(missing, "name")
 	}
-	if !c.Place.HasTimezone() {
+	if c.Source.Kind != ChartKindFile && !c.Place.HasTimezone() {
 		missing = append(missing, "timezone")
 	}
 	switch len(missing) {
@@ -197,7 +198,12 @@ func FilterCharts(charts []NamedChart, query string, cap int) ([]NamedChart, boo
 	if query == "" {
 		return nil, false
 	}
-	query = lowerASCII(query)
+	// A name matches without its spaces, and so does a query: the search takes
+	// none, and `johanneskepler` finds Johannes Kepler.
+	query = lowerASCII(strings.ReplaceAll(query, " ", ""))
+	if query == "" {
+		return nil, false
+	}
 
 	type match struct {
 		chart NamedChart
@@ -206,7 +212,7 @@ func FilterCharts(charts []NamedChart, query string, cap int) ([]NamedChart, boo
 	}
 	matches := make([]match, 0)
 	for i := range charts {
-		key := lowerASCII(charts[i].Name)
+		key := lowerASCII(strings.ReplaceAll(charts[i].Name, " ", ""))
 		tier := 0
 		switch {
 		case query == key:

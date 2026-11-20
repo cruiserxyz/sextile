@@ -13,10 +13,11 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/dialog"
 	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/pane"
+	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 )
 
-// finder.go is the house finder (⌃h, `, h`) and the zodiac finder (⌃z, `, z`):
+// finder.go is the house finder (`, u`) and the zodiac finder (⌃z, `, z`):
 // small pickers in the shared list chassis, and Enter casts the focused chart in
 // the one under the cursor. They share one shape, so they share one type: a
 // FinderKind says what differs (the list, a row, the title's prefix, the pinned
@@ -53,22 +54,37 @@ type Finder[T comparable] struct {
 	Current T
 	// Name is the title's chart: the one Enter changes.
 	Name string
+
+	// Shown is the houses finder's second part, under the systems: how houses
+	// are shown. Off for the zodiac finder.
+	Shown ShownAs
 }
 
-// FinderOutcome is what one key decided: Chosen is set when Enter fell on a row.
+// FinderOutcome is what one key decided: Confirmed when Enter fell on a row.
+// Chosen is the choice under the cursor; with OnShown, Enter fell on a row of
+// the Shown as part instead and Form is that row's form.
 type FinderOutcome[T comparable] struct {
 	Dismissed bool
 	Confirmed bool
 	Chosen    T
+	OnShown   bool
+	Form      panel.HouseForm
 }
+
+// extraRows is the rows the box holds beside the system list: the Shown as
+// part. The box is that much taller (dialog.Box.Taller), so the list keeps the
+// rows every popup gets.
+func (f Finder[T]) extraRows() int { return f.Shown.Rows() }
 
 // Refilter recomputes the list.
 func (f *Finder[T]) Refilter() {
 	f.SetMatches(f.Kind.List(strings.ToLower(strings.TrimSpace(f.FilterText))), false)
 }
 
-// Open puts the cursor on the current choice and scrolls it into view.
+// Open puts the cursor on the current choice, in the systems, and scrolls it
+// into view.
 func (f *Finder[T]) Open(listHeight int) {
+	f.Shown.Focus = false
 	f.Refilter()
 	for i, x := range f.Matches {
 		if x == f.Current {
@@ -78,33 +94,68 @@ func (f *Finder[T]) Open(listHeight int) {
 	f.ScrollTo(f.Cursor, listHeight)
 }
 
-// Apply runs one action. msg is read only by Type, for the filter text.
+// Apply runs one action. msg is read only by Type, for the filter text. The
+// cursor walks the systems and then the Shown as part below them with the
+// moving keys, and Enter applies the row under it, in whichever part it is.
+// Space does nothing here.
 func (f *Finder[T]) Apply(a Action, msg tea.KeyMsg, height int) FinderOutcome[T] {
 	var out FinderOutcome[T]
 	switch a {
 	case Dismiss:
 		out.Dismissed = true
+		return out
 	case Confirm:
+		if f.Shown.Focus {
+			out.Confirmed, out.OnShown, out.Form = true, true, f.Shown.Form()
+			return out
+		}
 		// Nothing under the cursor, nothing to apply: the finder stays open.
 		if f.Cursor < 0 || f.Cursor >= len(f.Matches) {
 			return out
 		}
 		out.Confirmed, out.Chosen = true, f.Matches[f.Cursor]
+		return out
+	}
+	if f.Shown.Focus {
+		if f.Shown.Apply(a) && len(f.Matches) > 0 {
+			f.Shown.Focus = false
+			f.Cursor = len(f.Matches) - 1
+			f.ScrollTo(f.Cursor, height)
+		}
+		return out
+	}
+	last := len(f.Matches) - 1
+	switch a {
 	case Up:
 		f.MoveUp()
 		f.ScrollTo(f.Cursor, height)
 	case Down:
+		if f.Shown.On && f.Cursor >= last {
+			f.Shown.Enter()
+			f.Shown.Focus = true
+			break
+		}
 		f.MoveDown()
 		f.ScrollTo(f.Cursor, height)
 	case PageUp:
 		f.page(menu.PageUp, height)
-	case PageDown:
-		f.page(menu.PageDown, height)
+	case PageDown, PageEnd:
+		if f.Shown.On && f.Cursor >= last {
+			f.Shown.Enter()
+			f.Shown.Focus = true
+			break
+		}
+		if a == PageDown {
+			f.page(menu.PageDown, height)
+		} else {
+			f.page(menu.PageEnd, height)
+		}
 	case PageHome:
 		f.page(menu.PageHome, height)
-	case PageEnd:
-		f.page(menu.PageEnd, height)
 	default:
+		if msg.String() == " " {
+			break
+		}
 		if f.TypeKey(msg) {
 			f.Refilter()
 			f.Cursor = 0
@@ -162,24 +213,33 @@ func (f Finder[T]) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome
 		Fit:      f.fit(cfg),
 		Position: counter(f.Cursor, len(f.Matches)),
 		Scroll: func(height int) (pane.Viewport, int) {
-			rows, off, _ := f.Window(height)
+			rows, off, _ := f.Window(max(height-f.extraRows(), 0))
 			return pane.Viewport{Total: len(f.Matches), Visible: len(rows), Offset: off}, 0
 		},
 		FilterText: f.FilterText,
+		Taller:     f.extraRows(),
 	}, cfg, termW, termH, chrome, func(width, height int) string {
-		return menu.RenderPinnedBody(menu.PinnedBody{Rows: f.rows(cfg, width, height)}, width, height)
+		b := menu.PinnedBody{Rows: f.rows(cfg, width, max(height-f.extraRows(), 0))}
+		if f.Shown.On {
+			b.Below = f.Shown.Lines(cfg, width)
+		}
+		return menu.RenderPinnedBody(b, width, height)
 	})
 }
 
 // fit is the finder's size: wide enough for the longest choice and as tall as
-// all of them (and the rule, while no search is typed). A search leaves rows blank.
+// all of them (and the rule, while no search is typed) and the Shown as part.
+// A search leaves rows blank.
 func (f Finder[T]) fit(cfg term.Style) dialog.Fit {
-	fit := dialog.Fit{Rows: len(f.Kind.All)}
+	fit := dialog.Fit{Rows: len(f.Kind.All) + f.extraRows()}
 	if f.Kind.Pinned > 0 {
 		fit.Rows++
 	}
 	for _, x := range f.Kind.All {
 		fit.Width = max(fit.Width, menu.RowWidth(f.Kind.Row(x, false, false, cfg), cfg))
+	}
+	if f.Shown.On {
+		fit.Width = max(fit.Width, f.Shown.Width(cfg))
 	}
 	return fit
 }
@@ -198,7 +258,7 @@ func (f Finder[T]) rows(cfg term.Style, width, height int) []string {
 		if rule && off+i == f.Kind.Pinned {
 			out = append(out, menu.Rule(cfg, width))
 		}
-		out = append(out, menu.Row(f.Kind.Row(x, x == f.Current, off+i == f.Cursor, cfg), cfg, width))
+		out = append(out, menu.Row(f.Kind.Row(x, x == f.Current, off+i == f.Cursor && !f.Shown.Focus, cfg), cfg, width))
 	}
 	return out
 }
@@ -344,6 +404,85 @@ func ZodiacKind() FinderKind[recipe.Zodiac] {
 				Cursor: cursor,
 				Pinned: true,
 			}
+		},
+	}
+}
+
+// FileZodiac stands for a chart file's own sidereal offset that no named
+// ayanamsa has. It is never a recipe.Zodiac Sextile sends: choosing it keeps
+// the file's own, which Astrolog reads from the file.
+const FileZodiac recipe.Zodiac = -1
+
+// ZodiacKindWithFile is ZodiacKind with one row first for the chart file's own
+// offset (operator, 2026-11-15: "Extra first row"), in words, as in the row's
+// tag: "Sidereal +2.5, from its file".
+func ZodiacKindWithFile(words, tag string) FinderKind[recipe.Zodiac] {
+	k := ZodiacKind()
+	k.All = append([]recipe.Zodiac{FileZodiac}, k.All...)
+	list, row := k.List, k.Row
+	k.List = func(q string) []recipe.Zodiac {
+		hits := list(q)
+		if q == "" || location.MatchTier(strings.ToLower(words), q) > 0 {
+			hits = append([]recipe.Zodiac{FileZodiac}, hits...)
+		}
+		return hits
+	}
+	k.Row = func(z recipe.Zodiac, current, cursor bool, st term.Style) menu.RowSpec {
+		if z != FileZodiac {
+			return row(z, current, cursor, st)
+		}
+		mark := "  "
+		if current {
+			mark = "● "
+		}
+		return menu.RowSpec{Left: words, Right: []string{tag, mark}, Cursor: cursor, Pinned: true}
+	}
+	return k
+}
+
+// nodeFormNames are the four castable pairs as the Nodes and Lilith chooser
+// words them, in the order of recipe.NodeForm.
+var nodeFormNames = [...]string{
+	"Mean Node, mean Lilith",
+	"True Node, true Lilith",
+	"Mean Node, natural Lilith",
+	"True Node, natural Lilith",
+}
+
+// NodeFormName is the pair as the chooser words it.
+func NodeFormName(f recipe.NodeForm) string { return nodeFormNames[f] }
+
+// NodesKind is the Nodes and Lilith chooser: the four pairs Astrolog casts, in
+// the fixed order of recipe.NodeForm, whatever is typed. The right column says
+// note on the home pair (`from its file`, `your default`) and nothing else.
+func NodesKind(home recipe.NodeForm, note string) FinderKind[recipe.NodeForm] {
+	var all []recipe.NodeForm
+	for f := recipe.NodesMean; f <= recipe.NodesTrueNatural; f++ {
+		all = append(all, f)
+	}
+	return FinderKind[recipe.NodeForm]{
+		Prefix:  dialog.TitleNodes + " · ",
+		NoMatch: "(no matching pairs)",
+		All:     all,
+		List: func(q string) []recipe.NodeForm {
+			var out []recipe.NodeForm
+			for _, f := range all {
+				if q == "" || strings.Contains(strings.ToLower(NodeFormName(f)), q) {
+					out = append(out, f)
+				}
+			}
+			return out
+		},
+		Row: func(f recipe.NodeForm, current, cursor bool, _ term.Style) menu.RowSpec {
+			mark := "  "
+			if current {
+				mark = "● "
+			}
+			right := ""
+			if f == home {
+				right = note
+			}
+			return menu.RowSpec{Left: NodeFormName(f), Right: []string{right, mark}, Cursor: cursor, Pinned: true}
 		},
 	}
 }

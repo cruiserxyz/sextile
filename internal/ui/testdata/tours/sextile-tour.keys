@@ -1,0 +1,62 @@
+# The Sextile Tour: the keys that make docs/tour.svg.
+#
+# A key file is plain text. Each line is one of:
+#
+#   # a comment            a line that starts with #
+#   @session NAME          the session the tour runs in (the unnamed one without it)
+#   @start DURATION        how long the opening picture rests before the first key (default 1s)
+#   KEY DURATION           press KEY, then rest DURATION on the picture it makes
+#
+# KEY is written as the Keybindings list writes it: <down>, <enter>, <esc>,
+# <space>, <ctrl+o>, <alt+x>, or a bare character such as 0, / or u. The one
+# character that is written in brackets is # (<#>), so it is not read as a comment.
+# DURATION is Go's: 800ms, 1.5s, 2s.
+#
+# The tour starts with one chart, Sextile 0.1.0 (the first public release), beside Now,
+# neither selected, in the session Sextile Tour. The picture is 132 columns by 40 rows
+# with the clock fixed. Regenerate it after a change here:
+#   go test ./internal/ui -run '^TestTourIsDrawn$' -demo
+#
+@session Sextile Tour
+@start 2.5s
+
+# The cursor goes from the chart to Now.
+<down> 1500ms
+# Enter goes into Details on the Timeline, ] shows the Moon, ] the report, Esc comes back.
+<enter> 1500ms
+] 2s
+] 2s
+<esc> 1500ms
+
+# 3 goes to Bodies; Details shows the aspects of the planet under the cursor.
+3 2s
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+<down> 400ms
+
+# 4 goes to Aspects; Details lists every aspect.
+4 2500ms
+
+# Enter goes into Details; / searches, and ura keeps the rows with Uranus.
+<enter> 1500ms
+/ 1s
+u 600ms
+r 600ms
+a 2s
+<enter> 1500ms
+# Esc goes back to Aspects.
+<esc> 3s

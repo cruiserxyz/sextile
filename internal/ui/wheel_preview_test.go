@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/preview"
 	"github.com/cruiserxyz/sextile/internal/store"
@@ -43,7 +42,8 @@ func stubRenderWheelImage(t *testing.T) *[]time.Time {
 	t.Helper()
 	calls := []time.Time{}
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			when := chart.When
 			calls = append(calls, when)
 			return []byte("BM-wheel"), nil
 		}
@@ -51,13 +51,17 @@ func stubRenderWheelImage(t *testing.T) *[]time.Time {
 	return &calls
 }
 
-func stubRenderOverlayWheelImage(t *testing.T) *[]time.Time {
+// stubRenderPairWheelImage replaces the rings renderer, which draws a pair's
+// bi-wheel, with a recorder of the second ring's moment (the cursor's chart).
+func stubRenderPairWheelImage(t *testing.T) *[]time.Time {
 	t.Helper()
 	calls := []time.Time{}
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.renderOverlay = func(_ context.Context, _ store.AnchorChart, transitWhen time.Time, _ location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
-			calls = append(calls, transitWhen)
-			return []byte("BM-overlay"), nil
+		s.wheel.renderRings = func(_ context.Context, rings []lookup.WheelRing, _ lookup.Lens) ([]byte, []string, error) {
+			if len(rings) == 2 {
+				calls = append(calls, rings[1].When)
+			}
+			return []byte("BM-pair"), []string{"astrolog -r0"}, nil
 		}
 	})
 	return &calls
@@ -377,7 +381,7 @@ func TestImageRender_UsesTargetFloatingTime(t *testing.T) {
 }
 
 func TestImageRender_OverlayUsesTargetFloatingTime(t *testing.T) {
-	calls := stubRenderOverlayWheelImage(t)
+	calls := stubRenderPairWheelImage(t)
 	m := modelWithSlot(t)
 	m.previewActive = true
 	if err := addAnchor(m.slots, testFrozenTime().AddDate(-30, 0, 0), testPlaceBerlin()); err != nil {
@@ -395,16 +399,16 @@ func TestImageRender_OverlayUsesTargetFloatingTime(t *testing.T) {
 	}
 	_ = cmd()
 	if len(*calls) != 1 {
-		t.Fatalf("overlay render calls = %d, want 1", len(*calls))
+		t.Fatalf("pair wheel render calls = %d, want 1", len(*calls))
 	}
 	if !(*calls)[0].Equal(target) {
-		t.Errorf("overlay transit render time = %v, want target %v (committed slot was %v)", (*calls)[0], target, committed)
+		t.Errorf("pair wheel second-ring time = %v, want target %v (committed slot was %v)", (*calls)[0], target, committed)
 	}
 }
 
 func TestImageRender_WithAnchorButUnselectedPairUsesSingleWheel(t *testing.T) {
 	singleCalls := stubRenderWheelImage(t)
-	overlayCalls := stubRenderOverlayWheelImage(t)
+	overlayCalls := stubRenderPairWheelImage(t)
 	m := modelWithSlot(t)
 	m.previewActive = true
 	anchorWhen := testFrozenTime().AddDate(-30, 0, 0)
@@ -544,10 +548,10 @@ func TestBrowserLaunchFailureStillLogsThePreviewURL(t *testing.T) {
 	}
 	wantURL, wantError := false, false
 	for _, line := range m.logLines {
-		if line.lane == laneNote && line.text == "wheel: open it by hand at http://localhost:5307/" {
+		if line.lane == laneNote && line.text == "wheel: the picture is at http://localhost:5307/" {
 			wantURL = true
 		}
-		if line.lane == laneError && line.text == "Couldn't show the wheel. The image could not be opened." {
+		if line.lane == laneError && line.text == "wheel: the picture did not open in an image viewer" {
 			wantError = true
 		}
 	}

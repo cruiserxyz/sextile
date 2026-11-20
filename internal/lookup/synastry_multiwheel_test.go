@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
-	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
 )
@@ -18,7 +17,7 @@ import (
 // shows up in its argv.
 func chosenLens() Lens {
 	l := Hellenistic
-	l.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10}, TrueNodeMode: true}
+	l.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10}, Nodes: recipe.NodesTrue}
 	l.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 5}}
 	return l
 }
@@ -39,9 +38,11 @@ func TestSynastrySpecIsR0AndCarriesTheBand(t *testing.T) {
 	jd1, jd2 := astrolog.GregorianToJD(a.when), astrolog.GregorianToJD(b.when)
 	lens := chosenLens()
 	for name, build := range map[string]func() (recipe.ChartSpec, error){
-		"utc": func() (recipe.ChartSpec, error) { return lens.synastrySpecAt(jd1, a.place, jd2, b.place) },
+		"utc": func() (recipe.ChartSpec, error) {
+			return lens.synastrySpecAt(AtMoment(jd1, a.place, store.ReportLabel{}), AtMoment(jd2, b.place, store.ReportLabel{}))
+		},
 		"local": func() (recipe.ChartSpec, error) {
-			return lens.localSynastrySpecAt(jd1, a.place, store.ReportLabel{}, jd2, b.place, store.ReportLabel{})
+			return lens.localSynastrySpecAt(AtMoment(jd1, a.place, store.ReportLabel{}), AtMoment(jd2, b.place, store.ReportLabel{}))
 		},
 	} {
 		spec, err := build()
@@ -67,7 +68,7 @@ func TestSynastrySpecIsR0AndCarriesTheBand(t *testing.T) {
 		}
 	}
 	// And today's overlay stays -rt.
-	spec, err := lens.comparisonSpecAt(jd1, a.place, jd2, b.place)
+	spec, err := lens.comparisonSpecAt(AtMoment(jd1, a.place, store.ReportLabel{}), AtMoment(jd2, b.place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,13 +83,12 @@ func TestSynastrySpecIsR0AndCarriesTheBand(t *testing.T) {
 
 // The N-ring spec stages the set in numeral order and carries the band.
 func TestMultiWheelSpecStagesNumeralOrderWithTheBand(t *testing.T) {
-	var jds []float64
-	var places []location.PlaceInfo
+	var ats []At
 	for _, n := range []string{"F1", "F3", "F4"} {
 		f := fixtureByName(t, n)
-		jds, places = append(jds, astrolog.GregorianToJD(f.when)), append(places, f.place)
+		ats = append(ats, AtMoment(astrolog.GregorianToJD(f.when), f.place, store.ReportLabel{}))
 	}
-	spec, err := chosenLens().multiWheelSpecAt(jds, places)
+	spec, err := chosenLens().multiWheelSpecAt(ats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,6 @@ func TestRenderMultiWheelImageRefusesBadSets(t *testing.T) {
 	ring := WheelRing{When: f.when, Place: f.place}
 	for n, rings := range map[string][]WheelRing{
 		"none": nil, "one": {ring}, "seven": {ring, ring, ring, ring, ring, ring, ring},
-		"untimed ring": {ring, ring, {When: f.when, Place: location.PlaceInfo{Name: "Nowhere"}}},
 	} {
 		if _, err := RenderMultiWheelImage(context.Background(), rings, Hellenistic); err == nil {
 			t.Errorf("%s: want an error", n)
@@ -166,9 +165,9 @@ func TestSynastryProducersAgainstLiveAstrolog(t *testing.T) {
 	a, b := fixtureByName(t, "F10a"), fixtureByName(t, "F3")
 	chart1 := store.AnchorChart{When: a.when, Place: a.place}
 	lens := Hellenistic
-	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10}, TrueNodeMode: true}
+	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7, 8, 9, 10}, Nodes: recipe.NodesTrue}
 
-	cross, err := SynastryCrossAspects(context.Background(), lens, chart1, b.when, b.place, store.ReportLabel{})
+	cross, err := SynastryCrossAspects(context.Background(), lens, chart1, store.AnchorChart{When: b.when, Place: b.place})
 	if err != nil {
 		t.Fatalf("SynastryCrossAspects: %v", err)
 	}
@@ -197,7 +196,7 @@ func TestSynastryProducersAgainstLiveAstrolog(t *testing.T) {
 		t.Error("the overlay (-rt) report equals the synastry (-r0) report")
 	}
 
-	raw, command, err := SynastryCrossBodyRawReport(context.Background(), lens, chart1, b.when, b.place, store.ReportLabel{}, objSun)
+	raw, command, err := SynastryCrossBodyRawReport(context.Background(), lens, chart1, store.AnchorChart{When: b.when, Place: b.place}, objSun)
 	if err != nil {
 		t.Fatalf("SynastryCrossBodyRawReport: %v", err)
 	}
@@ -215,17 +214,5 @@ func TestSynastryProducersAgainstLiveAstrolog(t *testing.T) {
 	}
 	if rows == 0 {
 		t.Errorf("no rows in the synastry body report:\n%s", raw)
-	}
-}
-
-func TestSynastryProducersRefuseUntimedPlaces(t *testing.T) {
-	f := fixtureByName(t, "F1")
-	timed := store.AnchorChart{When: f.when, Place: f.place}
-	bare := location.PlaceInfo{Name: "Nowhere"}
-	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, timed, f.when, bare, store.ReportLabel{}, objSun); err == nil {
-		t.Error("an untimed second place was accepted")
-	}
-	if _, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, store.AnchorChart{When: f.when, Place: bare}, f.when, f.place, store.ReportLabel{}, objSun); err == nil {
-		t.Error("an untimed first place was accepted")
 	}
 }

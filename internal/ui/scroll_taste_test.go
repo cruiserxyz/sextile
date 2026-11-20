@@ -46,7 +46,6 @@ func scrollTasteModel(t *testing.T, cfg Config, w, h, offset int, focus PanelID)
 	m := tabsPairModel(t, cfg)
 	m.width, m.height = w, h
 	m = m.testNote("active city: Berlin, DE (source=stored-location)")
-	m.limitedViewShown = true // the first-frame notice is not what this fixture is about
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{
 		Positions:    fullChartPositions(),
 		Aspects:      tasteOwnAspects(),

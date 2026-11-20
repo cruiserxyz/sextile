@@ -19,6 +19,13 @@
 // Exit 0 when nothing was found, 1 with findings on stdout, 2 when the crawl
 // could not run (no rules file, a pin mismatch, bad arguments): a crawl that
 // cannot run never passes.
+//
+// Every commit's author and committer is the rules' `author`. The one
+// exception is the `changelog-author`, when the rules name one: it may author
+// a commit with exactly one parent whose tree differs from that parent's only
+// in CHANGELOG.md, changed in place as a regular file. Its committer is still
+// the `author`. A release reaches the public as two commits, the program and
+// then its changelog, so the changelog's author is credited there.
 package main
 
 import (
@@ -34,6 +41,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -53,14 +61,20 @@ type denyRule struct {
 	re   *regexp.Regexp
 }
 
+// sha256Hex is a content hash as the rules write it.
+var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
 type rules struct {
 	hash     string
 	strip    []*regexp.Regexp // removed from a line before the deny rules see it
 	deny     []denyRule
-	trailers []string // lower-case keys
-	author   string   // "Name <email>"
-	pinned   map[string]string
+	trailers []string            // lower-case keys
+	author   string              // "Name <email>"
+	pinned   map[string][]string // path -> every content hash it may have
 	execOK   []string
+	// changelogAuthor may author a commit that changes only CHANGELOG.md
+	// ("" when the rules name none).
+	changelogAuthor string
 }
 
 func main() {
@@ -163,7 +177,7 @@ func loadRules(path string) (*rules, error) {
 		return nil, fmt.Errorf("cannot read the rules file %s: %v", path, err)
 	}
 	sum := sha256.Sum256(b)
-	r := &rules{hash: hex.EncodeToString(sum[:]), pinned: map[string]string{}}
+	r := &rules{hash: hex.EncodeToString(sum[:]), pinned: map[string][]string{}}
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	n := 0
 	for sc.Scan() {
@@ -200,17 +214,31 @@ func loadRules(path string) (*rules, error) {
 			if r.author != "" {
 				return nil, fmt.Errorf("rules line %d: a second author line", n)
 			}
-			if !strings.HasSuffix(rest, ">") || !strings.Contains(rest, " <") {
+			if !isIdentity(rest) {
 				return nil, fmt.Errorf("rules line %d: author must be `Name <email>`", n)
 			}
 			r.author = rest
+		case "changelog-author":
+			if r.changelogAuthor != "" {
+				return nil, fmt.Errorf("rules line %d: a second changelog-author line", n)
+			}
+			if !isIdentity(rest) {
+				return nil, fmt.Errorf("rules line %d: changelog-author must be `Name <email>`", n)
+			}
+			r.changelogAuthor = rest
 		case "allow":
+			// One line per content the file may have: a file that history holds
+			// in several versions has a line for each.
 			p, h, ok := strings.Cut(rest, " ")
 			h = strings.TrimSpace(h)
-			if !ok || len(h) != 64 {
-				return nil, fmt.Errorf("rules line %d: allow needs `path sha256`", n)
+			if !ok || !sha256Hex.MatchString(h) {
+				return nil, fmt.Errorf("rules line %d: allow needs `path sha256` (64 lower-case hex)", n)
 			}
-			r.pinned[filepath.ToSlash(p)] = h
+			key := filepath.ToSlash(p)
+			if slices.Contains(r.pinned[key], h) {
+				return nil, fmt.Errorf("rules line %d: %s is allowed with this hash already", n, key)
+			}
+			r.pinned[key] = append(r.pinned[key], h)
 		case "exec":
 			if rest == "" {
 				return nil, fmt.Errorf("rules line %d: exec needs a path prefix", n)
@@ -227,6 +255,11 @@ func loadRules(path string) (*rules, error) {
 		return nil, errors.New("the rules file names no author")
 	}
 	return r, nil
+}
+
+// isIdentity accepts "Name <email>" as git writes an identity.
+func isIdentity(s string) bool {
+	return strings.HasSuffix(s, ">") && strings.Contains(s, " <")
 }
 
 func (r *rules) checkPin(pin []byte) error {
@@ -292,6 +325,11 @@ func (r *rules) checkEntry(path string, isLink, isExec bool, content []byte) []s
 	for _, hit := range r.denyHits(path) {
 		out = append(out, fmt.Sprintf("%s: path matches deny %s", path, hit))
 	}
+	if _, pinned := r.pinned[path]; pinned && isLink {
+		// A pinned file is checked by its content: a link in its place would
+		// pass the path without any content being compared.
+		out = append(out, fmt.Sprintf("%s: pinned file is a symlink", path))
+	}
 	if isLink {
 		target := string(content)
 		for _, hit := range r.denyHits(target) {
@@ -304,18 +342,41 @@ func (r *rules) checkEntry(path string, isLink, isExec bool, content []byte) []s
 	}
 	if want, ok := r.pinned[path]; ok {
 		sum := sha256.Sum256(content)
-		if got := hex.EncodeToString(sum[:]); got != want {
-			out = append(out, fmt.Sprintf("%s: pinned file has hash %s, the rules allow only %s", path, got[:12], want[:12]))
+		if got := hex.EncodeToString(sum[:]); !slices.Contains(want, got) {
+			short := make([]string, len(want))
+			for i, h := range want {
+				short[i] = h[:12]
+			}
+			out = append(out, fmt.Sprintf("%s: pinned file has hash %s, the rules allow only %s", path, got[:12], strings.Join(short, ", ")))
 		}
 		return out
 	}
 	return append(out, r.scanContent(path, content)...)
 }
 
+// pinnedDirs is a finding for every pinned path that names a directory, empty
+// or not: the files under it are scanned, but nothing is compared with the
+// pinned path's allowed hashes. A link in a pinned path's place is refused by checkEntry,
+// and any other entry that is not a regular file by the walk or the history
+// scan. An absent pinned path is no finding: history holds a pinned file in
+// some commits and not in others (one file retired, another one new), and a
+// file that is not there leaks nothing.
+func (r *rules) pinnedDirs(isDir func(path string) bool) []string {
+	var out []string
+	for path := range r.pinned {
+		if isDir(path) {
+			out = append(out, fmt.Sprintf("%s: pinned file is a directory", path))
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // --- tree ---------------------------------------------------------------------
 
 func crawlTree(dir string, r *rules) ([]string, error) {
 	var findings []string
+	dirs := map[string]bool{}
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -329,6 +390,7 @@ func crawlTree(dir string, r *rules) ([]string, error) {
 			if rel == ".git" || rel == ".jj" {
 				return filepath.SkipDir
 			}
+			dirs[rel] = true
 			for _, hit := range r.denyHits(rel) {
 				findings = append(findings, fmt.Sprintf("%s/: path matches deny %s", rel, hit))
 			}
@@ -357,7 +419,10 @@ func crawlTree(dir string, r *rules) ([]string, error) {
 		findings = append(findings, r.checkEntry(rel, false, info.Mode()&0o111 != 0, content)...)
 		return nil
 	})
-	return findings, err
+	if err != nil {
+		return findings, err
+	}
+	return append(findings, r.pinnedDirs(func(p string) bool { return dirs[p] })...), nil
 }
 
 // --- history ------------------------------------------------------------------
@@ -365,9 +430,13 @@ func crawlTree(dir string, r *rules) ([]string, error) {
 type commit struct {
 	sha       string
 	tree      string
+	parents   []string
 	author    string
 	committer string
 	message   string
+	// changelogOnly: one parent, and the tree differs from it only in
+	// CHANGELOG.md, changed in place as a regular file.
+	changelogOnly bool
 }
 
 func git(dir string, args ...string) ([]byte, error) {
@@ -394,6 +463,8 @@ func readCommit(dir, sha string) (*commit, error) {
 		switch kind {
 		case "tree":
 			c.tree = rest
+		case "parent":
+			c.parents = append(c.parents, rest)
 		case "author":
 			c.author = identity(rest)
 		case "committer":
@@ -401,6 +472,35 @@ func readCommit(dir, sha string) (*commit, error) {
 		}
 	}
 	return c, nil
+}
+
+// changelogPath is the one file a changelog-author commit may change.
+const changelogPath = "CHANGELOG.md"
+
+// markChangelog sets c.changelogOnly for a commit that the changelog author
+// wrote: one parent, and one change against it, CHANGELOG.md modified as a
+// plain file (mode 100644 before and after). It asks git only for such a commit: every other commit is judged by
+// the author rule alone.
+func markChangelog(dir string, c *commit, r *rules) error {
+	if r.changelogAuthor == "" || c.author != r.changelogAuthor || len(c.parents) != 1 {
+		return nil
+	}
+	// -t lists tree entries too, so an added (even empty) directory is a second record.
+	raw, err := git(dir, "diff-tree", "-r", "-t", "-z", "--raw", "--no-renames", c.parents[0], c.sha)
+	if err != nil {
+		return err
+	}
+	// One record: ":<old mode> <new mode> <old sha> <new sha> <status>\0<path>\0".
+	f := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
+	if len(f) != 2 || f[1] != changelogPath {
+		return nil
+	}
+	meta := strings.Fields(strings.TrimPrefix(f[0], ":"))
+	if len(meta) != 5 || meta[4] != "M" || meta[0] != "100644" || meta[1] != "100644" {
+		return nil
+	}
+	c.changelogOnly = true
+	return nil
 }
 
 // identity strips the timestamp from "Name <email> 1700000000 +0100".
@@ -458,6 +558,9 @@ func crawlMessages(dir, rev, base string, r *rules) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := markChangelog(dir, c, r); err != nil {
+			return nil, err
+		}
 		findings = append(findings, checkMessage(sha[:12], c, r)...)
 	}
 	return findings, nil
@@ -476,18 +579,24 @@ func crawlHistory(dir, rev string, r *rules) ([]string, error) {
 		return nil, err
 	}
 	var findings []string
-	seen := map[string][]string{} // blob sha + path -> findings, so an unchanged file is scanned once
+	seen := map[string][]string{} // mode + blob sha + path -> findings, so an unchanged file is scanned once
 	for _, sha := range shas {
 		c, err := readCommit(dir, sha)
 		if err != nil {
 			return nil, err
 		}
+		if err := markChangelog(dir, c, r); err != nil {
+			return nil, err
+		}
 		short := sha[:12]
 		findings = append(findings, checkMessage(short, c, r)...)
-		entries, err := git(dir, "ls-tree", "-r", "-z", c.tree)
+		// -t lists tree entries too: an empty directory has no file to carry its
+		// path, and a pinned path may be a directory with nothing in it.
+		entries, err := git(dir, "ls-tree", "-r", "-t", "-z", c.tree)
 		if err != nil {
 			return nil, err
 		}
+		dirs := map[string]bool{}
 		for _, e := range bytes.Split(entries, []byte{0}) {
 			if len(e) == 0 {
 				continue
@@ -503,7 +612,14 @@ func crawlHistory(dir, rev string, r *rules) ([]string, error) {
 			}
 			mode, typ, blob := f[0], f[1], f[2]
 			p := string(path)
-			key := blob + " " + p
+			key := mode + " " + blob + " " + p
+			if typ == "tree" {
+				dirs[p] = true
+				for _, hit := range r.denyHits(p) {
+					findings = append(findings, fmt.Sprintf("commit %s: %s/: path matches deny %s", short, p, hit))
+				}
+				continue
+			}
 			if typ != "blob" {
 				findings = append(findings, fmt.Sprintf("commit %s: %s: not a blob (%s)", short, p, typ))
 				continue
@@ -524,13 +640,17 @@ func crawlHistory(dir, rev string, r *rules) ([]string, error) {
 				findings = append(findings, "commit "+short+": "+s)
 			}
 		}
+		for _, s := range r.pinnedDirs(func(p string) bool { return dirs[p] }) {
+			findings = append(findings, "commit "+short+": "+s)
+		}
 	}
 	return findings, nil
 }
 
 func checkMessage(short string, c *commit, r *rules) []string {
 	var out []string
-	if c.author != r.author {
+	changelog := r.changelogAuthor != "" && c.author == r.changelogAuthor && c.changelogOnly
+	if c.author != r.author && !changelog {
 		out = append(out, fmt.Sprintf("commit %s: author is %q, must be %q", short, c.author, r.author))
 	}
 	if c.committer != r.author {

@@ -123,6 +123,8 @@ ARG SEXTILE_VERSION=docker
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+# The module root's own package (license.go, which embeds LICENSE).
+COPY license.go LICENSE ./
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY pkg/ pkg/
@@ -137,13 +139,17 @@ USER 65532:65532
 # The three XDG folders default into the charts folder, so a hand-written
 # `docker run -v ~/charts:/charts` keeps its session, preferences and data
 # there. The `sextile` launcher overrides all three with -e and mounts folders
-# of the person's own XDG places instead.
+# of the person's own XDG places instead. The cache, where Sextile keeps the
+# private copy of a chart Astrolog reads, is in the container's own /tmp (the
+# launcher's tmpfs), never the charts folder: a --user with no home has HOME=/
+# and could make no cache of its own.
 ENV SEXTILE_CHARTS_DIR=/charts \
     SEXTILE_PREVIEW_MODE=serve \
     SEXTILE_PREVIEW_ADDR=0.0.0.0:5307 \
     XDG_STATE_HOME=/charts/.sextile/state \
     XDG_DATA_HOME=/charts/.sextile/data \
     XDG_CONFIG_HOME=/charts/.sextile/config \
+    XDG_CACHE_HOME=/tmp/sextile-cache \
     SEXTILE_ATLAS_PATH=/usr/local/share/astrolog/atlas.as
 EXPOSE 5307
 ENTRYPOINT ["sextile"]

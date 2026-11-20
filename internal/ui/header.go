@@ -18,18 +18,15 @@ import (
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
-// chartSlotsBody renders the [1] Chart panel body — one line per slot in the
-// workspace. The cursor row carries the shared cursor-row treatment while
-// Chart owns the keyboard (menu.RenderRowState); with colours off it also gets the
-// cursor column. Persistent slot selection remains visible independently. Pre-resolution (slots == nil)
-// falls back to the clock+place line so the body is never empty.
+// chartSlotsBody renders the [2] Chart panel body — one line per slot in the
+// workspace, as one table (chart_table.go). The cursor row carries the shared
+// cursor-row treatment while Chart owns the keyboard (menu.RenderRowState);
+// with colours off it also gets the cursor column. Persistent slot selection
+// remains visible independently. Pre-resolution (slots == nil) falls back to
+// the clock and place of now, so the body is never empty.
 //
-// Each anchored row opens with its OWN chart's name (Slot.Chart.Name), in a
-// column as wide as the widest shown name (capped at nameColumnMax), so every
-// row's moment — and, by padding the zone, every row's place — starts in the
-// same cell. The floating row shows no name, only the column's blank width.
-// With no name to show, rows render exactly as they did before names existed
-// (the specification item B).
+// Each anchored row opens with its OWN chart's name (Slot.Chart.Name). The
+// floating row shows floatTitle in that column, or nothing when it is empty.
 //
 // It returns one row per slot, however many there are. When the workspace
 // holds more slots than the panel has rows, compose draws the window of them
@@ -43,154 +40,55 @@ func chartSlotsBody(slots *store.Slots, cursorIdx int, panelFocused bool, now ti
 // the house system and zodiac ITS chart is cast in (the specification C5,
 // C7), not one shared lens's. A nil tag gives every row the lens's own.
 func chartSlotsBodyTagged(slots *store.Slots, cursorIdx int, panelFocused bool, now time.Time, place location.PlaceInfo, lens lookup.Lens, width int, cfg Config, tag func(*store.Slot) string) string {
-	return chartSlotsBodyLayout(slots, cursorIdx, panelFocused, now, place, lens, width, cfg, tag, "", false)
+	return chartSlotsBodyLayout(slots, cursorIdx, panelFocused, now, place, lens, width, cfg, tag, "", nil)
 }
 
-// chartSlotsBodyLayout is chartSlotsBodyTagged told which layout the screen is
-// in: oneChart is the one-chart layout, where Bodies shows one column.
-// floatTitle is the floating row's title (`~ Now`, `~`), set in the name column
-// the anchored rows use; empty gives the floating row no name, as before.
-func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, now time.Time, place location.PlaceInfo, lens lookup.Lens, width int, cfg Config, tag func(*store.Slot) string, floatTitle string, oneChart bool) string {
+// chartSlotsBodyLayout is chartSlotsBodyTagged with the floating row's title
+// (`~ Now`, `~`; empty gives it no name) and the atlas witness of the places.
+func chartSlotsBodyLayout(slots *store.Slots, cursorIdx int, panelFocused bool, now time.Time, place location.PlaceInfo, lens lookup.Lens, width int, cfg Config, tag func(*store.Slot) string, floatTitle string, witness placeWitness) string {
 	if width <= 0 {
 		return ""
 	}
-	if slots == nil {
-		prefix := menu.RowPrefix(panelFocused, true, false, false, cfg)
-		line := tagSlotLine(now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
-		if line == "" {
-			return ""
-		}
-		return menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, true), cfg)
+	var all []*store.Slot
+	if slots != nil {
+		all = slots.All()
 	}
-	all := slots.All()
 	if len(all) == 0 {
 		prefix := menu.RowPrefix(panelFocused, true, false, false, cfg)
-		line := tagSlotLine(now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
+		rows := []tableRow{{prefix: prefix, cells: placeCells(now, place, witness), tag: lens.HouseAbbrev() + lens.ZodiacAbbrev()}}
+		line := renderTable(rows, width, cfg)[0]
 		if line == "" {
 			return ""
 		}
-		return menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, true), cfg)
+		return menu.RenderRow(line, width, menu.CursorRowState(panelFocused, true), cfg)
 	}
 	set := selectionOf(slots)
 	selectionColumn := len(set) > 0
-	names := make([]string, len(all))
-	nameW, zoneW := 0, 0
-	// The one-chart layout fits each name into what is left of the row after
-	// the moment, a space and the tag (the specification rule 2),
-	// measured from what is rendered, never assumed.
-	nameCap := nameColumnMax
-	if oneChart {
-		momentW, tagW, rowW := 0, 0, width
-		for i, s := range all {
-			if !s.Location.HasTimezone() {
-				continue
-			}
-			momentW = max(momentW, ansi.StringWidth(slotMoment(s.Time, s.Location)))
-			tagW = max(tagW, ansi.StringWidth(rowTagOf(s, lens, tag)))
-			rowW = min(rowW, width-ansi.StringWidth(menu.ChartRowPrefix(panelFocused, i == cursorIdx, numeralMark(numeralIn(set, s), cfg), selectionColumn, cfg)))
-		}
-		nameCap = min(nameColumnMax, rowW-nameGutter-momentW-1-tagW)
-	}
+	// Honest time semantics: every slot displays its own Time field. For the
+	// anchored slot this is the natal moment; for the floating slot it is the
+	// time the chart payload was computed for. Reading the live clock here
+	// would advertise a wall-clock time the bodies and aspects panels have not
+	// been recomputed against. Time-stepping advances slot.Time and triggers
+	// a recompute, so the two stay in step.
+	rows := make([]tableRow, len(all))
 	for i, s := range all {
-		if !s.Location.HasTimezone() {
-			continue
-		}
+		name := s.Chart.Name
 		if s.Floating {
-			if floatTitle != "" {
-				names[i] = abbreviateNameTo(floatTitle, max(nameCap, 0), cfg)
-				nameW = max(nameW, ansi.StringWidth(names[i]))
-			}
-			continue
+			name = floatTitle
 		}
-		names[i] = abbreviateNameTo(s.Chart.Name, max(nameCap, 0), cfg)
-		nameW = max(nameW, ansi.StringWidth(names[i]))
-	}
-	if oneChart {
-		nameW = fitFloatTitle(all, names, nameW, width, lens, tag, panelFocused, cursorIdx, set, selectionColumn, cfg)
-	}
-	nameW = min(nameW, max(nameCap, 0))
-	if nameW > 0 || oneChart {
-		for _, s := range all {
-			if s.Location.HasTimezone() {
-				zoneW = max(zoneW, ansi.StringWidth(slotZone(s.Time, s.Location)))
-			}
+		rows[i] = tableRow{
+			prefix: menu.ChartRowPrefix(panelFocused, i == cursorIdx, numeralMark(numeralIn(set, s), cfg), selectionColumn, cfg),
+			name:   name,
+			float:  s.Floating,
+			cells:  slotCells(s, witness),
+			tag:    rowTagOf(s, lens, tag),
 		}
 	}
-	lines := make([]string, len(all))
-	for i, s := range all {
-		// Honest time semantics: every slot displays its own Time field.
-		// For the anchored slot this is the natal moment; for the floating
-		// slot it is the time the chart payload was computed for (set at
-		// NewSlots/refreshSlotsForPlace construction). Reading the live
-		// clock here would advertise a wall-clock time the bodies/aspects
-		// panels have not been recomputed against — a trust-breaking lie
-		// during consults. Time-stepping advances slot.Time and
-		// triggers recompute so the two stay in step.
-		prefix := menu.ChartRowPrefix(panelFocused, i == cursorIdx, numeralMark(numeralIn(set, s), cfg), selectionColumn, cfg)
-		rowLens := lens
-		var line string
-		if oneChart {
-			line = oneChartLine(names[i], nameW, zoneW, s.Time, s.Location, rowTagOf(s, lens, tag), width-ansi.StringWidth(prefix), cfg)
-		} else if tag != nil {
-			t := tag(s)
-			if nameW == 0 {
-				line = tagSlotLine(s.Time, s.Location, t, width-ansi.StringWidth(prefix), cfg)
-			} else {
-				line = tagNamedSlotLine(names[i], nameW, zoneW, s.Time, s.Location, t, width-ansi.StringWidth(prefix), cfg)
-			}
-		} else if nameW == 0 {
-			line = tagSlotLine(s.Time, s.Location, rowLens.HouseAbbrev()+rowLens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
-		} else {
-			line = tagNamedSlotLine(names[i], nameW, zoneW, s.Time, s.Location, rowLens.HouseAbbrev()+rowLens.ZodiacAbbrev(), width-ansi.StringWidth(prefix), cfg)
-		}
-		lines[i] = menu.RenderRow(prefix+line, width, menu.CursorRowState(panelFocused, i == cursorIdx), cfg)
+	lines := renderTable(rows, width, cfg)
+	for i := range lines {
+		lines[i] = menu.RenderRow(lines[i], width, menu.CursorRowState(panelFocused, i == cursorIdx), cfg)
 	}
 	return strings.Join(lines, "\n")
-}
-
-// floatTitleShorts are the attached floating row's shorter titles, tried in
-// order when `~ Now` would cost the row its place: the place keeps its column
-// and the title gives way (operator 2026-10-24). Never `~` alone, which says
-// the chart has been moved off the clock; when none fits the title stays whole.
-var floatTitleShorts = []string{"~Now", "Now"}
-
-// fitFloatTitle shortens the floating row's title to floatTitleShort when the
-// title alone is what would push the floating row's place out of the one-chart
-// layout, and returns the name column's width after it. When an anchored name
-// already takes that room the title stays: shortening it would save nothing.
-func fitFloatTitle(all []*store.Slot, names []string, nameW, width int, lens lookup.Lens, tag func(*store.Slot) string, panelFocused bool, cursorIdx int, set []*store.Slot, selectionColumn bool, cfg Config) int {
-	fi, otherW := -1, 0
-	for i, s := range all {
-		if s.Floating {
-			fi = i
-		} else {
-			otherW = max(otherW, ansi.StringWidth(names[i]))
-		}
-	}
-	if fi < 0 || names[fi] != "~ Now" || !all[fi].Location.HasTimezone() {
-		return nameW
-	}
-	room := floatTitleRoom(all[fi], width, lens, tag, panelFocused, fi == cursorIdx, numeralIn(set, all[fi]), selectionColumn, cfg)
-	if ansi.StringWidth(names[fi]) <= room || otherW > room {
-		return nameW
-	}
-	for _, short := range floatTitleShorts {
-		if ansi.StringWidth(short) <= room {
-			names[fi] = short
-			return max(otherW, ansi.StringWidth(short))
-		}
-	}
-	return nameW
-}
-
-// floatTitleRoom is how many cells the floating row's title may take in the
-// one-chart layout and still leave the row its moment, zone, place and tag
-// whole (oneChartLine drops the place first when room runs out).
-func floatTitleRoom(s *store.Slot, width int, lens lookup.Lens, tag func(*store.Slot) string, panelFocused, cursor bool, numeral int, selectionColumn bool, cfg Config) int {
-	rowW := width - ansi.StringWidth(menu.ChartRowPrefix(panelFocused, cursor, numeralMark(numeral, cfg), selectionColumn, cfg))
-	used := ansi.StringWidth(slotMoment(s.Time, s.Location)) + 1 + ansi.StringWidth(slotZone(s.Time, s.Location)) +
-		1 + ansi.StringWidth(s.Location.Display()) + 1 + ansi.StringWidth(rowTagOf(s, lens, tag))
-	return rowW - nameGutter - used
 }
 
 // chartWindow is the contiguous run of slot rows the Chart panel draws when
@@ -211,58 +109,7 @@ func chartWindow(total, cursor, rows, top int) (start, visible int) {
 	return max(top, 0), visible
 }
 
-// chartSlotLine renders one slot's chart-context line, fitted to exactly width
-// cells:
-//
-//	"<moment> <TZ> <location…>      <WhTr>"
-//
-// where <moment> is the held clock form (clockMoment), e.g. "Mon Oct  5, 2026  9:05".
-//
-// The condensed house·zodiac tag (e.g. "WhTr") is pinned to the far right; the
-// location is truncated with an ellipsis to fill the gap between the timezone
-// and the tag. Returns "" when the place carries no timezone (pre-location
-// startup) so the Chart panel body stays empty.
-//
-// Placement (Slice A/A.1, D15): the slot line is the Chart panel BODY — which
-// exists at every width — not the Details panel (absent at 80×24). The panel
-// title stays title-only ("[1] Chart"); the location lives here in the line.
-func chartSlotLine(now time.Time, place location.PlaceInfo, lens lookup.Lens, width int, cfg Config) string {
-	return tagSlotLine(now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width, cfg)
-}
-
-// tagSlotLine is chartSlotLine with the row's tag given.
-func tagSlotLine(now time.Time, place location.PlaceInfo, right string, width int, cfg Config) string {
-	if !place.HasTimezone() || width <= 0 {
-		return ""
-	}
-	left := clockMoment(zonedIn(now, place)) + " " + slotZone(now, place)
-	return layoutSlotLine(left, place.Display(), right, width, cfg)
-}
-
-// namedSlotLine is chartSlotLine behind a name column: the name padded to
-// nameW, a two-space gutter, then the moment with its zone right-padded to
-// zoneW so the places of all rows line up. A row whose place has no timezone
-// renders "" exactly as chartSlotLine does, name included.
-func namedSlotLine(name string, nameW, zoneW int, now time.Time, place location.PlaceInfo, lens lookup.Lens, width int, cfg Config) string {
-	return tagNamedSlotLine(name, nameW, zoneW, now, place, lens.HouseAbbrev()+lens.ZodiacAbbrev(), width, cfg)
-}
-
-// tagNamedSlotLine is namedSlotLine with the row's tag given.
-func tagNamedSlotLine(name string, nameW, zoneW int, now time.Time, place location.PlaceInfo, right string, width int, cfg Config) string {
-	if !place.HasTimezone() || width <= 0 {
-		return ""
-	}
-	cell := name + strings.Repeat(" ", nameW-ansi.StringWidth(name)) + "  "
-	if ansi.StringWidth(cell) >= width {
-		// No room for anything past the name: the row still fits its width.
-		return term.CutRight(cell, width, cfg)
-	}
-	zone := slotZone(now, place)
-	left := slotMoment(now, place) + " " + zone + strings.Repeat(" ", max(0, zoneW-ansi.StringWidth(zone)))
-	return cell + layoutSlotLine(left, place.Display(), right, width-ansi.StringWidth(cell), cfg)
-}
-
-// nameGutter is the two spaces between the name column and the moment.
+// nameGutter is the two spaces between the name column and the date.
 const nameGutter = 2
 
 // rowTagOf is the row's tag: the given function's, else the lens's own.
@@ -273,57 +120,10 @@ func rowTagOf(s *store.Slot, lens lookup.Lens, tag func(*store.Slot) string) str
 	return lens.HouseAbbrev() + lens.ZodiacAbbrev()
 }
 
-// oneChartLine is a chart row in the one-chart layout: the name column (blank
-// when no chart carries a name) and its gutter, the moment whole, then the
-// zone and the place only while each fits whole, then the tag pinned right.
-// Nothing after the name is ever cut: what does not fit is dropped, and the
-// moment is the one thing that always stays (the specification
-// rules 1-3). A row whose place has no timezone renders "".
-func oneChartLine(name string, nameW, zoneW int, now time.Time, place location.PlaceInfo, right string, width int, cfg Config) string {
-	if !place.HasTimezone() || width <= 0 {
-		return ""
-	}
-	cell := ""
-	if nameW > 0 {
-		cell = name + strings.Repeat(" ", nameW-ansi.StringWidth(name)) + strings.Repeat(" ", nameGutter)
-	}
-	moment := slotMoment(now, place)
-	rw := ansi.StringWidth(right)
-	room := width - ansi.StringWidth(cell) - ansi.StringWidth(moment) - 1 - rw
-	if room < 0 {
-		// Not even the moment and the tag: the existing clamp, which keeps the
-		// tag and clips the left (only at widths the layout never offers).
-		return clampLine(cell+moment, right, width, cfg)
-	}
-	left := cell + moment
-	zone := slotZone(now, place)
-	if zw := max(zoneW, ansi.StringWidth(zone)); room >= 1+zw {
-		left += " " + zone + strings.Repeat(" ", zw-ansi.StringWidth(zone))
-		room -= 1 + zw
-		if loc := place.Display(); room >= 1+ansi.StringWidth(loc) {
-			left += " " + loc
-		}
-	}
-	return left + strings.Repeat(" ", width-ansi.StringWidth(left)-rw) + right
-}
-
-// slotMoment and slotZone split chartSlotLine's left field so the zone can be
-// padded on its own; together they are exactly its `<moment> <zone>` (clockMoment).
-func slotMoment(now time.Time, place location.PlaceInfo) string {
-	return clockMoment(zonedIn(now, place))
-}
-
-func slotZone(now time.Time, place location.PlaceInfo) string {
-	local := zonedIn(now, place)
-	// Inside the 1582 window the call carries no zone, and the row says so.
-	if lookup.StampMoment(local, local.Location()).UT {
-		return "UT"
-	}
-	return local.Format("MST")
-}
-
+// zonedIn is now on the place's wall clock (lookup.PlaceZone): its zone, or
+// before the zone's standard time the local mean time of its longitude.
 func zonedIn(now time.Time, place location.PlaceInfo) time.Time {
-	if loc, err := time.LoadLocation(place.TZ); err == nil {
+	if loc, err := lookup.PlaceZone(now, place); err == nil {
 		return now.In(loc)
 	}
 	return now
@@ -394,44 +194,4 @@ func abbreviateNameTo(name string, w int, cfg Config) string {
 func initial(token string) string {
 	r := []rune(token)
 	return string(r[0]) + "."
-}
-
-// layoutSlotLine packs "<left> <loc> … <right>" into exactly width DISPLAY cells:
-// right is pinned to the far edge, loc is cut (text.go's mark)
-// to fill the gap, keeping at least one space on each side of loc. If width can't
-// hold even left+right, the left half is clipped. Widths are measured with
-// ansi.StringWidth so the line matches renderTitledBox's padBody exactly even for
-// wide (e.g. CJK) location names.
-func layoutSlotLine(left, loc, right string, width int, cfg Config) string {
-	if width <= 0 {
-		return ""
-	}
-	lw := ansi.StringWidth(left)
-	rw := ansi.StringWidth(right)
-	// reserve one space after left and one before right.
-	avail := width - lw - rw - 2
-	if avail < 1 {
-		return clampLine(left, right, width, cfg)
-	}
-	loc = term.CutRight(loc, avail, cfg)
-	pad := width - lw - 1 - ansi.StringWidth(loc) - rw
-	if pad < 1 {
-		pad = 1
-	}
-	return left + " " + loc + strings.Repeat(" ", pad) + right
-}
-
-// clampLine renders "<left><pad><right>" within width when there is no room for
-// a middle field, clipping left (then right) if even that overflows.
-func clampLine(left, right string, width int, cfg Config) string {
-	rw := ansi.StringWidth(right)
-	if width <= rw {
-		return term.CutRight(right, width, cfg)
-	}
-	lw := ansi.StringWidth(left)
-	if lw+rw > width {
-		left = term.CutRight(left, width-rw, cfg)
-		lw = ansi.StringWidth(left)
-	}
-	return left + strings.Repeat(" ", width-lw-rw) + right
 }

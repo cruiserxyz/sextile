@@ -158,7 +158,7 @@ func (m Model) noteArrival() Model {
 // withTabMemoryOf puts back the tab memory another Model held: a walk that
 // passes rows on its way restores it, so only its destination is an arrival.
 func (m Model) withTabMemoryOf(o Model) Model {
-	m.at, m.base = o.at, o.base
+	m.at, m.base, m.lastSelected = o.at, o.base, o.lastSelected
 	return m
 }
 
@@ -172,6 +172,28 @@ func (m Model) pruneTabMemory() Model {
 	if m.base != nil && numeralIn(set, m.base) == 0 {
 		m.base = nil
 	}
+	if m.lastSelected != nil && numeralIn(set, m.lastSelected) == 0 {
+		m.lastSelected = nil
+	}
+	return m
+}
+
+// selectionOpensComparison is what selecting the cursor's chart does to the
+// tab: with no base stored, the chart selected before it becomes the base, so
+// the Aspects tab, and the wheel that draws it, read the cursor's chart in
+// that one. A moment is never a base, so after Now the tab stays the chart's
+// own. A base already stored is kept. It runs after every Space on a chart
+// row; a deselect leaves the chart selected last as it was.
+func (m Model) selectionOpensComparison() Model {
+	c := m.focusedSlot()
+	if c == nil || numeralIn(selectionOf(m.slots), c) == 0 {
+		return m
+	}
+	prior := m.lastSelected
+	m.lastSelected = c
+	if m.base == nil && prior != nil && prior != c && !prior.Floating {
+		m = m.withBase(prior)
+	}
 	return m
 }
 
@@ -181,13 +203,24 @@ func (m Model) pruneTabMemory() Model {
 func (m Model) remapTabMemory(counterpart map[*store.Slot]*store.Slot) Model {
 	m.base = counterpart[m.base]
 	m.at = counterpart[m.at]
+	m.lastSelected = counterpart[m.lastSelected]
 	return m
 }
 
-// forgetTabMemory starts the tab on the chart alone: a restored session, or a
+// forgetTabMemory starts the tab on the chart alone, and the Status Details on Credits: a restored session, or a
 // rebuilt workspace whose slots are new objects.
 func (m Model) forgetTabMemory() Model {
-	m.base, m.at = nil, nil
+	m.base, m.at, m.lastSelected = nil, nil, nil
+	// The Status Details opens on Credits again; no other panel's tab is touched.
+	if _, ok := m.details.tabs[PanelStatus]; ok {
+		tabs := make(map[PanelID]TabID, len(m.details.tabs))
+		for p, id := range m.details.tabs {
+			if p != PanelStatus {
+				tabs[p] = id
+			}
+		}
+		m.details.tabs = tabs
+	}
 	return m
 }
 

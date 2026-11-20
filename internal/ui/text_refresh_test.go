@@ -113,7 +113,7 @@ func TestTextResult_ErrorPolicy(t *testing.T) {
 	m = tm.(Model)
 	found := false
 	for _, line := range m.logLines {
-		if strings.HasPrefix(line.text, "Couldn't cast the chart.") {
+		if strings.Contains(line.text, " not cast,") {
 			found = true
 		}
 	}
@@ -182,8 +182,8 @@ func TestTextCommit_TriggersWheelRefreshWhenPreviewActive(t *testing.T) {
 	}
 }
 
-// TestColdStartThroughCoordinator drives the REAL cold-start path the
-// invariants golden uses (perimeter + atlas → bumpIdentity → text run 1)
+// TestColdStartThroughCoordinator drives the REAL cold-start path
+// (perimeter + atlas → bumpIdentity → text run 1)
 // and asserts the coordinator tokens line up with the documented contract:
 // after a single cold-start dispatch, RunID = WantID = commitFloor = 1.
 func TestColdStartThroughCoordinator(t *testing.T) {
@@ -192,7 +192,7 @@ func TestColdStartThroughCoordinator(t *testing.T) {
 	m, _ = m.bumpIdentity(surfaceText)
 	st := m.refresh[surfaceText]
 	if st.runningRunID != 1 || st.wantID != 1 || st.commitFloor != 1 {
-		t.Fatalf("cold start tokens = run %d / want %d / floor %d, want 1/1/1 (the invariants golden hand-builds this)",
+		t.Fatalf("cold start tokens = run %d / want %d / floor %d, want 1/1/1",
 			st.runningRunID, st.wantID, st.commitFloor)
 	}
 

@@ -1,0 +1,5 @@
+charts folder: Sextile asks before each write
+charts folder: protected, Sextile writes nothing here
+charts folder: asks first from the next start, writes nothing now
+charts folder: no question before a write, set in launcher-originals.conf
+charts folder: protected, launcher-originals.conf has 2 lines for it

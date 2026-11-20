@@ -29,8 +29,9 @@ type Form struct {
 	// Saving is a write in flight: nothing is typed, and the name on screen is the
 	// name being written.
 	Saving bool
-	// Confirming is the title form's second step: Enter on a filled form showed
-	// what saving will do; nothing is written yet.
+	// Confirming is a question the form asks before it writes: the title form's
+	// change question and the save prompt's first-write question. Nothing is
+	// written until it is answered.
 	Confirming bool
 }
 

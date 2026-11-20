@@ -43,8 +43,8 @@ const (
 )
 
 const (
-	asterList = "Amsterdam, NL" // what the chart list shows for asterChart's coordinates
-	birchList = "Munich, DE"
+	asterList = "Aster Home Label" // what the chart list shows for asterChart: its own place
+	birchList = "Birch Home Label"
 )
 
 // namesLive is a ready 168x40 workspace (Details beside a four-chart left column) with colours off over the library
@@ -150,14 +150,13 @@ func TestDetailsReportsNameTheirCharts(t *testing.T) {
 	reOneLine := regexp.MustCompile(oneLine)
 
 	// momentLine is the second line a named header prints: the chart's own
-	// moment and, after the zone, the chart-list place.
-	wantMoment := func(t *testing.T, line, place string) {
+	// moment and, after the zone, the file's own place label, as Astrolog reads
+	// the file (operator, 2026-11-15: "The file's own"); never the chart list's
+	// atlas name for its coordinates.
+	wantMoment := func(t *testing.T, line string) {
 		t.Helper()
-		if !strings.Contains(line, ") "+place+" ") {
-			t.Errorf("the moment line %q does not show the chart-list place %q", line, place)
-		}
-		if strings.Contains(line, "Home Label") {
-			t.Errorf("the moment line %q shows the file's own place label", line)
+		if !regexp.MustCompile(`\) [A-Z][a-z]+ Home Label `).MatchString(line) {
+			t.Errorf("the moment line %q does not show the file's own place label", line)
 		}
 	}
 	// requireBegins: the first rendered row at scroll offset zero shows the
@@ -199,7 +198,7 @@ func TestDetailsReportsNameTheirCharts(t *testing.T) {
 			t.Fatal("fixture: comparing")
 		}
 		requireBegins(t, m, "Synthetic Aster")
-		wantMoment(t, strings.Split(m.details.body, "\n")[1], asterList)
+		wantMoment(t, strings.Split(m.details.body, "\n")[1])
 	})
 
 	t.Run("every body in the Bodies panel", func(t *testing.T) {
@@ -284,12 +283,12 @@ func TestDetailsReportsNameTheirCharts(t *testing.T) {
 			if lines[0] != "Astrolog 8.00 chart for Synthetic Aster" {
 				t.Errorf("chart 1 header %q", lines[0])
 			}
-			wantMoment(t, lines[1], asterList)
+			wantMoment(t, lines[1])
 			if pc.synastry {
 				if lines[2] != "Chart #2 comparison for Synthetic Birch" {
 					t.Errorf("chart 2 header %q", lines[2])
 				}
-				wantMoment(t, lines[3], birchList)
+				wantMoment(t, lines[3])
 				return
 			}
 			// The floating slot is unnamed: its header is its moment, one line.
@@ -447,10 +446,10 @@ func spyOnLabels(t *testing.T) *labelSpy {
 			spy.note("overlay", c.Label)
 			return oO(ctx, l, c, w, pl)
 		}
-		s.cast.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
 			spy.note("synastry", c.Label)
-			spy.note("synastry-other", ol)
-			return oS(ctx, l, c, w, pl, ol)
+			spy.note("synastry-other", other.Label)
+			return oS(ctx, l, c, other)
 		}
 	})
 	stubSpawns(t, func(s *rowSpawns) {
@@ -466,10 +465,10 @@ func spyOnLabels(t *testing.T) *labelSpy {
 			spy.note("cross-body", c.Label)
 			return oC(ctx, l, c, w, pl, b)
 		}
-		s.reports.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, w time.Time, pl location.PlaceInfo, ol store.ReportLabel, b aspect.Object) (string, string, error) {
+		s.reports.synastry = func(ctx context.Context, l lookup.Lens, c store.AnchorChart, other store.AnchorChart, b aspect.Object) (string, string, error) {
 			spy.note("synastry-body", c.Label)
-			spy.note("synastry-body-other", ol)
-			return oY(ctx, l, c, w, pl, ol, b)
+			spy.note("synastry-body-other", other.Label)
+			return oY(ctx, l, c, other, b)
 		}
 	})
 	return spy
@@ -498,6 +497,21 @@ func requireUnnamedCalls(t *testing.T, what string, m Model, spy *labelSpy, forb
 		// the specification rule 3, and its labels are
 		// checked through the spy above.
 		if strings.Contains(line, " -rt ") || strings.Contains(line, " -r0 ") {
+			continue
+		}
+		// A chart cast from its file carries the file's own record on the
+		// command line (`-qb …`), whose labels are the file's: an untitled file
+		// holds no `-zi`, or an empty one, so no name is sent.
+		if strings.Contains(line, " -qb ") {
+			checked++
+			if strings.Contains(line, " -zi ") && !reEmptyZI.MatchString(line) {
+				t.Errorf("%s: a file chart's call sends a name: %s", what, line)
+			}
+			for _, f := range forbidden {
+				if strings.Contains(line, f) {
+					t.Errorf("%s: a command carries %q: %s", what, f, line)
+				}
+			}
 			continue
 		}
 		checked++
@@ -686,7 +700,7 @@ func TestPickReadsNameAndMomentTogether(t *testing.T) {
 		m.cursorIdx = 0
 		m.focused = PanelAspects
 		m = namesSettle(t, m)
-		if !strings.HasPrefix(m.details.body, "Astrolog 8.00 chart for Synthetic Birch\n") || !strings.Contains(strings.Split(m.details.body, "\n")[1], birchList) {
+		if !strings.HasPrefix(m.details.body, "Astrolog 8.00 chart for Synthetic Birch\n") || !strings.Contains(strings.Split(m.details.body, "\n")[1], "Birch Home Label") {
 			t.Errorf("the report is not the replacement's:\n%.200s", m.details.body)
 		}
 	})
@@ -704,18 +718,17 @@ func TestPickReadsNameAndMomentTogether(t *testing.T) {
 		if want := time.Date(1995, 9, 23, 16, 0, 0, 0, time.UTC); !slot.Time.Equal(want) {
 			t.Errorf("moment %v, want the replacement's %v", slot.Time, want)
 		}
-		if slot.Location.Display() != birchList || slot.Chart.Place != slot.Location {
-			t.Errorf("place %q, want the replacement's %q", slot.Location.Display(), birchList)
+		// The untitled file names no place either: its coordinates stand.
+		if slot.Location.Display() != "11°34'E 48°08'N" || slot.Chart.Place != slot.Location {
+			t.Errorf("place %q, want the replacement's coordinates", slot.Location.Display())
 		}
 	})
-	t.Run("a file whose place cannot be named", func(t *testing.T) {
+	t.Run("a file far from any atlas city", func(t *testing.T) {
 		beyond := strings.Replace(asterChart, "4:53E 52:22N", "150:00W 80:00S", 1)
 		m, _ := pickAfterReplacing(t, beyond)
-		if m.slots.AnchoredCount() != 0 {
-			t.Fatalf("a chart with no known place was anchored: %q", slotOf(t, m, "Client.as").Chart.Name)
-		}
-		if m.picker.refusal == "" {
-			t.Error("the pick was not refused")
+		slot := slotOf(t, m, "Client.as")
+		if slot.Location.Display() != "Aster Home Label" || slot.Location.Lon != -150 {
+			t.Errorf("the chart opened at %q (%v, %v), want the file's own place", slot.Location.Display(), slot.Location.Lon, slot.Location.Lat)
 		}
 	})
 }
@@ -739,7 +752,7 @@ func TestPairNamesPreserveDistinctSlotsAtSameMoment(t *testing.T) {
 		t.Fatalf("fixture: %d columns (ok %v)", len(cols), ok)
 	}
 	aster, twin := slotOf(t, m, "Aster.as"), slotOf(t, m, "Twin.as")
-	if !aster.Time.Equal(twin.Time) || aster.Location != twin.Location {
+	if !aster.Time.Equal(twin.Time) || aster.Location.Lat != twin.Location.Lat || aster.Location.Lon != twin.Location.Lon {
 		t.Fatalf("fixture: the two charts differ in moment or place")
 	}
 	if anchoredKey(anchorOf(aster)).equal(anchoredKey(anchorOf(twin))) {
@@ -894,7 +907,7 @@ func TestRenamedChartRefreshesItsReport(t *testing.T) {
 	m, _ = ctrlR(t, m)
 	m = eraseField(t, m)
 	m, _ = escSend(t, m, escRunes("Renamed Aster"))
-	m, cmd := escSend(t, m, escKey(tea.KeyEnter))
+	m, cmd := submit(t, m)
 	m, cmd = runCmd(t, m, cmd)
 	if m.title.Refusal != "" || cmd == nil {
 		t.Fatalf("the rename did not finish: %q", m.title.Refusal)
@@ -952,7 +965,13 @@ func TestNamedCommandCopyRoundTripsArgv(t *testing.T) {
 		// Whatever the chart file could hold, the label is what the ui hands on:
 		// Astrolog's own reader refuses some control bytes in a title, so the
 		// label is set on the slot rather than written into a file.
-		slotOf(t, base, "Client.as").Chart.Label = store.ReportLabel{Name: label, Place: asterList}
+		// The chart is cast without its file's record (as a restored chart is
+		// until its file is read again), so the label travels on the argv as
+		// `-zi`: that is the path a hostile name could take into a copied command.
+		slot := slotOf(t, base, "Client.as")
+		slot.Chart.Label = store.ReportLabel{Name: label, Place: asterList}
+		slot.Chart.Record = ""
+		slot.Location.TZ = "Europe/Amsterdam" // a moment at a place needs its zone
 		m := namesSettle(t, base)
 		var captured string
 		old := yankLine
@@ -1156,7 +1175,7 @@ func TestRecheckLabelRequiresTheRowsFile(t *testing.T) {
 		if name != "" {
 			label = store.ReportLabel{Name: name, Place: pl.Display()}
 		}
-		return lookup.PickedChart{Label: label, Place: pl, HasPlace: true}
+		return lookup.PickedChart{Label: label, Place: pl, Record: "@AI800\n"}
 	}
 	for _, tc := range []struct {
 		name      string
@@ -1173,13 +1192,13 @@ func TestRecheckLabelRequiresTheRowsFile(t *testing.T) {
 		{"the file now carries another place", titled, read("Synthetic Aster", berlin), "Synthetic Aster", berlin, false, store.ReportLabel{Name: "Synthetic Aster", Place: "Mitte, DE"}},
 		{"an untitled row, a titled read", untitled, read("Synthetic Birch", munich), "Synthetic Birch", munich, false, store.ReportLabel{Name: "Synthetic Birch", Place: "Munich, DE"}},
 		{"a titled row, an untitled read", titled, read("", munich), "stem", munich, true, store.ReportLabel{}},
-		{"a read that could not place the chart", titled, lookup.PickedChart{}, "Synthetic Aster", munich, false, store.ReportLabel{}},
+		{"a read that failed", titled, lookup.PickedChart{}, "Synthetic Aster", munich, false, store.ReportLabel{}},
 	} {
 		row := rowOfRead(tc.row, tc.got)
 		if row.Name != tc.wantName || row.Place != tc.wantPlace || row.Untitled != tc.wantUntit {
 			t.Errorf("%s: row %q at %q (untitled %v), want %q at %q (%v)", tc.name, row.Name, row.Place.Display(), row.Untitled, tc.wantName, tc.wantPlace.Display(), tc.wantUntit)
 		}
-		if got := labelOfRead(tc.got); got != tc.want {
+		if got := tc.got.Label; got != tc.want {
 			t.Errorf("%s: label %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
@@ -1269,18 +1288,18 @@ func TestRestoreRecheckReadsNameAndMomentTogether(t *testing.T) {
 		requireOriginal(t, m, rec)
 	})
 
-	t.Run("the same moment at coordinates beyond the atlas", func(t *testing.T) {
-		// Aster's own moment (4:30pm DT 1E), a place no atlas city is near, and
-		// a house line the snapshot never saw.
+	t.Run("the same moment and title at other coordinates", func(t *testing.T) {
+		// Aster's own moment (4:30pm DT 1E) and title, a place no atlas city
+		// is near, and a house line the snapshot never saw.
 		beyond := strings.Replace(asterChart, "4:53E 52:22N", "150:00W 80:00S", 1) + "-c 3\n"
 		sessionSandbox(t)
 		titleLibrary(t, nil, map[string]string{"Aster.as": asterChart})
 		m, msg, rec := restore(t, beyond)
-		if !msg.Found || msg.Err != nil || !msg.Unplaced {
-			t.Fatalf("the re-read should have found the file but not placed it: found %v, err %v, unplaced %v", msg.Found, msg.Err, msg.Unplaced)
+		if !msg.Found || msg.Err != nil {
+			t.Fatalf("the re-check did not find and read the file: found %v, err %v", msg.Found, msg.Err)
 		}
-		if !sessionSaid(m, "that chart file can't be cast") {
-			t.Errorf("the refusal is not the can't-be-cast report: %q", sessionLines(m))
+		if !sessionSaid(m, "Aster.as now holds a different chart") {
+			t.Errorf("the refusal is not reported: %q", sessionLines(m))
 		}
 		requireOriginal(t, m, rec)
 		if got := m.ownHouses(slotOf(t, m, "Aster.as")).hs; got == recipe.Campanus {

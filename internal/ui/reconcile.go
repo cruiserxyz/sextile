@@ -91,6 +91,9 @@ func (m Model) reconcileText() (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	if m.textRefusedNow() {
+		return m, nil // refused: not retried
+	}
 	if shown, ok := m.shownPaneKey(PanelBodies); ok && shown.text == want {
 		return m, nil
 	}
@@ -135,9 +138,10 @@ func (m Model) reconcileDetails() (Model, tea.Cmd) {
 		return m, nil // shown
 	case m.details.failed.set:
 		return m, nil // failed: not retried
-	case m.textOutstanding() || !m.chart.settled:
+	case m.textOutstanding() || !m.chart.settled || m.textRefusedNow():
 		// The report is cast over the frame beside it: it waits for the frame,
-		// and the frame's commit asks for it. A frame that failed owes no report.
+		// and the frame's commit asks for it. A frame that was refused owes no
+		// report.
 		return m, nil
 	case m.reportInMemory():
 		// Computed before for this very key: drawn now, over whatever is in

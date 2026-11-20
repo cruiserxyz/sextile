@@ -197,6 +197,17 @@ func sessionName(text string) string {
 // one is marked OpenElsewhere when another window holds its lock. An absent
 // folder lists nothing; a linked one is an error.
 func ListNamedSessions(folderID, running string) ([]NamedSession, error) {
+	return listNamedSessions(folderID, running, true)
+}
+
+// SavedNamedSessions is ListNamedSessions without asking any lock: it only
+// reads, so nothing in the sessions folder is created or touched, and no
+// session is marked OpenElsewhere.
+func SavedNamedSessions(folderID string) ([]NamedSession, error) {
+	return listNamedSessions(folderID, "", false)
+}
+
+func listNamedSessions(folderID, running string, locks bool) ([]NamedSession, error) {
 	if exists, err := checkPrivateDir(dataHome(), "sextile", sessionsDirName); err != nil || !exists {
 		return nil, err
 	}
@@ -228,7 +239,7 @@ func ListNamedSessions(folderID, running string) ([]NamedSession, error) {
 		if ns.Name == "" {
 			ns.Name = strings.TrimSuffix(name, namedSessionExt)
 		}
-		if name != running {
+		if locks && name != running {
 			if l, err := lockNamed(dir, name); errors.Is(err, ErrSessionOpenElsewhere) {
 				ns.OpenElsewhere = true
 			} else if err == nil {

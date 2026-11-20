@@ -110,6 +110,7 @@ func TestResultCarriesMissingEphemerisFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 		spec.Registry = testRegistry(t)
+		spec.AspectRegistry = testAspects(t)
 		// A normal compute refuses a missing file's line. The folder is reduced
 		// above, so the refusal is required, not one of two possible answers.
 		for name, run := range map[string]func(context.Context, recipe.ChartSpec) (payload.RawOutput, error){
@@ -150,6 +151,7 @@ func TestNoDataBodyIsNotDrawableOnPositionsOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	out, err := ComputeChartProbe(context.Background(), spec)
 	if err != nil {
 		t.Fatal(err)

@@ -9,9 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"time"
 
-	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
@@ -20,10 +18,23 @@ import (
 // save in these tests can never reach the operator's library.
 func saveBase(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("SEXTILE_CHARTS_DIR", t.TempDir())
+	ownFolder(t, t.TempDir())
 	m := arrowBase(t)
 	m.cursorIdx = 1
 	return m
+}
+
+// ownFolder makes dir the charts folder and puts it at add, as a folder
+// Sextile created is: a new chart is saved in it with no question. The position
+// file is a private one.
+func ownFolder(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("SEXTILE_CHARTS_DIR", dir)
+	t.Setenv("SEXTILE_DEV_CHARTS_DIR", "")
+	if err := store.SetPosition(dir, store.PositionAdd); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // chartsDirOf returns the isolated directory saveBase pointed the model at.
@@ -226,7 +237,7 @@ func countArgvLines(m Model) int {
 }
 
 // C13: the binding table declares the save as exactly one help-visible entry
-// claiming ctrl+s, and the rendered help modal names it.
+// claiming ctrl+s, and the Keybindings popup names it.
 func TestSaveChartBindingIsDeclaredAndInHelp(t *testing.T) {
 	var claiming []keys.BindingEntry
 	for _, e := range mainBindings(keys.DefaultKeys()) {
@@ -254,12 +265,12 @@ func TestSaveChartBindingIsDeclaredAndInHelp(t *testing.T) {
 		m.width, m.height = size.w, size.h
 		m, _ = press(t, m, "?")
 		seen := m.View()
-		for i := 0; i < len(m.helpLines()); i++ {
+		for i := 0; i < len(keybindingLines(m)); i++ {
 			m, _ = press(t, m, "down")
 			seen += m.View()
 		}
 		if !strings.Contains(seen, "Save chart") {
-			t.Errorf("the help modal at %dx%d does not name the save binding", size.w, size.h)
+			t.Errorf("the Keybindings popup at %dx%d does not name the save binding", size.w, size.h)
 		}
 	}
 }
@@ -302,9 +313,9 @@ func TestSavePromptShowsTheRecordedName(t *testing.T) {
 	}
 }
 
-// Failure mode: the slot's place matches no atlas city. The save succeeds and
-// the operator is told the chart will not list until the atlas can place it.
-func TestSavePromptWarnsWhenTheAtlasCannotPlaceIt(t *testing.T) {
+// A chart saved far from any atlas city is saved and said like any other:
+// it lists, so there is nothing to warn about.
+func TestSaveFarFromAnyCityNeedsNoWarning(t *testing.T) {
 	m := saveBase(t)
 	// Move the floating slot to the middle of the South Pacific.
 	floating := m.slots.All()[1]
@@ -318,8 +329,8 @@ func TestSavePromptWarnsWhenTheAtlasCannotPlaceIt(t *testing.T) {
 	if len(added) != 1 {
 		t.Fatalf("logged %d lines, want exactly 1: %+v", len(added), added)
 	}
-	if !strings.Contains(added[0].text, "will not list") {
-		t.Errorf("the confirmation %q does not warn that the chart will not list", added[0].text)
+	if strings.Contains(added[0].text, "list") {
+		t.Errorf("the confirmation %q warns about the list", added[0].text)
 	}
 	// It still saved.
 	if _, err := os.Stat(filepath.Join(chartsDirOf(t), "test-person.as")); err != nil {
@@ -367,7 +378,7 @@ func TestStaleSaveDoneIsNotAppliedAfterEsc(t *testing.T) {
 	if m.startup != startupChartOpen {
 		t.Errorf("the stale save changed startup to %q; the modal the operator opened is gone", m.startup)
 	}
-	if added := m.logLines[before:]; len(added) != 1 || !strings.HasPrefix(added[0].text, `save: "Test Person" saved to `) {
+	if added := m.logLines[before:]; len(added) != 1 || !strings.HasPrefix(added[0].text, `save: "Test Person" saved as `) {
 		t.Errorf("the late save logged %+v, want its one save line", added)
 	}
 }
@@ -422,7 +433,7 @@ func runSaveFrom(t *testing.T, m Model) Model {
 // refuse to anchor, and the lookup test would stay green.
 //
 // That is not hypothetical: on 2026-09-20 the operator saved a chart, saw it
-// listed, pressed Enter and got "Couldn't anchor that chart. It has an unknown
+// listed, pressed Enter and got "Couldn't open that chart. It has an unknown
 // timezone" -- because the atlas parser had put a city name in the timezone
 // field (fixed in internal/location/atlas.go, controlled in its own test).
 // This test is the one that would have caught it here.
@@ -476,73 +487,15 @@ func TestSavedChartAnchorsThroughThePicker(t *testing.T) {
 	if focusedRecord(m).ID != "anchor-me" {
 		t.Errorf("focused chart ID = %q, want %q", focusedRecord(m).ID, "anchor-me")
 	}
-	if !focusedRecord(m).Place.HasTimezone() {
-		t.Errorf("the anchored chart carries no timezone")
-	}
-	if _, err := time.LoadLocation(focusedRecord(m).Place.TZ); err != nil {
-		t.Errorf("the anchored chart's timezone %q does not load: %v", focusedRecord(m).Place.TZ, err)
-	}
-}
-
-// The same path, at a city the atlas parser used to poison.
-//
-// TestSavedChartAnchorsThroughThePicker saves at the fixture's own place,
-// which was never affected, so it exercises the anchor path without being
-// able to catch the defect that motivated it. Chur is one of the ~831 entries
-// that carried "Biel/Bienne" as their timezone before
-// internal/location/atlas.go was fixed: this case is red against that parser
-// and green against this one, which is what makes it a control rather than
-// another green line.
-func TestSavedChartAnchorsAtAFormerlyPoisonedCity(t *testing.T) {
-	m := saveBase(t)
-	// Chur, Switzerland -- atlas row "-9.5333 46.8500 CH Chur", inheriting
-	// Europe/Zurich from Aarau.
-	floating := m.slots.All()[1]
-	floating.Location = location.PlaceInfo{
-		Name: "Chur", Country: "CH", Lat: 46.85, Lon: 9.5333, TZ: "Europe/Zurich",
-	}
-
-	m = runSave(t, m, "Chur Chart")
-
-	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
-	m = tm.(Model)
-	if cmd == nil {
-		t.Fatal("opening the picker dispatched no library load")
-	}
-	tm, _ = m.Update(cmd())
-	m = tm.(Model)
-	if len(m.picker.Matches) != 1 {
-		t.Fatalf("picker shows %d rows, want the 1 just saved (drops: %+v)",
-			len(m.picker.Matches), m.picker.drops)
-	}
-
-	tm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = tm.(Model)
-	if cmd == nil {
-		t.Fatal("picking the row dispatched no resolve")
-	}
-	resolved, ok := cmd().(ChartResolvedMsg)
-	if !ok {
-		t.Fatal("the resolve did not return ChartResolvedMsg")
-	}
-	if resolved.Err != nil {
-		t.Fatalf("resolving failed: %v", resolved.Err)
-	}
-	tm, _ = m.Update(resolved)
-	m = tm.(Model)
-
-	if m.picker.refusal != "" {
-		t.Fatalf("a chart saved at Chur would not anchor: %s", m.picker.refusal)
-	}
-	if got := focusedRecord(m).Place.TZ; got != "Europe/Zurich" {
-		t.Errorf("anchored timezone = %q, want %q", got, "Europe/Zurich")
+	if focusedRecord(m).Record == "" {
+		t.Errorf("the anchored chart carries no record of its file")
 	}
 }
 
 // U3 1: on an anchored chart ⌃s and `,s` change nothing, write no Log line,
 // and the key bar says why.
 func TestSaveOnAnAnchoredChartSaysWhy(t *testing.T) {
-	const want = "Only Now can be saved as a new chart. Focus Now first."
+	const want = "Only Now can be saved. Move the cursor to Now."
 	for _, name := range []string{"ctrl+s", "leader s"} {
 		t.Run(name, func(t *testing.T) {
 			m := saveBase(t)

@@ -162,7 +162,7 @@ func TestLedBodiesRowIsReversedOnlyWhenBodiesIsFocused(t *testing.T) {
 		}
 	}
 	m, _ = tpress(t, m, keyEsc)
-	m, _ = tpress(t, m, runes("2"))
+	m, _ = tpress(t, m, runes("3"))
 	bodies, _ = leftPanels(t, m.View())
 	found := false
 	for _, ln := range bodies {

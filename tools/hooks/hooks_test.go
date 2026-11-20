@@ -87,8 +87,18 @@ func TestPrePushRefusesOnAFailedCheck(t *testing.T) {
 
 func TestInstallHooksPutsTheHookInPlace(t *testing.T) {
 	dir, _, hook := repo(t)
-	// install-hooks copies scripts/pre-push relative to the repo it runs in,
-	// so give the temp repo a copy of both scripts.
+	// install-hooks copies scripts/pre-push relative to the repo it runs in.
+	src, out, code := installScripts(t, dir, hook)
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	assertHook(t, filepath.Join(dir, ".git", "hooks", "pre-push"), src)
+}
+
+// installScripts gives the temp repo copies of scripts/pre-push and
+// scripts/install-hooks and runs install-hooks there.
+func installScripts(t *testing.T, dir, hook string) (src []byte, out string, code int) {
+	t.Helper()
 	src, err := os.ReadFile(hook)
 	if err != nil {
 		t.Fatal(err)
@@ -102,12 +112,41 @@ func TestInstallHooksPutsTheHookInPlace(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "scripts", "pre-push"), src, 0o755)
 	os.WriteFile(filepath.Join(dir, "scripts", "install-hooks"), inst, 0o755)
-	out, code := sh(t, dir, nil, "", filepath.Join(dir, "scripts", "install-hooks"))
-	if code != 0 {
-		t.Fatalf("exit %d\n%s", code, out)
+	out, code = sh(t, dir, nil, "", filepath.Join(dir, "scripts", "install-hooks"))
+	return src, out, code
+}
+
+// A clone git made without a hooks folder, and one whose core.hooksPath names
+// a folder that does not exist yet: install-hooks makes the folder git names.
+func TestInstallHooksMakesAMissingHooksFolder(t *testing.T) {
+	for name, hooksPath := range map[string]string{"no .git/hooks": "", "core.hooksPath": "githooks/here", "a path with a leading dash": "-hooks"} {
+		t.Run(name, func(t *testing.T) {
+			dir, _, hook := repo(t)
+			if err := os.RemoveAll(filepath.Join(dir, ".git", "hooks")); err != nil {
+				t.Fatal(err)
+			}
+			want := filepath.Join(dir, ".git", "hooks", "pre-push")
+			if hooksPath != "" {
+				sh(t, dir, nil, "", "git", "config", "core.hooksPath", hooksPath)
+				want = filepath.Join(dir, hooksPath, "pre-push")
+			}
+			src, out, code := installScripts(t, dir, hook)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, out)
+			}
+			assertHook(t, want, src)
+		})
 	}
-	got, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "pre-push"))
+}
+
+// assertHook is the hook at path holding src and executable, as git runs it.
+func assertHook(t *testing.T, path string, src []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
 	if err != nil || string(got) != string(src) {
-		t.Fatalf("the installed hook differs or is missing: %v", err)
+		t.Fatalf("the installed hook differs or is missing at %s: %v", path, err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm()&0o111 != 0o111 {
+		t.Fatalf("the installed hook at %s is not executable: %v", path, info.Mode())
 	}
 }

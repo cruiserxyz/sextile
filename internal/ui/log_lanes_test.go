@@ -107,6 +107,29 @@ func drawnAs(lines []string) []string {
 	return out
 }
 
+// inSession is lines as the Log panel copies them: each in the Session group,
+// which the fixtures' lines carry.
+func inSession(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = groupSession.cell() + " " + l
+	}
+	return out
+}
+
+// panelAs is lines as the Log panel draws them with colours off: the Session
+// group, and the fixture's error lines behind `! `.
+func panelAs(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		if strings.HasPrefix(l, "error") {
+			l = term.ErrorLinePrefix + l
+		}
+		out[i] = strings.TrimRight(groupSession.cell()+" "+l, " ")
+	}
+	return out
+}
+
 func callSites(t *testing.T, method string) []callSite {
 	t.Helper()
 	fset, files := uiSources(t)
@@ -181,7 +204,7 @@ func TestEveryLogLineHasALane(t *testing.T) {
 	}
 	for _, site := range callSites(t, "appendLog") {
 		switch site.enclosing {
-		case "logNote", "logTrace", "logError", "logErrorLine", "logCommands", "logWarnings", "logWheelOpen", "logWheelClosed", "setNowLine", "logEphemeris":
+		case "logNote", "logTrace", "logError", "logErrorLine", "logCommands", "logWarnings", "logWheelOpen", "logWheelClosed", "setNowLine", "logEphemeris", "logBare":
 		default:
 			t.Errorf("appendLog is called from %s (%s), which is not a writer verb", site.enclosing, site.file)
 		}
@@ -327,7 +350,7 @@ func TestErrorFrameStillLogsItsCommands(t *testing.T) {
 	// The text is the sentence an earlier change writes, not the wrapped cause: the cause
 	// is the argv line above it, which is what an operator diagnosing this
 	// actually reads.
-	if got[1].lane != laneError || !strings.HasPrefix(got[1].text, "Couldn't cast the chart.") {
+	if got[1].lane != laneError || !strings.Contains(got[1].text, " not cast,") {
 		t.Errorf("second line = %+v, want the failure on the error lane", got[1])
 	}
 }
@@ -356,7 +379,7 @@ func TestDetailsCommitLogsItsCommand(t *testing.T) {
 			if tc.err == nil && len(got) != 1 {
 				t.Errorf("a successful report appended %+v, want the command alone", got)
 			}
-			if tc.err != nil && (len(got) != 2 || got[1].lane != laneError || !strings.HasPrefix(got[1].text, "Couldn't read the full report.")) {
+			if tc.err != nil && (len(got) != 2 || got[1].lane != laneError || !strings.HasPrefix(got[1].text, "details: report not read")) {
 				t.Errorf("a failed report appended %+v, want the command beside its failure line", got)
 			}
 		})
@@ -415,8 +438,8 @@ func logPanelRows(t *testing.T, m Model) []string {
 func TestSixRowLogHidesArgv(t *testing.T) {
 	m := mixedLogModel(t)
 	want := []string{"note one", "error one", "note two", "error two", "note three"}
-	if got := m.logPanelLines(); !reflect.DeepEqual(got, want) {
-		t.Errorf("logPanelLines = %q, want %q", got, want)
+	if got := m.logPanelLines(); !reflect.DeepEqual(got, inSession(want)) {
+		t.Errorf("logPanelLines = %q, want %q", got, inSession(want))
 	}
 	rows := logPanelRows(t, m)
 	joined := strings.Join(rows, "\n")
@@ -434,7 +457,7 @@ func TestSixRowLogHidesArgv(t *testing.T) {
 	// padBody's tail-clipping autoscroll is untouched: the panel shows the
 	// newest lines that fit its four inner rows, in arrival order. With
 	// colours off an error is drawn behind `! ` (the specification A2).
-	if tail := drawnAs(want[len(want)-len(rows):]); !reflect.DeepEqual(shown, tail) {
+	if tail := panelAs(want[len(want)-len(rows):]); !reflect.DeepEqual(shown, tail) {
 		t.Errorf("the 6-row Log rendered %q, want %q", shown, tail)
 	}
 }
@@ -443,7 +466,7 @@ func TestSixRowLogHidesArgv(t *testing.T) {
 // in arrival order, together with every note; while open it renders that
 // snapshot. an earlier change added the notes: they had no surface at 80x24 at all.
 func TestConsoleShowsEveryLane(t *testing.T) {
-	m, _ := press(t, mixedLogModel(t), ",", "l", "l")
+	m, _ := press(t, mixedLogModel(t), ",", "L", "l")
 	want := []string{
 		"note one", "argv one", "error one", "note two",
 		"argv two", "argv three", "error two", "note three",
@@ -488,7 +511,7 @@ func TestOnlyArgvLinesAreCapped(t *testing.T) {
 	if countLane(m, laneNote) != 2 || countLane(m, laneError) != 2 {
 		t.Errorf("notes=%d errors=%d, want both untouched at 2", countLane(m, laneNote), countLane(m, laneError))
 	}
-	if got := m.logPanelLines(); !reflect.DeepEqual(got, []string{"note before", "error before", "note after", "error after"}) {
+	if got := m.logPanelLines(); !reflect.DeepEqual(got, inSession([]string{"note before", "error before", "note after", "error after"})) {
 		t.Errorf("the Log's view after the trim = %q", got)
 	}
 }
@@ -505,8 +528,8 @@ func TestErrorsAndNotesAreNeverEvicted(t *testing.T) {
 		m = m.logCommands([]string{"argv"})
 	}
 	want := []string{"note 0", "error 0", "note 1", "error 1", "note 2", "error 2"}
-	if got := m.logPanelLines(); !reflect.DeepEqual(got, want) {
-		t.Errorf("after %d commands the Log's view is %q, want %q", 5*MaxLogLines, got, want)
+	if got := m.logPanelLines(); !reflect.DeepEqual(got, inSession(want)) {
+		t.Errorf("after %d commands the Log's view is %q, want %q", 5*MaxLogLines, got, inSession(want))
 	}
 	if got := len(m.logLines); got != MaxLogLines+6 {
 		t.Errorf("buffer holds %d lines, want %d argv + 6", got, MaxLogLines+6)
@@ -521,63 +544,56 @@ func TestErrorsAndNotesAreNeverEvicted(t *testing.T) {
 // SUCCEEDED into a chart that cannot anchor. Each row below is a site somebody
 // chose; a new one is a deliberate line in this table.
 func TestErrorLaneMembership(t *testing.T) {
-	// Since an earlier change every one of these is a SENTENCE, not a dump: the literal
-	// carries the subject and a %s takes the translated cause. The two "%s"
-	// sites are the whole-line constants — the startup probe and the missing
-	// place list — which have one cause each and nothing to translate.
+	// Each key is the scope and the message's format. The sites whose scope or
+	// format is not a literal are told apart by their function, in brackets.
 	want := map[string]int{
-		"Couldn't draw the wheel. %s":                                            1, // render failure, refresh.go
-		"Couldn't show the wheel. %s":                                            1, // publish failure, refresh.go
-		"Couldn't read the full report. %s":                                      1,
-		"Couldn't copy that line to the clipboard.":                              2, // the console's Enter and the focused Log's
-		"Couldn't cast the chart. %s":                                            1,
-		"Couldn't cast %s. %s":                                                   1,
-		"Couldn't open that chart. %s":                                           1, // requirement C15: a picked chart's resolve failed
-		"Couldn't anchor that chart. It has %s.":                                 1, // an earlier change: it read fine and still cannot be cast
-		"Couldn't restore the last session. Its file cannot be used.":            1, // the specification C16
-		"Couldn't keep the refused session file: %s":                             1, // the specification C4: the launch could not move the refused file aside
-		"Couldn't restore %d of the open charts.":                                1, // the specification C17: restore dropped entries that could not stand alone
-		"Couldn't keep %d of the selections. At most six slots can be selected.": 1, // the specification C17a
-		"Couldn't title that chart. %s":                                          2, // the specification § Failure modes: a retitle write failed, open or late (design-messages A8)
-		// The two whole-line errors with one cause each (design-messages
-		// § Message inventory): the startup probe and the missing atlas.
-		"Couldn't find the Astrolog program. Install it and restart.": 1,
-		"Couldn't find atlas.as. Put it beside Astrolog and restart.": 1,
-		// A save that failed (design-messages § Late work): open, and late
-		// after Esc, where a refusal of the name has no form left to sit in.
-		"Couldn't save %q. %s":                                  2,
-		"Couldn't save %q. That name is taken.":                 1,
-		"Couldn't save %q. That name has no letters or digits.": 1,
-		// the specification: a timeline search failed or was
-		// refused (C41), and the whole-panel `yy` copy failed (C22).
-		// the specification C8, C9: the save a house (or zodiac) choice makes failed, and
-		// the put-back of the session after a failed rename failed.
-		"Couldn't save the %s choice. It will be tried again at quit.":           1, // house or zodiac: chooseFrame, the one door of both (the specification C7)
-		"Couldn't restore the session after the failed rename.":                  1,
-		"Couldn't rename that chart. Its house system could not be saved first.": 1,
-		// A second window cannot keep a renamed chart's house system.
-		"Couldn't rename that chart. Its house system can only be kept by the first Sextile window.": 1,
-		"Couldn't read the timeline. %s": 1,
-		// A body template tab's facts (the specification P5).
-		"Couldn't compute the %s tab. %s":                   1,
-		"Couldn't copy the Details panel to the clipboard.": 1,
+		"wheel | wheel not drawn, %s":                                               1, // render failure, wheel_plan.go
+		"wheel | %s":                                                                1, // publish failure, refresh.go
+		"details | report not read, %s":                                             1,
+		"log | the line did not reach the clipboard":                                2, // the console's Enter and the focused Log's
+		"astrolog | %s not cast, %s":                                                2, // a chart column, and a refused text frame in startup_frame.go
+		"chart | chart not opened, it has %s":                                       1, // it read fine and still cannot be cast
+		"chart | chart not opened, %s":                                              1, // a picked chart's resolve failed
+		"session | the last session did not open, its file cannot be read":          1,
+		"session | the unreadable session file was not kept, %s":                    1, // the launch could not move the refused file aside
+		"session | %d of the open charts not restored":                              1, // restore dropped entries that could not stand alone
+		"chart | %d of the selections not kept, at most six charts can be selected": 1,
+		"chart | chart not titled, %s":                                              2, // a retitle write failed, open or late
+		"astrolog | the Astrolog program was not found":                             1, // the startup probe
+		// The aspect list's own refusal, said as the Aspects panel says it.
+		"aspects | %s": 1,
+		// A save that failed, open, and late after Esc, where a refusal of the
+		// name has no form left to sit in.
+		"save | %q was not saved, %s":                                2,
+		"save | %q was not saved, the name is taken":                 1,
+		"save | %q was not saved, the name has no letters or digits": 1,
+		// A timeline search failed or was refused, and the copy of the whole
+		// panel failed; the scope is the list's, a value.
+		"(logTimelineError)": 1, "(logTimelineFailures)": 2, "(yankDetails)": 1,
+		// The save a house (or zodiac) choice makes failed: chooseFrame, the one door of both.
+		"(chooseFrame)": 1,
+		// A body template tab's facts.
+		"details | the %s tab did not fill, %s": 1,
 		// `,y` on the Log, the console and each main panel names the panel.
-		"Couldn't copy the Log to the clipboard.":           1,
-		"Couldn't copy the Log console to the clipboard.":   1,
-		"Couldn't copy the Chart panel to the clipboard.":   1,
-		"Couldn't copy the Bodies panel to the clipboard.":  1,
-		"Couldn't copy the Aspects panel to the clipboard.": 1,
-		// Save as and opening a named session save the session the window ran
-		// first; a failure of that write is said (sessions_popup_model.go).
-		"Couldn't save the session this window ran. Its file could not be written.": 2,
+		"log | the Log lines did not reach the clipboard":     1,
+		"log | the console lines did not reach the clipboard": 1,
+		"chart | the rows did not reach the clipboard":        1,
+		"bodies | the rows did not reach the clipboard":       1,
+		"aspects | the aspects did not reach the clipboard":   1,
+		// Save as, and leaving a named session for another or for a new one, save it first
+		// (saveBeforeLeaving); a write that failed, or a file that changed
+		// outside Sextile, is said and the window stays.
+		"session | the session this window ran was not saved, its file could not be written":     2,
+		"session | %s changed outside Sextile and was left as it is, so this window stays in it": 1,
 	}
 	got := map[string]int{}
 	for _, site := range callSites(t, "logError") {
-		if site.literal == "" {
-			t.Errorf("logError in %s (%s) has no literal prefix", site.enclosing, site.file)
+		if site.literal == "" || site.format == "" {
+			// A scope or a format that is not a literal: the call is told apart by its function.
+			got["("+site.enclosing+")"]++
 			continue
 		}
-		got[site.literal]++
+		got[site.literal+" | "+site.format]++
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("error-lane writers = %v, want exactly %v", got, want)
@@ -586,7 +602,7 @@ func TestErrorLaneMembership(t *testing.T) {
 	// § Log scope). A wheel that did open names it once on its own lane (W1).
 	addressIsNote := false
 	for _, site := range callSites(t, "logNote") {
-		if site.literal == "wheel" && site.format == "open it by hand at %s" && site.enclosing == "onWheelPublished" {
+		if site.literal == "wheel" && site.format == "the picture is at %s" && site.enclosing == "onWheelPublished" {
 			addressIsNote = true
 		}
 	}
@@ -600,9 +616,8 @@ func TestErrorLaneMembership(t *testing.T) {
 	// but the lane still follows the call site, never the text.
 	wheel := map[string]string{}
 	for _, site := range callSites(t, "logError") {
-		if strings.HasPrefix(site.literal, "Couldn't draw the wheel") ||
-			strings.HasPrefix(site.literal, "Couldn't show the wheel") {
-			wheel[site.enclosing] = site.literal
+		if site.literal == "wheel" {
+			wheel[site.enclosing] = site.format
 		}
 	}
 	if len(wheel) != 2 {
@@ -673,7 +688,7 @@ func TestConsoleCursorAddressesSnapshot(t *testing.T) {
 	m = m.testNote("note 2")
 	m = m.logCommands([]string{"argv C"})
 	m = m.testNote("note 3")
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	want := []string{"note 0", "argv A", "note 1", "error B", "note 2", "argv C", "note 3"}
 	if got := snapshotTexts(m); !reflect.DeepEqual(got, want) {
 		t.Fatalf("snapshot = %q, want %q", got, want)
@@ -723,7 +738,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		}
 		return m
 	}
-	m, _ := press(t, build(), ",", "l", "l")
+	m, _ := press(t, build(), ",", "L", "l")
 	if len(m.console.snapshot) != 20 || len(m.logLines) != 20 {
 		t.Fatalf("snapshot %d over buffer %d, want 20 over 20", len(m.console.snapshot), len(m.logLines))
 	}
@@ -731,7 +746,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		t.Errorf("opened on %d, want 19 (the newest snapshot line)", m.console.cursor)
 	}
 	for _, k := range []string{"up", "k"} {
-		m, _ = press(t, build(), ",", "l", "l")
+		m, _ = press(t, build(), ",", "L", "l")
 		m, _ = press(t, m, k)
 		if m.console.cursor != 18 {
 			t.Errorf("%s moved to %d, want 18", k, m.console.cursor)
@@ -744,7 +759,7 @@ func TestConsoleOpenAndMoveOverSnapshot(t *testing.T) {
 		}
 	}
 	for _, k := range []string{"down", "j"} {
-		m, _ = press(t, build(), ",", "l", "l")
+		m, _ = press(t, build(), ",", "L", "l")
 		m, _ = press(t, m, "up", "up", "up")
 		m, _ = press(t, m, k)
 		if m.console.cursor != 17 {
@@ -767,7 +782,7 @@ func TestConsoleWindowFollowsCursorFiltered(t *testing.T) {
 		m = m.testNote("note %d", i)
 		m = m.logCommands([]string{fmt.Sprintf("argv %d", i)})
 	}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	innerH := m.consoleInnerHeight()
 	check := func(where string) {
 		t.Helper()
@@ -801,7 +816,7 @@ func TestConsoleWindowFollowsCursorFiltered(t *testing.T) {
 func TestYankCopiesWholeCommand(t *testing.T) {
 	last, _, restore := stubYankRecording(t, nil)
 	defer restore()
-	long := "/usr/local/bin/astrolog -qj 2461156.000000 -zl 13:25E 52:31N -c 14 -Yn -R 11 -R 17 -R 18 -R 25 -R 28 -v0 -aa -k " + strings.Repeat("-R 30 ", 20)
+	long := "/usr/local/bin/astrolog -qj 2461156.000000 -zl 13:25E 52:31N -c 14 =Yn _Ynn -R 11 -R 17 -R 18 -R 25 -R 28 -v0 -aa -k " + strings.Repeat("-R 30 ", 20)
 	m := detailsTestModel(t)
 	m.cfg = Config{Accessible: true}
 	m = m.testNote("note before")
@@ -810,7 +825,7 @@ func TestYankCopiesWholeCommand(t *testing.T) {
 	m = m.testError("error between")
 	m = m.logCommands([]string{long})
 	m = m.testNote("note after")
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	// The newest snapshot line is `note after` since an earlier change admitted the note
 	// lane, so step up onto the command. That the step is needed at all is the
 	// console carrying notes, which is the point of that ticket.
@@ -843,7 +858,7 @@ func TestYankCopiesErrorLine(t *testing.T) {
 		m = m.logCommands([]string{"argv before"})
 		m = m.testError("details: astrolog exited 1: %s", strings.Repeat("a long explanation ", 8))
 		want := m.logLines[len(m.logLines)-1].text
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		m, _ = press(t, m, "enter")
 		if *last != want {
 			t.Errorf("%+v: copied %q, want the stored error %q", cfg, *last, want)
@@ -873,7 +888,7 @@ func TestConsoleEmptyFilteredList(t *testing.T) {
 	if len(m.logLines) != 0 {
 		t.Fatalf("the fixture starts with %d lines, want an empty buffer", len(m.logLines))
 	}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open || len(m.console.snapshot) != 0 {
 		t.Fatalf("open=%v snapshot=%d, want an open console over an empty snapshot", m.console.open, len(m.console.snapshot))
 	}
@@ -960,7 +975,7 @@ func TestErrorAppearsInBothViewsOnce(t *testing.T) {
 	count := func(lines []string) int {
 		n := 0
 		for _, l := range lines {
-			if strings.Contains(l, "Couldn't read the full report.") {
+			if strings.Contains(l, "report not read") {
 				n++
 			}
 		}
@@ -969,7 +984,7 @@ func TestErrorAppearsInBothViewsOnce(t *testing.T) {
 	if n := count(m.logPanelLines()); n != 1 {
 		t.Errorf("the 6-row Log holds the error %d times, want once", n)
 	}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if n := count(snapshotTexts(m)); n != 1 {
 		t.Errorf("the console snapshot holds the error %d times, want once", n)
 	}
@@ -1021,7 +1036,7 @@ func TestANoteIsReachableAtTheSmallerWidth(t *testing.T) {
 		t.Fatalf("the note is already on the ordinary frame:\n%s", ordinary)
 	}
 
-	opened, _ := press(t, m, ",", "l", "l")
+	opened, _ := press(t, m, ",", "L", "l")
 	if !opened.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -1032,7 +1047,7 @@ func TestANoteIsReachableAtTheSmallerWidth(t *testing.T) {
 
 // logErrorLine is the error lane for a sentence the caller words in full. It
 // has exactly the call sites below, by function name, and it adds nothing
-// to what it is given: no "Couldn't" form, no full stop.
+// to what it is given but its scope.
 func checkErrorLineMembership(t *testing.T) {
 	t.Helper()
 	got := map[string]int{}
@@ -1043,8 +1058,8 @@ func checkErrorLineMembership(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("logErrorLine is called from %v, want exactly %v", got, want)
 	}
-	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime())).logErrorLine("default city not saved: x")
-	if l := lastLine(m); l.lane != laneError || l.text != "default city not saved: x" {
-		t.Errorf("line = %q on lane %d, want the text as given on the error lane", l.text, l.lane)
+	m := newTestModel(t, Config{}, FrozenClock(testFrozenTime())).logErrorLine("settings", "the city was not kept as the default")
+	if l := lastLine(m); l.lane != laneError || l.text != "settings: the city was not kept as the default" || l.group != groupSettings {
+		t.Errorf("line = %q on lane %d in group %q, want the text as given on the error lane, scoped", l.text, l.lane, l.group)
 	}
 }

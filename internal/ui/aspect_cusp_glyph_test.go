@@ -63,7 +63,7 @@ var (
 )
 
 func cuspSide(t *testing.T, n int) aspect.Aspect {
-	return aspect.Aspect{AObject: objMoon, BObject: fixtureObject(t, n), Kind: aspect.Conjunction, Orb: 1.5, Power: 9}
+	return aspect.Aspect{AObject: objMoon, BObject: fixtureObject(t, n), Kind: kindOf("Con"), Orb: 1.5, Power: 9}
 }
 
 func TestAspectCuspShowsItsHouseNumber(t *testing.T) {
@@ -86,7 +86,7 @@ func TestAspectCuspShowsItsHouseNumber(t *testing.T) {
 		t.Errorf("Vertex: got %q, want the placeholder", got)
 	}
 	t.Run("comparing", func(t *testing.T) {
-		a := lookup.OverlayAspect{NatalObject: fixtureObject(t, 32), TransitObject: objMars, Kind: aspect.Conjunction, Orb: 1, Power: 5}
+		a := lookup.OverlayAspect{NatalObject: fixtureObject(t, 32), TransitObject: objMars, Kind: kindOf("Con"), Orb: 1, Power: 5}
 		if got := renderCrossAspectWaterfall([]lookup.OverlayAspect{a}, 40, 1); !strings.HasPrefix(got, " ♂ ☌ 11") {
 			t.Errorf("got %q, want the transiting Mars first (in the cusp number's two cells), then the natal cusp's number", got)
 		}
@@ -94,7 +94,7 @@ func TestAspectCuspShowsItsHouseNumber(t *testing.T) {
 }
 
 func TestAspectCuspWidensTheGlyphCellsOnlyForTwoDigits(t *testing.T) {
-	plain := aspect.Aspect{AObject: objSun, BObject: objMars, Kind: aspect.Square, Orb: 2, Power: 5}
+	plain := aspect.Aspect{AObject: objSun, BObject: objMars, Kind: kindOf("Squ"), Orb: 2, Power: 5}
 	// kindCol is the display column of the aspect symbol in a row.
 	kindCol := func(row string) int { return ansi.StringWidth(row[:strings.IndexAny(row, "□☌")]) }
 

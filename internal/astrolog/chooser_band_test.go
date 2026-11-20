@@ -38,7 +38,7 @@ func hellenistic() recipe.ObjectPolicy {
 		Baseline: recipe.AstrologDefault,
 		Add:      recipe.NewObjectSet(11, 17, 18, 25, 28), // Chiron, South Node, Lilith, Nadir, Descendant
 
-		TrueNodeMode: true,
+		Nodes: recipe.NodesTrue,
 	}
 }
 
@@ -100,20 +100,20 @@ func TestTimelineArgvCarriesChooserBand(t *testing.T) {
 		req  TimelineRequest
 		tail string
 	}{
-		{"sky, Moon hidden (C2)", TimelineSky, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "-Yn " + mainNoMoon},
-		{"transit, Moon hidden: natal side banded, transit side not (C3)", TimelineTransit, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "-Yn " + mainNoMoon},
-		{"return, Moon hidden: both sides banded, a cusp never returns (C3)", TimelineReturn, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "-Yn " + mainNoMoon + " -RT0 1 3 4 5 6 7 8 9 10 16"},
+		{"sky, Moon hidden (C2)", TimelineSky, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "=Yn _Ynn " + mainNoMoon},
+		{"transit, Moon hidden: natal side banded, transit side not (C3)", TimelineTransit, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "=Yn _Ynn " + mainNoMoon},
+		{"return, Moon hidden: both sides banded, a cusp never returns (C3)", TimelineReturn, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{}), "=Yn _Ynn " + mainNoMoon + " -RT0 1 3 4 5 6 7 8 9 10 16"},
 		{"transit, Sun hidden: both sides banded (C3)", TimelineTransit, bandReq(t, without(defaultLens(), objSun), recipe.AspectPolicy{}),
-			"-Yn -R0 2 3 4 5 6 7 8 9 10 16 22 31 -RT0 3 4 5 6 7 8 9 10 16"},
-		{"sky, Sun hidden has no transit band", TimelineSky, bandReq(t, without(defaultLens(), objSun), recipe.AspectPolicy{}), "-Yn -R0 2 3 4 5 6 7 8 9 10 16 22 31"},
-		{"unfiltered lens: only the node mode on a transit search (C4, C8)", TimelineTransit, bandReq(t, defaultLens(), recipe.AspectPolicy{}), "-Yn"},
-		{"unfiltered sky, mean nodes: no band at all (C4)", TimelineSky, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{}), ""},
+			"=Yn _Ynn -R0 2 3 4 5 6 7 8 9 10 16 22 31 -RT0 3 4 5 6 7 8 9 10 16"},
+		{"sky, Sun hidden has no transit band", TimelineSky, bandReq(t, without(defaultLens(), objSun), recipe.AspectPolicy{}), "=Yn _Ynn -R0 2 3 4 5 6 7 8 9 10 16 22 31"},
+		{"unfiltered lens: only the node mode on a transit search (C4, C8)", TimelineTransit, bandReq(t, defaultLens(), recipe.AspectPolicy{}), "=Yn _Ynn"},
+		{"unfiltered sky, mean nodes: only the node mode (C4)", TimelineSky, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{}), "_Yn _Ynn"},
 		{"explicit selection Sun+Moon", TimelineTransit, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{2, 1}}, recipe.AspectPolicy{}),
-			"-R0 1 2 -RT0 1"},
-		{"empty explicit selection is a bare band on each side", TimelineReturn, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.Explicit}, recipe.AspectPolicy{}), "-R0 -RT0"},
-		{"aspect band exactly as emitAspects (C7)", TimelineSky, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{Explicit: true, Indices: []int{6, 1}}), "-RA0 1 6"},
-		{"empty aspect selection is a bare -RA0 (C7)", TimelineTransit, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{Explicit: true}), "-RA0"},
-		{"object band then aspect band", TimelineSky, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{Explicit: true, Indices: []int{1}}), "-Yn " + mainNoMoon + " -RA0 1"},
+			"_Yn _Ynn -R0 1 2 -RT0 1"},
+		{"empty explicit selection is a bare band on each side", TimelineReturn, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.Explicit}, recipe.AspectPolicy{}), "_Yn _Ynn -R0 -RT0"},
+		{"aspect band exactly as emitAspects (C7)", TimelineSky, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{Explicit: true, Indices: []int{6, 1}}), "_Yn _Ynn -RA0 1 6"},
+		{"empty aspect selection is a bare -RA0 (C7)", TimelineTransit, bandReq(t, recipe.ObjectPolicy{Baseline: recipe.AstrologDefault}, recipe.AspectPolicy{Explicit: true}), "_Yn _Ynn -RA0"},
+		{"object band then aspect band", TimelineSky, bandReq(t, without(defaultLens(), objMoon), recipe.AspectPolicy{Explicit: true, Indices: []int{1}}), "=Yn _Ynn " + mainNoMoon + " -RA0 1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestTimelineArgvCarriesChooserBand(t *testing.T) {
 // defaultLens is the lens that ticks exactly what Astrolog lists: true nodes
 // and nothing added or removed.
 func defaultLens() recipe.ObjectPolicy {
-	return recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, TrueNodeMode: true}
+	return recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Nodes: recipe.NodesTrue}
 }
 
 // C11: the sets come from the binary, through exempt calls, with exactly the
@@ -287,7 +287,7 @@ func TestBodyCallRefusesSmuggledRestriction(t *testing.T) {
 	routes := map[string]func() (BodyCall, error){
 		"with -R0 2": func() (BodyCall, error) { return base.with("-R0", "2") },
 		"with -R 2":  func() (BodyCall, error) { return base.with("-R", "2") },
-		"with -Yn":   func() (BodyCall, error) { return base.with("-Yn") },
+		"with -Yn":   func() (BodyCall, error) { return base.with("=Yn") },
 		"derive appending": func() (BodyCall, error) {
 			return base.derive(func(a []string) []string { return append(a, "-RT0", "2") })
 		},

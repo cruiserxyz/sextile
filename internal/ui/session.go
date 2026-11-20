@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 	"io/fs"
+	"math"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -40,7 +41,7 @@ var cleanupPreview = preview.Cleanup
 // Both places that quit come through here — main scope and the console — so
 // the operator's marked bodies do not depend on which one they happened to be
 // looking at when they pressed the key. A modal is the exception, and it never
-// reaches this: help, atlas and charts each swallow the key themselves.
+// reaches this: Keybindings, atlas and charts each swallow the key themselves.
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	// A launch the instance lock refused owns nothing: the session on disk is
 	// the other window's, and this one must not write it, whatever the model
@@ -86,11 +87,11 @@ func (m Model) ownsSession() bool {
 }
 
 // errSecondWindow is a session write asked of a second window.
-var errSecondWindow = errors.New("another Sextile window keeps the session")
+var errSecondWindow = errors.New("another Sextile window holds this session")
 
 // errForeignSession is a general-session write asked of a run that does not
 // own the general session file: it belongs to another charts folder.
-var errForeignSession = errors.New("the saved session is another folder's")
+var errForeignSession = errors.New("the saved session belongs to another charts folder")
 
 // saveRunningSession writes the session this window runs: the named one when
 // it runs one, else the general one. A window that owns no session writes
@@ -182,6 +183,7 @@ func (m Model) sessionSnapshot() store.Session {
 		FloatingSelected: m.slots.SlotSelected(floating),
 		FloatingBodies:   m.markNames(floating),
 		Drawn:            m.drawnNames(),
+		Actions:          m.recentActionTitles(),
 		Frames:           m.frameRecordsToSave(),
 	}
 	for i := 0; i < m.slots.AnchoredCount(); i++ {
@@ -242,11 +244,11 @@ func (m Model) markNames(i int) []string {
 func (m Model) reportSessionKeep(k store.SessionKeep) Model {
 	if k.Kept != "" {
 		m.sessionKept = false
-		m = m.logNote("session", "refused, kept %s", k.Kept)
+		m = m.logNote("session", "unreadable, kept %s", k.Kept)
 	}
 	if k.Problem != "" {
 		m.sessionKept = true
-		m = m.logError("Couldn't keep the refused session file: %s", k.Problem)
+		m = m.logError("session", "the unreadable session file was not kept, %s", k.Problem)
 		m.sessionWriteErr = &SessionWriteError{Path: store.SessionPath(), Err: errors.New(k.Problem)}
 	}
 	return m
@@ -269,7 +271,7 @@ func (m Model) restoreSession(p ingest.StartupPerimeterReadMsg) (Model, bool) {
 		if p.SessionKeep == (store.SessionKeep{}) {
 			m.sessionKept = errors.Is(p.SessionErr, store.ErrSessionLineTooLong)
 		}
-		return m.logError("Couldn't restore the last session. Its file cannot be used."), false
+		return m.logError("session", "the last session did not open, its file cannot be read"), false
 	}
 	if !p.HasSession {
 		return m, false
@@ -301,12 +303,13 @@ func (m Model) restoreSession(p ingest.StartupPerimeterReadMsg) (Model, bool) {
 		// A chart: block that cannot stand on its own. Saying nothing here
 		// would leave an astrologer looking at transits over the wrong chart
 		// without a word about why.
-		m = m.logNote("session", "natal not restored")
+		m = m.logNote("session", "the chart of the last session did not open")
 	default:
-		m = m.logError("Couldn't restore %d of the open charts.", dropped)
+		m = m.logError("session", "%d of the open charts not restored", dropped)
 	}
 
 	m = m.restoreDrawn(sess.Drawn)
+	m.recentActions = m.recentActionsFromTitles(sess.Actions)
 	return m, restored
 }
 
@@ -371,7 +374,7 @@ func (m Model) restoreDrawn(names []string) Model {
 		switch {
 		case !ok:
 			m.drawnKept = append(m.drawnKept, name)
-			m = m.logEphemeris(name + " is not an object of this Astrolog, kept in the session")
+			m = m.logBare("bodies", name+" is not known to this Astrolog, the session keeps its name")
 		case m.ephemeris.IsAbsent(o.Number):
 			// Not drawn, but still the operator's: a file written where the
 			// ephemeris file exists loses nothing where it is missing.
@@ -380,7 +383,7 @@ func (m Model) restoreDrawn(names []string) Model {
 			nums = append(nums, o.Number)
 		}
 	}
-	return m.chosenObjects(recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: nums, TrueNodeMode: m.lens.Objects.TrueNodeMode})
+	return m.chosenObjects(recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: nums, Nodes: m.lens.Objects.Nodes})
 }
 
 // defaultObjects is the object policy the view follows when the operator has
@@ -388,14 +391,14 @@ func (m Model) restoreDrawn(names []string) Model {
 // host's default objects plus the lens's additions), with the node mode in
 // force. It is the ONE place that answers "the default bodies" (operator,
 // 2026-11-04: "defined by a lens"), and every way back to them asks here: the
-// chooser's Ctrl+D (openedBodyModal), nothing ticked (chosenObjects), a new
-// session (resetSession), a named session without a drawn: line
+// chooser's Restore row (openedBodyModal), nothing ticked (chosenObjects), a new
+// session (startNewSession), a named session without a drawn: line
 // (applyNamedSessionLoaded) and the ephemeris account's default view
 // (sayEphemeris). When lenses become a registry this is where the active one is
 // looked up by name.
 func (m Model) defaultObjects() recipe.ObjectPolicy {
 	p := lookup.Hellenistic.Objects
-	p.TrueNodeMode = m.lens.Objects.TrueNodeMode
+	p.Nodes = m.lens.Objects.Nodes
 	return p
 }
 
@@ -446,23 +449,28 @@ func (m Model) chosenObjects(p recipe.ObjectPolicy) Model {
 	}
 	m.lens.Objects = m.defaultObjects()
 	var lines []string
+	traced := false
 	if len(m.drawnKept) == 0 {
 		lines = []string{noBodiesChosenLine}
 	} else {
 		if nums := m.keptAbsentNums(); len(nums) > 0 { // nil would mean every absent body
 			if l := m.drainedLine(nums); l != "" {
-				lines = []string{l}
+				lines, traced = []string{l}, m.allAbsent(nums)
 			}
 		}
 		if len(lines) == 0 {
 			// Only names this Astrolog does not list: the substitution is still said.
-			lines = []string{"the saved set can't be drawn, showing the default set"}
+			lines = []string{"the bodies of the last session can't be drawn here, the usual ones are shown"}
 		}
 	}
 	if said := strings.Join(lines, "\n"); said != m.fallbackSaid {
 		m.fallbackSaid = said
 		for _, l := range lines {
-			m = m.logEphemeris(l)
+			if traced {
+				m = m.logEphemeris(l)
+			} else {
+				m = m.logBare("bodies", l)
+			}
 		}
 	}
 	return m
@@ -485,11 +493,11 @@ func (m Model) keptAbsentNums() []int {
 }
 
 // addable reports whether a remembered slot can come back: it could stand on its
-// own, and its place carries a timezone the workspace will accept. A hand-built
-// entry can be Usable and still fail the second test; the store marks that one
-// unusable itself.
+// own, and its place carries a timezone the workspace will accept, or it is a
+// chart file, cast from the file. A hand-built entry can be Usable and still
+// fail the second test; the store marks that one unusable itself.
 func addable(e store.SessionSlot) bool {
-	return e.Usable && e.Chart.Place.HasTimezone()
+	return e.Usable && (e.Chart.Place.HasTimezone() || e.Chart.Source.Kind == store.ChartKindFile)
 }
 
 // anchorFromSession adds one remembered chart to the workspace, as an anchored
@@ -500,7 +508,7 @@ func (m Model) anchorFromSession(rec store.SessionChart) (Model, bool) {
 		return m, false
 	}
 	if err := m.slots.AddAnchored(rec, rec.When, rec.Place); err != nil {
-		return m.logNote("slots", "anchor refused (%v)", err), false
+		return m.logNote("chart", "chart not opened, %v", err), false
 	}
 	m.cursorIdx = m.slots.AnchoredCount() // the floating slot sits behind the list
 	return m, true
@@ -544,7 +552,7 @@ func (m Model) applySessionSelections(p ingest.StartupPerimeterReadMsg) Model {
 	// that saved it selected (0.1.1 allowed that) comes back without the mark.
 	apply(floating, sess.FloatingSelected && m.slots.AnchoredCount() > 0, sess.FloatingBodies)
 	if refused > 0 {
-		m = m.logError("Couldn't keep %d of the selections. At most six slots can be selected.", refused)
+		m = m.logError("chart", "%d of the selections not kept, at most six charts can be selected", refused)
 	}
 	return m
 }
@@ -562,7 +570,7 @@ func (m Model) selectObjects(slotIdx int, names []string, said *[]string) Model 
 		o, ok := m.resolveMarkName(name)
 		if !ok {
 			if !slices.Contains(*said, name) && !slices.Contains(m.drawnKept, name) {
-				m = m.logEphemeris(name + " is not an object of this Astrolog, kept in the session")
+				m = m.logBare("bodies", name+" is not known to this Astrolog, the session keeps its name")
 				*said = append(*said, name)
 			}
 			m.slots.KeepMark(slotIdx, name)
@@ -614,14 +622,19 @@ type SessionChartRecheckedMsg struct {
 	// (the specification C2).
 	Houses    recipe.HouseSystem
 	HasHouses bool
+	// Nodes and HasNodes are the form of the Nodes and Lilith the re-read file
+	// states.
+	Nodes    recipe.NodeForm
+	HasNodes bool
 	// Label is the name and place the chart's reports print, from the same
 	// read as When. It is empty when that read is not of the file the listing
 	// row came from (the file was replaced between the two), so a name is never
 	// paired with a chart it does not belong to.
 	Label store.ReportLabel
-	// Unplaced is set by a successful read that could not place the chart: the
-	// row's name and place are then not the file's, and the slot is refused.
-	Unplaced bool
+	// Record is the file's text from the same read: what Astrolog casts.
+	Record string
+	// Clock is the chart's moment as Astrolog read it, for its row.
+	Clock store.ChartClock
 }
 
 // sessionRecheckCmd is the re-read a restored chart-file anchor owes, or nil when
@@ -684,13 +697,6 @@ func recheckSessionChartCmd(rec store.SessionChart, slot *store.Slot) tea.Cmd {
 		if err != nil {
 			return SessionChartRecheckedMsg{Remembered: rec, Err: err, Slot: slot}
 		}
-		if lib.AtlasErr != nil {
-			// With no place list no chart can be given a timezone, so every one
-			// of them drops. Reporting "no longer in the library" would blame
-			// the client's file for a fact about the atlas, which is the
-			// wolf-crying that gets a warning ignored.
-			return SessionChartRecheckedMsg{Remembered: rec, Err: lib.AtlasErr, Slot: slot}
-		}
 		afterRecheckListing()
 		want := filepath.Base(rec.Source.File)
 		for _, c := range lib.Charts {
@@ -701,18 +707,18 @@ func recheckSessionChartCmd(rec store.SessionChart, slot *store.Slot) tea.Cmd {
 			// Name, place and moment of the answer are ONE read: a file replaced
 			// since the listing is judged by what it holds now (C0).
 			c = rowOfRead(c, p)
-			return SessionChartRecheckedMsg{Remembered: rec, Row: c, Found: true, When: p.When, Err: err, Slot: slot, Houses: p.Houses, HasHouses: p.HasHouses, Label: labelOfRead(p), Unplaced: err == nil && !p.HasPlace}
+			return SessionChartRecheckedMsg{Remembered: rec, Row: c, Found: true, When: p.When, Err: err, Slot: slot, Houses: p.Houses, HasHouses: p.HasHouses, Nodes: p.Nodes, HasNodes: p.NodesStated, Label: p.Label, Record: p.Record, Clock: p.Clock}
 		}
 		return SessionChartRecheckedMsg{Remembered: rec, Slot: slot}
 	}
 }
 
 // rowOfRead is the listing row corrected to the read made after it: when the
-// read could place the chart, its title and casting place replace the row's,
-// so the comparison with the snapshot and the moment come from one read. An
-// untitled read keeps the file stem the listing showed.
+// read succeeded, its title and casting place replace the row's, so the
+// comparison with the snapshot and the moment come from one read. An untitled
+// read keeps the file stem the listing showed.
 func rowOfRead(row store.NamedChart, p lookup.PickedChart) store.NamedChart {
-	if !p.HasPlace {
+	if p.Record == "" {
 		return row
 	}
 	row.Place = p.Place
@@ -726,16 +732,6 @@ func rowOfRead(row store.NamedChart, p lookup.PickedChart) store.NamedChart {
 	}
 	row.Untitled = true
 	return row
-}
-
-// labelOfRead is the report label of a re-read: its own, when it could place
-// the chart. The row was corrected to the same read (rowOfRead), so the label
-// and the row cannot disagree.
-func labelOfRead(p lookup.PickedChart) store.ReportLabel {
-	if !p.HasPlace {
-		return store.ReportLabel{}
-	}
-	return p.Label
 }
 
 // applySessionChartRecheck decides what the re-read means and, when the file
@@ -759,13 +755,10 @@ func labelOfRead(p lookup.PickedChart) store.ReportLabel {
 // "short enough for the names tried so far" — and the first casualty is the
 // substitution refusal, the line here that matters most.
 //
-// Dropping the identifier entirely was tried and was wrong: nothing in the
-// persistent UI renders a chart's name. `chartSlotLine`
-// (`internal/ui/header.go`) draws the moment, the zone and the PLACE, and the
-// panel title is title-only, so outside the picker modal the name appears only
-// on the one `session: restored <name> …` Log line — which the 6-row window
-// drops as soon as anything else is written. A substitution warning that
-// cannot be tied to a client is an audit trail with a hole in it.
+// The identifier stays: the Log keeps six rows, so a chart's name in the
+// Chart panel says nothing about which chart a substitution warning was
+// for once the panel has changed. A substitution warning that cannot be tied
+// to a client is an audit trail with a hole in it.
 //
 // A COORDINATE-ONLY correction — the astrologer tightens a client's birth
 // coordinates and leaves the recorded time alone — is reported here as a
@@ -794,25 +787,20 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 	}
 	switch {
 	case msg.Err != nil:
-		return m.logNote("session", "couldn't re-read %s", logIdent(msg.Remembered.Name, m.cfg)), nil
+		return m.logNote("session", "the file of %s did not read", logIdent(msg.Remembered.Name, m.cfg)), nil
 	case !msg.Found:
 		// "no longer in the library" and not "the file is gone": the row can
-		// also vanish with the file untouched on disk -- another chart file whose
-		// stem slugifies to the same id took the row (library.go names it as
-		// a drop), or the atlas can no longer place it. Claiming a file was
-		// deleted when it was not is a false report about a client's data.
-		return m.logNote("session", "%s is no longer in the library",
+		// also vanish with the file untouched on disk -- another chart file
+		// whose stem slugifies to the same id took the row (library.go names
+		// it as a drop). Claiming a file was deleted when it was not is a
+		// false report about a client's data.
+		return m.logNote("session", "%s is not in the charts folder",
 			logIdent(filepath.Base(msg.Remembered.Source.File), m.cfg)), nil
 	}
 
 	if msg.Row.Source != msg.Remembered.Source {
 		// One file, one row: content read from another file is never this row's.
 		return m, nil
-	}
-	if msg.Unplaced {
-		// The re-read found the file but could not place it, so nothing of the
-		// listing row (its name, its place) is the file's. Never fall back to it.
-		return m.logNote("session", "that chart file can't be cast: %s", "no known place"), nil
 	}
 	cand := store.SessionChart{
 		ID:     msg.Row.ID,
@@ -821,6 +809,8 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 		Place:  msg.Row.Place,
 		Source: msg.Row.Source,
 		Label:  msg.Label,
+		Record: msg.Record,
+		Clock:  msg.Clock,
 	}
 	if reason := cand.UnusableReason(); reason != "" {
 		// The library lists on a weaker bar than anchoring needs, so a
@@ -834,7 +824,7 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 		// announcing a substitution on that evidence would alarm an astrologer
 		// about the wrong thing. The file is named because the file is what is
 		// certainly true here.
-		return m.logNote("session", "that chart file can't be cast: %s", reason), nil
+		return m.logNote("session", "one chart did not open, it has %s", reason), nil
 	}
 	if !sameChart(msg.Remembered, cand) {
 		// A different person, or the same name somewhere else. Anchoring it
@@ -847,8 +837,8 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 	// A change of the system shown by this slot recasts it.
 	before := m.ownHouses(m.slots.All()[idx]).hs
 	wasUnresolved := m.unresolvedFor(m.slots.All()[idx]) != nil
-	m.frames = m.frames.withFile(filepath.Base(msg.Row.Source.File), fileFrame{when: msg.When, houses: msg.Houses, has: msg.HasHouses})
-	if cand.When.Equal(msg.Remembered.When) {
+	m.frames = m.frames.withFile(filepath.Base(msg.Row.Source.File), fileFrame{when: msg.When, houses: msg.Houses, has: msg.HasHouses, nodes: msg.Nodes, nodesStated: msg.HasNodes})
+	if sameRemembered(msg.Remembered.When, cand.When) {
 		// The file says what the snapshot said. Only its id may have moved:
 		// a session written while `;sextile-id:` still named charts carries
 		// that id, and a chart file's id is now its file stem (C3.20, C3.21).
@@ -862,8 +852,10 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 		// (a restored chart sends none until its file has been read again); the
 		// reports recompute when they change.
 		slot := m.slots.All()[idx]
-		relabelled := slot.Chart.Label != cand.Label
-		slot.Chart.Label = cand.Label
+		relabelled := slot.Chart.Label != cand.Label || slot.Chart.Record != cand.Record
+		slot.Chart.Label, slot.Chart.Record, slot.Chart.Clock = cand.Label, cand.Record, cand.Clock
+		slot.Chart.Place, slot.Location = cand.Place, cand.Place
+		slot.Chart.When, slot.Time = cand.When, cand.When
 		if wasUnresolved || relabelled || m.ownHouses(m.slots.All()[idx]).hs != before {
 			return m.recastHouses()
 		}
@@ -872,19 +864,15 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 	return m.reanchorEditedChart(idx, cand)
 }
 
-// sameChart reports whether two records describe the same chart, comparing
-// everything a library read knows without spawning anything: the display label
-// and the WHOLE casting place — city, country, coordinates and zone.
+// sameChart reports whether two records describe the same chart: the same
+// display label, cast at the same coordinates to the arc-second.
 //
-// The coordinates are the load-bearing half and comparing the city name alone
-// was not enough. `Place.Name` is the nearest ATLAS city
-// (`lookup.translateChartFiles` → `location.Nearest`), so two births thirty
-// kilometres apart share it; the file's own precise `Lat`/`Lon` sit in the same
-// record at no extra cost. Without them, a chart file overwritten with a different
-// client who happens to share a display name and round to the same city read as
-// the same chart, and the workspace re-anchored onto the wrong person while the
-// Log said the reassuring thing. `PlaceInfo` is comparable, so this is the whole
-// of it rather than a field list that can fall behind the struct.
+// The coordinates are the load-bearing half: two clients who share a name and
+// a town are told apart by them, where a place's words are not. The words and
+// the zone are not compared, because one chart file's place has two spellings
+// (the file's own words, and the nearest atlas city a session written by
+// Sextile 0.1.3 remembers), and a changed place label at the same coordinates
+// is an edit of the same chart.
 //
 // The MOMENT is deliberately not part of it — a changed moment is precisely
 // what makes this an edit rather than a substitution, so including it would
@@ -896,7 +884,8 @@ func applySessionChartRecheck(m Model, msg SessionChartRecheckedMsg) (Model, tea
 // of a file nobody touched otherwise. An identity check that failed on that
 // would report "a different chart" for a chart the astrologer merely opened.
 func sameChart(a, b store.SessionChart) bool {
-	return a.Name == b.Name && a.Place == b.Place
+	arcSecond := func(deg float64) int64 { return int64(math.Round(deg * 3600)) }
+	return a.Name == b.Name && arcSecond(a.Place.Lat) == arcSecond(b.Place.Lat) && arcSecond(a.Place.Lon) == arcSecond(b.Place.Lon)
 }
 
 // holdsSnapshot reports whether a slot holds exactly the chart record a restore
@@ -938,12 +927,12 @@ func (m Model) reanchorEditedChart(idx int, cand store.SessionChart) (Model, tea
 		return m, nil
 	}
 	if err := m.slots.ReplaceAnchored(idx, cand, cand.When, cand.Place); err != nil {
-		return m.logNote("slots", "anchor refused (%v)", err), nil
+		return m.logNote("chart", "chart not opened, %v", err), nil
 	}
 
 	m.chart = chartViewState{}
 	m = m.suspendDetails()
-	m = m.logNote("session", "%s was edited — re-anchored", logIdent(cand.Name, m.cfg))
+	m = m.logNote("session", "%s changed on disk, shown new", logIdent(cand.Name, m.cfg))
 
 	m.startup = startupComputing
 	var recompute, wheel tea.Cmd
@@ -990,4 +979,32 @@ func (m Model) sessionPrefill() string {
 		}
 	}
 	return ""
+}
+
+// recordLastSession records the named session this window now runs as the one
+// the charts folder's next start reopens. The record is made at the switch,
+// not at quit, so a window that is killed still leaves it true.
+func (m Model) recordLastSession() Model {
+	if err := store.RecordLastSession(store.ChartsDir(), m.named.file); err != nil {
+		return m.logTrace("session", "the next start may not reopen %s: %s", m.named.file, firstLine(err.Error()))
+	}
+	return m
+}
+
+// forgetLastSession is the window returning to the unnamed session: the next
+// start runs the unnamed session too.
+func (m Model) forgetLastSession() Model {
+	if err := store.ForgetLastSession(store.ChartsDir()); err != nil {
+		return m.logTrace("session", "the next start may still reopen the last named session: %s", firstLine(err.Error()))
+	}
+	return m
+}
+
+// moveLastSession keeps the record true when a saved session is renamed (to
+// newFile) or trashed ("").
+func (m Model) moveLastSession(oldFile, newFile string) Model {
+	if err := store.MoveLastSession(store.ChartsDir(), oldFile, newFile); err != nil {
+		return m.logTrace("session", "the record of the last session may name %s still: %s", oldFile, firstLine(err.Error()))
+	}
+	return m
 }

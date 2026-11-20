@@ -11,8 +11,8 @@ import (
 // .as, .legacy and .txt all list when they open with Astrolog's `@AI`; a
 // settings file (`@AD`), a text with no header, a note that merely mentions
 // the header, a dotfile (even a hidden legacy yaml) and a sub-folder never do, and
-// none of them is reported. A file that opens with `@AI` and cannot be read as a chart is the
-// one thing that is named, with its reason.
+// none of them is reported. A file that opens with `@AI` lists even when its
+// text sets no moment: Astrolog says at the pick whether it is a chart.
 func TestChartsAreKnownByTheirFirstBytes(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "a.as", munichChart)
@@ -35,7 +35,8 @@ func TestChartsAreKnownByTheirFirstBytes(t *testing.T) {
 	// A hidden legacy file is not reported; a visible one still is (below).
 	writeChartFile(t, dir, ".hidden.yaml", "chart:\n  name: Hidden\n")
 	writeChartFile(t, dir, "visible.yaml", "chart:\n  name: Visible\n")
-	// Opens with the header and is no chart: the one named failure.
+	// Opens with the header and sets no moment: listed, and Astrolog says
+	// at the pick that it is no chart.
 	writeChartFile(t, dir, "broken.as", "@AI780\nno birth line here\n")
 
 	lib, err := LoadChartLibrary()
@@ -46,15 +47,14 @@ func TestChartsAreKnownByTheirFirstBytes(t *testing.T) {
 	for _, c := range lib.Charts {
 		files = append(files, c.Source.File)
 	}
-	if got, want := strings.Join(files, ","), "a.as,b.legacy,c.txt"; got != want {
+	if got, want := strings.Join(files, ","), "a.as,b.legacy,broken.as,c.txt"; got != want {
 		t.Errorf("listed charts = %q, want %q", got, want)
 	}
-	if len(lib.Drops) != 2 || lib.Drops[0].File != "broken.as" || lib.Drops[0].Reason == "" ||
-		lib.Drops[1].File != "visible.yaml" {
-		t.Errorf("drops = %+v, want exactly broken.as (with a reason) and the visible legacy yaml, and no hidden file", lib.Drops)
+	if len(lib.Drops) != 1 || lib.Drops[0].File != "visible.yaml" {
+		t.Errorf("drops = %+v, want exactly the visible legacy yaml, and no hidden file", lib.Drops)
 	}
-	if len(lib.Seen) != 3 {
-		t.Errorf("fingerprinted %v, want only the three charts", lib.Seen)
+	if len(lib.Seen) != 4 {
+		t.Errorf("fingerprinted %v, want only the four charts", lib.Seen)
 	}
 }
 
@@ -76,8 +76,8 @@ func TestSameStemSecondFileIsADrop(t *testing.T) {
 		t.Fatalf("charts = %v, want exactly X.as", lib.Charts)
 	}
 	if len(lib.Drops) != 1 || lib.Drops[0].File != "X.legacy" ||
-		!strings.Contains(lib.Drops[0].Reason, "another file already has this name") {
-		t.Fatalf("drops = %+v, want one row for X.legacy saying another file already has this name", lib.Drops)
+		!strings.Contains(lib.Drops[0].Reason, "another file in the folder has the same name") {
+		t.Fatalf("drops = %+v, want one row for X.legacy saying another file in the folder has the same name", lib.Drops)
 	}
 	if owner, err := chartOwning(dir, "x"); err != nil || owner != "X.as" {
 		t.Errorf("chartOwning(x) = %q, %v; want the slug refused, naming X.as", owner, err)

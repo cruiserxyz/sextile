@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in Sextile did not work as you expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for writing. A few facts help us find the cause.
+
+        **Never attach a real person's birth data. Use the eclipse chart or an invented one.**
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `sextile --version` prints.
+      placeholder: "sextile 0.1.4, astrolog 8.00"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Your operating system, and Docker or `--no-docker`.
+      placeholder: "Ubuntu 24.04 with Docker 28, or Windows 11 in a WSL terminal"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and its size
+      description: The terminal program, and its columns and rows.
+      placeholder: "Windows Terminal, 132 columns and 40 rows"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: The keys you pressed, one step a line, from the start of Sextile.
+      placeholder: |
+        1. Start sextile.
+        2. Press Ctrl+O and open the eclipse chart.
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+      description: What happened, and what you expected instead. Paste the screen as text if you can.
+    validations:
+      required: true

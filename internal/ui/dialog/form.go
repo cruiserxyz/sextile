@@ -132,6 +132,10 @@ type FormView struct {
 	// Title names the form's popup in its frame (Box.Title).
 	Title string
 
+	// Fixed are lines after the fields that the form shows and does not let
+	// the operator change: a label, a value and a dim note.
+	Fixed []FixedLine
+
 	// Info is the block beneath the rule, one entry per line, each truncated
 	// to the box: the save prompt's destination, for instance.
 	Info []string
@@ -142,32 +146,32 @@ type FormView struct {
 	// is elided by design (save_modal.go destLine).
 	WrapInfo bool
 
-	// Alt are the other blocks of text this popup shows in place of Info in
-	// another step (the title form's second step): the box is sized for the
-	// fullest of them and Info, once, so it does not change between steps.
-	Alt [][]string
-
 	// Refusal, when non-empty, is drawn in the box's message zone, which the
 	// form keeps from the moment it opens. The form stays open with it; a
 	// refusal is the caller's next instruction to the operator, not a dialog
-	// of its own, and it never makes the box bigger: one longer than its row
-	// wraps and takes rows from the foot of the info above it.
+	// of its own. One longer than its row wraps and is never cut: the box takes
+	// the rows it needs.
 	Refusal string
 }
 
-// RefusalRoom is the cells the message zone has: a sentence of
-// the kind the forms say ("That name has no letters or digits to save under.")
-// fits, and the form is that wide from the moment it opens (chosen 2026-10-27).
+// FixedLine is a line a form shows and does not let the operator change.
+type FixedLine struct {
+	Label, Value, Note string
+}
+
+// RefusalRoom is the cells a refusal has: a sentence of the kind the forms say
+// ("That name has no letters or digits to save under.") fits, and the form is
+// that wide from the moment it opens (chosen 2026-10-27).
 const RefusalRoom = ProseWidth
 
-// RenderForm draws f inside Box's chrome. The box is decided when the form
-// opens and holds for the whole opening (operator, 2026-10-27): as wide as its
-// widest line -- the fields (each asks for its label and FieldRoom cells to
-// type in), the info wrapped at ProseWidth when the caller says to wrap it,
-// and the message zone -- and as tall as its info (the fullest block, if the
-// form has steps) and the zone, a blank row and the row where a refusal appears.
-// It does not change size with the values typed, the placeholders, which field is
-// focused or a refusal appearing.
+// RenderForm draws f inside Box's chrome. The box is as wide as its widest
+// line from the moment it opens (operator, 2026-10-27) -- the fields (each asks
+// for its label and FieldRoom cells to type in), the info wrapped at ProseWidth
+// when the caller says to wrap it, and the room for a refusal -- and as tall as
+// its fields and its info. It does not change size with the values typed, the
+// placeholders or which field is focused. A refusal takes a blank row and its
+// own rows below the info, so the box grows by them and is back to its height
+// when the refusal goes (operator, 2026-11-14: no popup keeps an empty row).
 //
 // An info line that is NOT wrapped echoes what was typed (the save prompt's
 // file name): it is cut to the box and never sizes it, or the box would widen
@@ -180,6 +184,20 @@ func RenderForm(f Form, v FormView, cfg term.Style, termW, termH int, chrome Chr
 			Width:  ansi.StringWidth(fld.Label) + FieldRoom + 1,
 			Render: func(width int) string { return fieldLine(fld, focused, cfg, chrome, width) },
 		}
+	}
+
+	for _, fx := range v.Fixed {
+		fx := fx
+		inputs = append(inputs, input{
+			Width: ansi.StringWidth(fx.Label + fx.Value + "  " + fx.Note),
+			Render: func(width int) string {
+				line := term.CutRight(fx.Label+fx.Value, width, cfg)
+				if note := width - ansi.StringWidth(line) - 2; fx.Note != "" && note > 0 {
+					line += "  " + chrome.Dim(term.CutRight(fx.Note, note, cfg))
+				}
+				return line
+			},
+		})
 	}
 
 	// The lines are laid out before the box is, at a width that does not
@@ -202,17 +220,15 @@ func RenderForm(f Form, v FormView, cfg term.Style, termW, termH int, chrome Chr
 	}
 	lines := layout(v.Info)
 	fit.Rows = len(lines)
-	for _, alt := range v.Alt {
-		fit.Rows = max(fit.Rows, len(layout(alt)))
-	}
 
-	return Render(Box{
+	box := Box{
 		Title:   v.Title,
 		Inputs:  inputs,
 		Fit:     fit,
 		Zone:    true,
 		Message: v.Refusal,
-	}, cfg, termW, termH, chrome, func(width, height int) string {
+	}
+	return Render(box, cfg, termW, termH, chrome, func(width, height int) string {
 		out := make([]string, 0, height)
 		for _, l := range lines {
 			out = append(out, term.CutRight(l, width, cfg))

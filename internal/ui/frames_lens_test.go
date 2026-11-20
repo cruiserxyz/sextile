@@ -68,22 +68,22 @@ func TestEachChartKeepsItsOwnSystem(t *testing.T) {
 	m = withOwnHouses(m, recipe.WholeSign, recipe.WholeSign)
 	m = settleHouses(t, m)
 
-	m = chooseInFinder(t, m, keyCtrlHMain, "placidus")
+	m = chooseInFinder(t, m, keysOpenHouses, "placidus")
 	if got := m.ownHouses(slotAt(m, 1)).hs; got != recipe.Placidus {
-		t.Fatalf("Ctrl+H Placidus on Ben: Ben's own system is %v", got)
+		t.Fatalf("`, u` Placidus on Ben: Ben's own system is %v", got)
 	}
 	if got := m.ownHouses(slotAt(m, 0)).hs; got != recipe.WholeSign {
-		t.Errorf("Ctrl+H on Ben changed Anna's own system to %v", got)
+		t.Errorf("`, u` on Ben changed Anna's own system to %v", got)
 	}
 	if got := m.rowTag(slotAt(m, 0)); got != "WhTr" {
-		t.Errorf("Ctrl+H on Ben: Anna's row tag = %q, want her own WhTr", got)
+		t.Errorf("`, u` on Ben: Anna's row tag = %q, want her own WhTr", got)
 	}
 	if got := m.rowTag(slotAt(m, 1)); got != "PlTr" {
-		t.Errorf("Ctrl+H on Ben: Ben's row tag = %q, want PlTr", got)
+		t.Errorf("`, u` on Ben: Ben's row tag = %q, want PlTr", got)
 	}
 
 	m = walk(t, m, keyUp, 1) // Anna
-	m = chooseInFinder(t, m, keyCtrlZ, "lahiri")
+	m = chooseInFinder(t, m, []tea.KeyMsg{keyCtrlZ}, "lahiri")
 	if got := m.ownZodiac(slotAt(m, 0)); got != recipe.Lahiri {
 		t.Fatalf("Ctrl+Z Lahiri on Anna: Anna's own zodiac is %v", got)
 	}
@@ -327,7 +327,7 @@ func driveCmds(cmd tea.Cmd) []tea.Msg {
 func recordShowWheel(t *testing.T) *[]string {
 	t.Helper()
 	stubRenderWheelImage(t)
-	stubRenderOverlayWheelImage(t)
+	stubRenderPairWheelImage(t)
 	var shown []string
 	stubSpawns(t, func(s *rowSpawns) {
 		s.wheel.show = func(b []byte) (string, error) {
@@ -451,9 +451,9 @@ func TestFinderTitlesNameTheFocusedChart(t *testing.T) {
 	}
 	houseTitle := func(t *testing.T, m Model) string {
 		t.Helper()
-		m, _ = tpress(t, m, keyCtrlHMain)
+		m, _ = openHouses(t, m)
 		if m.startup != startupHouseOpen {
-			t.Fatalf("Ctrl+H opened %q", m.startup)
+			t.Fatalf("`, u` opened %q", m.startup)
 		}
 		return topEdge(t, m)
 	}
@@ -492,7 +492,7 @@ func TestFinderTitlesNameTheFocusedChart(t *testing.T) {
 	// Enter on now, read in Ben, edits now's own record; Ben's is left alone.
 	m = setup(t)
 	m = choosePair(m, scenePair{left: slotAt(m, 1), right: slotAt(m, 2)})
-	m, _ = tpress(t, m, keyCtrlHMain)
+	m, _ = openHouses(t, m)
 	for _, r := range "campanus" {
 		m, _ = tpress(t, m, runes(string(r)))
 	}

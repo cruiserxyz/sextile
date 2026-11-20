@@ -70,7 +70,7 @@ func followFixture(t *testing.T, cfg Config, w, h int) (Model, *followStub) {
 			stub.casts++
 			return lookup.OverlayAspects{Report: "SUBJECT cross\n"}, nil
 		}
-		s.cast.synastry = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(context.Context, lookup.Lens, store.AnchorChart, store.AnchorChart) (lookup.OverlayAspects, error) {
 			stub.casts++
 			return lookup.OverlayAspects{Report: "SUBJECT cross\n"}, nil
 		}
@@ -104,7 +104,6 @@ func followFixture(t *testing.T, cfg Config, w, h int) (Model, *followStub) {
 	openChart(t, m, 1)
 	m.cursorIdx = len(m.slots.All()) - 1 // Now, the floating slot, last in the list
 	m.focused = PanelChart
-	m.limitedViewShown = true
 	m, cmd := m.bumpIdentity(surfaceText)
 	m = pump(t, m, cmd)
 	// Below the dual-column width Details is not in the layout and owes no report.

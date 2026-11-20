@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestAnEditedChartFileChartWinsOnRelaunch(t *testing.T) {
 	if anchorRecord(m).When != datEditedWhen {
 		t.Errorf("the record still names %v; the next quit would write the stale moment back", anchorRecord(m).When)
 	}
-	if !sessionSaid(m, "was edited — re-anchored") {
+	if !sessionSaid(m, "changed on disk, shown new") {
 		t.Errorf("the astrologer was not told the chart moved: %q", sessionLines(m))
 	}
 	if cmd == nil {
@@ -215,9 +216,9 @@ func TestARereadThatCannotConcludeKeepsTheSnapshot(t *testing.T) {
 		msg  SessionChartRecheckedMsg
 		want string
 	}{
-		{"the file is gone", SessionChartRecheckedMsg{}, "is no longer in the library"},
-		{"the library could not be read", SessionChartRecheckedMsg{Err: errors.New("x")}, "couldn't re-read"},
-		{"the moment could not be resolved", SessionChartRecheckedMsg{Found: true, Err: errors.New("x")}, "couldn't re-read"},
+		{"the file is gone", SessionChartRecheckedMsg{}, "session: rosa-lang.as is not in the charts folder"},
+		{"the library could not be read", SessionChartRecheckedMsg{Err: errors.New("x")}, "session: the file of Rosa Lang did not read"},
+		{"the moment could not be resolved", SessionChartRecheckedMsg{Found: true, Err: errors.New("x")}, "session: the file of Rosa Lang did not read"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -226,8 +227,10 @@ func TestARereadThatCannotConcludeKeepsTheSnapshot(t *testing.T) {
 			if got := anchoredSlot(t, m).Time; !got.Equal(chartFileWhen) {
 				t.Errorf("the anchor moved to %v; the snapshot must survive", got)
 			}
-			if !sessionSaid(m, tc.want) {
-				t.Errorf("lines = %q, want one containing %q", sessionLines(m), tc.want)
+			// The whole line, not a part of it: a line that also carried the
+			// chart's moment or place would put a client's birth data in the Log.
+			if !slices.Contains(sessionLines(m), tc.want) {
+				t.Errorf("lines = %q, want exactly %q", sessionLines(m), tc.want)
 			}
 			if cmd != nil {
 				t.Error("nothing moved, so nothing should recompute")
@@ -249,7 +252,7 @@ func TestAnEditedChartFileThatCanNoLongerBeCastIsRefusedAndNamed(t *testing.T) {
 	if got := anchoredSlot(t, m).Time; !got.Equal(chartFileWhen) {
 		t.Errorf("an uncastable edit was anchored at %v", got)
 	}
-	if !sessionSaid(m, "no birth place") {
+	if !sessionSaid(m, "no place") {
 		t.Errorf("the refusal did not name what is missing: %q", sessionLines(m))
 	}
 	// It must not guess at WHY. The missing field is one sameChart compares,
@@ -295,12 +298,11 @@ func TestAPickOutranksAnInFlightReread(t *testing.T) {
 	}
 }
 
-// A substitute that shares the display name AND rounds to the same atlas city
-// is the case comparing `Place.Name` alone could not see: `location.Nearest`
-// gives two births thirty kilometres apart one city label, so the only thing
-// separating them is the coordinates the row already carries.
+// A substitute that shares the display name AND the place's words is told
+// apart by its coordinates: two births thirty kilometres apart can share a
+// town's name.
 //
-// Positive control: narrow sameChart back to `a.Place.Name == b.Place.Name` and
+// Positive control: narrow sameChart to `a.Place.Name == b.Place.Name` and
 // this fails by name while every other test here still passes.
 func TestASubstituteSharingNameAndCityIsStillRefused(t *testing.T) {
 	m := chartFileModel(t)
@@ -390,7 +392,7 @@ func TestSessionRecheckLinesFitTheLog(t *testing.T) {
 		}
 		line := lines[len(lines)-1]
 		sized, _ := m.Update(tea.WindowSizeMsg{Width: 144, Height: 40})
-		if got := sized.(Model).View(); !strings.Contains(got, line) {
+		if got := sized.(Model).View(); !strings.Contains(got, strings.TrimPrefix(line, "session: ")) {
 			t.Errorf("the Log truncated %q; it renders as:\n%s", line, logRegion(got))
 		}
 		if wantIdent != "" {
@@ -434,14 +436,16 @@ func TestSessionRecheckLinesFitTheLog(t *testing.T) {
 			switch clause {
 			case "no name":
 				broken.Name = ""
-			case "no birth time":
+			case "no time":
 				broken.When = time.Time{}
-			case "no birth place":
+			case "no place":
 				broken.Place.Name = ""
-			case "no numeric coordinates":
+			case "no coordinates":
 				broken.Place.Lat = math.NaN()
-			case "an unknown timezone":
-				broken.Place.TZ = "Nowhere/Nothing"
+			case "an unknown time zone":
+				// A re-check reads a chart file, which needs no zone: the
+				// clause cannot fire here, and the pick's test measures it.
+				return
 			default:
 				t.Fatalf("unmeasured refusal clause %q — add it here", clause)
 			}
@@ -550,7 +554,8 @@ func TestLegacySextileIDReconcilesOnRecheck(t *testing.T) {
 func TestRecheckCorrectionRefreshesAnOpenWheel(t *testing.T) {
 	var whens []time.Time
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			when := chart.When
 			whens = append(whens, when)
 			return []byte("BM-wheel"), nil
 		}
@@ -599,5 +604,28 @@ func TestRecheckNeverAppliesAnotherFilesContent(t *testing.T) {
 	}
 	if cmd != nil || len(sessionLines(m)) != 0 {
 		t.Errorf("a result for another file acted: cmd %v, lines %q", cmd != nil, sessionLines(m))
+	}
+}
+
+// A session remembers a chart file's place as the nearest atlas city where
+// Sextile 0.1.3 wrote it; the file's read names the file's own place at the
+// same coordinates. That is the same chart: it stays anchored, takes the
+// file's place and record, and nothing is reported.
+//
+// Positive control: compare the whole place in sameChart and this fails by
+// name, reporting a different chart.
+func TestARememberedAtlasPlaceIsTheFilesOwnPlace(t *testing.T) {
+	m := chartFileModel(t)
+	own := chartFileSnapshot()
+	own.Place = location.PlaceInfo{Name: "Rosa's own words", Lat: own.Place.Lat, Lon: own.Place.Lon}
+	m, _ = recheck(m, SessionChartRecheckedMsg{
+		Row: chartFileRow("Rosa Lang", own), Found: true, When: chartFileWhen, Record: "@AI800\n",
+	})
+	if sessionSaid(m, "different chart") {
+		t.Fatalf("the remembered chart was reported as a different chart: %q", sessionLines(m))
+	}
+	slot := anchoredSlot(t, m)
+	if slot.Chart.Record == "" || slot.Location != own.Place || slot.Chart.Place != own.Place {
+		t.Errorf("the slot keeps %q at %+v (record %q), want the file's place and record", slot.Chart.Name, slot.Location, slot.Chart.Record)
 	}
 }

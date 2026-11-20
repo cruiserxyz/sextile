@@ -21,8 +21,10 @@ type KeysConfig struct {
 	Leader        string
 	LeaderPresent bool
 
-	// TimeoutlenMS is how long a pending leader waits, in milliseconds.
-	// Present only when the entry parsed as a whole number above zero.
+	// TimeoutlenMS is the file's keys.timeoutlen in milliseconds, kept so the
+	// preferences file does not lose the line. A pending leader has no time
+	// limit, so nothing reads it. Present only when the entry parsed as a whole
+	// number above zero.
 	TimeoutlenMS      int
 	TimeoutlenPresent bool
 
@@ -103,7 +105,7 @@ func readKeys(path string) KeysConfig {
 				cfg.Rejections = append(cfg.Rejections, KeyRejection{
 					Field:  "keys.timeoutlen",
 					Value:  val,
-					Reason: "expected a whole number of milliseconds above zero",
+					Reason: "It must be a whole number above zero",
 				})
 				continue
 			}

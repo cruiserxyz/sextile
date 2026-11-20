@@ -49,17 +49,17 @@ func TestParseAspects_KeepsEveryCutOffFirstName(t *testing.T) {
 		x, y string
 		kind aspect.AspectKind
 	}{
-		{"  14: 5th Cus [Tau] Con [Tau] 6th Cusp   - orb: a0:12' - power:  4.10", "5th Cus", "6th Cusp", aspect.Conjunction},
-		{"  18: East Po (Ari) Squ (Cap) Midheaven  - orb: s0:14' - power:  6.65", "East Po", objMidheaven.Name, aspect.Square},
-		{"  11: 11th Cu (Leo) Con [Leo] Zeus       - orb: s0:39' - power:  3.00", "11th Cu", "Zeus", aspect.Conjunction},
-		{"   7: Kaus Au (Cap) Tri (Tau) Zeta Retic - orb: a1:02' - power:  1.20", "Kaus Au", "Zeta Retic", aspect.Trine},
-		{"   9: Zeta Re (Ari) Sex (Gem) Kaus Austr - orb: s0:40' - power:  1.10", "Zeta Re", "Kaus Austr", aspect.Sextile},
+		{"  14: 5th Cus [Tau] Con [Tau] 6th Cusp   - orb: a0:12' - power:  4.10", "5th Cus", "6th Cusp", kindOf("Con")},
+		{"  18: East Po (Ari) Squ (Cap) Midheaven  - orb: s0:14' - power:  6.65", "East Po", objMidheaven.Name, kindOf("Squ")},
+		{"  11: 11th Cu (Leo) Con [Leo] Zeus       - orb: s0:39' - power:  3.00", "11th Cu", "Zeus", kindOf("Con")},
+		{"   7: Kaus Au (Cap) Tri (Tau) Zeta Retic - orb: a1:02' - power:  1.20", "Kaus Au", "Zeta Retic", kindOf("Tri")},
+		{"   9: Zeta Re (Ari) Sex (Gem) Kaus Austr - orb: s0:40' - power:  1.10", "Zeta Re", "Kaus Austr", kindOf("Sex")},
 		// Controls: the second-name side, and a two-word typed name, as before.
-		{"  89: Neptune [Ari] Con (Ari) East Point - orb: a0:58' - power:  3.08", objNeptune.Name, "East Point", aspect.Conjunction},
-		{"   3:     Sun (Ari) Tri (Leo) North Node - orb: a2:00' - power:  5.00", objSun.Name, objNorthNode.Name, aspect.Trine},
-		{"   4: North N (Leo) Opp (Aqu) Moon       - orb: s1:00' - power:  5.00", objNorthNode.Name, objMoon.Name, aspect.Opposition},
+		{"  89: Neptune [Ari] Con (Ari) East Point - orb: a0:58' - power:  3.08", objNeptune.Name, "East Point", kindOf("Con")},
+		{"   3:     Sun (Ari) Tri (Leo) North Node - orb: a2:00' - power:  5.00", objSun.Name, objNorthNode.Name, kindOf("Tri")},
+		{"   4: North N (Leo) Opp (Aqu) Moon       - orb: s1:00' - power:  5.00", objNorthNode.Name, objMoon.Name, kindOf("Opp")},
 	} {
-		got := parseAspects(tc.line, testRegistry(t))
+		got := mustAspects(t, tc.line, testRegistry(t))
 		if len(got) != 1 || !hasSides(got[0], tc.x, tc.y) || got[0].Kind != tc.kind {
 			var s []string
 			for _, a := range got {
@@ -78,7 +78,7 @@ func TestParseAspects_KeepsEveryCutOffFirstName(t *testing.T) {
 		"  23: Midheav (Cap) Squ <Ari> Hygiea     - orb: s1:19' - power:  5.84",
 		"  24:  Hygiea <Ari> Con <Ari> Eris       - orb: s0:00' - power: 27.50",
 	} {
-		if got := parseAspects(line, testRegistry(t)); len(got) != 0 {
+		if got := mustAspects(t, line, testRegistry(t)); len(got) != 0 {
 			t.Errorf("%q parsed as %v, want no aspect", line, sides(got[0]))
 		}
 	}
@@ -112,8 +112,8 @@ func TestEveryAstrologObjectParsesOnEitherSide(t *testing.T) {
 			{fmt.Sprintf("  1: %s (Ari) Con (Ari) %-10s - orb: a0:20' - power:  9.51", first, partner), f},
 			{fmt.Sprintf("  1: %7s (Ari) Con (Ari) %s%s - orb: a0:20' - power:  9.51", partner, second, pad), second},
 		} {
-			got := parseAspects(tc.line, testRegistry(t))
-			if len(got) != 1 || !pairIs(got[0], tc.x, partner) || got[0].Kind != aspect.Conjunction {
+			got := mustAspects(t, tc.line, testRegistry(t))
+			if len(got) != 1 || !pairIs(got[0], tc.x, partner) || got[0].Kind != kindOf("Con") {
 				t.Errorf("object %d %q: %q not read as %q / %q", o.Number, o.Name, tc.line, tc.x, partner)
 			}
 		}
@@ -124,7 +124,7 @@ func TestEveryAstrologObjectParsesOnEitherSide(t *testing.T) {
 			{fmt.Sprintf("  1: %s (Ari) Con with (Ari) %-10s - orb: a0:20' - power:  9.51", first, partner), f, partner},
 			{fmt.Sprintf("  1: %7s (Ari) Con with (Ari) %s%s - orb: a0:20' - power:  9.51", partner, second, pad), partner, second},
 		} {
-			got := parseCrossAspects(tc.line, testRegistry(t))
+			got := mustCross(t, tc.line, testRegistry(t))
 			if len(got) != 1 || !isPrinted(got[0].PrimaryObject, tc.first) ||
 				!isPrinted(got[0].SecondaryObject, tc.second) {
 				t.Errorf("object %d %q: comparing row %q not read as %q with %q", o.Number, o.Name, tc.line, tc.first, tc.second)
@@ -173,7 +173,7 @@ func TestEveryPrintedAspectRowIsKept(t *testing.T) {
 				}
 			}
 		}
-		got := parseAspects(line, testRegistry(t))
+		got := mustAspects(t, line, testRegistry(t))
 		if strings.ContainsAny(line, "<>") {
 			if len(got) != 0 {
 				t.Errorf("a body with no speed was kept: %q", line)

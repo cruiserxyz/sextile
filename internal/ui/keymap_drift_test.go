@@ -44,9 +44,9 @@ var ownerTables = map[string]string{
 	"chartTitleBindings": "title_form.go", "titleConfirmBindings": "title_form.go",
 	"saveChartBindings": "save_modal.go", "bodiesBindings": "body_modal_model.go",
 	"aspectsBindings": "aspect_modal_model.go", "housesBindings": "house_finder_model.go",
-	"zodiacBindings": "zodiac_finder_model.go", "displayBindings": "house_display_popup_model.go",
+	"zodiacBindings":   "zodiac_finder_model.go",
 	"sessionsBindings": "sessions_popup_model.go", "sessionNameBindings": "sessions_popup_model.go",
-	"helpBindings": "model.go", "consoleBindings": "console.go", "actionsBindings": "actions_popup_model.go",
+	"consoleBindings": "console.go", "keybindingsBindings": "keybindings_popup_model.go",
 	"timelineSearchBindings": "timeline.go", "reportSearchBindings": "report_search_bindings.go",
 }
 

@@ -8,7 +8,7 @@
 │  To fix it, either                                             │
 │    · run Sextile from its Docker image, which builds Astrolog  │
 │      for you, or                                               │
-│    · install Astrolog 8.00 as README, Install and run says.    │
+│    · install Astrolog 8.00 as REFERENCE, By hand says.         │
 │                                                                │
 │  Then start Sextile again.                            q quits  │
 │                                                                │

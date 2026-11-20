@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -46,12 +45,12 @@ func TestWheelHighlightUsesFocusedSlotSelection(t *testing.T) {
 }
 
 // C9 — while a pair tab is active the image surface requests the overlay
-// render, which carries no highlight state at all, regardless of selection; on
+// pair wheel, which carries no highlight state at all, regardless of selection; on
 // the chart's own tab the wheel is the cursor's chart alone and keeps its
 // highlight (S4a A16).
 func TestComparisonWheelEmitsNoHighlight(t *testing.T) {
 	wheelCalls := stubRenderWheelImage(t)
-	overlayCalls := stubRenderOverlayWheelImage(t)
+	overlayCalls := stubRenderPairWheelImage(t)
 	m := rowSelectionModel(t)
 	m.slots.SetComparisonSelected(true)
 	m.slots.ToggleObjectSelection(1, objMars)
@@ -72,7 +71,7 @@ func TestComparisonWheelEmitsNoHighlight(t *testing.T) {
 	}
 	cmd()
 	if len(*overlayCalls) != 1 || len(*wheelCalls) != 0 {
-		t.Errorf("want the highlight-free overlay render (overlay=1 single=0), got overlay=%d single=%d",
+		t.Errorf("want the highlight-free pair wheel (pair=1 single=0), got overlay=%d single=%d",
 			len(*overlayCalls), len(*wheelCalls))
 	}
 }
@@ -202,7 +201,7 @@ func TestHighlightPublishesComposite(t *testing.T) {
 		}
 	})
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, _ store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
 			return []byte("COMPOSITE"), nil
 		}
 	})

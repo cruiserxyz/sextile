@@ -129,45 +129,35 @@ func TestJulianDayLabelsFollowAstrologs1582Boundary(t *testing.T) {
 	}
 }
 
-func TestParseDegMin(t *testing.T) {
+// parseCoordinate reads every spelling of a coordinate that Astrolog reads in
+// a chart file, and nothing else.
+func TestParseCoordinate(t *testing.T) {
 	cases := []struct {
-		in   string
-		want float64
+		in       string
+		pos, neg byte
+		want     float64
+		ok       bool
 	}{
-		{"11:34E", 11.5667},
-		{"8:40E", 8.6667},
-		{"48:08N", 48.1333},
-		{"0W", 0},
-		{"5:30W", -5.5},
-		{"10:00S", -10},
+		{"11:34E", 'E', 'W', 11 + 34.0/60, true},
+		{"48:08N", 'N', 'S', 48 + 8.0/60, true},
+		{"0W", 'E', 'W', 0, true},
+		{"5:30W", 'E', 'W', -5.5, true},
+		{"10:00S", 'N', 'S', -10, true},
+		{"52:31'30N", 'N', 'S', 52 + 31.0/60 + 30.0/3600, true},
+		{"4.88E", 'E', 'W', 4.88, true},
+		{"4:53e", 'E', 'W', 4 + 53.0/60, true},
+		{"4E53", 'E', 'W', 4 + 53.0/60, true},
+		{"52n22:30", 'N', 'S', 52 + 22.0/60 + 30.0/3600, true},
+		{"157:28W", 'E', 'W', -(157 + 28.0/60), true},
+		{"4:53", 'E', 'W', 0, false},
+		{"E53", 'E', 'W', 0, false},
+		{"4:75E", 'E', 'W', 0, false},
+		{"52:22N", 'E', 'W', 0, false},
 	}
 	for _, c := range cases {
-		if got := parseDegMin(c.in); math.Abs(got-c.want) > 0.001 {
-			t.Errorf("parseDegMin(%q) = %.4f, want %.4f", c.in, got, c.want)
-		}
-	}
-}
-
-// reQB must extract the trailing lon/lat from real -qb grammar, accept
-// whole-degree coordinates, and never mistake the (colon-less or half-hour)
-// zone for the longitude.
-func TestReQB_CoordExtraction(t *testing.T) {
-	cases := []struct {
-		line, lon, lat string
-	}{
-		{"-qb Sep 23 1995 6:00pm DT 1E 11:34E 48:08N", "11:34E", "48:08N"},    // deg:min, zone 1E
-		{"-qb Jan 1 2000 9:00am ST 0W 8:40E 50:06N", "8:40E", "50:06N"},       // zone 0W
-		{"-qb Sep 23 1995 6:00pm DT 1E 11E 48N", "11E", "48N"},                // whole-degree lon/lat
-		{"-qb Jan 1 2000 12:00pm ST 5:30E 11:34E 48:08N", "11:34E", "48:08N"}, // half-hour zone
-	}
-	for _, c := range cases {
-		m := reQB.FindStringSubmatch(c.line)
-		if m == nil {
-			t.Errorf("reQB did not match %q", c.line)
-			continue
-		}
-		if m[1] != c.lon || m[2] != c.lat {
-			t.Errorf("reQB(%q) = (%q, %q), want (%q, %q)", c.line, m[1], m[2], c.lon, c.lat)
+		got, ok := parseCoordinate(c.in, c.pos, c.neg)
+		if ok != c.ok || math.Abs(got-c.want) > 1e-9 {
+			t.Errorf("parseCoordinate(%q) = %v, %v; want %v, %v", c.in, got, ok, c.want, c.ok)
 		}
 	}
 }

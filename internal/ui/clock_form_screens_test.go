@@ -93,17 +93,41 @@ func formModel(t *testing.T, fc formCase) Model {
 
 func plainView(m Model) string { return ansi.Strip(m.View()) }
 
-// chartRowMoment is the moment the rendered Chart row of the given place
-// shows: the cells before the zone abbreviation and the place. The place is
-// the row's own fit-or-drop field: the floating row's `~ Now` title takes the
-// cells that let it show in the narrowest left column, so the row is found by
-// its zone and either the place or the gap the place left.
-func chartRowMoment(t *testing.T, view string, p location.PlaceInfo, zoneAbbr string) string {
+// zoneCell is the zone cell the Chart table shows for the clock t: the real
+// offset from Greenwich in one notation (`+1`, `+5:30`, `+0`), with `DT` after
+// it while a one-hour daylight shift is in force. It is written from the specification's
+// own examples, not from the code under test.
+func zoneCell(t time.Time) string {
+	_, off := t.Zone()
+	sign := "+"
+	if off < 0 {
+		sign, off = "-", -off
+	}
+	cell := fmt.Sprintf("%s%d", sign, off/3600)
+	if m := off % 3600 / 60; m != 0 {
+		cell += fmt.Sprintf(":%02d", m)
+	}
+	// Only a shift of exactly one hour reads DT; Lord Howe's half hour does not.
+	_, jan := time.Date(t.Year(), 1, 1, 12, 0, 0, 0, t.Location()).Zone()
+	_, jul := time.Date(t.Year(), 7, 1, 12, 0, 0, 0, t.Location()).Zone()
+	if _, now := t.Zone(); t.IsDST() && now-min(jan, jul) == 3600 {
+		cell += " DT"
+	}
+	return cell
+}
+
+// momentSecondsRE is momentRE with the seconds a table clock always shows.
+const momentSecondsRE = `[A-Z][a-z]{2} (?:[A-Z][a-z]{2} [ 0-9]\d, \d+|[ 0-9]\d [A-Z][a-z]{2} \d+) [ 0-9]\d:\d{2}:\d{2}(?:am|pm)?`
+
+// chartRowMoment is the moment, seconds included, the rendered Chart row with
+// the given zone cell shows: the cells before the zone cell, which is followed
+// by the place or by the gap the place left.
+func chartRowMoment(t *testing.T, view string, zone string) string {
 	t.Helper()
-	re := regexp.MustCompile(`(` + momentRE + `) ` + regexp.QuoteMeta(zoneAbbr) + `(?: +` + regexp.QuoteMeta(p.Name) + `| {3,}\S+\|)`)
+	re := regexp.MustCompile(`(` + momentSecondsRE + `) ` + regexp.QuoteMeta(zone) + `(?: |\|)`)
 	m := re.FindStringSubmatch(view)
 	if m == nil {
-		t.Fatalf("no chart row for %s (%s) in the rendered screen:\n%s", p.Name, zoneAbbr, view)
+		t.Fatalf("no chart row with the zone cell %q in the rendered screen:\n%s", zone, view)
 	}
 	return m[1]
 }
@@ -126,14 +150,13 @@ func TestEveryDetailsReportReadsTheSlotClock(t *testing.T) {
 					m := formModel(t, fc)
 					loc, _ := time.LoadLocation(fc.place.TZ)
 					local := fc.at.In(loc)
-					abbr := local.Format("MST")
 					want := refMoment(local, c)
 					lens := m.viewLens()
 
 					check := func(label, view string) {
 						t.Helper()
-						if row := chartRowMoment(t, view, fc.place, abbr); row != want {
-							t.Errorf("%s: the chart row reads %q, want %q", label, row, want)
+						if row := chartRowMoment(t, view, zoneCell(local)); row != clockSeconds(want) {
+							t.Errorf("%s: the chart row reads %q, want %q", label, row, clockSeconds(want))
 						}
 						h := reChartFor.FindStringSubmatch(view)
 						if h == nil {
@@ -213,11 +236,11 @@ func TestPairReportsShowTheChosenForm(t *testing.T) {
 				}
 			}
 			// And the rows of the Chart panel read the same two moments.
-			if row := chartRowMoment(t, view, location.PlaceInfo{Name: "New York"}, "EDT"); row != refMoment(natal, c) {
-				t.Errorf("anchored row reads %q, want %q", row, refMoment(natal, c))
+			if row := chartRowMoment(t, view, zoneCell(natal)); row != clockSeconds(refMoment(natal, c)) {
+				t.Errorf("anchored row reads %q, want %q", row, clockSeconds(refMoment(natal, c)))
 			}
-			if row := chartRowMoment(t, view, testPlaceTokyo(), "JST"); row != refMoment(transit, c) {
-				t.Errorf("floating row reads %q, want %q", row, refMoment(transit, c))
+			if row := chartRowMoment(t, view, zoneCell(transit)); row != clockSeconds(refMoment(transit, c)) {
+				t.Errorf("floating row reads %q, want %q", row, clockSeconds(refMoment(transit, c)))
 			}
 		})
 	}
@@ -232,7 +255,7 @@ func mustLoc(t *testing.T, name string) *time.Location {
 	return loc
 }
 
-// Acceptance 5: the rendered Timeline rows of a -dm, a -t and a -tr search
+// Acceptance 5: the rendered Timeline rows of a -dY, a -t and a -tr search
 // show the chosen form, under all four.
 func TestTimelineDisplaysChosenClock(t *testing.T) {
 	needLiveAstrolog(t)
@@ -264,7 +287,7 @@ func TestTimelineDisplaysChosenClock(t *testing.T) {
 			rendered := wholeTimeline(m)
 			seen := map[string]int{}
 			for _, row := range m.timeline.rows {
-				for _, kind := range []string{" -dm", " -tr", " -t "} {
+				for _, kind := range []string{" -dY", " -tr", " -t "} {
 					if strings.Contains(row.Command+" ", kind) {
 						seen[strings.TrimSpace(kind)]++
 					}
@@ -278,7 +301,7 @@ func TestTimelineDisplaysChosenClock(t *testing.T) {
 					t.Errorf("the rendered Timeline does not show %q %q", row.Date, row.Time)
 				}
 			}
-			for _, kind := range []string{"-dm", "-t", "-tr"} {
+			for _, kind := range []string{"-dY", "-t", "-tr"} {
 				if seen[kind] == 0 {
 					t.Errorf("no rendered row came from a %s search (saw %v)", kind, seen)
 				}
@@ -347,8 +370,8 @@ func TestFirstRowFollowsThePreference(t *testing.T) {
 			row := func(label string, m Model) {
 				t.Helper()
 				at := m.slots.Floating().Time.In(berlin)
-				want := refMoment(at, c)
-				if got := chartRowMoment(t, plainView(m), m.place, at.Format("MST")); got != want {
+				want := clockSeconds(refMoment(at, c))
+				if got := chartRowMoment(t, plainView(m), zoneCell(at)); got != want {
 					t.Errorf("%s: the first row reads %q, want %q", label, got, want)
 				}
 			}

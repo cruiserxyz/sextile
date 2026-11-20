@@ -21,7 +21,7 @@ func TestParsedPairsFollowNumberOrder(t *testing.T) {
   4: Fortune (Leo) Con (Leo) Sun         - orb: a0:10' - power:  8.00
   5:     Sun (Leo) Sex (Gem) Moon        - orb: a0:10' - power:  7.00
 `
-	got := parseAspects(lines, reg)
+	got := mustAspects(t, lines, reg)
 	if len(got) != 5 {
 		t.Fatalf("parsed %d aspects, want 5", len(got))
 	}
@@ -43,8 +43,8 @@ func TestParsedPairsFollowNumberOrder(t *testing.T) {
 		{FirstName: "North N", KindName: "Tri", SecondName: "Chiron", Style: astrologstyle.AspectStyle{First: "node", Kind: "tri", Second: "chiron"}},
 		{FirstName: "Chiron", KindName: "Sex", SecondName: "North Node", Style: astrologstyle.AspectStyle{First: "chiron", Kind: "sex", Second: "node"}},
 	}
-	styles := mapAspectStyles(rows, reg)
-	for _, kind := range []aspect.AspectKind{aspect.Trine, aspect.Sextile} {
+	styles := mapAspectStyles(rows, reg, testAspects(t))
+	for _, kind := range []aspect.AspectKind{kindOf("Tri"), kindOf("Sex")} {
 		style := styles[astrologstyle.AspectIdentity{First: chiron, Second: node, Kind: kind}]
 		if style.First != "chiron" || style.Second != "node" {
 			t.Errorf("%v: spans %+v, want Chiron's first and the node's second", kind, style)

@@ -27,15 +27,16 @@ func hellenisticSpecAt(t *testing.T, jd, lon, lat float64) recipe.ChartSpec {
 		recipe.WholeSign,
 		recipe.Tropical,
 		recipe.ObjectPolicy{
-			Baseline:     recipe.AstrologDefault,
-			Add:          recipe.NewObjectSet(11, 17, 18, 25, 28), // Chiron, South Node, Lilith, Nadir, Descendant
-			TrueNodeMode: true,
+			Baseline: recipe.AstrologDefault,
+			Add:      recipe.NewObjectSet(11, 17, 18, 25, 28), // Chiron, South Node, Lilith, Nadir, Descendant
+			Nodes:    recipe.NodesTrue,
 		},
 	)
 	if err != nil {
 		t.Fatalf("build hellenistic spec: %v", err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	return spec
 }
 
@@ -53,15 +54,13 @@ func mustCompile(t *testing.T, spec recipe.ChartSpec, p recipe.Projection) Execu
 
 func argv(plan ExecutionPlan) []string { return plan.Invocations[0].Argv }
 
-// TestCompile_PositionsArgv pins the Hellenistic positions argv exactly. This
-// began as the v0b cutover gate (Compile == legacy buildChartArgv); buildChartArgv
-// is now retired, so the expected argv is hardcoded here as a permanent guard,
-// independent of the invariants golden.
+// TestCompile_PositionsArgv pins the Hellenistic positions argv exactly, as a
+// hardcoded literal.
 func TestCompile_PositionsArgv(t *testing.T) {
 	got := argv(mustCompile(t, hellenisticSpec(t), recipe.Positions{}))
 	want := []string{
 		"-qj", "2446232.0000000005", "-zl", "11:34E", "48:08N", "-zi", "", "", "-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd",
-		"-Yn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0",
+		"=Yn", "_Ynn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Positions argv\n got: %v\nwant: %v", got, want)
@@ -80,7 +79,7 @@ func TestCompile_PositionsArgv_Bare(t *testing.T) {
 		t.Fatalf("spec: %v", err)
 	}
 	got := argv(mustCompile(t, spec, recipe.Positions{}))
-	want := []string{"-qj", "2446232.0000000005", "-zl", "0:00E", "0:00N", "-zi", "", "", "-c", "0", "=s", "0", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "=v0", "-Yw", "0"}
+	want := []string{"-qj", "2446232.0000000005", "-zl", "0:00E", "0:00N", "-zi", "", "", "-c", "0", "=s", "0", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "_Yn", "_Ynn", "=v0", "-Yw", "0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("bare Positions argv\n got: %v\nwant: %v", got, want)
 	}
@@ -203,7 +202,8 @@ func TestCompile_WheelImage(t *testing.T) {
 			t.Errorf("wheel image argv must not contain %q: %v", bad, joined)
 		}
 	}
-	for _, want := range []string{"-XV", "-Xw", "1200", "-Xi", "-XA", "-Xr", "-Xu", "-Xs", "400", "-XS", "-Xt", "-XL"} {
+	// Each option is set on (=) or off (_), never toggled from the host's.
+	for _, want := range []string{"-XV", "-Xw", "1200", "=Xi", "=XA", "=Xr", "_Xu", "-Xs", "400", "-XS", "_Xt", "=XL"} {
 		if !contains(joined, want) {
 			t.Errorf("wheel image argv missing %q: %v", want, joined)
 		}

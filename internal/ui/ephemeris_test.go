@@ -12,6 +12,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -40,19 +41,24 @@ func countLines(m Model, sub string) int {
 func TestStartupSaysWhichBodiesCannotBeDrawnInOneLine(t *testing.T) {
 	m := timelineModel(t, Config{Accessible: true})
 	m, cmd := applyEphemerisProbed(m, EphemerisProbedMsg{Availability: absentSeas18()})
-	if cmd == nil {
-		t.Fatal("no footer notice was started")
+	if cmd != nil {
+		t.Fatal("a footer notice was started")
 	}
-	// Two files and four bodies: the count, not the names.
-	const want = "4 bodies can't be drawn here. Press Ctrl+B to see which."
-	if n := countLines(m, want); n != 1 {
-		t.Errorf("the Log carries %q %d times, want once\n%s", want, n, strings.Join(logTexts(m), "\n"))
+	// Two files and four bodies: the count, not the names. In the large log only.
+	const want = "4 bodies can't be drawn here. Press Ctrl+B to see which"
+	if n := countConsole(m, "bodies: "+want); n != 1 {
+		t.Errorf("the console carries %q %d times, want once\n%s", want, n, strings.Join(consoleLineTexts(m), "\n"))
 	}
-	if got := m.footerIndicator(); got != want {
-		t.Errorf("footer = %q, want the Log line %q", got, want)
+	if n := countLines(m, "can't be drawn"); n != 1 {
+		t.Errorf("%d lines about bodies that can't be drawn, want one", n)
 	}
-	if !isNotice(m.footerIndicator()) {
-		t.Error("the footer text is not classed as a notice, so a narrow bar would not cut it")
+	for _, l := range m.logPanelLines() {
+		if strings.Contains(l, "can't be drawn") {
+			t.Errorf("the Log panel says %q", l)
+		}
+	}
+	if got := m.footerIndicator(); strings.Contains(got, "can't be drawn") {
+		t.Errorf("footer = %q, want no notice", got)
 	}
 
 	// The same answer again says nothing; another data folder says it again.
@@ -63,7 +69,7 @@ func TestStartupSaysWhichBodiesCannotBeDrawnInOneLine(t *testing.T) {
 		t.Errorf("the same account was logged again (%d lines)", len(m.logLines)-before)
 	}
 	if again != nil {
-		t.Error("the same account started another footer notice")
+		t.Error("the same account started a footer notice")
 	}
 	other := absentSeas18()
 	other.Folder = "folder-B"
@@ -160,7 +166,7 @@ func TestARestoredSelectionNamingAnAbsentBodyIsSaidOnce(t *testing.T) {
 	if got := markedObjects(m.slots, 0); !slices.Contains(got, objChiron) {
 		t.Fatalf("fixture: the restored selection is %v", got)
 	}
-	if n := countLines(m, "Chiron can't be drawn here: no ephemeris file seas_18.se1"); n != 1 {
+	if n := countLines(m, "Chiron can't be drawn here: no file seas_18.se1"); n != 1 {
 		t.Errorf("the Log names Chiron %d times, want once:\n%s", n, strings.Join(logTexts(m), "\n"))
 	}
 	// And the probe landing after the restore says it too.
@@ -168,7 +174,7 @@ func TestARestoredSelectionNamingAnAbsentBodyIsSaidOnce(t *testing.T) {
 	late, _ = late.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
 	late, _ = late.Update(p)
 	lm, _ := applyEphemerisProbed(late.(Model), EphemerisProbedMsg{Availability: av})
-	if n := countLines(lm, "Chiron can't be drawn here: no ephemeris file seas_18.se1"); n != 1 {
+	if n := countLines(lm, "Chiron can't be drawn here: no file seas_18.se1"); n != 1 {
 		t.Errorf("a probe after the restore: the Log names Chiron %d times, want once", n)
 	}
 }
@@ -179,26 +185,25 @@ func TestChooserStatusForAnAbsentBodyWithNoFileNameSaysNoData(t *testing.T) {
 	st := popup.Open(reg, recipe.ObjectPolicy{}, nil)
 	st.Absent = map[int]string{12: ""}
 	got, ok := popup.ProbeStatusFor(st, reg[0])
-	if !ok || got != "Astrolog gave Ceres no position and named no file" {
+	if !ok || got != "Astrolog cannot place Ceres here and did not say why" {
 		t.Errorf("status = %q (%v), want the no-words sentence", got, ok)
 	}
 }
 
 // Restore path: once the session is in, saying the same account again (as the
-// probe landing again would) starts no footer notice and writes no line. An
-// account that changes A -> B -> A is said on each change: "once per account"
-// means not twice in a row (recorded, round 2).
-func TestSayingTheSameAccountAgainStartsNoNotice(t *testing.T) {
+// probe landing again would) writes no line. An account that changes A -> B -> A
+// is said on each change: "once per account" means not twice in a row (recorded,
+// round 2). No account starts a footer notice.
+func TestSayingTheSameAccountAgainWritesNothing(t *testing.T) {
 	m := timelineModel(t, Config{Accessible: true})
 	m, first := applyEphemerisProbed(m, EphemerisProbedMsg{Availability: absentSeas18()})
-	if first == nil {
-		t.Fatal("the first account started no notice")
+	if first != nil {
+		t.Fatal("the first account started a footer notice")
 	}
 	lines := len(m.logLines)
-	var cmd tea.Cmd
-	m, cmd = m.sayEphemeris()
-	if cmd != nil || len(m.logLines) != lines {
-		t.Errorf("a repeated account: cmd=%v, %d new lines", cmd != nil, len(m.logLines)-lines)
+	m = m.sayEphemeris()
+	if len(m.logLines) != lines {
+		t.Errorf("a repeated account: %d new lines", len(m.logLines)-lines)
 	}
 	b := absentSeas18()
 	delete(b.Absent, 43)
@@ -283,6 +288,21 @@ func TestUnavailableBackstopOmitsTheDateWhenNamesWereUnioned(t *testing.T) {
 				t.Errorf("line %q: has a date = %v, want %v", got, hasDate, c.wantDate)
 			}
 		})
+	}
+}
+
+// The date is the moment the frame was cast for, not where Now stands when it
+// lands: stepping fast, a frame cast for 44 BC can land while Now still reads
+// a later year.
+func TestUnavailableBackstopNamesTheCastMoment(t *testing.T) {
+	m := timelineModel(t, Config{Accessible: true})
+	m.slots.SetFloatingTime(time.Date(2025, 11, 15, 17, 0, 0, 0, time.UTC))
+	m = m.focusFloatingForTest()
+	cast := time.Date(-43, 11, 15, 17, 0, 0, 0, time.UTC)
+	m, _ = commitTextFrame(m, FirstFrameReadyMsg{Unavailable: []string{"Eris"}, TransitTime: cast}, false)
+	want := "bodies: Eris can't be drawn: no ephemeris data for " + slotDate(&store.Slot{Floating: true, Time: cast, Location: m.slots.Floating().Location})
+	if !slices.Contains(logTexts(m), want) {
+		t.Errorf("want %q in the console:\n%s", want, strings.Join(logTexts(m), "\n"))
 	}
 }
 

@@ -39,8 +39,12 @@ func stripHookPrefix(argv []string) ([]string, error) {
 		return nil, errors.New("argv does not start with -YQ 0")
 	}
 	rest := argv[2:]
+	if len(rest) < len(hostBand) || !slices.Equal(rest[:len(hostBand)], hostBand) {
+		return nil, errors.New("argv does not carry the host band right after -YQ 0")
+	}
+	rest = rest[len(hostBand):]
 	if len(rest) < len(band) || !slices.Equal(rest[:len(band)], band) {
-		return nil, errors.New("argv does not carry every hook clear, in order, right after -YQ 0")
+		return nil, errors.New("argv does not carry every hook clear, in order, after the host band")
 	}
 	return rest[len(band):], nil
 }
@@ -48,7 +52,7 @@ func stripHookPrefix(argv []string) ([]string, error) {
 // hookBandCommandWords is the band as it appears in a recorded command line.
 func hookBandCommandWords() []string {
 	var out []string
-	for _, w := range HookClearBand() {
+	for _, w := range CallHead()[2:] {
 		out = append(out, shellQuote(w))
 	}
 	return out
@@ -109,7 +113,7 @@ func TestEveryCallClearsHooks(t *testing.T) {
 		t.Fatalf("%d spawns logged, want %d", len(records), len(calls))
 	}
 	for i, c := range calls {
-		want := append(append([]string{"-YQ", "0"}, band...), c.own...)
+		want := append(CallHead(), c.own...)
 		if !reflect.DeepEqual(records[i], want) {
 			t.Errorf("%s: the process received %q, want -YQ 0, the band, then %q", c.name, records[i], c.own)
 		}
@@ -125,10 +129,11 @@ func TestEveryCallClearsHooks(t *testing.T) {
 	}
 	// The shared helper must not mask a missing or swapped clear.
 	t.Run("helper refuses a damaged band", func(t *testing.T) {
-		whole := append(append([]string{"-YQ", "0"}, band...), "-HO")
-		missingEmpty := slices.Delete(slices.Clone(whole), 3, 4) // drops the first ""
+		whole := append(CallHead(), "-HO")
+		at := 2 + len(hostBand)                                        // the first hook clear
+		missingEmpty := slices.Delete(slices.Clone(whole), at+1, at+2) // drops the first ""
 		swapped := slices.Clone(whole)
-		swapped[2], swapped[4] = swapped[4], swapped[2]
+		swapped[at], swapped[at+2] = swapped[at+2], swapped[at]
 		for name, argv := range map[string][]string{"missing empty": missingEmpty, "swapped pair": swapped, "no band": {"-YQ", "0", "-HO"}} {
 			if _, err := stripHookPrefix(argv); err == nil {
 				t.Errorf("%s: stripHookPrefix accepted %q", name, argv[:min(8, len(argv))])
@@ -228,7 +233,7 @@ func TestRecordedCommandIncludesHookClears(t *testing.T) {
 		if want := formatCommand(path, records[i]); got != want {
 			t.Errorf("spawn %d: command %q is not what ran, %q", i, got, want)
 		}
-		if !strings.Contains(got, " -YQ 0 '-~g' '' '-~a' '' ") {
+		if !strings.Contains(got, " -YQ 0 ") || !strings.Contains(got, " '-~g' '' '-~a' '' ") {
 			t.Errorf("spawn %d: command %q does not show the clears", i, got)
 		}
 	}
@@ -257,6 +262,8 @@ func hookTimelineRequest() TimelineRequest {
 		Houses:  recipe.WholeSign,
 		Zodiac:  recipe.Tropical,
 		Objects: recipe.ObjectPolicy{Baseline: recipe.AstrologDefault},
+
+		AspectRegistry: mustTestAspects(),
 	}
 }
 
@@ -367,7 +374,7 @@ func TestHostHooksCannotMoveTheChart(t *testing.T) {
 	}
 	t.Run("control/A", func(t *testing.T) {
 		c, h := both(rawAspects.Argv())
-		if nc, nh := len(parseAspects(c, testRegistry(t))), len(parseAspects(h, testRegistry(t))); nc == 0 || nh != 0 {
+		if nc, nh := len(mustAspects(t, c, testRegistry(t))), len(mustAspects(t, h, testRegistry(t))); nc == 0 || nh != 0 {
 			t.Errorf("~A is not live: %d clean aspects, %d hostile, want >0 and 0", nc, nh)
 		}
 	})
@@ -408,14 +415,14 @@ func TestHostHooksCannotMoveTheChart(t *testing.T) {
 		c, _ := rawAstrolog(t, tlCall.Argv())
 		useDataDir(t, only)
 		h, _ := rawAstrolog(t, tlCall.Argv())
-		rc, errc := ParseTimeline(c, time.UTC, testRegistry(t))
+		rc, errc := ParseTimeline(c, time.UTC, testRegistry(t), testAspects(t))
 		if errc != nil || len(rc) == 0 {
 			t.Fatalf("clean timeline parsed %d rows, err %v", len(rc), errc)
 		}
 		if !strings.Contains(h, "Transits during") {
 			t.Fatalf("the hostile -t run printed no search header, so it never searched: %q", h)
 		}
-		rh, errh := ParseTimeline(h, time.UTC, testRegistry(t))
+		rh, errh := ParseTimeline(h, time.UTC, testRegistry(t), testAspects(t))
 		if errh != nil {
 			t.Fatalf("hostile timeline: %v", errh)
 		}
@@ -599,6 +606,7 @@ func TestMissingEphemerisFileKeepsTheChart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		spec.AspectRegistry = testAspects(t)
 		out, err := ComputeChart(context.Background(), spec)
 		// The folder is reduced above: the refusal is required.
 		if !errors.Is(err, ErrAstrologWarned) {
@@ -690,7 +698,8 @@ func TestHookClearBandReturnsIndependentArgv(t *testing.T) {
 	if _, _, err := invoke(context.Background(), []string{"-HO"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rawArgvRecords(t, argvLog)[0]; !slices.Equal(got[2:2+len(want)], want) {
+	at := 2 + len(hostBand)
+	if got := rawArgvRecords(t, argvLog)[0]; !slices.Equal(got[at:at+len(want)], want) {
 		t.Errorf("a caller's edit reached the launch: %q", got[:6])
 	}
 }

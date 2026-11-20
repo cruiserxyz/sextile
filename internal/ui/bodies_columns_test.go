@@ -310,19 +310,19 @@ func TestBodiesColumnsClipNeverWrap(t *testing.T) {
 	}
 }
 
-// C5: the left column is 52 + 12 per extra chart shown, and Details shows only
-// when 80 more cells fit; otherwise the single column takes the terminal.
+// C5: the left column is 65 + 12 per extra chart shown, and Details shows only
+// when 67 more cells fit; otherwise the single column takes the terminal.
 func TestLeftColumnGrowsByTwelve(t *testing.T) {
 	for shown := 1; shown <= 6; shown++ {
-		left := 52 + 12*(shown-1)
-		for _, w := range []int{66, 80, 103, 104, 115, 116, 127, 128, 131, 132, 139, 140, 143, 144, 151, 152, 155, 156, 163, 164, 200} {
-			rects := layoutGeometry(w, 40, 1, shown)
+		left := 65 + 12*(shown-1)
+		for _, w := range []int{66, 80, left + 66, left + 67, 132, 164, 200} {
+			rects := rectsAt(w, 40, 1, shown)
 			if rects == nil {
 				t.Fatalf("width %d: no layout", w)
 			}
 			details, hasDetails := rects[PanelDetails]
-			if want := w >= left+80; hasDetails != want {
-				t.Errorf("shown %d width %d: Details present = %v, want %v (left %d + 80)", shown, w, hasDetails, want, left)
+			if want := w >= left+67; hasDetails != want {
+				t.Errorf("shown %d width %d: Details present = %v, want %v (left %d + 67)", shown, w, hasDetails, want, left)
 			}
 			wantLeft := w
 			if hasDetails {
@@ -333,10 +333,10 @@ func TestLeftColumnGrowsByTwelve(t *testing.T) {
 				if rects[PanelLog].x != left || rects[PanelLog].w != w-left {
 					t.Errorf("shown %d width %d: Log at x=%d w=%d, want x=%d w=%d", shown, w, rects[PanelLog].x, rects[PanelLog].w, left, w-left)
 				}
-				if c, _ := consoleRect(w, 40, 1, shown); c.x != left || c.w != w-left {
+				if c, _ := consoleRectAt(w, 40, 1, shown); c.x != left || c.w != w-left {
 					t.Errorf("shown %d width %d: console at x=%d w=%d, want Details' x=%d w=%d", shown, w, c.x, c.w, left, w-left)
 				}
-				if got := hitTestPanel(w, 40, 1, shown, left, 0); got != PanelDetails {
+				if got := panelAtCell(w, 40, 1, shown, left, 0); got != PanelDetails {
 					t.Errorf("shown %d width %d: a click on Details' first cell hits %q", shown, w, got)
 				}
 			}

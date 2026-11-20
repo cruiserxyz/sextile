@@ -59,7 +59,7 @@ func TestRefusedSessionKeptIsLogged(t *testing.T) {
 	if len(copies) != 1 {
 		t.Fatalf("kept copies = %v, want one", copies)
 	}
-	want := "session: refused, kept " + filepath.Base(copies[0])
+	want := "session: unreadable, kept " + filepath.Base(copies[0])
 	n := 0
 	for _, l := range m.logLines {
 		if strings.Contains(l.text, "kept") {
@@ -101,7 +101,7 @@ func TestRefusedSessionSymlinkReportsWhy(t *testing.T) {
 	m := startedModel(t, realPerimeter(t))
 	found := false
 	for _, l := range m.logLines {
-		if l.lane == laneError && l.text == "Couldn't keep the refused session file: it is a symlink." {
+		if l.lane == laneError && l.text == "session: the unreadable session file was not kept, it is a link" {
 			found = true
 		}
 	}
@@ -137,7 +137,7 @@ func TestRefusedSessionSymlinkIsLeftAlone(t *testing.T) {
 		t.Errorf("copies appeared: %v", got)
 	}
 	err := m.SessionWriteError()
-	if err == nil || !strings.Contains(err.Error(), "it is a symlink") || strings.Contains(err.Error(), keepSecret) {
+	if err == nil || !strings.Contains(err.Error(), "it is a link") || strings.Contains(err.Error(), keepSecret) {
 		t.Errorf("SessionWriteError = %v, want the symlink reason and no content", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestRefusedSessionDirectoryIsLeftAlone(t *testing.T) {
 	if got := keptCopies(t); len(got) != 0 {
 		t.Errorf("copies appeared: %v", got)
 	}
-	if err := m.SessionWriteError(); err == nil || !strings.Contains(err.Error(), "it is a directory") {
+	if err := m.SessionWriteError(); err == nil || !strings.Contains(err.Error(), "it is a folder") {
 		t.Errorf("SessionWriteError = %v, want the directory reason", err)
 	}
 }
@@ -298,7 +298,7 @@ func TestFailedKeepReportedBeforeTheCityIsChosen(t *testing.T) {
 			Source: "stored-location",
 			Place:  location.RawPlace{Name: "Atlantis", Country: "??"},
 		},
-		SessionKeep: store.SessionKeep{Problem: "it is a symlink"},
+		SessionKeep: store.SessionKeep{Problem: "it is a link"},
 	}
 	var tm tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
 	tm, _ = tm.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
@@ -309,14 +309,14 @@ func TestFailedKeepReportedBeforeTheCityIsChosen(t *testing.T) {
 	}
 	found := false
 	for _, l := range m.logLines {
-		if l.lane == laneError && l.text == "Couldn't keep the refused session file: it is a symlink." {
+		if l.lane == laneError && l.text == "session: the unreadable session file was not kept, it is a link" {
 			found = true
 		}
 	}
 	if !found {
 		t.Errorf("no error-lane line before the city was chosen: %q", lineTexts(m))
 	}
-	if err := m.SessionWriteError(); err == nil || !strings.Contains(err.Error(), "it is a symlink") {
+	if err := m.SessionWriteError(); err == nil || !strings.Contains(err.Error(), "it is a link") {
 		t.Errorf("SessionWriteError = %v, want the failed keep before any workspace exists", err)
 	}
 	if !m.sessionKept {
@@ -330,8 +330,8 @@ func TestFailedMoveStillNamesTheKeptCopy(t *testing.T) {
 		Kept: "session.yaml.refused-20261008T120000Z", Problem: "it could not be moved"}))
 	var note, errLine bool
 	for _, l := range m.logLines {
-		note = note || (l.lane == laneNote && l.text == "session: refused, kept session.yaml.refused-20261008T120000Z")
-		errLine = errLine || (l.lane == laneError && l.text == "Couldn't keep the refused session file: it could not be moved.")
+		note = note || (l.lane == laneNote && l.text == "session: unreadable, kept session.yaml.refused-20261008T120000Z")
+		errLine = errLine || (l.lane == laneError && l.text == "session: the unreadable session file was not kept, it could not be moved")
 	}
 	if !note || !errLine {
 		t.Errorf("note %v, error %v; log = %q", note, errLine, lineTexts(m))

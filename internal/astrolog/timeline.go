@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -101,11 +103,12 @@ type TimelineRow struct {
 	Direction string
 	Station   string
 
-	// The aspect resolved through aspectAbbrev, here because the ui may not
-	// import this package (the specification rule 2). Resolved says every name
-	// the kind needs resolved: an aspect row's two objects and its aspect, an
-	// ingress or station's object. A name with no entry leaves it false, and
-	// the row is unmarkable.
+	// The aspect resolved through the aspect registry, here because the ui may
+	// not import this package (the specification rule 2). Resolved says every
+	// name the kind needs resolved: an aspect row's two objects and its aspect,
+	// an ingress or station's object. A name with no entry leaves it false, and
+	// the row is unmarkable. An aspect the registry does not hold is not a row
+	// at all: the list is refused.
 	AspectID aspect.AspectKind
 	Resolved bool
 
@@ -145,11 +148,8 @@ const (
 	// is a column.
 	tlBodyOther = tlName
 	tlSign      = `(?:\([A-Z][a-z]{2}\)|\[[A-Z][a-z]{2}\]|<[A-Z][a-z]{2}>)`
-	// tlAsp is the three-letter aspect abbreviation as aspectAbbrev spells it:
-	// `Con`, but also `BQn`, `SSx` and `SSq`, whose second letter is a capital.
-	// A `[a-z]{2}` tail refused every minor-aspect row the operator's chooser
-	// had turned on, and with it the whole month (2026-10-22).
-	tlAsp   = `[A-Z][A-Za-z]{2}`
+	// tlAsp is the aspect letters, the one grammar (astrologstyle.AspectLetters).
+	tlAsp   = astrologstyle.AspectLetters
 	tlLabel = `\([A-Z][A-Za-z ]*\)`
 	// (v/c HH:MM) marks the Moon's last major aspect in its sign: HH:MM is how
 	// long it stays void of course, the hours and minutes until the next Moon
@@ -184,7 +184,7 @@ func tlDate(c Clock) string {
 }
 
 // timelineGrammar is the pair of line grammars for a clock, anchored at BOTH
-// ends. The sky grammar (-d, -dm) is a weekday, the date and time, then an aspect
+// ends. The sky grammar (-d, -dY) is a weekday, the date and time, then an aspect
 // between two bodies, a sign ingress (--> forward, <-- by retrograde) or a
 // station (S/R, S/D), then optional labels and void. The transit grammar
 // (-t/-tr) is the date and time, Astrolog's `trans` and `natal` markers around
@@ -219,31 +219,47 @@ const (
 	noSkyEventsFound = "No transit events found."
 )
 
-// ParseTimeline reads the output of one `-t`, `-d`, `-dm` or `-tr` search whose
+// ParseTimeline reads the output of one `-t`, `-d`, `-dY` or `-tr` search whose
 // times are expressed in zone, and returns each dated event line's instant
 // and the line byte-identically (C1). The same output under a different zone
 // resolves to different instants (C1a): the zone is the reader's to supply,
 // because the text carries only a local clock.
 //
 // It recognises and drops exactly these non-event lines: blank, a chart header
-// beginning `Astrolog `, a search header beginning `Transits during ` (C4), and
-// the two "no events" notices above. Every other line must be a dated event, or the
+// beginning `Astrolog ` with every line after it up to the blank line (a
+// titled chart's date line, `Thu Dec 27, 1571 2:37pm (ST Zone LMT) …`, or an
+// untitled chart's place line, `Bassum, Germany   8:43E 52:51N`), a search
+// header beginning `Transits during ` (C4),
+// and the two "no events" notices above. Every other line must be a dated event, or the
 // whole parse fails naming it and returns no rows (C2) — including a line
 // that looks dated but whose date or time cannot be read (C55). A format
 // change is meant to be loud here rather than to lose a row silently.
-func ParseTimeline(out string, zone *time.Location, reg aspect.Registry) ([]TimelineRow, error) {
+func ParseTimeline(out string, zone *time.Location, reg aspect.Registry, aspects aspect.AspectRegistry) ([]TimelineRow, error) {
 	if zone == nil {
 		return nil, fmt.Errorf("astrolog: ParseTimeline: no zone to read the printed times in")
 	}
+	if text := aspects.Refusal(); text != "" {
+		return nil, &AspectsRefusedError{Text: text}
+	}
 	var rows []TimelineRow
+	// inHeader: a chart header runs from its `Astrolog ` line to the first blank
+	// line. Its second line is the date of a titled chart, or the place of an
+	// untitled one; neither is an event.
+	inHeader := false
 	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "Astrolog ") {
+			inHeader = true
+		}
+		if strings.TrimSpace(line) == "" {
+			inHeader = false
+		}
 		if strings.TrimSpace(line) == "" ||
-			strings.HasPrefix(line, "Astrolog ") ||
+			inHeader ||
 			strings.HasPrefix(line, "Transits during ") ||
 			line == noTransitsFound || line == noSkyEventsFound {
 			continue
 		}
-		row, err := timelineRow(line, zone, reg)
+		row, err := timelineRow(line, zone, reg, aspects)
 		if err != nil {
 			return nil, &TimelineLineError{Line: line, Reason: err.Error()}
 		}
@@ -266,7 +282,7 @@ func (e *TimelineLineError) Error() string {
 
 // timelineRow reads one event line: its instant (date and clock time in
 // zone) and its columns, cut from the groups of the grammar that matched.
-func timelineRow(line string, zone *time.Location, reg aspect.Registry) (TimelineRow, error) {
+func timelineRow(line string, zone *time.Location, reg aspect.Registry, aspects aspect.AspectRegistry) (TimelineRow, error) {
 	var re *regexp.Regexp
 	var m []string
 	transit := false
@@ -299,23 +315,28 @@ func timelineRow(line string, zone *time.Location, reg aspect.Registry) (Timelin
 	}
 	row := TimelineRow{Instant: parsed.Instant, Line: line, Weekday: weekday, Date: g("date"), Time: g("time"),
 		Transit: transit, Body: g("body"), Rest: g("rest"), Julian: parsed.Julian}
-	row.cutKind(reg, g("asp"), g("other"), g("dir"), g("ingress"), g("station"))
+	if err := row.cutKind(reg, aspects, g("asp"), g("other"), g("dir"), g("ingress"), g("station")); err != nil {
+		return TimelineRow{}, err
+	}
 	return row, nil
 }
 
 // cutKind fills the kind columns from the groups of the match and resolves the
 // names through the registry the search carried (rule 2 of the
 // specification). Only the groups that matched are set.
-func (r *TimelineRow) cutKind(reg aspect.Registry, asp, other, dir, ingress, station string) {
+func (r *TimelineRow) cutKind(reg aspect.Registry, aspects aspect.AspectRegistry, asp, other, dir, ingress, station string) error {
 	object, bodyOK := reg.ByCut(r.Body, leftNameWidth)
 	r.Object = object
 	switch {
 	case asp != "":
 		r.Kind, r.Aspect, r.Other = TimelineKindAspect, asp, other
 		second, otherOK := reg.ByCut(other, rightNameWidth)
-		kind, aspectOK := aspectAbbrev[asp]
+		kind, err := readAspectKind(aspects, asp)
+		if err != nil {
+			return err
+		}
 		r.OtherObject, r.AspectID = second, kind
-		r.Resolved = bodyOK && otherOK && aspectOK
+		r.Resolved = bodyOK && otherOK
 	case dir != "":
 		r.Kind, r.Direction, r.Sign = TimelineKindIngress, dir, ingress
 		r.Resolved = bodyOK
@@ -323,6 +344,7 @@ func (r *TimelineRow) cutKind(reg aspect.Registry, asp, other, dir, ingress, sta
 		r.Kind, r.Station = TimelineKindStation, station
 		r.Resolved = bodyOK
 	}
+	return nil
 }
 
 // timelineInstant reads one event's date and clock time in zone, in Astrolog's
@@ -430,6 +452,10 @@ type TimelineNatal struct {
 	When     time.Time
 	Lon, Lat float64
 	Objects  recipe.ObjectPolicy
+	// Record is the chart file's text for a natal cast from its file: the
+	// search reads it (`-i`), so the natal is the file's exactly. Empty for a
+	// natal with no file behind it, which goes as `-qj` and `-zl`.
+	Record string
 }
 
 // TimelineRequest is everything the searches depend on: the floating slot's
@@ -460,6 +486,37 @@ type TimelineRequest struct {
 	Defaults DefaultSets
 	// Registry is the binary's object list, handed to the call for its parser.
 	Registry aspect.Registry
+	// AspectRegistry is the binary's aspect list, handed to the call the same
+	// way. The Timeline does not go through ChartSpec, so it carries its own.
+	AspectRegistry aspect.AspectRegistry
+
+	// Voids answers the void search the sky rows' marks come from. Nil runs
+	// RunVoidSearch with the segment's searcher; the ui hands one that
+	// remembers (spec L6).
+	Voids VoidSource
+
+	// Moon makes this the Moon list: the sky's day searches carry the Moon
+	// event filter, and the transiting side of a transit search is the Moon
+	// alone. The Moon is the registry's own entry named "Moon".
+	Moon bool
+
+	// LeftOut, when set, collects what the searches left out because the
+	// ephemeris does not reach the date (see LeftOut).
+	LeftOut *LeftOut
+}
+
+// moonNumber is the registry number of the Moon a Moon-list request names, or 0
+// for a request that is not the Moon list. A registry without a Moon fails with
+// ErrVoidRegistry.
+func (req TimelineRequest) moonNumber() (int, error) {
+	if !req.Moon {
+		return 0, nil
+	}
+	moon, ok := req.Registry.ByName("Moon")
+	if !ok {
+		return 0, ErrVoidRegistry
+	}
+	return moon.Number, nil
 }
 
 // TimelineCall is one search as a body call: the argv and the chooser band the
@@ -480,12 +537,6 @@ type TimelineRequest struct {
 // The sky's call is Astrolog's day search for the local day seg starts in, at
 // seg's offset, in Astrolog's own calendar (Julian before its reform).
 func TimelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest) (BodyCall, error) {
-	return timelineCall(src, seg, req, false)
-}
-
-// timelineCall is TimelineCall; voids makes the sky's call the month search
-// over the Moon and the planets that marks the Moon void of course (skySegment).
-func timelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest, voids bool) (BodyCall, error) {
 	if req.Month < time.January || req.Month > time.December {
 		return BodyCall{}, fmt.Errorf("astrolog: TimelineArgv: month %d out of range", int(req.Month))
 	}
@@ -497,10 +548,6 @@ func timelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest, 
 	var argv []string
 	switch src {
 	case TimelineSky:
-		if voids {
-			argv = append(zone, "-qm", month, year, "-dm")
-			break
-		}
 		y, m, d := AstrologCalendar{}.DateOf(seg.Start, seg.Offset)
 		argv = append(zone, "-qd", strconv.Itoa(int(m)), strconv.Itoa(d), strconv.Itoa(y), "-d")
 	case TimelineTransit, TimelineReturn:
@@ -518,7 +565,15 @@ func timelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest, 
 		if src == TimelineReturn {
 			mode = "-tr"
 		}
-		argv = append(zone, "-qj", natalJD, "-zl", formatLon(req.Natal.Lon), formatLat(req.Natal.Lat))
+		if req.Natal.Record != "" {
+			// The natal's own record (InlineRecord), AFTER `-z`: the zone the
+			// rows print in is the floating one, and the natal keeps its own
+			// (measured: the record before `-z` re-zones the natal's clock and
+			// moves its moment).
+			argv = append(zone, InlineRecord(req.Natal.Record)...)
+		} else {
+			argv = append(zone, "-qj", natalJD, "-zl", formatLon(req.Natal.Lon), formatLat(req.Natal.Lat))
+		}
 		argv = append(argv, mode, month, year)
 	default:
 		return BodyCall{}, fmt.Errorf("astrolog: TimelineArgv: unknown source %d", int(src))
@@ -540,13 +595,54 @@ func timelineCall(src TimelineSource, seg TimelineSegment, req TimelineRequest, 
 		// side the now slot's marks, which the sky search's policy carries.
 		objects, transitMarks = req.Natal.Objects, req.Objects.Only
 	}
-	band, err := timelineBand(src, objects, transitMarks, req.Aspects, req.Defaults, voids)
+	moon, err := req.moonNumber()
 	if err != nil {
 		return BodyCall{}, err
 	}
-	call := newBodyCall(append(argv, band.tokens...), band)
-	call.Registry = req.Registry
+	band, err := timelineBand(src, objects, transitMarks, req.Aspects, req.Defaults, moon)
+	if err != nil {
+		return BodyCall{}, err
+	}
+	if src == TimelineSky && moon != 0 {
+		band = newBand(band.tokens, moonEventFilter(moon))
+	}
+	call := newBodyCall(append(argv, band.tokens...), band).asSearch()
+	call.Registry, call.Aspects, call.Objects = req.Registry, req.AspectRegistry, bandObjects(band, req.Defaults)
+	if req.LeftOut != nil {
+		call = call.reportingLeftOut(&req.LeftOut.Bodies).reportingLeftOutLines(&req.LeftOut.Lines)
+	}
 	return call, nil
+}
+
+// LeftOut is what a search leaves out: the objects whose ephemeris does not
+// reach the moment, and Astrolog's own lines about them. It is for the large
+// log only, never for a screen.
+type LeftOut struct {
+	Bodies []string
+	Lines  []string
+}
+
+// bandObjects is the objects a band draws, ascending: the numbers of its
+// show-lists, and Astrolog's default main set where the band lists none.
+func bandObjects(b Band, d DefaultSets) []int {
+	var nums []int
+	listed, inList := false, false
+	for _, t := range b.tokens {
+		if t == flagMainShow || t == flagTransitShow {
+			listed, inList = listed || t == flagMainShow, true
+			continue
+		}
+		if n, err := strconv.Atoi(t); inList && err == nil {
+			nums = append(nums, n)
+			continue
+		}
+		inList = false
+	}
+	if !listed {
+		nums = append(nums, d.Main...)
+	}
+	slices.Sort(nums)
+	return slices.Compact(nums)
 }
 
 // formatSearchZone renders an offset (seconds east) as Astrolog's `-z` value,
@@ -624,6 +720,9 @@ func ComputeTimeline(ctx context.Context, req TimelineRequest, srcs []TimelineSo
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := requireReadableAspects(req.AspectRegistry); err != nil {
+		return nil, nil, fmt.Errorf("astrolog: ComputeTimeline: %w", err)
+	}
 	var rows []TimelineRow
 	var commands []string
 	for _, src := range srcs {
@@ -639,8 +738,8 @@ func ComputeTimeline(ctx context.Context, req TimelineRequest, srcs []TimelineSo
 	return rows, commands, nil
 }
 
-// skyOverflowLine is the line Astrolog 8.00 can print in a `-dm` search that
-// is a miscount, not a loss (the specification). It is printed
+// skyOverflowLine is the line Astrolog 8.00 can print in a month search (`-dm`;
+// Sextile no longer runs one) that is a miscount, not a loss (the specification). It is printed
 // inside the day loop, so event rows may follow it. A day search (`-d`) holds
 // nothing back, so there it comes only with 300 rows on its day, past the bound
 // below, and is refused.
@@ -667,8 +766,8 @@ const skyDayRowBound = 75
 // when no printed date has skyDayRowBound or more rows (counted over this
 // one invocation's raw rows, before the segment filter). Every other case is
 // ParseTimeline's own refusal.
-func parseSearchOutput(src TimelineSource, out string, zone *time.Location, reg aspect.Registry) ([]TimelineRow, error) {
-	rows, err := ParseTimeline(out, zone, reg)
+func parseSearchOutput(src TimelineSource, out string, zone *time.Location, reg aspect.Registry, aspects aspect.AspectRegistry) ([]TimelineRow, error) {
+	rows, err := ParseTimeline(out, zone, reg, aspects)
 	var lineErr *TimelineLineError
 	if err == nil || src != TimelineSky || !errors.As(err, &lineErr) || lineErr.Line != skyOverflowLine {
 		return rows, err
@@ -679,7 +778,7 @@ func parseSearchOutput(src TimelineSource, out string, zone *time.Location, reg 
 			kept = append(kept, line)
 		}
 	}
-	stripped, serr := ParseTimeline(strings.Join(kept, "\n"), zone, reg)
+	stripped, serr := ParseTimeline(strings.Join(kept, "\n"), zone, reg, aspects)
 	if serr != nil {
 		return nil, serr
 	}
@@ -711,24 +810,37 @@ func timelineSegment(ctx context.Context, req TimelineRequest, src TimelineSourc
 // skySegment is the sky over one offset segment: Astrolog's day search (`-d`)
 // for each local day of it, because its month search drops events once a month
 // averages more than 75 a day (Astrolog_8.0 NEXT.md BUG 8: the planets' moons
-// alone make 95 to 129), and first one month search (`-dm`) over the Moon and
-// the planets for the void-of-course marks, which a day search prints only
-// when the Moon changes sign that same day. A day row the month search printed
-// with a mark is that month row, its own command with it; the month search's
-// other rows are not used. Any failed call fails the segment.
+// alone make 95 to 129), and the void search (void.go) for the void-of-course
+// marks, which a day search prints only when the Moon changes sign that same
+// day. The month search is gone because it misses a void whose sign change
+// falls in the next month (Astrolog_8.0 NEXT.md BUG 9). A day row the void
+// search printed with a mark is that void row, its own command with it; the
+// void search's other rows are not used. The Moon event filter (`-~d`) is the
+// one hook a call sets (hooks.go), and ReadVoids refuses output it did not
+// apply to. Any failed call, the void search included, fails the segment: a
+// list is never shown without its marks.
 func skySegment(ctx context.Context, req TimelineRequest, seg TimelineSegment, search TimelineSearcher) ([]TimelineRow, []string, error) {
 	var commands []string
-	call, err := timelineCall(TimelineSky, seg, req, true)
-	if err != nil {
-		return nil, nil, err
+	voids := req.Voids
+	if voids == nil {
+		voids = func(ctx context.Context, r VoidRequest) (VoidResult, bool, error) {
+			res, err := RunVoidSearch(ctx, r, search)
+			return res, true, err
+		}
 	}
-	month, command, err := searchCall(ctx, call, TimelineSky, seg, search)
-	commands = recordCommand(commands, command)
+	res, spawned, err := voids(ctx, VoidRequest{Moment: seg.Start, Offset: seg.Offset, Houses: req.Houses, Zodiac: req.Zodiac, Registry: req.Registry, AspectRegistry: req.AspectRegistry, LeftOut: req.LeftOut})
+	if spawned {
+		commands = recordCommand(commands, res.Command)
+	}
+	if err != nil {
+		return nil, commands, err
+	}
+	moon, err := req.moonNumber()
 	if err != nil {
 		return nil, commands, err
 	}
 	marked := map[string]TimelineRow{}
-	for _, row := range month {
+	for _, row := range res.Rows {
 		if bare := voidMark.ReplaceAllString(row.Line, ""); bare != row.Line {
 			marked[bare] = row
 		}
@@ -745,6 +857,11 @@ func skySegment(ctx context.Context, req TimelineRequest, seg TimelineSegment, s
 			return nil, commands, err
 		}
 		for _, row := range got {
+			// An AstroExpression filter that fails does so silently: the Moon
+			// list refuses a row the filter should have left out.
+			if moon != 0 && row.Object.Number != moon && row.OtherObject.Number != moon {
+				return nil, commands, fmt.Errorf("astrolog: Moon list: the Moon filter did not apply: %q", row.Line)
+			}
 			if m, ok := marked[voidMark.ReplaceAllString(row.Line, "")]; ok {
 				row = m
 			}
@@ -784,7 +901,7 @@ func searchCall(ctx context.Context, call BodyCall, src TimelineSource, seg Time
 	if err != nil {
 		return nil, command, err
 	}
-	parsed, err := parseSearchOutput(src, out, time.FixedZone("", seg.Offset), call.Registry)
+	parsed, err := parseSearchOutput(src, out, time.FixedZone("", seg.Offset), call.Registry, call.Aspects)
 	if err != nil {
 		return nil, command, err
 	}
@@ -801,7 +918,7 @@ func searchCall(ctx context.Context, call BodyCall, src TimelineSource, seg Time
 
 // TimelineCallResult is one segment's own outcome: the source and segment it
 // ran, the rows it contributed, the commands of its spawns (the sky's are one
-// a day and its void marks') and its error. A failed segment has no rows.
+// a day and its void search) and its error. A failed segment has no rows.
 type TimelineCallResult struct {
 	Source   TimelineSource
 	Segment  TimelineSegment
@@ -827,6 +944,9 @@ func ComputeTimelineCalls(ctx context.Context, req TimelineRequest, src Timeline
 	segs, err := timelineSegments(req.Year, req.Month, req.Zone)
 	if err != nil {
 		return nil, err
+	}
+	if err := requireReadableAspects(req.AspectRegistry); err != nil {
+		return nil, fmt.Errorf("astrolog: ComputeTimelineCalls: %w", err)
 	}
 	var results []TimelineCallResult
 	for _, seg := range segs {

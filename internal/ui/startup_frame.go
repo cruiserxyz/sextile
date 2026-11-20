@@ -1,12 +1,12 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
@@ -87,15 +87,7 @@ func acceptTextNotStaleError(m Model, msg refreshResultMsg) bool {
 // A current-want Err is non-fatal: the ready view renders empty panels
 // rather than blocking on the modal indefinitely.
 func applyTextCommit(m Model, msg FirstFrameReadyMsg) (Model, tea.Cmd) {
-	m, cmd := commitTextFrame(m, msg, m.isTickFrame(msg.WantID))
-	// The first ready frame with no Details to show says what size would.
-	if !m.limitedViewShown && m.startup == startupReady && m.geometry() != nil && !m.detailsVisible() {
-		var noticeCmd tea.Cmd
-		m.limitedViewShown = true
-		m, noticeCmd = m.showNotice(limitedViewNotice(m.shownCount()))
-		return m, tea.Batch(cmd, noticeCmd)
-	}
-	return m, cmd
+	return commitTextFrame(m, msg, m.isTickFrame(msg.WantID))
 }
 
 // commitTextFrame is the commit itself.
@@ -117,14 +109,23 @@ func commitTextFrame(m Model, msg FirstFrameReadyMsg, quiet bool) (Model, tea.Cm
 		m = m.logCommands(msg.Commands, failed...)
 	}
 	if msg.Err != nil {
-		m = m.noteEphemeris(msg.Err).logError("Couldn't cast the chart. %s", m.failureReason(msg.Err, m.consolePointer(len(msg.Commands) > 0))).logWarnings(msg.Err)
+		return m.commitRefusedFrame(msg)
 	}
-	var when time.Time
+	m.refused = textRefused{}
+	var date string
 	if s := m.focusedSlot(); s != nil && !msg.UnavailableUnion {
-		when = s.Time
+		if s.Floating && !msg.TransitTime.IsZero() {
+			// The moment this frame was cast for: Now may have moved on
+			// while it was computed.
+			cast := *s
+			cast.Time = msg.TransitTime
+			s = &cast
+		}
+		date = slotDate(s)
 	}
-	m = m.reportUnavailable(msg.Unavailable, when)
+	m = m.reportUnavailable(msg.Unavailable, date)
 	m.chart.positions = msg.Positions
+	m.chart.nodes = msg.Nodes
 	m.chart.stations = msg.Stations
 	// One note per failed probe run: a burst coalesces into one commit, so the
 	// note cannot repeat per key (the specification C5).
@@ -144,7 +145,7 @@ func commitTextFrame(m Model, msg FirstFrameReadyMsg, quiet bool) (Model, tea.Cm
 	m.chart.crossAspectsReport = msg.CrossAspectsReport
 	m.chart.crossSynastry = msg.CrossSynastry
 	m.chart.overlay = msg.Overlay
-	m.chart.settled = msg.Err == nil
+	m.chart.settled = true
 	m = m.commitColumns(msg)
 	m = m.commitCasts(msg.Casts)
 	m = m.noteHouseSources()
@@ -197,21 +198,8 @@ func commitTextFrame(m Model, msg FirstFrameReadyMsg, quiet bool) (Model, tea.Cm
 	detailsNeedsText := m.details.waitForText || (m.details.title == "" && m.details.body == "")
 	// While Aspects is focused Details is the frame's own report, so
 	// every settled commit refreshes it — no timer, no spawn.
-	if msg.Err == nil && textSettled && (detailsNeedsText || m.focused == PanelAspects) {
+	if textSettled && (detailsNeedsText || m.focused == PanelAspects) {
 		m, detailsCmd = m.requestDetails()
-	} else if msg.Err != nil && textSettled && m.details.waitForText && m.reportTabHidden() {
-		// The report tab is hidden: the pending mark stays as it was and the
-		// catch-up asks again when the report tab is chosen.
-		m.details.stale = true
-	} else if msg.Err != nil && textSettled {
-		// The new chart frame failed, so no matching Details report can run.
-		// Fence pending work, and do not keep the previous chart's report: the
-		// panels are cleared with the chart, and a held report under the new
-		// caption would be a state that is not true (round 2, 2.4).
-		m.details.pending = false
-		m.details.waitForText = false
-		m.details.title, m.details.body, m.details.keyed = "", "", false
-		m = m.suspendSurface(surfaceDetails)
 	}
 
 	// Auto-refresh the external wheel preview. In overlay mode the bi-wheel
@@ -226,7 +214,7 @@ func commitTextFrame(m Model, msg FirstFrameReadyMsg, quiet bool) (Model, tea.Cm
 	var timelineCmd tea.Cmd
 	m, timelineCmd = m.syncTimeline()
 	m = m.clampTimelineCursor()
-	if msg.Err == nil && (m.comparing() || m.focusedIsFloating()) {
+	if m.comparing() || m.focusedIsFloating() {
 		var imageCmd tea.Cmd
 		m, imageCmd = m.refreshWheelIfActive()
 		return m, tea.Batch(detailsCmd, imageCmd, timelineCmd)
@@ -234,18 +222,51 @@ func commitTextFrame(m Model, msg FirstFrameReadyMsg, quiet bool) (Model, tea.Cm
 	return m, tea.Batch(detailsCmd, timelineCmd)
 }
 
-// reportUnavailable says, once, which selected objects this Astrolog cannot
-// compute. Their rows were dropped at the parse rather than drawn at 0° Aries
-// with no motion, which is what Astrolog returns for them — so without this
-// line a body the operator ticked would simply never appear, and the selector
-// would look broken in exactly the way a silently-dropped row always does.
+// commitRefusedFrame is the commit of a text frame Astrolog refused to cast.
+// Nothing the panels show is replaced: Bodies, Aspects and Details keep what
+// they showed, and the floating chart keeps the moment that content was cast
+// at. The refused key is remembered, so the panes say the cast failed (the
+// view rule, subject.go) and nothing asks for that frame again until the key
+// asked for changes. The Log says which chart failed and why.
+func (m Model) commitRefusedFrame(msg FirstFrameReadyMsg) (Model, tea.Cmd) {
+	m = m.noteEphemeris(msg.Err).logError("astrolog", "%s not cast, %s", chartCaption(m.focusedSlot()), m.failureReason(msg.Err, m.consolePointer(len(msg.Commands) > 0))).logWarnings(msg.Err)
+	// An error commits only for the newest want, so the key asked for now is
+	// the key that was refused.
+	key, keyed := m.textKeyFor()
+	m.refused = textRefused{set: keyed, key: key}
+	if !m.startupShowsModal() {
+		m.startup = startupReady
+	}
+	if msg.WantID == m.refresh[surfaceText].wantID {
+		if m.details.waitForText && m.reportTabHidden() {
+			// The report tab is hidden: the pending mark stays as it was and
+			// the catch-up asks again when the report tab is chosen.
+			m.details.stale = true
+		} else {
+			// No report can be cast over a frame that was refused.
+			m.details.pending = false
+			m.details.waitForText = false
+			m = m.suspendSurface(surfaceDetails)
+		}
+	}
+	var timelineCmd tea.Cmd
+	m, timelineCmd = m.syncTimeline()
+	m = m.clampTimelineCursor()
+	return m, timelineCmd
+}
+
+// reportUnavailable notes, once, in the log console which selected objects this
+// Astrolog cannot compute. Their rows were dropped at the parse rather than
+// drawn at 0° Aries with no motion, which is what Astrolog returns for them.
+// The note is the console's, never the Log panel's: how Sextile works around
+// the missing data is not something the operator asked about.
 //
 // ONCE means once per change, not once per frame. The text surface recomputes
 // on every time-step and every cursor move, and the same three names arriving
-// sixty times during a held-key sweep would push the whole Log out of its six
-// rows. The set is remembered and compared, so selecting Eris logs one line,
-// stepping time logs none, and deselecting it logs the recovery.
-func (m Model) reportUnavailable(names []string, when time.Time) Model {
+// sixty times during a held-key sweep would fill the console. The set is
+// remembered and compared, so selecting Eris notes one line, stepping time
+// notes none, and deselecting it notes nothing.
+func (m Model) reportUnavailable(names []string, date string) Model {
 	if sameStringSet(m.lastUnavailable, names) {
 		return m
 	}
@@ -258,20 +279,20 @@ func (m Model) reportUnavailable(names []string, when time.Time) Model {
 	// The same sentence shape as the startup account (ephemerisAccount); this is
 	// the date backstop, for a chart outside a file's range.
 	what := "no ephemeris data"
-	if !when.IsZero() {
-		what += " for " + strings.TrimSpace(civilDate(when.Year(), int(when.Month()), when.Day()))
+	if date != "" {
+		what += " for " + date
 	}
 	// The bound absentLines has: at most three names, when the sentence fits
-	// the Log; otherwise the count.
+	// the Log's width; otherwise the count.
 	if list, few := nameList(names); few {
 		if line := list + " can't be drawn: " + what; fits(line, m.logLineLimit()) {
-			return m.logEphemeris(line)
+			return m.logTrace("bodies", "%s", line)
 		}
 	}
 	if len(names) == 1 {
-		return m.logEphemeris("1 body can't be drawn: " + what)
+		return m.logTrace("bodies", "1 body can't be drawn: %s", what)
 	}
-	return m.logEphemeris(fmt.Sprintf("%d bodies can't be drawn: %s", len(names), what))
+	return m.logTrace("bodies", "%d bodies can't be drawn: %s", len(names), what)
 }
 
 // sameStringSet compares two name lists as sets, so a reordering by Astrolog
@@ -313,4 +334,19 @@ func unionNames(a, b []string) []string {
 		}
 	}
 	return out
+}
+
+// slotDate is the date a slot's row shows, in Astrolog's calendar (Julian
+// before 15 October 1582): a chart file's own clock, or the slot's moment at
+// its place. "" when the slot shows no moment.
+func slotDate(s *store.Slot) string {
+	if c := s.Chart.Clock; !s.Floating && !c.IsZero() {
+		return strings.TrimSpace(civilDate(c.Year, c.Month, c.Day))
+	}
+	if s.Time.IsZero() {
+		return ""
+	}
+	t := zonedIn(s.Time, s.Location)
+	st := lookup.StampMoment(t, t.Location())
+	return strings.TrimSpace(civilDate(st.Year, st.Month, st.Day))
 }

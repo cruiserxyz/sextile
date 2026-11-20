@@ -56,7 +56,7 @@ func TestImageRunLogTranscript(t *testing.T) {
 		want []string
 	}{
 		{"ok", []string{"/bin/astrolog ring one", "/bin/astrolog ring two"}},
-		{"fail", []string{"/bin/astrolog ring one", "/bin/astrolog ring two", "Couldn't draw the wheel. Astrolog could not render it."}},
+		{"fail", []string{"/bin/astrolog ring one", "/bin/astrolog ring two", "wheel: wheel not drawn, Astrolog could not render it"}},
 		{"stale", []string{"/bin/astrolog ring one", "/bin/astrolog ring two", "/bin/astrolog follow-up"}},
 	}
 	for _, c := range cases {

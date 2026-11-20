@@ -101,6 +101,9 @@ func weekSearch(_ context.Context, call lookup.BodyCall) (string, string, error)
 		return weekReturn, cmd, nil
 	case slices.Contains(argv, "-t"):
 		return weekTransit, cmd, nil
+	case slices.Contains(argv, "-dY"):
+		// The void search prints the Moon's rows only (its `-~d` filter).
+		return moonRows(weekSky), cmd, nil
 	}
 	return weekSky, cmd, nil
 }
@@ -112,7 +115,7 @@ func weekRows(t *testing.T) []lookup.TimelineRow {
 	defaultClock(t)
 	t.Helper()
 	res, err := lookup.TimelineWith(context.Background(),
-		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry}, When: tlFloatingTime, Place: testPlaceAmsterdam(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, weekSearch, stubDefaults)
+		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry, AspectRegistry: lookup.Hellenistic.AspectRegistry}, When: tlFloatingTime, Place: testPlaceAmsterdam(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, weekSearch, stubDefaults)
 	if err != nil {
 		t.Fatalf("fixture merge: %v", err)
 	}
@@ -182,20 +185,21 @@ func assertEnteredChartRowRecomputed(t *testing.T, m Model, when time.Time, what
 	}
 }
 
-// stubAnyWheel stubs both wheel renderers — single chart and the comparison
-// bi-wheel, which is what the fixture's selected pair draws — and returns the
+// stubAnyWheel stubs both wheel renderers — single chart and the rings route,
+// which draws the comparison bi-wheel the fixture's selected pair has — and returns the
 // moment each render was asked for, in order.
 func stubAnyWheel(t *testing.T) *[]time.Time {
 	t.Helper()
 	calls := &[]time.Time{}
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			when := chart.When
 			*calls = append(*calls, when)
 			return []byte("BM-wheel"), nil
 		}
-		s.wheel.renderOverlay = func(_ context.Context, _ store.AnchorChart, when time.Time, _ location.PlaceInfo, _ lookup.Lens) ([]byte, error) {
-			*calls = append(*calls, when)
-			return []byte("BM-overlay"), nil
+		s.wheel.renderRings = func(_ context.Context, rings []lookup.WheelRing, _ lookup.Lens) ([]byte, []string, error) {
+			*calls = append(*calls, rings[len(rings)-1].When) // the cursor's chart, the inner ring
+			return []byte("BM-rings"), nil, nil
 		}
 	})
 	return calls
@@ -217,7 +221,7 @@ func stubTextCompute(t *testing.T) *[]textCall {
 		}
 		s.cast.overlay = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
 			*calls = append(*calls, textCall{kind: "aspects", when: when})
-			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objMoon, Kind: aspect.Conjunction, Orb: aspect.Orb(stamp(when))}}}, nil
+			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objMoon, Kind: kindOf("Con"), Orb: aspect.Orb(stamp(when))}}}, nil
 		}
 	})
 	return calls
@@ -237,6 +241,7 @@ func timelineModel(t *testing.T, cfg Config) Model {
 		t.Fatalf("addAnchor: %v", err)
 	}
 	m.slots = slots
+	m.lens.Registry = fixtureRegistry()
 	m.cursorIdx = len(slots.All()) - 1
 	m.place = testPlaceAmsterdam()
 	m.targetFloatingTime = slots.Floating().Time
@@ -263,9 +268,12 @@ func detailsTimelineModel(t *testing.T, cfg Config) Model {
 	return m
 }
 
-func syncTimelineVisited(m Model) (Model, tea.Cmd) {
+func syncTimelineVisited(m Model) (Model, tea.Cmd) { return syncListVisited(m, listTimeline) }
+
+// syncListVisited is syncTimelineVisited for list k.
+func syncListVisited(m Model, k timelineList) (Model, tea.Cmd) {
 	before, had := m.details.tabs[m.focused]
-	m = m.withDetailsTab(m.focused, TabDetailsTimeline)
+	m = m.withDetailsTab(m.focused, k.tab())
 	m, cmd := m.syncTimeline()
 	if had {
 		return m.withDetailsTab(m.focused, before), cmd
@@ -283,14 +291,20 @@ func syncTimelineVisited(m Model) (Model, tea.Cmd) {
 // syncTimelineShown is syncTimelineVisited for a fixture whose operator stays
 // on the timeline tab: the tests after it change search inputs and expect the
 // visible timeline to follow (rule 4 of the specification).
-func syncTimelineShown(m Model) (Model, tea.Cmd) {
-	m = m.withDetailsTab(m.focused, TabDetailsTimeline)
+func syncTimelineShown(m Model) (Model, tea.Cmd) { return syncListShown(m, listTimeline) }
+
+// syncListShown is syncTimelineShown for list k.
+func syncListShown(m Model, k timelineList) (Model, tea.Cmd) {
+	m = m.withDetailsTab(m.focused, k.tab())
 	return m.syncTimeline()
 }
 
 // loadedTimeline is timelineModel with its first search run and committed
 // through the real coordinator path.
-func loadedTimeline(t *testing.T, cfg Config) Model {
+func loadedTimeline(t *testing.T, cfg Config) Model { return loadedList(t, listTimeline, cfg) }
+
+// loadedList is loadedTimeline for list k.
+func loadedList(t *testing.T, k timelineList, cfg Config) Model {
 	t.Helper()
 	freshModels(t)
 	if !isStubbed(t, "timeline") {
@@ -299,10 +313,10 @@ func loadedTimeline(t *testing.T, cfg Config) Model {
 	m := timelineModel(t, cfg)
 	// Details, which holds the timeline, needs room beside the left column.
 	m.width = max(m.width, dualColumnMinWidth(m.shownCount()))
-	m, cmd := syncTimelineVisited(m)
+	m, cmd := syncListVisited(m, k)
 	m = pump(t, m, cmd)
-	if !m.timeline.complete || len(m.timeline.rows) != 34 {
-		t.Fatalf("fixture timeline did not load: complete=%v rows=%d", m.timeline.complete, len(m.timeline.rows))
+	if l := m.list(k); !l.complete || len(l.rows) != 34 {
+		t.Fatalf("fixture %s list did not load: complete=%v rows=%d", k.scope(), l.complete, len(l.rows))
 	}
 	return m
 }
@@ -430,13 +444,16 @@ func runes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: [
 
 // onTimeline is a loaded model with the timeline tab chosen and Details
 // attached from Chart.
-func onTimeline(t *testing.T, cfg Config) Model {
+func onTimeline(t *testing.T, cfg Config) Model { return onList(t, listTimeline, cfg) }
+
+// onList is onTimeline for list k: its tab chosen and Details attached.
+func onList(t *testing.T, k timelineList, cfg Config) Model {
 	t.Helper()
 	freshModels(t)
-	m := loadedTimeline(t, cfg)
-	m, _ = tpress(t, m, runes("0"))
+	m := loadedList(t, k, cfg)
+	m, _ = openList(t, m, k)
 	m, _ = tpress(t, m, keyEnter)
-	if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline {
+	if !m.details.attached || m.activeTabID(PanelDetails) != k.tab() {
 		t.Fatalf("fixture: attached=%v tab=%s", m.details.attached, m.activeTabID(PanelDetails))
 	}
 	return homedTimeline(t, m)
@@ -497,114 +514,120 @@ func renderDetails(m Model) string {
 // reached through a text commit under the report tab (nothing runs), then
 // through choosing the tab, the way a real session first reaches it.
 func TestTimelineRunsOnItsFirstDeclaration(t *testing.T) {
-	calls := stubTimeline(t, nil)
-	m := timelineModel(t, Config{Accessible: true})
-	m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime})
-	m = pump(t, m, cmd)
-	if len(*calls) != 0 {
-		t.Fatalf("searches ran %d times with the report tab active, want none", len(*calls))
-	}
-	m, cmd = tpress(t, m, runes("0"))
-	m = pump(t, m, cmd)
-	if len(*calls) != 1 {
-		t.Fatalf("searches ran %d times on the first declaration, want once", len(*calls))
-	}
-	got := (*calls)[0].req
-	// Changed by selected-charts-compare P4/C10: a comparing timeline asks for
-	// its anchored slots as Natals (numeral 1 here), not as the one Natal.
-	if !got.When.Equal(tlFloatingTime) || got.Place != testPlaceAmsterdam() || len(got.Natals) != 1 || got.Natals[0].Numeral != 1 || got.Natals[0].Chart != tlNatal() {
-		t.Errorf("searched %+v, want the floating slot's time and place and the anchored chart", got)
-	}
-	if len(m.timeline.rows) != 34 {
-		t.Errorf("rows = %d after the first search, want the 34 it returned", len(m.timeline.rows))
-	}
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		calls := stubTimeline(t, nil)
+		m := timelineModel(t, Config{Accessible: true})
+		m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime})
+		m = pump(t, m, cmd)
+		if len(*calls) != 0 {
+			t.Fatalf("searches ran %d times with the report tab active, want none", len(*calls))
+		}
+		m, cmd = openList(t, m, lk)
+		m = pump(t, m, cmd)
+		if len(*calls) != 1 {
+			t.Fatalf("searches ran %d times on the first declaration, want once", len(*calls))
+		}
+		got := (*calls)[0].req
+		// Changed by selected-charts-compare P4/C10: a comparing timeline asks for
+		// its anchored slots as Natals (numeral 1 here), not as the one Natal.
+		if !got.When.Equal(tlFloatingTime) || got.Place != testPlaceAmsterdam() || len(got.Natals) != 1 || got.Natals[0].Numeral != 1 || got.Natals[0].Chart != tlNatal() {
+			t.Errorf("searched %+v, want the floating slot's time and place and the anchored chart", got)
+		}
+		if len(m.list(lk).rows) != 34 {
+			t.Errorf("rows = %d after the first search, want the 34 it returned", len(m.list(lk).rows))
+		}
+	})
 }
 
 // C10: each search input, changed alone, re-runs the searches.
 func TestTimelineRecomputesWhenASearchInputChanges(t *testing.T) {
-	calls := stubTimeline(t, nil)
-	commit := func(m Model, when time.Time) Model {
-		m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: when})
-		return pump(t, m, cmd)
-	}
-	berlin := testPlaceBerlin()
-	for _, tc := range []struct {
-		name   string
-		change func(*testing.T, Model) Model
-	}{
-		{"the month", func(t *testing.T, m Model) Model { return commit(m, tlFloatingTime.AddDate(0, 1, 0)) }},
-		{"the year", func(t *testing.T, m Model) Model { return commit(m, tlFloatingTime.AddDate(1, 0, 0)) }},
-		{"the floating zone", func(t *testing.T, m Model) Model {
-			slots, _ := store.NewSlots(tlFloatingTime, berlin)
-			_ = addAnchor(slots, tlNatalWhen, testPlaceAmsterdam())
-			m.slots = slots
-			return commit(m, tlFloatingTime)
-		}},
-		{"whether a slot is anchored", func(t *testing.T, m Model) Model {
-			slots, _ := store.NewSlots(tlFloatingTime, testPlaceAmsterdam())
-			m.slots, m.cursorIdx = slots, 0
-			return commit(m, tlFloatingTime)
-		}},
-		{"which chart is anchored", func(t *testing.T, m Model) Model {
-			setAnchor(m, store.AnchorChart{When: time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Place: berlin})
-			return commit(m, tlFloatingTime)
-		}},
-		{"the pair is deselected", func(t *testing.T, m Model) Model {
-			m.slots.SetComparisonSelected(false)
-			return commit(m, tlFloatingTime)
-		}},
-		{"another library chart with the same moment and place", func(t *testing.T, m Model) Model {
-			m, _ = applyChartResolved(m, ChartResolvedMsg{
-				Chart: store.NamedChart{ID: "twin", Name: "Constructed Twin", Place: testPlaceAmsterdam()},
-				When:  tlNatalWhen, Gen: m.pickGen})
-			if anchorHandle(m) != tlNatal() || m.focusedChart() != tlNatal() {
-				t.Fatal("fixture: the twin chart does not share the moment and place")
-			}
-			// A pick adds the twin below the first chart; it is the baseline —
-			// the chart the comparison and the timeline use — once the
-			// astrologer selects it and deselects the first (the specification M1).
-			m.slots.ToggleSlotSelection(1)
-			m.slots.ToggleSlotSelection(0)
-			return commit(m, tlFloatingTime)
-		}},
-		{"the anchored chart's own place", func(t *testing.T, m Model) Model {
-			moved := tlNatal()
-			moved.Place.Lon += 1
-			setAnchor(m, moved)
-			return commit(m, tlFloatingTime)
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := loadedTimeline(t, Config{Accessible: true})
-			// The searches follow the inputs while the timeline tab is on screen.
-			m = m.withDetailsTab(PanelChart, TabDetailsTimeline)
-			before := len(*calls)
-			m = tc.change(t, m)
-			if got := len(*calls) - before; got != 1 {
-				t.Errorf("changing %s ran the searches %d times, want once", tc.name, got)
-			}
-		})
-	}
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		calls := stubTimeline(t, nil)
+		commit := func(m Model, when time.Time) Model {
+			m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: when})
+			return pump(t, m, cmd)
+		}
+		berlin := testPlaceBerlin()
+		for _, tc := range []struct {
+			name   string
+			change func(*testing.T, Model) Model
+		}{
+			{"the month", func(t *testing.T, m Model) Model { return commit(m, tlFloatingTime.AddDate(0, 1, 0)) }},
+			{"the year", func(t *testing.T, m Model) Model { return commit(m, tlFloatingTime.AddDate(1, 0, 0)) }},
+			{"the floating zone", func(t *testing.T, m Model) Model {
+				slots, _ := store.NewSlots(tlFloatingTime, berlin)
+				_ = addAnchor(slots, tlNatalWhen, testPlaceAmsterdam())
+				m.slots = slots
+				return commit(m, tlFloatingTime)
+			}},
+			{"whether a slot is anchored", func(t *testing.T, m Model) Model {
+				slots, _ := store.NewSlots(tlFloatingTime, testPlaceAmsterdam())
+				m.slots, m.cursorIdx = slots, 0
+				return commit(m, tlFloatingTime)
+			}},
+			{"which chart is anchored", func(t *testing.T, m Model) Model {
+				setAnchor(m, store.AnchorChart{When: time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Place: berlin})
+				return commit(m, tlFloatingTime)
+			}},
+			{"the pair is deselected", func(t *testing.T, m Model) Model {
+				m.slots.SetComparisonSelected(false)
+				return commit(m, tlFloatingTime)
+			}},
+			{"another library chart with the same moment and place", func(t *testing.T, m Model) Model {
+				m, _ = applyChartResolved(m, ChartResolvedMsg{
+					Chart: store.NamedChart{ID: "twin", Name: "Constructed Twin", Place: testPlaceAmsterdam()},
+					When:  tlNatalWhen, Gen: m.pickGen})
+				if anchorHandle(m) != tlNatal() || m.focusedChart() != tlNatal() {
+					t.Fatal("fixture: the twin chart does not share the moment and place")
+				}
+				// A pick adds the twin below the first chart; it is the baseline —
+				// the chart the comparison and the timeline use — once the
+				// astrologer selects it and deselects the first (the specification M1).
+				m.slots.ToggleSlotSelection(1)
+				m.slots.ToggleSlotSelection(0)
+				return commit(m, tlFloatingTime)
+			}},
+			{"the anchored chart's own place", func(t *testing.T, m Model) Model {
+				moved := tlNatal()
+				moved.Place.Lon += 1
+				setAnchor(m, moved)
+				return commit(m, tlFloatingTime)
+			}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				m := loadedList(t, lk, Config{Accessible: true})
+				// The searches follow the inputs while the timeline tab is on screen.
+				m = m.withDetailsTab(PanelChart, lk.tab())
+				before := len(*calls)
+				m = tc.change(t, m)
+				if got := len(*calls) - before; got != 1 {
+					t.Errorf("changing %s ran the searches %d times, want once", tc.name, got)
+				}
+			})
+		}
+	})
 }
 
 // C25: moving the floating slot inside the same month — by day, hour or
 // minute, through the real step keys — never re-runs the searches.
 func TestTimelineDoesNotRecomputeWithinTheSameInputs(t *testing.T) {
-	calls := stubTimeline(t, nil)
-	stubTextCompute(t)
-	m := loadedTimeline(t, Config{Accessible: true})
-	before := len(*calls)
-	for _, k := range []string{"d", "D", "h", "H", "m", "M", "w"} {
-		var cmd tea.Cmd
-		m, cmd = tpress(t, m, runes(k))
-		m = pump(t, m, cmd)
-	}
-	if got := m.slots.Floating().Time; got.Month() != time.October || got.Equal(tlFloatingTime) {
-		t.Fatalf("fixture: the steps did not move the slot within October: %v", got)
-	}
-	if len(*calls) != before {
-		t.Errorf("stepping within October re-ran the searches %d times", len(*calls)-before)
-	}
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		calls := stubTimeline(t, nil)
+		stubTextCompute(t)
+		m := loadedList(t, lk, Config{Accessible: true})
+		before := len(*calls)
+		for _, k := range []string{"d", "D", "h", "H", "m", "M", "w"} {
+			var cmd tea.Cmd
+			m, cmd = tpress(t, m, runes(k))
+			m = pump(t, m, cmd)
+		}
+		if got := m.slots.Floating().Time; got.Month() != time.October || got.Equal(tlFloatingTime) {
+			t.Fatalf("fixture: the steps did not move the slot within October: %v", got)
+		}
+		if len(*calls) != before {
+			t.Errorf("stepping within October re-ran the searches %d times", len(*calls)-before)
+		}
+	})
 }
 
 // ---- The Details panel ---------------------------------------------------
@@ -623,8 +646,11 @@ func TestDetailsAlwaysDeclaresTheTimelineTab(t *testing.T) {
 					m.focused, m.details.attached, m.details.title = focus, attached, title
 					// Only the Chart panel offers the timeline (the specification acceptance 1).
 					want := []TabID{TabDetailsReport}
+					if focus == PanelStatus {
+						want = append(want, TabStatusSession)
+					}
 					if focus == PanelChart {
-						want = append(want, TabDetailsTimeline)
+						want = append(want, TabDetailsTimeline, TabDetailsMoon)
 					}
 					if got := tabIDs(m.panelTabs(PanelDetails)); !reflect.DeepEqual(got, want) {
 						t.Errorf("paired=%v focus=%s attached=%v title=%q: tabs %v", paired, focus, attached, title, got)
@@ -678,7 +704,7 @@ func TestDetailsReportTabIsUnchangedBelowTheStrip(t *testing.T) {
 			if strings.Contains(string(raw), "[0]") || !strings.Contains(string(raw), "[4] Details") {
 				t.Fatalf("%s is not the pre-slice frame: the baseline has been regenerated", tc.golden)
 			}
-			r := layoutGeometry(144, 39, chartContentLines(m.slots), m.shownCount())[PanelDetails]
+			r := rectsAt(144, 39, chartContentLines(m.slots), m.shownCount())[PanelDetails]
 			const baselineX = 66 // where the frozen frame drew Details
 			const shared = 61    // cells after the border that both frames draw intact
 			want := strings.Split(ansi.Strip(string(raw)), "\n")
@@ -700,7 +726,7 @@ func TestDetailsReportTabIsUnchangedBelowTheStrip(t *testing.T) {
 
 // rowsFromSearch runs lookup's own merge over canned Astrolog output, so a
 // fixture row carries the columns the parser cut and not a hand-built struct.
-// sky answers the -dm search, transit the -t search; both at one zone.
+// sky answers the sky searches, transit the -t search; both at one zone.
 func rowsFromSearch(t *testing.T, when time.Time, sky, transit string) []lookup.TimelineRow {
 	amPmMonthFirst(t)
 	t.Helper()
@@ -712,10 +738,12 @@ func rowsFromSearch(t *testing.T, when time.Time, sky, transit string) []lookup.
 			return "", cmd, nil
 		case slices.Contains(argv, "-t"):
 			return transit, cmd, nil
+		case slices.Contains(argv, "-dY"):
+			return moonRows(sky), cmd, nil
 		}
 		return sky, cmd, nil
 	}
-	req := lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry}, When: when, Place: testPlaceAmsterdam()}
+	req := lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry, AspectRegistry: lookup.Hellenistic.AspectRegistry}, When: when, Place: testPlaceAmsterdam()}
 	if transit != "" {
 		req.Natal = tlNatal()
 	}
@@ -837,50 +865,54 @@ func TestTimelineRowsKeepAstrologsWords(t *testing.T) {
 // C14: a failed search for the SAME inputs leaves the visible frame — title
 // and body — byte for byte.
 func TestTimelineFailureRetainsTheVisibleFrame(t *testing.T) {
-	fail := false
-	week := weekRows(t)
-	stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		if fail {
-			return lookup.TimelineResult{Commands: []string{"astrolog -z -2 -qm 10 2026 -dm"}}, errors.New("astrolog exec: exit status 1")
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		fail := false
+		week := weekRows(t)
+		stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			if fail {
+				return lookup.TimelineResult{Commands: []string{"astrolog -z -2 -qm 10 2026 -dm"}}, errors.New("astrolog exec: exit status 1")
+			}
+			return lookup.TimelineResult{Rows: week}, nil
+		})
+		m := loadedList(t, lk, Config{Accessible: true})
+		m, _ = openList(t, m, lk)
+		before := renderDetails(m)
+		fail = true
+		m, cmd := m.bumpIdentity(lk.surface()) // the same inputs, searched again
+		m = pump(t, m, cmd)
+		if got := renderDetails(m); got != before {
+			t.Fatalf("a failed search changed the frame:\nBEFORE\n%s\nAFTER\n%s", before, got)
 		}
-		return lookup.TimelineResult{Rows: week}, nil
 	})
-	m := loadedTimeline(t, Config{Accessible: true})
-	m, _ = tpress(t, m, runes("0"))
-	before := renderDetails(m)
-	fail = true
-	m, cmd := m.bumpIdentity(surfaceTimeline) // the same inputs, searched again
-	m = pump(t, m, cmd)
-	if got := renderDetails(m); got != before {
-		t.Fatalf("a failed search changed the frame:\nBEFORE\n%s\nAFTER\n%s", before, got)
-	}
 }
 
 // C44: once any input has changed, no row of the previous inputs is shown —
 // not while the new search runs, and not after it fails.
 func TestNoRowsSurviveASearchInputChange(t *testing.T) {
-	fail := false
-	week := weekRows(t)
-	stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		if fail {
-			return lookup.TimelineResult{}, errors.New("astrolog exec: exit status 1")
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		fail := false
+		week := weekRows(t)
+		stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			if fail {
+				return lookup.TimelineResult{}, errors.New("astrolog exec: exit status 1")
+			}
+			return lookup.TimelineResult{Rows: week}, nil
+		})
+		m := loadedList(t, lk, Config{Accessible: true})
+		m, _ = openList(t, m, lk)
+		fail = true
+		// Another client is anchored: the old client's transits must go at once.
+		setAnchor(m, store.AnchorChart{When: time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Place: testPlaceBerlin()})
+		m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime})
+		pending := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
+		m = pump(t, m, cmd)
+		failed := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
+		for _, r := range week {
+			if strings.Contains(pending, r.Line) || strings.Contains(failed, r.Line) {
+				t.Fatalf("a row of the previous inputs is still on screen: %q", r.Line)
+			}
 		}
-		return lookup.TimelineResult{Rows: week}, nil
 	})
-	m := loadedTimeline(t, Config{Accessible: true})
-	m, _ = tpress(t, m, runes("0"))
-	fail = true
-	// Another client is anchored: the old client's transits must go at once.
-	setAnchor(m, store.AnchorChart{When: time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Place: testPlaceBerlin()})
-	m, cmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime})
-	pending := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
-	m = pump(t, m, cmd)
-	failed := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
-	for _, r := range week {
-		if strings.Contains(pending, r.Line) || strings.Contains(failed, r.Line) {
-			t.Fatalf("a row of the previous inputs is still on screen: %q", r.Line)
-		}
-	}
 }
 
 // C44 through the paths that really change an input: a new client resolved
@@ -888,50 +920,52 @@ func TestNoRowsSurviveASearchInputChange(t *testing.T) {
 // or the zone at once, long before their recompute commits, and neither may
 // leave the previous client's rows on screen for that interval.
 func TestNoRowsSurviveAnAnchorOrCityPick(t *testing.T) {
-	week := weekRows(t)
-	for name, change := range map[string]func(Model) Model{
-		// A pick adds a chart below the first one, which stays the baseline; the
-		// baseline — and so the timeline's inputs — changes when the astrologer
-		// selects the new chart and deselects the first (the specification M1).
-		"chart picker": func(m Model) Model {
-			m, _ = applyChartResolved(m, ChartResolvedMsg{
-				Chart: store.NamedChart{ID: "another", Name: "Another Constructed", Place: testPlaceBerlin()},
-				When:  time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Gen: m.pickGen})
-			m.slots.ToggleSlotSelection(1)
-			m.slots.ToggleSlotSelection(0)
-			return m
-		},
-		"a twin chart": func(m Model) Model {
-			m, _ = applyChartResolved(m, ChartResolvedMsg{
-				Chart: store.NamedChart{ID: "twin", Name: "Constructed Twin", Place: testPlaceAmsterdam()},
-				When:  tlNatalWhen, Gen: m.pickGen})
-			m.slots.ToggleSlotSelection(1)
-			m.slots.ToggleSlotSelection(0)
-			return m
-		},
-		"atlas": func(m Model) Model {
-			m, _ = applyAtlasPicked(m, AtlasPickedMsg{Place: testPlaceBerlin()})
-			return m
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			m := loadedTimeline(t, Config{Accessible: true})
-			m, _ = tpress(t, m, runes("0"))
-			m = change(m)
-			if _, key, ok := m.timelineInputs(); !ok || key == m.timeline.key {
-				t.Fatalf("fixture: the %s did not change the search inputs", name)
-			}
-			shown := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
-			for _, r := range week {
-				if strings.Contains(shown, r.Line) {
-					t.Fatalf("after the %s, the previous inputs' row is on screen: %q", name, r.Line)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		week := weekRows(t)
+		for name, change := range map[string]func(Model) Model{
+			// A pick adds a chart below the first one, which stays the baseline; the
+			// baseline — and so the timeline's inputs — changes when the astrologer
+			// selects the new chart and deselects the first (the specification M1).
+			"chart picker": func(m Model) Model {
+				m, _ = applyChartResolved(m, ChartResolvedMsg{
+					Chart: store.NamedChart{ID: "another", Name: "Another Constructed", Place: testPlaceBerlin()},
+					When:  time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC), Gen: m.pickGen})
+				m.slots.ToggleSlotSelection(1)
+				m.slots.ToggleSlotSelection(0)
+				return m
+			},
+			"a twin chart": func(m Model) Model {
+				m, _ = applyChartResolved(m, ChartResolvedMsg{
+					Chart: store.NamedChart{ID: "twin", Name: "Constructed Twin", Place: testPlaceAmsterdam()},
+					When:  tlNatalWhen, Gen: m.pickGen})
+				m.slots.ToggleSlotSelection(1)
+				m.slots.ToggleSlotSelection(0)
+				return m
+			},
+			"atlas": func(m Model) Model {
+				m, _ = applyAtlasPicked(m, AtlasPickedMsg{Place: testPlaceBerlin()})
+				return m
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				m := loadedList(t, lk, Config{Accessible: true})
+				m, _ = openList(t, m, lk)
+				m = change(m)
+				if _, key, ok := m.timelineInputs(); !ok || key == m.list(lk).key {
+					t.Fatalf("fixture: the %s did not change the search inputs", name)
 				}
-			}
-			if copied := m.copiedRows(); len(copied) != 0 {
-				t.Errorf("after the %s, the content would copy the previous inputs' rows", name)
-			}
-		})
-	}
+				shown := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
+				for _, r := range week {
+					if strings.Contains(shown, r.Line) {
+						t.Fatalf("after the %s, the previous inputs' row is on screen: %q", name, r.Line)
+					}
+				}
+				if copied := m.copiedRows(); len(copied) != 0 {
+					t.Errorf("after the %s, the content would copy the previous inputs' rows", name)
+				}
+			})
+		}
+	})
 }
 
 // C41: the failure is on the error lane and names what was refused — the
@@ -940,7 +974,7 @@ func TestTimelineFailureReportsOnTheErrorLane(t *testing.T) {
 	defaultClock(t)
 	refused := "Astrolog: Value 13 passed to parameter #1 of switch -t out of range."
 	_, parseErr := lookup.TimelineWith(context.Background(),
-		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry}, When: tlFloatingTime, Place: testPlaceAmsterdam()},
+		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry, AspectRegistry: lookup.Hellenistic.AspectRegistry}, When: tlFloatingTime, Place: testPlaceAmsterdam()},
 		func(context.Context, lookup.BodyCall) (string, string, error) {
 			return refused + "\n", "astrolog -dm", nil
 		}, stubDefaults)
@@ -959,7 +993,7 @@ func TestTimelineFailureReportsOnTheErrorLane(t *testing.T) {
 			lane = append(lane, l.text)
 		}
 	}
-	if len(lane) != 1 || !strings.HasPrefix(lane[0], "Couldn't read the timeline.") || !strings.Contains(lane[0], refused) {
+	if len(lane) != 1 || !strings.HasPrefix(lane[0], "timeline: the timeline not read") || !strings.Contains(lane[0], refused) {
 		t.Fatalf("error lane = %q, want one timeline failure naming %q", lane, refused)
 	}
 }
@@ -968,34 +1002,36 @@ func TestTimelineFailureReportsOnTheErrorLane(t *testing.T) {
 // discarded — the late search for the previous client never replaces the
 // current list, whichever gate catches it.
 func TestStaleTimelineResultIsDiscarded(t *testing.T) {
-	week := weekRows(t)
-	november := []lookup.TimelineRow{{Instant: time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC), Line: "Tue 11/ 3/2026 10:00am    Moon (Leo) Tri (Sag) Sun", Command: "astrolog -dm"}}
-	stubTimeline(t, func(req lookup.TimelineRequest) (lookup.TimelineResult, error) {
-		if req.When.Month() == time.November {
-			return lookup.TimelineResult{Rows: november}, nil
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		week := weekRows(t)
+		november := []lookup.TimelineRow{{Instant: time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC), Line: "Tue 11/ 3/2026 10:00am    Moon (Leo) Tri (Sag) Sun", Command: "astrolog -dm"}}
+		stubTimeline(t, func(req lookup.TimelineRequest) (lookup.TimelineResult, error) {
+			if req.When.Month() == time.November {
+				return lookup.TimelineResult{Rows: november}, nil
+			}
+			return lookup.TimelineResult{Rows: week}, nil
+		})
+		m := timelineModel(t, Config{Accessible: true})
+		m, octoberCmd := syncListShown(m, lk) // October's search starts and is not yet delivered
+		m, novemberCmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime.AddDate(0, 0, 20)})
+		m = pump(t, m, octoberCmd) // October's result arrives late
+		if len(m.list(lk).rows) != 0 {
+			t.Fatalf("the late October result painted %d rows over November's inputs", len(m.list(lk).rows))
 		}
-		return lookup.TimelineResult{Rows: week}, nil
-	})
-	m := timelineModel(t, Config{Accessible: true})
-	m, octoberCmd := syncTimelineShown(m) // October's search starts and is not yet delivered
-	m, novemberCmd := applyTextCommit(m, FirstFrameReadyMsg{TransitTime: tlFloatingTime.AddDate(0, 0, 20)})
-	m = pump(t, m, octoberCmd) // October's result arrives late
-	if len(m.timeline.rows) != 0 {
-		t.Fatalf("the late October result painted %d rows over November's inputs", len(m.timeline.rows))
-	}
-	m = pump(t, m, novemberCmd)
-	if len(m.timeline.rows) != 1 || m.timeline.rows[0].Line != november[0].Line {
-		t.Fatalf("rows = %+v, want November's", m.timeline.rows)
-	}
+		m = pump(t, m, novemberCmd)
+		if len(m.list(lk).rows) != 1 || m.list(lk).rows[0].Line != november[0].Line {
+			t.Fatalf("rows = %+v, want November's", m.list(lk).rows)
+		}
 
-	// The key guard on its own: a result whose run and want are current but
-	// whose inputs are not is still dropped.
-	stale := refreshResultMsg{surface: surfaceTimeline, runID: m.refresh[surfaceTimeline].runningRunID, wantID: m.refresh[surfaceTimeline].wantID,
-		payload: timelinePayload{key: timelineKey{year: 2026, month: time.October, zone: "Europe/Amsterdam"}, rows: week}}
-	m, _ = m.commitTimeline(stale)
-	if len(m.timeline.rows) != 1 {
-		t.Fatalf("a result for other inputs replaced the list: %d rows", len(m.timeline.rows))
-	}
+		// The key guard on its own: a result whose run and want are current but
+		// whose inputs are not is still dropped.
+		stale := refreshResultMsg{surface: lk.surface(), runID: m.refresh[lk.surface()].runningRunID, wantID: m.refresh[lk.surface()].wantID,
+			payload: timelinePayload{key: timelineKey{list: lk, year: 2026, month: time.October, zone: "Europe/Amsterdam"}, rows: week}}
+		m, _ = m.commitTimeline(stale)
+		if len(m.list(lk).rows) != 1 {
+			t.Fatalf("a result for other inputs replaced the list: %d rows", len(m.list(lk).rows))
+		}
+	})
 }
 
 // ---- Attachment, subject and the tab keys --------------------------------
@@ -1012,11 +1048,11 @@ func TestDetailsSubjectFollowsTheRingNotAttachment(t *testing.T) {
 	if got := m.detailsSubject().panel; got != PanelBodies {
 		t.Errorf("after tab the subject is %s, want Bodies", got)
 	}
-	m, _ = tpress(t, m, runes("3"))
+	m, _ = tpress(t, m, runes("4"))
 	if got := m.detailsSubject().panel; got != PanelAspects {
-		t.Errorf("after 3 the subject is %s, want Aspects", got)
+		t.Errorf("after 4 the subject is %s, want Aspects", got)
 	}
-	m, _ = tpress(t, m, runes("1"))
+	m, _ = tpress(t, m, runes("2"))
 	m, _ = tpress(t, m, keyUp)
 	if got := m.detailsSubject().slot; got != 0 {
 		t.Errorf("after ↑ on Chart the subject slot is %d, want 0", got)
@@ -1026,14 +1062,19 @@ func TestDetailsSubjectFollowsTheRingNotAttachment(t *testing.T) {
 	if m.detailsSubject() != subject {
 		t.Errorf("attaching moved the subject to %+v", m.detailsSubject())
 	}
-	// `2` is not here: from attached Details a digit detaches and focuses its
-	// panel (the specification rule 7; TestDigitsDetachAndFocus).
+	// While attached, the ring keys move the focus and Details follows it:
+	// the subject is the panel in focus, and the attachment stays.
 	for _, k := range []tea.KeyMsg{keyTab, keyRight, keyDown, runes("j")} {
+		before := m.detailsSubject()
 		m, _ = tpress(t, m, k)
-		if m.detailsSubject() != subject {
-			t.Errorf("%v while attached moved the subject to %+v", k, m.detailsSubject())
+		if !m.details.attached {
+			t.Errorf("%v while attached detached Details", k)
+		}
+		if k.Type == tea.KeyTab && m.detailsSubject().panel == before.panel {
+			t.Errorf("%v while attached left the subject on %s", k, before.panel)
 		}
 	}
+	subject = m.detailsSubject()
 	m, _ = tpress(t, m, keyEsc)
 	if m.detailsSubject() != subject {
 		t.Errorf("detaching moved the subject to %+v", m.detailsSubject())
@@ -1043,7 +1084,7 @@ func TestDetailsSubjectFollowsTheRingNotAttachment(t *testing.T) {
 // C32: attaching never collapses the list or moves off the chosen tab.
 func TestAttachingDoesNotCollapseTheTimelineTab(t *testing.T) {
 	// Chart focus only: the timeline tab is the Chart's (acceptance 7).
-	for _, focus := range []string{"1"} {
+	for _, focus := range []string{"2"} {
 		m := loadedTimeline(t, Config{Accessible: true})
 		m, _ = tpress(t, m, runes(focus))
 		m, _ = tpress(t, m, runes("0"))
@@ -1064,14 +1105,19 @@ func TestAttachingDoesNotCollapseTheTimelineTab(t *testing.T) {
 // C33: `0` cycles Details' tabs from any ring panel, wrapping, and moves
 // neither focus nor attachment.
 func TestZeroCyclesDetailsTabsFromAnywhere(t *testing.T) {
+	twoTabs(t)
 	for _, focus := range focusablePanels() {
 		m := loadedTimeline(t, Config{Accessible: true})
 		m.focused = focus
 		wants := []TabID{TabDetailsTimeline, TabDetailsReport, TabDetailsTimeline}
 		if focus != PanelChart {
 			// One tab outside the Chart: `0` does nothing there
-			// (the specification acceptance 2).
+			// (the specification acceptance 2). The Status panel has two:
+			// Credits and Session.
 			wants = []TabID{TabDetailsReport, TabDetailsReport, TabDetailsReport}
+		}
+		if focus == PanelStatus {
+			wants = []TabID{TabStatusSession, TabDetailsReport, TabStatusSession}
 		}
 		for _, want := range wants {
 			var cmd tea.Cmd
@@ -1090,6 +1136,7 @@ func TestZeroCyclesDetailsTabsFromAnywhere(t *testing.T) {
 // panel otherwise, and from the Chart panel the Aspects tabs (amendment (a) of
 // the view rule, 2026-10-24).
 func TestBracketKeysCycleTheFocusedViewsTabs(t *testing.T) {
+	twoTabs(t)
 	m := loadedTimeline(t, Config{Accessible: true})
 	if m.focusedView() != PanelAspects {
 		t.Fatalf("unattached focused view = %s", m.focusedView())
@@ -1134,7 +1181,9 @@ func TestTabKeysNoopOnSingleTab(t *testing.T) {
 			continue
 		}
 		for _, r := range []string{"[", "]"} {
-			if focus == PanelChart || focus == PanelBodies {
+			if focus == PanelChart || focus == PanelBodies || (focus == PanelStatus && base.detailsVisible()) {
+				// With Details on screen the Status panel's brackets switch its
+				// Details tabs (TestStatusDetailsOpensOnCreditsFirst).
 				// From the Chart panel the keys step the Aspects tabs
 				// (TestBracketKeysFromChartChangeTheAspectsTab), and from Bodies
 				// since the 0.1.3 walk, 2026-11-06, operator: "Everywhere but
@@ -1142,6 +1191,11 @@ func TestTabKeysNoopOnSingleTab(t *testing.T) {
 				break
 			}
 			m, cmd := tpress(t, base, runes(r))
+			if focus == PanelStatus {
+				// Any key on the Session panel refreshes its own saved-sessions
+				// read; that is not a tab change.
+				m.sessionInfo, m.loading = base.sessionInfo, base.loading
+			}
 			if cmd != nil || !sameModel(m, base) {
 				t.Errorf("%s: %q changed the model or returned a Cmd", focus, r)
 			}
@@ -1177,35 +1231,47 @@ func TestActiveTabClampsToFirstAndTheChoiceSurvives(t *testing.T) {
 
 // C38: switching tabs is presentation only.
 func TestTabSwitchStartsNoCompute(t *testing.T) {
-	m := loadedTimeline(t, Config{Accessible: true})
-	before := m.refresh
-	for _, k := range []tea.KeyMsg{runes("0"), runes("0"), keyEnter, runes("]"), runes("["), runes("0")} {
-		var cmd tea.Cmd
-		m, cmd = tpress(t, m, k)
-		if cmd != nil {
-			t.Errorf("%v returned a Cmd", k)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		m := loadedList(t, lk, Config{Accessible: true})
+		// The tabs the keys pass through have their lists: a tab whose list was
+		// never searched owes its first search when it is chosen (M7), and this
+		// test is about the switch itself.
+		for _, other := range allLists {
+			if other != lk {
+				var cmd tea.Cmd
+				m, cmd = syncListVisited(m, other)
+				m = pump(t, m, cmd)
+			}
 		}
-	}
-	for _, s := range []surface{surfaceText, surfaceImage, surfaceDetails, surfaceTimeline} {
-		if m.refresh[s].wantID != before[s].wantID || m.refresh[s].cancel != nil {
-			t.Errorf("surface %d: want %d -> %d, running=%v", s, before[s].wantID, m.refresh[s].wantID, m.refresh[s].cancel != nil)
+		before := m.refresh
+		for _, k := range []tea.KeyMsg{runes("0"), runes("0"), keyEnter, runes("]"), runes("["), runes("0")} {
+			var cmd tea.Cmd
+			m, cmd = tpress(t, m, k)
+			if cmd != nil {
+				t.Errorf("%v returned a Cmd", k)
+			}
 		}
-	}
+		for _, s := range []surface{surfaceText, surfaceImage, surfaceDetails, lk.surface()} {
+			if m.refresh[s].wantID != before[s].wantID || m.refresh[s].cancel != nil {
+				t.Errorf("surface %d: want %d -> %d, running=%v", s, before[s].wantID, m.refresh[s].wantID, m.refresh[s].cancel != nil)
+			}
+		}
+	})
 }
 
 // C39: Details renders as [0], and the Log keeps no digit.
 func TestDetailsRendersAsPanelZeroAndLogHasNoDigit(t *testing.T) {
 	m := loadedTimeline(t, Config{Accessible: true})
 	view := ansi.Strip(m.View())
-	rects := layoutGeometry(m.width, m.height, chartContentLines(m.slots), m.shownCount())
+	rects := rectsAt(m.width, m.height, chartContentLines(m.slots), m.shownCount())
 	lines := strings.Split(view, "\n")
 	detailsTop := ansi.Cut(lines[rects[PanelDetails].y], rects[PanelDetails].x, rects[PanelDetails].x+rects[PanelDetails].w)
 	logTop := ansi.Cut(lines[rects[PanelLog].y], rects[PanelLog].x, rects[PanelLog].x+rects[PanelLog].w)
 	if !strings.HasPrefix(detailsTop, "+-[0] ") {
 		t.Errorf("Details border = %q, want it to open with [0]", detailsTop)
 	}
-	if strings.Contains(view, "[4]") {
-		t.Error("[4] is still on screen")
+	if strings.Contains(view, "[5]") {
+		t.Error("[5] is on screen: the Log has no digit")
 	}
 	if !strings.HasPrefix(logTop, "+-Log") {
 		t.Errorf("Log border = %q, want no digit", logTop)
@@ -1250,17 +1316,18 @@ func TestEnterAttachesDetails(t *testing.T) {
 			t.Errorf("%s: attaching returned a Cmd", focus)
 		}
 	}
-	// A modal owns Enter: attachment never happens underneath it.
+	// A modal owns Enter: attachment never happens underneath it. In the popup
+	// Enter runs the row under the cursor, here one that opens a chooser.
 	m := loadedTimeline(t, Config{Accessible: true})
-	m.helpOpen = true
+	m = kbType(t, openedKeybindings(m), "choose zodiac")
 	if m, _ = tpress(t, m, keyEnter); m.details.attached {
-		t.Error("Enter attached Details under the help modal")
+		t.Error("Enter attached Details under Keybindings")
 	}
 }
 
 // C16: Esc detaches and the focused panel is the subject's, unchanged.
 func TestEscDetachesDetails(t *testing.T) {
-	for _, digit := range []string{"1", "2", "3"} {
+	for _, digit := range []string{"1", "2", "3", "4"} {
 		// q and Left leave exactly as Esc does (time-keys-everywhere rule 4).
 		for _, leave := range []tea.KeyMsg{keyEsc, runes("q"), keyLeft} {
 			m := loadedTimeline(t, Config{Accessible: true})
@@ -1278,30 +1345,41 @@ func TestEscDetachesDetails(t *testing.T) {
 				t.Errorf("%s: %v quit the app from Details", digit, leave)
 			}
 		}
+		m := loadedTimeline(t, Config{Accessible: true})
+		m, _ = tpress(t, m, runes(digit))
+		from := m.focused
+		m, _ = tpress(t, m, keyEnter)
+		m, _ = tpress(t, m, keyRight)
+		if !m.details.attached || m.focused != from {
+			t.Errorf("%s: right changed attached %v, focus %s to %s", digit, m.details.attached, from, m.focused)
+		}
 	}
 }
 
 // C17: attached on the timeline, ↑ ↓ j k move the row cursor and never the
 // focused slot.
 func TestDetailsAttachedArrowsAndJKMoveTheRowCursor(t *testing.T) {
-	m := onTimeline(t, Config{Accessible: true})
-	slot := m.cursorIdx
-	for _, step := range []struct {
-		k    tea.KeyMsg
-		want int
-	}{{keyDown, 1}, {runes("j"), 2}, {runes("j"), 3}, {keyUp, 2}, {runes("k"), 1}} {
-		m, _ = tpress(t, m, step.k)
-		if m.details.cursor != step.want {
-			t.Errorf("%v: cursor %d, want %d", step.k, m.details.cursor, step.want)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		m := onList(t, lk, Config{Accessible: true})
+		slot := m.cursorIdx
+		for _, step := range []struct {
+			k    tea.KeyMsg
+			want int
+		}{{keyDown, 1}, {runes("j"), 2}, {runes("j"), 3}, {keyUp, 2}, {runes("k"), 1}} {
+			m, _ = tpress(t, m, step.k)
+			if m.details.cursor != step.want {
+				t.Errorf("%v: cursor %d, want %d", step.k, m.details.cursor, step.want)
+			}
+			if m.cursorIdx != slot {
+				t.Errorf("%v moved the focused slot", step.k)
+			}
 		}
-		if m.cursorIdx != slot {
-			t.Errorf("%v moved the focused slot", step.k)
-		}
-	}
+	})
 }
 
 // C26: attached on the report, ↑ ↓ j k scroll the report one line.
 func TestReportTabArrowsAndJKScrollByALine(t *testing.T) {
+	twoTabs(t)
 	m := loadedTimeline(t, Config{Accessible: true})
 	m.details.title, m.details.body = "[0] Chart", influenceReport(t)
 	m, _ = tpress(t, m, keyEnter)
@@ -1373,6 +1451,9 @@ func TestPageKeysScrollTheActiveDetailsTabFromAnyFocus(t *testing.T) {
 	ctrlDn := tea.KeyMsg{Type: tea.KeyCtrlPgDown}
 	ctrlUp := tea.KeyMsg{Type: tea.KeyCtrlPgUp}
 	for _, focus := range focusablePanels() {
+		if focus == PanelStatus {
+			continue // Details shows the Session panel's own short text, not a scrollable report
+		}
 		for _, attached := range []bool{false, true} {
 			for _, tab := range []TabID{TabDetailsReport, TabDetailsTimeline} {
 				if tab == TabDetailsTimeline && focus != PanelChart {
@@ -1422,25 +1503,26 @@ func TestPlainPageKeyWithChartFocusMovesTheChartCursor(t *testing.T) {
 // C20: Enter on a row moves the floating slot to the row's instant — the
 // COMMITTED Time, after the compute's result message — and Details stays
 // attached, on the timeline, with the cursor where it was.
-func TestEnterOnATimelineRowMovesTheFloatingSlotAndStays(t *testing.T) {
-	stubTextCompute(t)
-	m := onTimeline(t, Config{Accessible: true})
-	for i := 0; i < 16; i++ {
-		m, _ = tpress(t, m, runes("j"))
-	}
-	row := m.timeline.rows[16]
-	m, cmd := tpress(t, m, keyEnter)
-	if !m.targetFloatingTime.Equal(landedAt(row.Instant)) {
-		t.Fatalf("target = %v, want the row's instant %v", m.targetFloatingTime, landedAt(row.Instant))
-	}
-	m = pump(t, m, cmd)
-	if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
-		t.Fatalf("committed Time = %v, want %v (%q)", got, landedAt(row.Instant), row.Line)
-	}
-	if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline || m.details.cursor != 16 {
-		t.Errorf("after the jump: attached=%v tab=%s cursor=%d, want attached on the timeline at row 16",
-			m.details.attached, m.activeTabID(PanelDetails), m.details.cursor)
-	}
+func TestEnterOnATimelineRowMovesTheFloatingSlotAndClosesDetails(t *testing.T) {
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		stubTextCompute(t)
+		m := onList(t, lk, Config{Accessible: true})
+		for i := 0; i < 16; i++ {
+			m, _ = tpress(t, m, runes("j"))
+		}
+		row := m.list(lk).rows[16]
+		m, cmd := tpress(t, m, keyEnter)
+		if !m.targetFloatingTime.Equal(landedAt(row.Instant)) {
+			t.Fatalf("target = %v, want the row's instant %v", m.targetFloatingTime, landedAt(row.Instant))
+		}
+		m = pump(t, m, cmd)
+		if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
+			t.Fatalf("committed Time = %v, want %v (%q)", got, landedAt(row.Instant), row.Line)
+		}
+		if m.details.attached {
+			t.Errorf("after the jump: Details stayed open on %s at row %d, want it closed", m.activeTabID(PanelDetails), m.details.cursor)
+		}
+	})
 }
 
 // C20 from the ANCHORED slot (review round 4): picking a client focuses it,
@@ -1448,53 +1530,55 @@ func TestEnterOnATimelineRowMovesTheFloatingSlotAndStays(t *testing.T) {
 // the specification rule 8, the cursor with it, so the screen
 // shows the chart that moved (Bodies and Aspects follow the new moment).
 func TestEnterOnATimelineRowFromTheAnchoredSlot(t *testing.T) {
-	// Only with the pair selected: an unselected anchored chart, or a group
-	// without the floating slot, has no Timeline tab to press Enter on.
-	for _, paired := range []bool{true} {
-		stubTextCompute(t)
-		m := loadedTimeline(t, Config{Accessible: true})
-		m.slots.SetComparisonSelected(paired)
-		for _, k := range append(append([]tea.KeyMsg{keyUp, runes("0"), keyEnter}, homeKeys()...), runes("j"), runes("j")) {
-			var cmd tea.Cmd
-			m, cmd = tpress(t, m, k)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		// Only with the pair selected: an unselected anchored chart, or a group
+		// without the floating slot, has no Timeline tab to press Enter on.
+		for _, paired := range []bool{true} {
+			stubTextCompute(t)
+			m := loadedList(t, lk, Config{Accessible: true})
+			m.slots.SetComparisonSelected(paired)
+			for _, k := range append(append(append(append([]tea.KeyMsg{keyUp}, listKeys(lk)...), keyEnter), homeKeys()...), runes("j"), runes("j")) {
+				var cmd tea.Cmd
+				m, cmd = tpress(t, m, k)
+				m = pump(t, m, cmd)
+			}
+			if m.focusedIsFloating() {
+				t.Fatal("fixture: ↑ did not focus the anchored slot")
+			}
+			row := m.list(lk).rows[2]
+			if paired && m.activePairSlot() != nil {
+				// S4a A1: an arrival never chooses a pair, whatever is selected.
+				t.Fatalf("fixture: the arrival chose a pair: %v", m.activePairSlot())
+			}
+			m, cmd := tpress(t, m, keyEnter)
 			m = pump(t, m, cmd)
-		}
-		if m.focusedIsFloating() {
-			t.Fatal("fixture: ↑ did not focus the anchored slot")
-		}
-		row := m.timeline.rows[2]
-		if paired && m.activePairSlot() != nil {
-			// S4a A1: an arrival never chooses a pair, whatever is selected.
-			t.Fatalf("fixture: the arrival chose a pair: %v", m.activePairSlot())
-		}
-		m, cmd := tpress(t, m, keyEnter)
-		m = pump(t, m, cmd)
-		if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
-			t.Fatalf("paired=%v: committed floating Time %v, want %v", paired, got, landedAt(row.Instant))
-		}
-		// Rule 8 of the specification reverses the old "focus
-		// stays": the cursor goes to the floating slot, whichever slot the
-		// operator picked the row from (operator, 2026-10-09: "if another slot
-		// than floating is selected, the focused chart slot needs to change to
-		// the floating slot"). The list is left as it was.
-		if !m.focusedIsFloating() || !m.details.attached || m.details.cursor != 2 {
-			t.Errorf("paired=%v: the jump left the cursor off the floating slot or left the list", paired)
-		}
-		if len(m.chart.positions) == 0 || m.chart.positions[0].Longitude != stamp(row.Instant) {
-			t.Errorf("paired=%v: Bodies is not the floating chart at the row's instant: %+v", paired, m.chart.positions)
-		}
-		if paired {
-			// Rule 2 of the specification reverses the old
-			// cross list here: row 2 is a sky row, so the Aspects panel shows
-			// the floating chart's own list (operator, 2026-10-12: "when hitting
-			// enter in timeline, all main planes must reflect what the
-			// 'entered' timeline row shows"). A chart row's cross list is
-			// asserted by TestEnterOnAChartRowPicksItsPair.
-			if got := m.activeTabID(PanelAspects); got != TabAspects {
-				t.Errorf("paired: a sky row left the Aspects tab on %s, want %s", got, TabAspects)
+			if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
+				t.Fatalf("paired=%v: committed floating Time %v, want %v", paired, got, landedAt(row.Instant))
+			}
+			// Rule 8 of the specification reverses the old "focus
+			// stays": the cursor goes to the floating slot, whichever slot the
+			// operator picked the row from (operator, 2026-10-09: "if another slot
+			// than floating is selected, the focused chart slot needs to change to
+			// the floating slot"). Details closes with the jump.
+			if !m.focusedIsFloating() || m.details.attached {
+				t.Errorf("paired=%v: the jump left the cursor off the floating slot or left Details open", paired)
+			}
+			if len(m.chart.positions) == 0 || m.chart.positions[0].Longitude != stamp(row.Instant) {
+				t.Errorf("paired=%v: Bodies is not the floating chart at the row's instant: %+v", paired, m.chart.positions)
+			}
+			if paired {
+				// Rule 2 of the specification reverses the old
+				// cross list here: row 2 is a sky row, so the Aspects panel shows
+				// the floating chart's own list (operator, 2026-10-12: "when hitting
+				// enter in timeline, all main planes must reflect what the
+				// 'entered' timeline row shows"). A chart row's cross list is
+				// asserted by TestEnterOnAChartRowPicksItsPair.
+				if got := m.activeTabID(PanelAspects); got != TabAspects {
+					t.Errorf("paired: a sky row left the Aspects tab on %s, want %s", got, TabAspects)
+				}
 			}
 		}
-	}
+	})
 }
 
 // Operator hot-fix, 2026-09-30: with only one slot selected the timeline
@@ -1556,44 +1640,46 @@ func TestOneSelectedSlotShowsNoTransitRows(t *testing.T) {
 // C21: the jump recomputes Bodies and Aspects through the time-step path,
 // and refreshes the wheel when — and only when — its preview is open.
 func TestTimelineJumpRecomputesThroughTheTimeStepPath(t *testing.T) {
-	for _, preview := range []bool{false, true} {
-		freshModels(t)
-		text := stubTextCompute(t)
-		wheel := stubAnyWheel(t)
-		stubShowWheel(t)
-		m := onTimeline(t, Config{Accessible: true})
-		m.previewActive = preview
-		// A chart row (numeral 1): Enter on a sky row shows the floating
-		// chart's own aspects and runs no cross compute (rule 2 of
-		// the specification).
-		first := firstChartRow(t, m.timeline.rows)
-		for range first {
-			m, _ = tpress(t, m, runes("j"))
-		}
-		row := m.timeline.rows[first]
-		textBefore := len(*text)
-		m, cmd := tpress(t, m, keyEnter)
-		m = pump(t, m, cmd)
-		if !m.slots.ComparisonSelected() {
-			t.Fatal("fixture: the pair is not selected, so Aspects is not the cross compute")
-		}
-		kinds := map[string]bool{}
-		for _, c := range (*text)[textBefore:] {
-			if c.when.Equal(landedAt(row.Instant)) {
-				kinds[c.kind] = true
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		for _, preview := range []bool{false, true} {
+			freshModels(t)
+			text := stubTextCompute(t)
+			wheel := stubAnyWheel(t)
+			stubShowWheel(t)
+			m := onList(t, lk, Config{Accessible: true})
+			m.previewActive = preview
+			// A chart row (numeral 1): Enter on a sky row shows the floating
+			// chart's own aspects and runs no cross compute (rule 2 of
+			// the specification).
+			first := firstChartRow(t, m.list(lk).rows)
+			for range first {
+				m, _ = tpress(t, m, runes("j"))
+			}
+			row := m.list(lk).rows[first]
+			textBefore := len(*text)
+			m, cmd := tpress(t, m, keyEnter)
+			m = pump(t, m, cmd)
+			if !m.slots.ComparisonSelected() {
+				t.Fatal("fixture: the pair is not selected, so Aspects is not the cross compute")
+			}
+			kinds := map[string]bool{}
+			for _, c := range (*text)[textBefore:] {
+				if c.when.Equal(landedAt(row.Instant)) {
+					kinds[c.kind] = true
+				}
+			}
+			if !kinds["bodies"] || !kinds["aspects"] {
+				t.Errorf("preview=%v: computes for %v = %v, want both the Bodies and the Aspects compute", preview, landedAt(row.Instant), kinds)
+			}
+			assertEnteredChartRowRecomputed(t, m, landedAt(row.Instant), "jump")
+			if preview && (len(*wheel) == 0 || !(*wheel)[len(*wheel)-1].Equal(landedAt(row.Instant))) {
+				t.Errorf("preview open: the wheel was not refreshed for the jump: %v", *wheel)
+			}
+			if !preview && len(*wheel) != 0 {
+				t.Errorf("preview closed: the jump rendered the wheel %d times", len(*wheel))
 			}
 		}
-		if !kinds["bodies"] || !kinds["aspects"] {
-			t.Errorf("preview=%v: computes for %v = %v, want both the Bodies and the Aspects compute", preview, landedAt(row.Instant), kinds)
-		}
-		assertEnteredChartRowRecomputed(t, m, landedAt(row.Instant), "jump")
-		if preview && (len(*wheel) == 0 || !(*wheel)[len(*wheel)-1].Equal(landedAt(row.Instant))) {
-			t.Errorf("preview open: the wheel was not refreshed for the jump: %v", *wheel)
-		}
-		if !preview && len(*wheel) != 0 {
-			t.Errorf("preview closed: the jump rendered the wheel %d times", len(*wheel))
-		}
-	}
+	})
 }
 
 // C48 and D18: attached Details owns the keyboard. Ring keys and keys it does
@@ -1609,10 +1695,10 @@ func TestAttachedDetailsOwnsTheKeyboard(t *testing.T) {
 	stubTextCompute(t)
 	m := onTimeline(t, Config{Accessible: true})
 	target, focus := m.targetFloatingTime, m.focused
-	// The digits are not swallowed any more: rule 7 of
-	// the specification makes 1/2/3 detach and focus
-	// (TestDigitsDetachAndFocus).
-	for _, k := range []tea.KeyMsg{runes("x"), runes("z"), keyTab, keyRight, runes("t")} {
+	// Letters that are no binding of Details reach neither the time steps nor the
+	// ring. The ring keys (digits, Tab, arrows) move the focus and Details follows
+	// (TestDigitsFocusAndKeepDetailsAttached).
+	for _, k := range []tea.KeyMsg{runes("x"), runes("z"), runes("t")} {
 		m, _ = tpress(t, m, k)
 	}
 	if !m.targetFloatingTime.Equal(target) || !m.slots.Floating().Time.Equal(target) {
@@ -1630,6 +1716,7 @@ func TestAttachedDetailsOwnsTheKeyboard(t *testing.T) {
 
 // C50: while attached, `0`, `[` and `]` are forwarded to the tab cycle.
 func TestAttachedDetailsForwardsTheTabKeys(t *testing.T) {
+	twoTabs(t)
 	m := loadedTimeline(t, Config{Accessible: true})
 	m, _ = tpress(t, m, keyEnter)
 	for _, step := range []struct {
@@ -1652,8 +1739,8 @@ func TestTimelineJourneyThroughRealKeyDispatch(t *testing.T) {
 		name string
 		keys []tea.KeyMsg
 	}{
-		{"chart: 0 then enter", append(append(append([]tea.KeyMsg{runes("1"), runes("0"), keyEnter}, homeKeys()...), downKeys(journeyRow(t))...), keyEnter)},
-		{"chart: enter lands on the timeline", append(append(append([]tea.KeyMsg{runes("1"), keyEnter}, homeKeys()...), downKeys(journeyRow(t))...), keyEnter)},
+		{"chart: 0 then enter", append(append(append([]tea.KeyMsg{runes("2"), runes("0"), keyEnter}, homeKeys()...), downKeys(journeyRow(t))...), keyEnter)},
+		{"chart: enter lands on the timeline", append(append(append([]tea.KeyMsg{runes("2"), keyEnter}, homeKeys()...), downKeys(journeyRow(t))...), keyEnter)},
 	} {
 		for _, preview := range []bool{false, true} {
 			t.Run(route.name, func(t *testing.T) {
@@ -1685,40 +1772,53 @@ func TestTimelineJourneyThroughRealKeyDispatch(t *testing.T) {
 				if got := len(*wheel) > 0; got != preview {
 					t.Errorf("preview=%v: wheel refreshes = %d", preview, len(*wheel))
 				}
-				if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline {
-					t.Errorf("preview=%v: the jump left the timeline", preview)
+				if m.details.attached {
+					t.Errorf("preview=%v: the jump left Details open", preview)
 				}
 			})
 		}
 	}
 }
 
-// C52: Details disappearing under an attachment detaches it, with focus on
-// the subject's panel and the keyboard back with the ring.
+// C52: a resize never orphans or drops an attachment. Narrowing keeps an
+// attached Details attached and moves it below its panel; widening moves it
+// back to the right of the left column. Focus and the keyboard stay with the ring.
 func TestResizeWhileAttachedLeavesNoOrphanedAttachment(t *testing.T) {
 	m := loadedTimeline(t, Config{Accessible: true})
 	// The timeline is the Chart's tab, so the subject is the Chart.
-	m, _ = tpress(t, m, runes("1"))
+	m, _ = tpress(t, m, runes("2"))
 	m, _ = tpress(t, m, runes("0"))
 	m, _ = tpress(t, m, keyEnter)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m = tm.(Model)
-	if m.details.attached {
-		t.Fatal("Details is hidden and still attached")
+	if !m.details.attached {
+		t.Fatal("narrowing detached Details")
+	}
+	g := m.geometry()
+	d, ok := g[PanelDetails]
+	if !ok || !m.detailsVisible() {
+		t.Fatal("narrowed: Details is attached but has no rectangle")
+	}
+	if c := g[PanelChart]; d.y < c.y+c.h {
+		t.Fatalf("narrowed: Details at y=%d is not below the Chart (ends at %d)", d.y, c.y+c.h)
 	}
 	if m.focused != PanelChart {
-		t.Fatalf("focus after the hide = %s, want the subject's Chart", m.focused)
+		t.Fatalf("focus after the narrowing = %s, want the subject's Chart", m.focused)
 	}
-	m, _ = tpress(t, m, runes("3"))
+	m, _ = tpress(t, m, runes("4"))
 	if m.focused != PanelAspects {
-		t.Fatal("the ring did not get the keyboard back")
+		t.Fatal("the ring did not keep the keyboard")
 	}
-	tm, _ = m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
+	tm, _ = m.Update(tea.WindowSizeMsg{Width: max(132, dualColumnMinWidth(m.shownCount())), Height: 40})
 	m = tm.(Model)
-	if m.details.attached || m.activeTabID(PanelDetails) != TabDetailsReport {
-		t.Errorf("after the return: attached=%v tab=%s, want detached on Aspects' own single tab", m.details.attached, m.activeTabID(PanelDetails))
+	if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsReport {
+		t.Errorf("after the return: attached=%v tab=%s, want attached on Aspects' own single tab", m.details.attached, m.activeTabID(PanelDetails))
 	}
-	m, _ = tpress(t, m, runes("1"))
+	g = m.geometry()
+	if d, c := g[PanelDetails], g[PanelChart]; d.w == 0 || d.x < c.x+c.w {
+		t.Errorf("widened: Details %+v is not to the right of the Chart %+v", d, c)
+	}
+	m, _ = tpress(t, m, runes("2"))
 	if m.activeTabID(PanelDetails) != TabDetailsTimeline {
 		t.Errorf("back on the Chart the tab is %s, want the timeline chosen before Enter", m.activeTabID(PanelDetails))
 	}
@@ -1727,57 +1827,61 @@ func TestResizeWhileAttachedLeavesNoOrphanedAttachment(t *testing.T) {
 // C29: the cursor row is always inside the rendered window — after cursor
 // moves past its edge and immediately after a page key.
 func TestTimelineCursorStaysWithinTheViewport(t *testing.T) {
-	m := onTimeline(t, Config{Color: ColorNever})
-	visible := m.detailsInnerHeight()
-	check := func(what string) {
-		t.Helper()
-		if c, off := m.details.cursor, m.details.rowOffset; c < off || c >= off+visible {
-			t.Fatalf("%s: cursor %d outside [%d, %d)", what, c, off, off+visible)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		m := onList(t, lk, Config{Color: ColorNever})
+		visible := m.detailsInnerHeight()
+		check := func(what string) {
+			t.Helper()
+			if c, off := m.details.cursor, m.details.rowOffset; c < off || c >= off+visible {
+				t.Fatalf("%s: cursor %d outside [%d, %d)", what, c, off, off+visible)
+			}
+			raw := strings.Split(renderDetails(m), "\n")
+			if drawn := raw[1+m.details.cursor-m.details.rowOffset]; !strings.HasPrefix(drawn, "│"+term.CursorRowOff) {
+				t.Fatalf("%s: the cursor row is not drawn with the cursor treatment: %q", what, drawn)
+			}
 		}
-		raw := strings.Split(renderDetails(m), "\n")
-		if drawn := raw[1+m.details.cursor-m.details.rowOffset]; !strings.HasPrefix(drawn, "│"+term.CursorRowOff) {
-			t.Fatalf("%s: the cursor row is not drawn with the cursor treatment: %q", what, drawn)
+		for i := 0; i < len(m.list(lk).rows); i++ {
+			m, _ = tpress(t, m, runes("j"))
+			check("walking down")
 		}
-	}
-	for i := 0; i < len(m.timeline.rows); i++ {
-		m, _ = tpress(t, m, runes("j"))
-		check("walking down")
-	}
-	for i := 0; i < 5; i++ {
-		m, _ = tpress(t, m, keyPgUp)
-		check("after pgup")
-	}
-	for i := 0; i < 5; i++ {
-		m, _ = tpress(t, m, keyPgDn)
-		check("after pgdn")
-	}
+		for i := 0; i < 5; i++ {
+			m, _ = tpress(t, m, keyPgUp)
+			check("after pgup")
+		}
+		for i := 0; i < 5; i++ {
+			m, _ = tpress(t, m, keyPgDn)
+			check("after pgdn")
+		}
+	})
 }
 
 // C30: the cursor stops at both ends and nothing else moves.
 func TestTimelineCursorStopsAtTheEnds(t *testing.T) {
-	m := onTimeline(t, Config{Accessible: true})
-	slot, target := m.cursorIdx, m.targetFloatingTime
-	for _, k := range []tea.KeyMsg{keyUp, runes("k")} {
-		m, _ = tpress(t, m, k)
-		if m.details.cursor != 0 {
-			t.Errorf("%v on the first row moved the cursor to %d", k, m.details.cursor)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		m := onList(t, lk, Config{Accessible: true})
+		slot, target := m.cursorIdx, m.targetFloatingTime
+		for _, k := range []tea.KeyMsg{keyUp, runes("k")} {
+			m, _ = tpress(t, m, k)
+			if m.details.cursor != 0 {
+				t.Errorf("%v on the first row moved the cursor to %d", k, m.details.cursor)
+			}
 		}
-	}
-	last := len(m.timeline.rows) - 1
-	m.details.cursor = last
-	m = m.clampTimelineCursor()
-	for _, k := range []tea.KeyMsg{keyDown, runes("j")} {
-		m, _ = tpress(t, m, k)
-		if m.details.cursor != last {
-			t.Errorf("%v on the last row moved the cursor to %d", k, m.details.cursor)
+		last := len(m.list(lk).rows) - 1
+		m.details.cursor = last
+		m = m.clampTimelineCursor()
+		for _, k := range []tea.KeyMsg{keyDown, runes("j")} {
+			m, _ = tpress(t, m, k)
+			if m.details.cursor != last {
+				t.Errorf("%v on the last row moved the cursor to %d", k, m.details.cursor)
+			}
 		}
-	}
-	if m.cursorIdx != slot || !m.targetFloatingTime.Equal(target) {
-		t.Error("a key at an end moved a slot")
-	}
+		if m.cursorIdx != slot || !m.targetFloatingTime.Equal(target) {
+			t.Error("a key at an end moved a slot")
+		}
+	})
 }
 
-// C23: the global additions are keyMap fields carrying exactly these keys,
+// C23: the global additions are keys.KeyMap fields carrying exactly these keys,
 // named — parity (C42) passes even if a key was never added.
 func TestNewGlobalBindingsAreRegisteredByName(t *testing.T) {
 	k := keys.DefaultKeys()
@@ -1789,9 +1893,10 @@ func TestNewGlobalBindingsAreRegisteredByName(t *testing.T) {
 		{"Attach", k.Attach.Keys(), []string{"enter"}},
 		{"TabPrev", k.TabPrev.Keys(), []string{"["}},
 		{"TabNext", k.TabNext.Keys(), []string{"]"}},
-		{"FocusChart", k.FocusChart.Keys(), []string{"1"}},
-		{"FocusBodies", k.FocusBodies.Keys(), []string{"2"}},
-		{"FocusAspects", k.FocusAspects.Keys(), []string{"3"}},
+		{"FocusSession", k.FocusSession.Keys(), []string{"1"}},
+		{"FocusChart", k.FocusChart.Keys(), []string{"2"}},
+		{"FocusBodies", k.FocusBodies.Keys(), []string{"3"}},
+		{"FocusAspects", k.FocusAspects.Keys(), []string{"4"}},
 		{"DetailsTab", k.DetailsTab.Keys(), []string{"0"}},
 		{"SlotCycleUp", k.SlotCycleUp.Keys(), []string{"up", "k"}},
 		{"SlotCycleDown", k.SlotCycleDown.Keys(), []string{"down", "j"}},
@@ -1824,9 +1929,9 @@ func TestAttachedDetailsAddsNoNewGlobalBindings(t *testing.T) {
 	if got := claims["esc"]; !slices.Equal(got, []keys.BindingID{keys.BindingCancelLeader}) {
 		t.Errorf("esc is claimed by %v, want exactly CancelLeader", got)
 	}
-	for _, y := range []string{"y", "Y"} {
-		if got := claims[y]; !slices.Equal(got, []keys.BindingID{keys.BindingTimeStepYear}) {
-			t.Errorf("%s is claimed by %v, want exactly TimeStepYear", y, got)
+	for y, id := range map[string]keys.BindingID{"y": keys.BindingTimeStepYear, "Y": keys.BindingTimeStepYearBack} {
+		if got := claims[y]; !slices.Equal(got, []keys.BindingID{id}) {
+			t.Errorf("%s is claimed by %v, want exactly %v", y, got, id)
 		}
 	}
 	for k := range claims {
@@ -1838,6 +1943,7 @@ func TestAttachedDetailsAddsNoNewGlobalBindings(t *testing.T) {
 
 // § Failure modes: Enter on the report tab while attached moves nothing.
 func TestEnterOnTheReportTabMovesNothing(t *testing.T) {
+	twoTabs(t)
 	m := loadedTimeline(t, Config{Accessible: true})
 	m, _ = tpress(t, m, keyEnter)
 	m, _ = tpress(t, m, runes("]")) // Enter from the Chart lands on the timeline
@@ -1851,26 +1957,28 @@ func TestEnterOnTheReportTabMovesNothing(t *testing.T) {
 // § Failure modes: Enter with no row under the cursor — an empty month or a
 // refused search — leaves Time, focus and the tab alone.
 func TestEnterOnAnEmptyTimelineMovesNothing(t *testing.T) {
-	for name, answer := range map[string]func(lookup.TimelineRequest) (lookup.TimelineResult, error){
-		"empty month": func(lookup.TimelineRequest) (lookup.TimelineResult, error) { return lookup.TimelineResult{}, nil },
-		"refused search": func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
-			return lookup.TimelineResult{}, errors.New("refused")
-		},
-	} {
-		freshModels(t)
-		stubTimeline(t, answer)
-		m := timelineModel(t, Config{Accessible: true})
-		m, cmd := syncTimelineVisited(m)
-		m = pump(t, m, cmd)
-		m, _ = tpress(t, m, runes("0"))
-		m, _ = tpress(t, m, keyEnter)
-		target, focus := m.targetFloatingTime, m.focused
-		m, cmd = tpress(t, m, keyEnter)
-		if cmd != nil || !m.targetFloatingTime.Equal(target) || !m.slots.Floating().Time.Equal(target) ||
-			m.focused != focus || m.activeTabID(PanelDetails) != TabDetailsTimeline || !m.details.attached {
-			t.Errorf("%s: Enter moved something", name)
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		for name, answer := range map[string]func(lookup.TimelineRequest) (lookup.TimelineResult, error){
+			"empty month": func(lookup.TimelineRequest) (lookup.TimelineResult, error) { return lookup.TimelineResult{}, nil },
+			"refused search": func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
+				return lookup.TimelineResult{}, errors.New("refused")
+			},
+		} {
+			freshModels(t)
+			stubTimeline(t, answer)
+			m := timelineModel(t, Config{Accessible: true})
+			m, cmd := syncListVisited(m, lk)
+			m = pump(t, m, cmd)
+			m, _ = openList(t, m, lk)
+			m, _ = tpress(t, m, keyEnter)
+			target, focus := m.targetFloatingTime, m.focused
+			m, cmd = tpress(t, m, keyEnter)
+			if cmd != nil || !m.targetFloatingTime.Equal(target) || !m.slots.Floating().Time.Equal(target) ||
+				m.focused != focus || m.activeTabID(PanelDetails) != lk.tab() || !m.details.attached {
+				t.Errorf("%s: Enter moved something", name)
+			}
 		}
-	}
+	})
 }
 
 // C57: `o`/`O` are forwarded while the timeline is attached, so the month the
@@ -1878,6 +1986,7 @@ func TestEnterOnAnEmptyTimelineMovesNothing(t *testing.T) {
 // performs, which is what the operator affirmed on 2026-09-30, reversing
 // pass-7 P2. The other step keys follow (TestTimelineTabForwardsEveryStepKey).
 func TestAttachedTimelineForwardsTheMonthStep(t *testing.T) {
+	twoTabs(t)
 	step := func(t *testing.T, k tea.KeyMsg, direction int) {
 		t.Helper()
 		stubTextCompute(t)
@@ -1900,8 +2009,8 @@ func TestAttachedTimelineForwardsTheMonthStep(t *testing.T) {
 	t.Run("o steps the month on", func(t *testing.T) { step(t, runes("o"), +1) })
 	t.Run("O steps the month back", func(t *testing.T) { step(t, runes("O"), -1) })
 
-	// C58, operator 2026-10-01: `n` (now) and `N` (toggle back) move the
-	// floating slot's clock, so on the timeline they move the list — the same
+	// C58, operator 2026-10-01: `n` (now) moves the
+	// floating slot's clock, so on the timeline it moves the list — the same
 	// reason the month keys are forwarded.
 	t.Run("n jumps the list to now", func(t *testing.T) {
 		stubTextCompute(t)
@@ -1919,19 +2028,15 @@ func TestAttachedTimelineForwardsTheMonthStep(t *testing.T) {
 			t.Errorf("attached n moved the mode: attached=%v tab=%s", m.details.attached, m.activeTabID(PanelDetails))
 		}
 	})
-	t.Run("N toggles back to where n left", func(t *testing.T) {
+	t.Run("N does nothing after n", func(t *testing.T) {
 		stubTextCompute(t)
 		m := onTimeline(t, Config{Accessible: true})
 		m, _ = tpress(t, m, runes("o"))
-		before := m.targetFloatingTime
 		m, _ = tpress(t, m, runes("n"))
-		// Without this the subtest would pass while BOTH keys were swallowed.
-		if m.targetFloatingTime.Equal(before) {
-			t.Fatalf("n did not move the clock, so N proves nothing: %v", m.targetFloatingTime)
-		}
+		atNow := m.targetFloatingTime
 		m, _ = tpress(t, m, runes("N"))
-		if !m.targetFloatingTime.Equal(before) {
-			t.Errorf("attached N: target %v, want back at %v", m.targetFloatingTime, before)
+		if !m.targetFloatingTime.Equal(atNow) {
+			t.Errorf("attached N: target %v, want it left at %v", m.targetFloatingTime, atNow)
 		}
 	})
 
@@ -1939,7 +2044,7 @@ func TestAttachedTimelineForwardsTheMonthStep(t *testing.T) {
 	// operator 2026-10-13): the report tab forwards the same keys, with the
 	// same effect as on the timeline tab.
 	t.Run("all of them act on the report tab", func(t *testing.T) {
-		for _, k := range []tea.KeyMsg{runes("o"), runes("O"), runes("n"), runes("N")} {
+		for _, k := range []tea.KeyMsg{runes("o"), runes("O"), runes("n")} {
 			freshModels(t)
 			stubTextCompute(t)
 			tl := onTimeline(t, Config{Accessible: true})
@@ -1954,7 +2059,7 @@ func TestAttachedTimelineForwardsTheMonthStep(t *testing.T) {
 			if !m.targetFloatingTime.Equal(tl.targetFloatingTime) {
 				t.Errorf("%s on the report tab: %v, want what the timeline tab does, %v", k, m.targetFloatingTime, tl.targetFloatingTime)
 			}
-			if k.String() != "N" && m.targetFloatingTime.Equal(start) {
+			if m.targetFloatingTime.Equal(start) {
 				t.Errorf("%s did not reach the clock on the report tab", k)
 			}
 			if !m.details.attached {
@@ -1986,8 +2091,11 @@ func TestDetailsTimelineTabIsTheChartsOnly(t *testing.T) {
 		m := timelineModel(t, Config{Accessible: true})
 		m.focused = focus
 		want := []TabID{TabDetailsReport}
+		if focus == PanelStatus {
+			want = append(want, TabStatusSession)
+		}
 		if focus == PanelChart {
-			want = append(want, TabDetailsTimeline)
+			want = append(want, TabDetailsTimeline, TabDetailsMoon)
 		}
 		if got := tabIDs(m.panelTabs(PanelDetails)); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s focused: Details tabs %v, want %v", focus, got, want)
@@ -1997,11 +2105,11 @@ func TestDetailsTimelineTabIsTheChartsOnly(t *testing.T) {
 	// The choice is remembered per panel: the Chart's survives a visit elsewhere.
 	m := loadedTimeline(t, Config{Accessible: true})
 	m, _ = tpress(t, m, runes("0"))
-	m, _ = tpress(t, m, runes("2"))
+	m, _ = tpress(t, m, runes("3"))
 	if got := m.activeTabID(PanelDetails); got != TabDetailsReport {
 		t.Errorf("Bodies focused: Details shows %s, want its report", got)
 	}
-	m, _ = tpress(t, m, runes("1"))
+	m, _ = tpress(t, m, runes("2"))
 	if got := m.activeTabID(PanelDetails); got != TabDetailsTimeline {
 		t.Errorf("back on the Chart: Details shows %s, want the Chart's last choice, the timeline", got)
 	}
@@ -2028,7 +2136,7 @@ func TestDetailsTimelineTabIsTheChartsOnly(t *testing.T) {
 	// the specification: the search is owed to the active
 	// tab), so the Chart's first visit pays the searches.
 	m = m.withDetailsTab(PanelChart, TabDetailsTimeline)
-	m, cmd = tpress(t, m, runes("1"))
+	m, cmd = tpress(t, m, runes("2"))
 	m = pump(t, m, cmd)
 	if len(*calls) == 0 || !m.timeline.complete {
 		t.Errorf("coming to the Chart ran %d searches (complete=%v), want the timeline loaded", len(*calls), m.timeline.complete)
@@ -2059,7 +2167,7 @@ func TestEnterFromChartOpensTheTimeline(t *testing.T) {
 	}
 
 	// From Bodies or Aspects Enter attaches on their report, as today.
-	for _, focus := range []string{"2", "3"} {
+	for _, focus := range []string{"3", "4"} {
 		m = loadedTimeline(t, Config{Accessible: true})
 		m, _ = tpress(t, m, runes(focus))
 		m, _ = tpress(t, m, keyEnter)
@@ -2073,13 +2181,13 @@ func TestEnterFromChartOpensTheTimeline(t *testing.T) {
 // of attached Details puts back the tab that was active before Enter,
 // whatever was chosen in between.
 func TestLeavingDetailsPutsBackTheTab(t *testing.T) {
+	twoTabs(t)
 	exits := []struct {
 		name  string
 		key   tea.KeyMsg
 		focus PanelID
 	}{
-		{"esc", keyEsc, PanelChart}, {"q", runes("q"), PanelChart}, {"left", tea.KeyMsg{Type: tea.KeyLeft}, PanelChart},
-		{"digit 2", runes("2"), PanelBodies}, {"digit 1", runes("1"), PanelChart},
+		{"esc", keyEsc, PanelChart}, {"q", runes("q"), PanelChart},
 	}
 	for _, exit := range exits {
 		for _, preselected := range []bool{false, true} {
@@ -2120,7 +2228,7 @@ func TestLeavingDetailsPutsBackTheTab(t *testing.T) {
 				if got != want {
 					t.Errorf("after %s the Chart's Details tab is %q, want %q", exit.name, got, want)
 				}
-				m, _ = tpress(t, m, runes("1"))
+				m, _ = tpress(t, m, runes("2"))
 				if got := m.activeTabID(PanelDetails); got != want {
 					t.Errorf("after %s the Chart shows %s, want %s", exit.name, got, want)
 				}

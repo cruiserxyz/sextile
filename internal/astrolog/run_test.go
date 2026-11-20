@@ -46,7 +46,7 @@ func TestRunAgainstLiveAstrolog(t *testing.T) {
 	if got := len(out.AspectStyles); got < 10 {
 		t.Errorf("Run returned %d aspect styles, want >= 10", got)
 	}
-	conStyle := out.AspectStyles[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Conjunction}]
+	conStyle := out.AspectStyles[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: kindOf("Con")}]
 	if conStyle.First == "" || conStyle.Kind == "" || conStyle.Second == "" {
 		t.Errorf("Sun-Moon conjunction styles incomplete: %#v", conStyle)
 	}
@@ -114,6 +114,7 @@ func TestComputeCrossAspectsAgainstLiveAstrologCarriesStyles(t *testing.T) {
 		t.Fatalf("comparison spec: %v", err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	out, err := ComputeCrossAspects(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("ComputeCrossAspects: %v", err)
@@ -130,7 +131,7 @@ func TestComputeCrossAspectsAgainstLiveAstrologCarriesStyles(t *testing.T) {
 
 // TestComputeChart_RestrictionSurfacesFullBodySet proves B2 end-to-end: the -R
 // switches SURFACE the v1 body set — Chiron, both nodes, Lilith, and the
-// Descendant/Imum Coeli angles on top of the default thirteen. (-Yn chooses
+// Descendant/Imum Coeli angles on top of the default thirteen. (=Yn and _Yn choose
 // true-vs-mean for the node/Lilith once enabled; -R 18 is what makes Lilith
 // visible at all.)
 func TestComputeChart_RestrictionSurfacesFullBodySet(t *testing.T) {
@@ -189,7 +190,7 @@ func TestMapAspectStylesCanonicalizesBodyOrderWithSpans(t *testing.T) {
 		FirstName: "Moon", KindName: "Squ", SecondName: "Sun",
 		Style: astrologstyle.AspectStyle{First: "moon", Kind: "square", Second: "sun"},
 	}}
-	got := mapAspectStyles(rows, testRegistry(t))[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: aspect.Square}]
+	got := mapAspectStyles(rows, testRegistry(t), testAspects(t))[astrologstyle.AspectIdentity{First: objSun, Second: objMoon, Kind: kindOf("Squ")}]
 	if got != (astrologstyle.AspectStyle{First: "sun", Kind: "square", Second: "moon"}) {
 		t.Fatalf("canonical style = %#v", got)
 	}
@@ -200,7 +201,7 @@ func TestMapCrossAspectStylesPreservesPrimarySecondaryRoles(t *testing.T) {
 		FirstName: "Ascenda", KindName: "Sex", SecondName: "Moon",
 		Style: astrologstyle.AspectStyle{First: "primary", Kind: "sextile", Second: "secondary"},
 	}}
-	got := mapCrossAspectStyles(rows, testRegistry(t))[astrologstyle.AspectIdentity{First: objAscendant, Second: objMoon, Kind: aspect.Sextile}]
+	got := mapCrossAspectStyles(rows, testRegistry(t), testAspects(t))[astrologstyle.AspectIdentity{First: objAscendant, Second: objMoon, Kind: kindOf("Sex")}]
 	if got != (astrologstyle.AspectStyle{First: "primary", Kind: "sextile", Second: "secondary"}) {
 		t.Fatalf("cross style = %#v", got)
 	}

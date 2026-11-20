@@ -28,14 +28,14 @@ func (m Model) applyDisplayConfig(d store.DisplayConfig) Model {
 			continue
 		}
 		if !validDisplayColour(c.val) {
-			m = m.logNote("preferences", "%s %q ignored: expected a 256-colour number (0-255) or #rrggbb. The default stands", c.key, c.val)
+			m = m.logNote("settings", "colour %q not valid, ignored", c.val)
 			continue
 		}
 		*c.into = c.val
 	}
 	if d.RetiredStripePresent && !m.rowStripeNoted {
 		m.rowStripeNoted = true
-		m = m.logNote("preferences", "display.row_stripe is no longer used: rows are not striped, and the cursor row's colour is display.cursor_row_color")
+		m = m.logNote("settings", "display.row_stripe no longer does anything, rows have no stripes")
 	}
 	return m
 }

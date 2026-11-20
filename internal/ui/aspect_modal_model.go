@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 )
 
@@ -16,7 +17,7 @@ import (
 
 // aspectsBindings is the Aspects popup's table.
 func aspectsBindings() []keys.BindingEntry {
-	return keys.Titled(append(append([]keys.BindingEntry{listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), toggle().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 })}, chooserCloseBindings()...), pageEntries()...))
+	return keys.TitledLocal(append(append([]keys.BindingEntry{listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), toggle().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 })}, chooserCloseBindings()...), pageEntries()...))
 }
 
 // updateAspectModalKey resolves one keystroke through the aspects bindings table
@@ -217,12 +218,19 @@ func openAspectChooser(m Model) (tea.Model, tea.Cmd) {
 func applyAspectRegistryLoaded(m Model, msg AspectRegistryLoadedMsg) (Model, tea.Cmd) {
 	pending := m.aspectOpenPending
 	m.aspectOpenPending = false
+	awaiting := m.awaitingAspects
+	m.awaitingAspects = false
 
 	if msg.Err != nil {
 		m.aspectRegErr = msg.Err
+		m.cantStart.aspectList = oneLine(msg.Err.Error())
 		return m.logTrace("aspects", "registry unreadable (%v)", msg.Err), nil
 	}
 	m.aspectRegistry = msg.Registry
+	m.lens.AspectRegistry = lookup.NewAspectRegistry(msg.Registry)
+	if awaiting {
+		return maybeResolveStartup(m)
+	}
 
 	// Someone pressed the key before the read landed. Honour it now rather
 	// than making them press again — the whole point of taking the request

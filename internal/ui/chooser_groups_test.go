@@ -13,12 +13,13 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
+	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // chooser_groups_test.go: operator, 2026-11-04 (interview). The body chooser has
-// seven groups, each with a ticked/total count, Ctrl+D restores the lens's own
+// seven groups, each with a ticked/total count, a first row restores the lens's own
 // default bodies, the rows with no ephemeris file come last, and a group's name
 // typed into the search lists its members.
 
@@ -204,10 +205,18 @@ func keyIn(t *testing.T, m Model, k tea.KeyMsg) Model {
 	return tm.(Model)
 }
 
-func TestCtrlDRestoresLensDefaults(t *testing.T) {
+// restoreRow is Enter on the Bodies chooser's first row, "+ Restore the default
+// bodies".
+func restoreRow(t *testing.T, m Model) Model {
+	t.Helper()
+	m.bodyModal.Cursor = menu.LeadCursor
+	return keyIn(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+}
+
+func TestRestoreRowRestoresLensDefaults(t *testing.T) {
 	oldChooserRule(t)
 	want := lensDrawn(t)
-	entry := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 43, 60}, TrueNodeMode: true}
+	entry := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 43, 60}, Nodes: recipe.NodesTrue}
 	m := openedChooser(t, entry)
 
 	m.bodyModal.Cursor = popup.GroupRows() + listIndex(t, m.bodyModal, 1)
@@ -218,14 +227,17 @@ func TestCtrlDRestoresLensDefaults(t *testing.T) {
 		t.Fatalf("fixture: the ticks %v already are the defaults", got)
 	}
 
-	m = keyIn(t, m, tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = restoreRow(t, m)
+	if m.startup != startupBodyOpen {
+		t.Errorf("Enter on the restore row closed the chooser (startup %q)", m.startup)
+	}
 	if got := tickedNums(m.bodyModal); !slices.Equal(got, want) {
-		t.Errorf("after Ctrl+D the ticks are %v, want the lens's drawn set %v", got, want)
+		t.Errorf("after the restore row the ticks are %v, want the lens's drawn set %v", got, want)
 	}
 	// Live, like any tick: the chart behind is asked for the same set (as the
 	// default policy, which TestEqualTicksAreDefaults holds).
 	if got := visibleObjects(t, m.lens); !slices.Equal(got, want) {
-		t.Errorf("after Ctrl+D the lens draws %v, want %v", got, want)
+		t.Errorf("after the restore row the lens draws %v, want %v", got, want)
 	}
 
 	// Esc undoes it all under the closing rule that puts the entry back.
@@ -238,7 +250,7 @@ func TestCtrlDRestoresLensDefaults(t *testing.T) {
 // Four ways to arrive at "the default bodies" give one set, the lens's.
 func TestDefaultsOneSource(t *testing.T) {
 	want := lensDrawn(t)
-	explicit := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}, TrueNodeMode: true}
+	explicit := recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2}, Nodes: recipe.NodesTrue}
 	check := func(t *testing.T, m Model) {
 		t.Helper()
 		if got := visibleObjects(t, m.lens); !slices.Equal(got, want) {
@@ -247,7 +259,7 @@ func TestDefaultsOneSource(t *testing.T) {
 	}
 
 	t.Run("nothing ticked", func(t *testing.T) {
-		m := openedChooser(t, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}, TrueNodeMode: true})
+		m := openedChooser(t, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}, Nodes: recipe.NodesTrue})
 		m.bodyModal.Cursor = popup.GroupRows() + listIndex(t, m.bodyModal, 1)
 		m = keyIn(t, m, tea.KeyMsg{Type: tea.KeySpace}) // untick the last body
 		if left := tickedNums(m.bodyModal); len(left) != 0 {
@@ -271,9 +283,9 @@ func TestDefaultsOneSource(t *testing.T) {
 		m, _ = applyNamedSessionLoaded(m, NamedSessionLoadedMsg{Gen: m.sessionGen, Name: "plain", Perimeter: p})
 		check(t, m)
 	})
-	t.Run("ctrl+d", func(t *testing.T) {
+	t.Run("the restore row", func(t *testing.T) {
 		m := openedChooser(t, explicit)
-		check(t, keyIn(t, m, tea.KeyMsg{Type: tea.KeyCtrlD}))
+		check(t, restoreRow(t, m))
 	})
 	t.Run("one spelling", func(t *testing.T) {
 		// The default policy is spelled once. A bare policy built anywhere else
@@ -292,7 +304,7 @@ func TestDefaultsOneSource(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i, l := range strings.Split(string(b), "\n") {
-				if strings.Contains(l, "recipe.ObjectPolicy{TrueNodeMode") {
+				if strings.Contains(l, "recipe.ObjectPolicy{Nodes") {
 					t.Errorf("%s:%d builds its own default policy: %s", f, i+1, strings.TrimSpace(l))
 				}
 			}
@@ -417,17 +429,20 @@ func TestFilterByGroupName(t *testing.T) {
 	}
 }
 
-// Ctrl+D is in the chooser's own key bar and in Help, as Defaults.
-func TestCtrlDIsListed(t *testing.T) {
+// Ctrl+D does nothing in the Bodies chooser, and neither its bar nor Help lists
+// Defaults: the default is a row of the list.
+func TestCtrlDIsGoFromBodies(t *testing.T) {
 	m := helpFixtureOneChart(t, 144, 40)
-	var listed []string
-	for _, l := range m.helpLines() {
+	for _, l := range keybindingLines(m) {
 		if l.Binding && strings.Contains(l.Text, "Defaults") {
-			listed = append(listed, l.Text)
+			t.Errorf("Help lists %q", l.Text)
 		}
 	}
-	if len(listed) != 1 || !strings.Contains(listed[0], "⌃d") && !strings.Contains(listed[0], "ctrl+d") {
-		t.Errorf("Help lists %q for Defaults, want one row with its key", listed)
+	cm := openedChooser(t, recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 43, 60}})
+	before := tickedNums(cm.bodyModal)
+	cm = keyIn(t, cm, tea.KeyMsg{Type: tea.KeyCtrlD})
+	if got := tickedNums(cm.bodyModal); !slices.Equal(got, before) || cm.startup != startupBodyOpen {
+		t.Errorf("Ctrl+D changed the ticks %v to %v or closed the chooser (startup %q)", before, got, cm.startup)
 	}
 }
 
@@ -443,7 +458,7 @@ func TestEqualTicksAreDefaults(t *testing.T) {
 		}
 	}
 
-	t.Run("ctrl+d then confirm", func(t *testing.T) {
+	t.Run("restore row then confirm", func(t *testing.T) {
 		sessionSandbox(t)
 		m, _, _ := ticksStart(t)
 		cm := chooserOf(t, m)
@@ -451,10 +466,12 @@ func TestEqualTicksAreDefaults(t *testing.T) {
 		if cm.lens.Objects.Baseline != recipe.Explicit {
 			t.Fatalf("fixture: unticking one body left %+v", cm.lens.Objects)
 		}
-		cm = pressInChooser(t, cm, tea.KeyMsg{Type: tea.KeyCtrlD})
+		cm.bodyModal.Cursor = menu.LeadCursor
+		cm = pressInChooser(t, cm, tea.KeyMsg{Type: tea.KeyEnter})
 		if got, want := visibleObjects(t, cm.lens), cm.defaultDrawn(); !slices.Equal(got, want) {
-			t.Errorf("after Ctrl+D the preview draws %v, want the default set %v", got, want)
+			t.Errorf("after the restore row the preview draws %v, want the default set %v", got, want)
 		}
+		cm.bodyModal.Cursor = 0
 		cm = pressInChooser(t, cm, tea.KeyMsg{Type: tea.KeyEnter})
 		check(t, cm, "after confirming")
 		noDrawnLine(t, cm)

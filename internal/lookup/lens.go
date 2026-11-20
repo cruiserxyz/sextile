@@ -29,9 +29,16 @@ type Lens struct {
 	// Zodiac selects the tropical or sidereal reference frame (sidereal is pinned by the frame band, never a bare `-s`).
 	Zodiac recipe.Zodiac
 
+	// HousesChosen and ZodiacChosen say the operator chose this chart's house
+	// system or zodiac. For a chart cast from its file (recipe.FileChart) a
+	// chosen setting overrides the file's own, and an unchosen one is only the
+	// default for a file that names none.
+	HousesChosen bool
+	ZodiacChosen bool
+
 	// Objects is the body-visibility policy: the baseline profile plus the typed
-	// Add/Remove deltas and the true-node/Lilith mode. The compiler alone turns
-	// this into astrolog `-R`/`-Yn` switches.
+	// Add/Remove deltas and the form of the Nodes and Lilith. The compiler alone
+	// turns this into astrolog `-R` and `=Yn`/`=Ynn` switches.
 	Objects recipe.ObjectPolicy
 
 	// Aspects is which aspects the chart counts. It is deliberately NOT part
@@ -47,6 +54,10 @@ type Lens struct {
 	// it. Every call built from the lens carries it, so the parsers name each
 	// printed row by Astrolog's own object.
 	Registry aspect.Registry
+
+	// AspectRegistry is the binary's aspect list, set by the Model once it has
+	// read it, and carried by every call built from the lens beside Registry.
+	AspectRegistry aspect.AspectRegistry
 }
 
 // Hellenistic is the cp2 default: Whole Sign houses, tropical zodiac, true
@@ -63,178 +74,154 @@ var Hellenistic = Lens{
 		Baseline: recipe.AstrologDefault,
 		// Chiron (11), the South Node (17), Lilith (18), the Nadir (25) and the
 		// Descendant (28): Astrolog's own numbers for the five the lens adds.
-		Add:          recipe.NewObjectSet(11, 17, 18, 25, 28),
-		TrueNodeMode: true,
+		Add: recipe.NewObjectSet(11, 17, 18, 25, 28),
 	},
 }
 
 // specAt assembles the validated recipe.ChartSpec for a moment (Julian Day `jd`)
-// at `place` under this lens — the typed semantic input the astrolog compiler
-// consumes. It is the single construction site that replaced astrolog's
-// specFromPrimitives bridge: the lens contributes the reference frame + body
-// policy, the arguments contribute the source.
-func (l Lens) specAt(jd float64, place location.PlaceInfo) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.MomentAtPlace{JD: jd, Lon: place.Lon, Lat: place.Lat},
-		l.Houses, l.Zodiac, l.Objects,
-	)
+// At is one chart as a spec takes it: its moment and place, the label its
+// reports print, and, for a chart read from its file, that file's record.
+type At struct {
+	JD     float64
+	Place  location.PlaceInfo
+	Label  store.ReportLabel
+	Record string
+}
+
+// AtChart is the At of an anchored chart: a chart that holds its file's record
+// is cast from that record.
+func AtChart(c store.AnchorChart) At {
+	return At{JD: astrolog.SlotJD(c.When), Place: c.Place, Label: c.Label, Record: c.Record}
+}
+
+// AtMoment is the At of a moment at a place with no file behind it: Now, a
+// transit, a probe.
+func AtMoment(jd float64, place location.PlaceInfo, label store.ReportLabel) At {
+	return At{JD: jd, Place: place, Label: label}
+}
+
+// sourceForm says how a moment at a place is written for Astrolog when the
+// chart has no record: in UT, in UT with its zone for the header, or as the
+// place's local clock (the raw report).
+type sourceForm int
+
+const (
+	formUT sourceForm = iota
+	formZoned
+	formLocal
+)
+
+// source is the one door from a chart to Astrolog's source. A chart that holds
+// its file's record IS that record (recipe.FileChart): Astrolog reads the
+// file itself, so its moment, zone, place and own settings are the file's,
+// exact by construction, and form does not apply. Every other chart is a
+// moment at a place, written in form.
+func (l Lens) source(a At, form sourceForm) recipe.Source {
+	if a.Record != "" {
+		return recipe.FileChart{
+			Record: a.Record, JD: a.JD, Lon: a.Place.Lon, Lat: a.Place.Lat,
+			Name: a.Label.Name, Place: a.Label.Place,
+			HousesChosen: l.HousesChosen, ZodiacChosen: l.ZodiacChosen,
+		}
+	}
+	if a.Place.TZ == "" {
+		// A chart file's place before its file is read: the instant at the
+		// coordinates, which needs no zone.
+		form = formUT
+	}
+	switch form {
+	case formZoned:
+		return recipe.MomentAtPlace{JD: a.JD, Lon: a.Place.Lon, Lat: a.Place.Lat, TZ: a.Place.TZ, Name: a.Label.Name, Place: a.Label.Place}
+	case formLocal:
+		return recipe.LocalMomentAtPlace{JD: a.JD, Lon: a.Place.Lon, Lat: a.Place.Lat, TZ: a.Place.TZ, Name: a.Label.Name, Place: a.Label.Place}
+	}
+	return recipe.MomentAtPlace{JD: a.JD, Lon: a.Place.Lon, Lat: a.Place.Lat}
+}
+
+// spec is the validated recipe.ChartSpec for src under this lens.
+func (l Lens) spec(src recipe.Source) (recipe.ChartSpec, error) {
+	spec, err := recipe.NewChartSpec(src, l.Houses, l.Zodiac, l.Objects)
 	if err != nil {
 		return recipe.ChartSpec{}, err
 	}
 	spec.Aspects = l.Aspects
 	spec.Registry = l.Registry
+	spec.AspectRegistry = l.AspectRegistry
 	return spec, spec.Validate()
+}
+
+// specAt assembles the validated recipe.ChartSpec for one chart under this
+// lens: the lens contributes the reference frame and body policy, the chart
+// its source. The wheel takes it.
+func (l Lens) specAt(a At) (recipe.ChartSpec, error) {
+	return l.spec(l.source(a, formUT))
 }
 
 // chartSpecAt is specAt for the single-chart compute (positions and the aspect
-// text Details/Aspects reads): the source also carries the slot's IANA zone, so
-// Astrolog's header reads the chart's own clock (the specification C4). An
-// unloadable zone refuses here, before any spawn. The wheel keeps specAt.
-func (l Lens) chartSpecAt(jd float64, place location.PlaceInfo, label store.ReportLabel) (recipe.ChartSpec, error) {
-	if _, err := time.LoadLocation(place.TZ); err != nil {
-		return recipe.ChartSpec{}, fmt.Errorf("timezone %q does not load: %w", place.TZ, err)
+// text Details/Aspects reads): a moment at a place also carries the slot's IANA
+// zone, so Astrolog's header reads the chart's own clock (the specification
+// C4), and an unloadable zone refuses here, before any spawn. A chart cast from
+// its file carries the file's own zone.
+func (l Lens) chartSpecAt(a At) (recipe.ChartSpec, error) {
+	if a.Record == "" && a.Place.TZ != "" {
+		if _, err := time.LoadLocation(a.Place.TZ); err != nil {
+			return recipe.ChartSpec{}, fmt.Errorf("timezone %q does not load: %w", a.Place.TZ, err)
+		}
 	}
-	spec, err := recipe.NewChartSpec(
-		recipe.MomentAtPlace{JD: jd, Lon: place.Lon, Lat: place.Lat, TZ: place.TZ, Name: label.Name, Place: label.Place},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+	return l.spec(l.source(a, formZoned))
 }
 
-// localSpecAt is specAt for the raw report: the same instant at the same
-// place, handed to Astrolog as the place's local clock and zone so the
-// report header names the slot's own time (the specification). Only
-// the raw report asks for it; positions, aspects and the wheel keep specAt.
-func (l Lens) localSpecAt(jd float64, place location.PlaceInfo, label store.ReportLabel) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.LocalMomentAtPlace{JD: jd, Lon: place.Lon, Lat: place.Lat, TZ: place.TZ, Name: label.Name, Place: label.Place},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+// localSpecAt is specAt for the raw report: a moment at a place is handed to
+// Astrolog as the place's local clock and zone, so the report header names the
+// slot's own time (the specification).
+func (l Lens) localSpecAt(a At) (recipe.ChartSpec, error) {
+	return l.spec(l.source(a, formLocal))
 }
 
 // localComparisonSpecAt is comparisonSpecAt for the pair raw report: both
 // staged charts carry their own local clock and zone. The cross-aspect list
 // and the wheel image keep comparisonSpecAt and its UT files.
-func (l Lens) localComparisonSpecAt(jdNatal float64, natalPlace location.PlaceInfo, natalLabel store.ReportLabel, jdTransit float64, transitPlace location.PlaceInfo, transitLabel store.ReportLabel) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.Comparison{
-			Primary:   localMomentAt(jdNatal, natalPlace, natalLabel),
-			Secondary: localMomentAt(jdTransit, transitPlace, transitLabel),
-			Relation:  recipe.TransitToNatal,
-		},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+func (l Lens) localComparisonSpecAt(natal, transit At) (recipe.ChartSpec, error) {
+	return l.spec(recipe.Comparison{Primary: l.source(natal, formLocal), Secondary: l.source(transit, formLocal), Relation: recipe.TransitToNatal})
 }
 
 // comparisonSpecAt assembles the validated two-chart recipe.ChartSpec for a
-// natal moment (jdNatal at natalPlace) compared against a transit moment
-// (jdTransit at transitPlace) under this lens — the input astrolog's -r*
-// relationship path consumes. Primary = natal (first operand, drawn by
-// Astrolog on the bi-wheel's outer ring with its houses), Secondary = transit
-// (second operand, the inner ring), Relation =
-// TransitToNatal so aspect phase follows the transiting body against the
-// fixed natal (astrolog -rt, an earlier change); the lens contributes the shared
-// reference frame + body policy applied to both charts.
-func (l Lens) comparisonSpecAt(jdNatal float64, natalPlace location.PlaceInfo, jdTransit float64, transitPlace location.PlaceInfo) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.Comparison{
-			Primary:   recipe.MomentAtPlace{JD: jdNatal, Lon: natalPlace.Lon, Lat: natalPlace.Lat},
-			Secondary: recipe.MomentAtPlace{JD: jdTransit, Lon: transitPlace.Lon, Lat: transitPlace.Lat},
-			Relation:  recipe.TransitToNatal,
-		},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+// natal chart compared against a transit moment under this lens — the input
+// astrolog's -r* relationship path consumes. Primary = natal (first operand,
+// drawn by Astrolog on the bi-wheel's outer ring with its houses), Secondary =
+// transit (the inner ring), Relation = TransitToNatal so aspect phase follows
+// the transiting body against the fixed natal (astrolog -rt); the lens
+// contributes the shared reference frame + body policy applied to both charts.
+func (l Lens) comparisonSpecAt(natal, transit At) (recipe.ChartSpec, error) {
+	return l.spec(recipe.Comparison{Primary: l.source(natal, formUT), Secondary: l.source(transit, formUT), Relation: recipe.TransitToNatal})
 }
 
 // synastrySpecAt is comparisonSpecAt for two ANCHORED charts: the same two-chart
 // input with Relation Synastry (astrolog -r0), chart 1 the frame (Primary,
 // first operand, the bi-wheel's outer ring with its houses) and chart 2 the
-// other selected slot (the inner ring). Neither
-// chart transits the other, so no velocity is zeroed and the aspect list is
-// Astrolog's plain relationship list (its `a`/`s` is the synthetic both-natal-
-// motions metric, never shown for a pair).
-func (l Lens) synastrySpecAt(jd1 float64, place1 location.PlaceInfo, jd2 float64, place2 location.PlaceInfo) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.Comparison{
-			Primary:   momentAt(jd1, place1),
-			Secondary: momentAt(jd2, place2),
-			Relation:  recipe.Synastry,
-		},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+// other selected slot (the inner ring). Neither chart transits the other, so no
+// velocity is zeroed and the aspect list is Astrolog's plain relationship list
+// (its `a`/`s` is the synthetic both-natal-motions metric, never shown for a
+// pair).
+func (l Lens) synastrySpecAt(one, two At) (recipe.ChartSpec, error) {
+	return l.spec(recipe.Comparison{Primary: l.source(one, formUT), Secondary: l.source(two, formUT), Relation: recipe.Synastry})
 }
 
 // localSynastrySpecAt is synastrySpecAt for the pair raw report: both staged
 // charts carry their own local clock and zone, as localComparisonSpecAt's do.
-func (l Lens) localSynastrySpecAt(jd1 float64, place1 location.PlaceInfo, label1 store.ReportLabel, jd2 float64, place2 location.PlaceInfo, label2 store.ReportLabel) (recipe.ChartSpec, error) {
-	spec, err := recipe.NewChartSpec(
-		recipe.Comparison{
-			Primary:   localMomentAt(jd1, place1, label1),
-			Secondary: localMomentAt(jd2, place2, label2),
-			Relation:  recipe.Synastry,
-		},
-		l.Houses, l.Zodiac, l.Objects,
-	)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
+func (l Lens) localSynastrySpecAt(one, two At) (recipe.ChartSpec, error) {
+	return l.spec(recipe.Comparison{Primary: l.source(one, formLocal), Secondary: l.source(two, formLocal), Relation: recipe.Synastry})
 }
 
 // multiWheelSpecAt is the validated N-ring spec for the selected set in
 // numeral order: rings[0] is chart 1, the innermost ring that carries the
 // houses. Three to six rings; a pair is a comparison, not a multi-wheel.
-func (l Lens) multiWheelSpecAt(jds []float64, places []location.PlaceInfo) (recipe.ChartSpec, error) {
-	rings := make([]recipe.Source, len(jds))
-	for i := range jds {
-		rings[i] = momentAt(jds[i], places[i])
+func (l Lens) multiWheelSpecAt(charts []At) (recipe.ChartSpec, error) {
+	rings := make([]recipe.Source, len(charts))
+	for i, c := range charts {
+		rings[i] = l.source(c, formUT)
 	}
-	spec, err := recipe.NewChartSpec(recipe.MultiWheel{Rings: rings}, l.Houses, l.Zodiac, l.Objects)
-	if err != nil {
-		return recipe.ChartSpec{}, err
-	}
-	spec.Aspects = l.Aspects
-	spec.Registry = l.Registry
-	return spec, spec.Validate()
-}
-
-func momentAt(jd float64, place location.PlaceInfo) recipe.MomentAtPlace {
-	return recipe.MomentAtPlace{JD: jd, Lon: place.Lon, Lat: place.Lat}
-}
-
-func localMomentAt(jd float64, place location.PlaceInfo, label store.ReportLabel) recipe.LocalMomentAtPlace {
-	return recipe.LocalMomentAtPlace{JD: jd, Lon: place.Lon, Lat: place.Lat, TZ: place.TZ, Name: label.Name, Place: label.Place}
+	return l.spec(recipe.MultiWheel{Rings: rings})
 }
 
 // houseNames and houseCodes are the approved display name and two-letter tag

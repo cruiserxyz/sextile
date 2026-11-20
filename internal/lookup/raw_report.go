@@ -38,6 +38,9 @@ type RawReportRequest struct {
 	// Label is the chart's name and place as its report header prints them
 	// (the specification C1); the zero value is the unnamed chart.
 	Label store.ReportLabel
+	// Record is the chart file's text for a chart cast from its file
+	// (store.AnchorChart.Record); empty for Now.
+	Record string
 }
 
 func (r RawReportRequest) projection() (recipe.RawReport, error) {
@@ -69,7 +72,7 @@ func (r RawReportRequest) projection() (recipe.RawReport, error) {
 // it — carried from astrolog unchanged, and present beside the
 // error whenever the spawn happened.
 func ComputeRawReport(ctx context.Context, when time.Time, place location.PlaceInfo, lens Lens, request RawReportRequest) (report string, command string, err error) {
-	if !place.HasTimezone() {
+	if request.Record == "" && !place.HasTimezone() {
 		return "", "", fmt.Errorf("lookup: ComputeRawReport: place %q has no IANA timezone", place.Display())
 	}
 	projection, err := request.projection()
@@ -86,7 +89,7 @@ func ComputeRawReport(ctx context.Context, when time.Time, place location.PlaceI
 		// turning red.
 		lens = lens.withoutStars()
 	}
-	spec, err := lens.localSpecAt(astrolog.SlotJD(when), place, request.Label)
+	spec, err := lens.localSpecAt(At{JD: astrolog.SlotJD(when), Place: place, Label: request.Label, Record: request.Record})
 	if err != nil {
 		return "", "", fmt.Errorf("lookup: ComputeRawReport: %w", err)
 	}
@@ -145,7 +148,7 @@ func (l Lens) withoutStars() Lens {
 			return l
 		}
 		fallback := Hellenistic.Objects
-		fallback.TrueNodeMode, fallback.Only = p.TrueNodeMode, p.Only
+		fallback.Nodes, fallback.Only = p.Nodes, p.Only
 		p = fallback
 	}
 	add := make([]int, 0, len(p.Add))
@@ -181,17 +184,11 @@ func CrossBodyRawReport(
 	if !transitPlace.HasTimezone() {
 		return "", "", fmt.Errorf("lookup: CrossBodyRawReport: place %q has no IANA timezone", transitPlace.Display())
 	}
-	if !natalChart.Place.HasTimezone() {
-		return "", "", fmt.Errorf("lookup: CrossBodyRawReport: natal place %q has no IANA timezone", natalChart.Place.Display())
-	}
 	projection := recipe.BodyRawReport(object)
 	if err := projection.Validate(); err != nil {
 		return "", "", fmt.Errorf("lookup: CrossBodyRawReport: %w", err)
 	}
-	spec, err := lens.localComparisonSpecAt(
-		astrolog.SlotJD(natalChart.When), natalChart.Place, natalChart.Label,
-		astrolog.SlotJD(transitWhen), transitPlace, store.ReportLabel{},
-	)
+	spec, err := lens.localComparisonSpecAt(AtChart(natalChart), AtMoment(astrolog.SlotJD(transitWhen), transitPlace, store.ReportLabel{}))
 	if err != nil {
 		return "", "", fmt.Errorf("lookup: CrossBodyRawReport: %w", err)
 	}
@@ -206,25 +203,14 @@ func SynastryCrossBodyRawReport(
 	ctx context.Context,
 	lens Lens,
 	natalChart store.AnchorChart,
-	otherWhen time.Time,
-	otherPlace location.PlaceInfo,
-	otherLabel store.ReportLabel,
+	other store.AnchorChart,
 	object aspect.Object,
 ) (report string, command string, err error) {
-	if !otherPlace.HasTimezone() {
-		return "", "", fmt.Errorf("lookup: SynastryCrossBodyRawReport: place %q has no IANA timezone", otherPlace.Display())
-	}
-	if !natalChart.Place.HasTimezone() {
-		return "", "", fmt.Errorf("lookup: SynastryCrossBodyRawReport: chart 1 place %q has no IANA timezone", natalChart.Place.Display())
-	}
 	projection := recipe.BodyRawReport(object)
 	if err := projection.Validate(); err != nil {
 		return "", "", fmt.Errorf("lookup: SynastryCrossBodyRawReport: %w", err)
 	}
-	spec, err := lens.localSynastrySpecAt(
-		astrolog.SlotJD(natalChart.When), natalChart.Place, natalChart.Label,
-		astrolog.SlotJD(otherWhen), otherPlace, otherLabel,
-	)
+	spec, err := lens.localSynastrySpecAt(AtChart(natalChart), AtChart(other))
 	if err != nil {
 		return "", "", fmt.Errorf("lookup: SynastryCrossBodyRawReport: %w", err)
 	}

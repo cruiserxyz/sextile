@@ -18,13 +18,13 @@ const astrologRecord = "@AI800  ; Astrolog chart info.\n" +
 // C3.19 (the specification), superseding save-chart's C5: the saved file
 // is astrolog's record byte for byte. The ";sextile-id:" line C5 appended is
 // gone; a chart's id is its file stem.
-func TestPlaceChartFileWritesTheRecordAsHanded(t *testing.T) {
+func TestPlaceWritesTheRecordAsHanded(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SEXTILE_CHARTS_DIR", dir)
 
-	path, err := PlaceChartFile(dir, []byte(astrologRecord), "test-person")
+	path, err := OriginalsDoor(dir).Place("test-person", []byte(astrologRecord))
 	if err != nil {
-		t.Fatalf("PlaceChartFile: %v", err)
+		t.Fatalf("Place: %v", err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -44,8 +44,8 @@ func TestSaveCreatesTheResolvedChartsDir(t *testing.T) {
 		t.Fatalf("precondition: %s already exists", dir)
 	}
 
-	if _, err := PlaceChartFile(dir, []byte(astrologRecord), "test-person"); err != nil {
-		t.Fatalf("PlaceChartFile: %v", err)
+	if _, err := OriginalsDoor(dir).Place("test-person", []byte(astrologRecord)); err != nil {
+		t.Fatalf("Place: %v", err)
 	}
 	fi, err := os.Stat(dir)
 	if err != nil {
@@ -68,9 +68,9 @@ func TestSavedChartIsOperatorReadableOnly(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SEXTILE_CHARTS_DIR", dir)
 
-	path, err := PlaceChartFile(dir, []byte(astrologRecord), "test-person")
+	path, err := OriginalsDoor(dir).Place("test-person", []byte(astrologRecord))
 	if err != nil {
-		t.Fatalf("PlaceChartFile: %v", err)
+		t.Fatalf("Place: %v", err)
 	}
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -88,7 +88,7 @@ func TestSavedChartIsOperatorReadableOnly(t *testing.T) {
 // The exclusive create is the refusal, at the syscall. C6 states the
 // requirement in library terms and internal/lookup verifies it there; this
 // pins the half that cannot be reordered away.
-func TestPlaceChartFileRefusesAnExistingFile(t *testing.T) {
+func TestPlaceRefusesAnExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SEXTILE_CHARTS_DIR", dir)
 	path := filepath.Join(dir, "test-person.as")
@@ -97,7 +97,7 @@ func TestPlaceChartFileRefusesAnExistingFile(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err := PlaceChartFile(dir, []byte(astrologRecord), "test-person")
+	_, err := OriginalsDoor(dir).Place("test-person", []byte(astrologRecord))
 	if !errors.Is(err, ErrChartExists) {
 		t.Fatalf("err = %v, want ErrChartExists", err)
 	}
@@ -122,8 +122,8 @@ func TestSaveWhenChartsDirIsReadOnly(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
-	if _, err := PlaceChartFile(dir, []byte(astrologRecord), "test-person"); err == nil {
-		t.Fatal("PlaceChartFile succeeded against a read-only charts directory")
+	if _, err := OriginalsDoor(dir).Place("test-person", []byte(astrologRecord)); err == nil {
+		t.Fatal("Place succeeded against a read-only charts directory")
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {

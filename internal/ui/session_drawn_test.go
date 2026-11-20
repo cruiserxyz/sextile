@@ -202,7 +202,7 @@ func TestDrawnSetKeepsAnUnknownName(t *testing.T) {
 		Drawn: []string{"Sun", "Moon", "Nibiru"}}
 	m2 := drawnRestart(t, m, m.ephemeris, sess)
 
-	const line = "Nibiru is not an object of this Astrolog, kept in the session"
+	const line = "Nibiru is not known to this Astrolog, the session keeps its name"
 	if n := countLines(m2, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m2), "\n"))
 	}
@@ -219,7 +219,7 @@ func TestDrawnSetKeepsAnUnknownName(t *testing.T) {
 	// A set of unknown names alone shows the defaults and says so, once.
 	sess.Drawn = []string{"Nibiru"}
 	m3 := drawnRestart(t, m, m.ephemeris, sess)
-	const subst = "the saved set can't be drawn, showing the default set"
+	const subst = "the bodies of the last session can't be drawn here, the usual ones are shown"
 	for _, l := range []string{line, subst} {
 		if n := countLines(m3, l); n != 1 {
 			t.Errorf("the Log carries %q %d times, want once:\n%s", l, n, strings.Join(logTexts(m3), "\n"))
@@ -236,7 +236,7 @@ func TestDrawnSetThatDrainsFallsBack(t *testing.T) {
 	if m.lens.Objects.Baseline == recipe.Explicit {
 		t.Errorf("a drawn set with nothing drawable is in force: %v", m.lens.Objects.Selected())
 	}
-	const line = "Chiron is selected but can't be drawn here, so all drawn bodies are shown"
+	const line = "Chiron selected but can't be drawn here, all are shown"
 	if n := countLines(m, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 	}
@@ -249,7 +249,7 @@ func TestDrawnSetThatDrainsFallsBack(t *testing.T) {
 	if got := m.lens.Objects.Selected(); !slices.Equal(got, []int{1}) {
 		t.Errorf("the restored set is %v, want the Sun alone", got)
 	}
-	const partial = "Chiron can't be drawn here: no ephemeris file seas_18.se1"
+	const partial = "Chiron can't be drawn here: no file seas_18.se1"
 	if n := countLines(m, partial); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", partial, n, strings.Join(logTexts(m), "\n"))
 	}
@@ -467,7 +467,7 @@ func TestDrawnSetLastTickFallsBack(t *testing.T) {
 	if !strings.Contains(left["bodies"], "· Fort") || !strings.Contains(left["bodies"], "Mars") {
 		t.Errorf("the Bodies panel does not show the defaults:\n%s", left["bodies"])
 	}
-	const line = "Chiron is selected but can't be drawn here, so all drawn bodies are shown"
+	const line = "Chiron selected but can't be drawn here, all are shown"
 	if n := countLines(c, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(c), "\n"))
 	}
@@ -539,7 +539,7 @@ func TestDrawnSetListErrorCannotStart(t *testing.T) {
 	}
 	tm, _ = tm.Update(ObjectRegistryLoadedMsg{Err: errors.New("unreadable")})
 	m := tm.(Model)
-	if want := "Astrolog's object list could not be read: unreadable"; !strings.Contains(csText(m.View()), want) {
+	if want := "Astrolog's list of bodies could not be read: unreadable"; !strings.Contains(csText(m.View()), want) {
 		t.Errorf("the can't-start screen lacks %q:\n%s", want, csText(m.View()))
 	}
 	if m.slots != nil || len(argvTexts(m)) != 0 {
@@ -582,7 +582,7 @@ func TestNamedFileWithoutDrawnClearsAStaleWait(t *testing.T) {
 	}
 	m.drawnRaw = []string{"Sun"}
 	m = openSessions(t, m)
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	if cmd == nil {
 		t.Fatal("Enter on a saved session started nothing")
@@ -609,7 +609,7 @@ func TestNamedSessionKeepsAChangedDrawnSet(t *testing.T) {
 	m.objectRegistry = drawnRegistry()
 	file := otherSession(t, "Other work", "Client Zed")
 	m = openSessions(t, m)
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	tm, _ := m.Update(cmd())
 	m = tm.(Model)
@@ -644,7 +644,7 @@ func TestResetStartsAtTheDefaultDrawnSet(t *testing.T) {
 	}
 }
 
-// An unnamed session holding nothing but a chooser set is not empty to `, n`.
+// An unnamed session holding nothing but a chooser set is not empty to the New row.
 func TestResetDropsADrawnSetOnAnEmptySession(t *testing.T) {
 	sessionSandbox(t)
 	m := listModel(t, 0, 0)
@@ -652,7 +652,7 @@ func TestResetDropsADrawnSetOnAnEmptySession(t *testing.T) {
 	m.lens.Objects = explicitOf(1)
 	m, _ = pressReset(t, m)
 	if m.lens.Objects.Baseline == recipe.Explicit {
-		t.Errorf("`, n` left the set in force: %+v", m.lens.Objects)
+		t.Errorf("the New row left the set in force: %+v", m.lens.Objects)
 	}
 }
 
@@ -679,7 +679,7 @@ func drawnNamed(t *testing.T, name string, drawn []string) string {
 func openNamed(t *testing.T, m Model) Model {
 	t.Helper()
 	m = openSessions(t, m)
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	if cmd == nil {
 		t.Fatal("Enter on a saved session started nothing")
@@ -768,7 +768,7 @@ func TestNamedSessionSaysItsDrainAgain(t *testing.T) {
 		m, _ = applyNamedSessionLoaded(m, NamedSessionLoadedMsg{Gen: m.sessionGen, Name: "n", Perimeter: p})
 		return m
 	}
-	const line = "Chiron is selected but can't be drawn here, so all drawn bodies are shown"
+	const line = "Chiron selected but can't be drawn here, all are shown"
 	m = load(m, []string{"Chiron"})
 	m = load(m, nil)
 	m = load(m, []string{"Chiron"})
@@ -791,12 +791,12 @@ func TestDrawnSetTwoMissingFiles(t *testing.T) {
 	both := drawnRestart(t, m, m.ephemeris, store.Session{Version: 3, Folder: folder, Drawn: []string{"Chiron", "Hygiea"}})
 	var drained []string
 	for _, l := range logTexts(both) {
-		if strings.Contains(l, "can't be drawn here, so all drawn bodies are shown") {
+		if strings.Contains(l, "can't be drawn here, all are shown") {
 			drained = append(drained, l)
 		}
 	}
 	// (Both names and the sentence are wider than the Log, so the general form.)
-	want := []string{"The selected bodies can't be drawn here, so all drawn bodies are shown"}
+	want := []string{"bodies: the selected bodies can't be drawn here, all are shown"}
 	if !slices.Equal(drained, want) {
 		t.Errorf("drained lines = %q, want %q", drained, want)
 	}
@@ -804,7 +804,7 @@ func TestDrawnSetTwoMissingFiles(t *testing.T) {
 	if got := mixed.lens.Objects.Selected(); !slices.Equal(got, []int{1}) {
 		t.Errorf("the restored set is %v, want the Sun", got)
 	}
-	if n := countLines(mixed, "Hygiea can't be drawn here: no ephemeris file se00010s.se1"); n != 1 {
+	if n := countLines(mixed, "Hygiea can't be drawn here: no file se00010s.se1"); n != 1 {
 		t.Errorf("Hygiea's line appears %d times, want once:\n%s", n, strings.Join(logTexts(mixed), "\n"))
 	}
 }

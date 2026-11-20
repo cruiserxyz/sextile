@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -84,6 +85,12 @@ func writeChartFile(t *testing.T, body string) string {
 
 const readerQB = "-qb Oct 6 2026 12:30:15am DT 1E 4:53E 52:22N\n"
 
+// readerZI and stubTop agree: a stand-in box prints the name and the place rows
+// only for a file that names them, as Astrolog does.
+const readerZI = "-zi \"N\" \"P\"\n"
+
+var stubTop = []string{"Astrolog 8.00 chart", "N", "Tue Oct  6 2026  0:30:15", "P"}
+
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // ---- C1, C2, C4: values come from fixed lines of the box -------------------
@@ -99,7 +106,7 @@ func TestChartFileValuesComeFromFixedBoxLines(t *testing.T) {
 	top := []string{
 		"Astrolog 8.00 chart",
 		"Julian Day: 2440000.00000",
-		"Tue Oct  6 2026 12:30:15am",
+		"Tue Oct  6 2026  0:30:15",
 		"DT Zone 9:00E, 1:00'00E 2:00'00N",
 	}
 	stubAstrolog(t, boxText(top,
@@ -123,66 +130,47 @@ func TestChartFileValuesComeFromFixedBoxLines(t *testing.T) {
 	if !cf.HasHouses || cf.Houses != recipe.Koch {
 		t.Errorf("houses = %v (has %v), want Koch from the houses line", cf.Houses, cf.HasHouses)
 	}
+	want := BoxClock{Weekday: "Tue", Month: "Oct", Day: 6, Year: 2026, Hour: 0, Minute: 30, Second: 15, DST: "DT", Zone: "1:00E", UT: "1:29:45"}
+	if cf.Clock != want {
+		t.Errorf("clock = %+v, want the date, zone and UT rows %+v", cf.Clock, want)
+	}
 }
 
 // wholeMinuteRows is a subtest of TestChartFileValuesComeFromFixedBoxLines.
-// With `-b2` in the chart file Astrolog prints a place whose seconds are both
-// zero to the minute, `=b0` or not (verified 2026-10-12).
+// `-b2` in a chart file hides zero seconds; the box pins come after the file,
+// so the file reads exactly as without it.
 func wholeMinuteRows(t *testing.T) {
-	t.Run("stub", func(t *testing.T) {
-		stubAstrolog(t, boxText([]string{"Astrolog 8.00 chart", "N", "date", "P"},
-			"DT Zone 1E,   4:53E 52:22N", "UT: 14:30, Sid.T:  7:28:47", "Null houses", "Tropical, Geocentric", "Julian Day: 2448044.10417"))
-		cf, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !near(cf.Lon, 4+53.0/60) || !near(cf.Lat, 52+22.0/60) {
-			t.Errorf("place = %v, %v, want 4:53E 52:22N", cf.Lon, cf.Lat)
-		}
-	})
-	t.Run("live", func(t *testing.T) {
-		needAstrolog(t)
-		cf, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+"-b2\n"))
-		if err != nil {
-			t.Fatalf("with -b2: %v", err)
-		}
-		if !near(cf.Lon, 4+53.0/60) || !near(cf.Lat, 52+22.0/60) {
-			t.Errorf("with -b2: place = %v, %v, want 4:53E 52:22N", cf.Lon, cf.Lat)
-		}
-	})
+	sameAsWithout(t, "-b2\n")
+}
+
+// sameAsWithout reads the chart readerQB states with and without extra lines
+// of display switches, and wants the same record from both.
+func sameAsWithout(t *testing.T, extra string) {
+	t.Helper()
+	needAstrolog(t)
+	plain, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+readerZI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	with, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+readerZI+extra))
+	if err != nil {
+		t.Fatalf("with %q: %v", extra, err)
+	}
+	if !reflect.DeepEqual(with, plain) {
+		t.Errorf("with %q: %+v\nwithout: %+v", extra, with, plain)
+	}
+	if plain.Clock.Second != 15 || plain.Clock.Hour != 0 || plain.Clock.Minute != 30 {
+		t.Errorf("the clock is %+v, want 0:30:15 as the file states", plain.Clock)
+	}
 }
 
 // offsetZoneRows is a subtest of TestChartFileValuesComeFromFixedBoxLines.
-// With `-Yz1` in the chart file Astrolog prints the zone as an offset with no
-// leading DT/ST word ("Zone h1e,"); the place after it is the same.
+// `-Yz1` (and the clock and date forms) in a chart file change only how the box
+// prints; the box pins come after the file, so it reads exactly as without them.
 func offsetZoneRows(t *testing.T) {
-	for _, zone := range []string{"Zone h1e,   4:53'41E 52:22'07N", "Zone h5e30,   4:53'41E 52:22'07N", "Zone m0e19,   4:53'41E 52:22'07N"} {
-		t.Run(zone, func(t *testing.T) {
-			stubAstrolog(t, boxText([]string{"Astrolog 8.00 chart", "N", "date", "P"},
-				zone, "UT:  1:29:45, Sid.T: 23:48:16", "Null houses", "Tropical, Geocentric", "Julian Day: 2461319.4376736"))
-			cf, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !near(cf.Lon, 4+53.0/60+41.0/3600) || !near(cf.Lat, 52+22.0/60+7.0/3600) {
-				t.Errorf("place = %v, %v", cf.Lon, cf.Lat)
-			}
-		})
+	for _, extra := range []string{"-Yz1\n", "_Yt\n", "=Yd\n", "-b0\n", "=b1\n"} {
+		t.Run(strings.TrimSpace(extra), func(t *testing.T) { sameAsWithout(t, extra) })
 	}
-	t.Run("live: -Yz1 reads the same place as without it", func(t *testing.T) {
-		needAstrolog(t)
-		plain, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB))
-		if err != nil {
-			t.Fatal(err)
-		}
-		offset, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+"-Yz1\n"))
-		if err != nil {
-			t.Fatalf("with -Yz1: %v", err)
-		}
-		if offset.Lon != plain.Lon || offset.Lat != plain.Lat || offset.JD != plain.JD {
-			t.Errorf("with -Yz1 %+v, without %+v", offset, plain)
-		}
-	})
 }
 
 func TestALabelCannotChooseTheMoment(t *testing.T) {
@@ -377,7 +365,7 @@ func TestUnexpectedBoxRefuses(t *testing.T) {
 		return []string{"DT Zone 1:00E,   4:53'41E 52:22'07N", "UT:  1:29:45, Sid.T: 23:48:16", "Null houses", "Tropical, Geocentric", "Julian Day: 2461319.4376736"}
 	}
 	box := func(cells []string) string {
-		return boxText([]string{"Astrolog 8.00 chart", "N", "date", "P"}, cells[0], cells[1], cells[2], cells[3], cells[4])
+		return boxText(stubTop, cells[0], cells[1], cells[2], cells[3], cells[4])
 	}
 	if cells := good(); cells[2] == "" {
 		t.Fatal("control")
@@ -394,10 +382,15 @@ func TestUnexpectedBoxRefuses(t *testing.T) {
 		"a progressed chart's line":      bad(1, "Prog: Jun  1 1990  4:30pm"),
 		"a UT line that is no time":      bad(1, "UT: banana, Sid.T: potato"),
 		"a zodiac line naming no centre": bad(3, "Tropical, 4:53E"),
+		"a zone with no daylight word":   bad(0, "Zone h1e,   4:53'41E 52:22'07N"),
+		"a place to the minute":          bad(0, "DT Zone 1:00E,   4:53E 52:22N"),
+		"a UT to the minute":             bad(1, "UT:  1:29, Sid.T: 23:48:16"),
+		"a 12-hour date":                 boxText([]string{"Astrolog 8.00 chart", "N", "Tue Oct  6 2026 12:30:15am", "P"}, good()[0], good()[1], good()[2], good()[3], good()[4]),
+		"no date row":                    boxText([]string{"Astrolog 8.00 chart", "N", "P"}, good()[0], good()[1], good()[2], good()[3], good()[4]),
 	} {
 		t.Run(name, func(t *testing.T) {
 			stubAstrolog(t, out)
-			cf, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB))
+			cf, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+readerZI))
 			if err == nil {
 				t.Fatalf("opened as %+v", cf)
 			}
@@ -409,7 +402,7 @@ func TestUnexpectedBoxRefuses(t *testing.T) {
 	// The control: the same stub with the good cells opens.
 	t.Run("the well-shaped box opens", func(t *testing.T) {
 		stubAstrolog(t, box(good()))
-		if _, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB)); err != nil {
+		if _, err := ResolveChartFile(context.Background(), writeChartFile(t, "@AI780\n"+readerQB+readerZI)); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -461,10 +454,44 @@ func TestFixtureLibraryReadsUnchanged(t *testing.T) {
 			t.Errorf("%s: listing read %+v", tc.file, h)
 		}
 	}
-	// Every file in the library is either in the table or the refused one.
+	// The person fixtures: their moments are kept in their files only, so the
+	// data can be corrected in one place; here the place, name and year are read.
+	persons := []struct {
+		file      string
+		year      int
+		lon, lat  float64
+		name, plc string
+	}{
+		{"Bailey-1880-06-16.as", 1880, -(2 + 14.0/60), 53 + 29.0/60, "Alice A. Bailey", "Manchester, United Kingdom"},
+		{"Gauquelin-1928-11-13.as", 1928, 2 + 20.0/60, 48 + 50.0/60, "Michel Gauquelin", "Paris 14e, France"},
+		{"Kepler-1571-12-27.as", 1571, 8 + 52.0/60, 48 + 45.0/60, "Johannes Kepler", "Weil der Stadt, Germany"},
+		{"Rudhyar-1895-03-23.as", 1895, 2 + 21.0/60, 48 + 51.0/60, "Dane Rudhyar", "Paris, France"},
+	}
+	for _, p := range persons {
+		cf, err := ResolveChartFile(context.Background(), fixture(p.file))
+		if err != nil {
+			t.Errorf("%s: %v", p.file, err)
+			continue
+		}
+		if math.Abs(cf.Lon-p.lon) > 1e-9 || math.Abs(cf.Lat-p.lat) > 1e-9 || cf.Name != p.name || cf.PlaceLabel != p.plc {
+			t.Errorf("%s: %v, %v %q/%q, want %v, %v %q/%q", p.file, cf.Lon, cf.Lat, cf.Name, cf.PlaceLabel, p.lon, p.lat, p.name, p.plc)
+		}
+		h, err := ReadChartFileHeader(fixture(p.file))
+		if err != nil {
+			t.Errorf("%s: listing: %v", p.file, err)
+			continue
+		}
+		if h.Name != p.name || h.PlaceLabel != p.plc || h.Year != p.year {
+			t.Errorf("%s: listing read %+v", p.file, h)
+		}
+	}
+	// Every file in the library is either in a table or the refused one.
 	seen := map[string]bool{"InvalidFile.as": true}
 	for _, tc := range tcs {
 		seen[tc.file] = true
+	}
+	for _, p := range persons {
+		seen[p.file] = true
 	}
 	ents, err := os.ReadDir(filepath.Join("testdata", "charts"))
 	if err != nil {

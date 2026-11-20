@@ -21,13 +21,12 @@ import (
 //
 // internal/astrolog spawns the BARE NAME "astrolog", so exec resolves it
 // through PATH and this intercepts every package's spawns — with no test-only
-// seam, export or build tag in production code. That is exactly what
-// invariants.TestAstrologSpawnChokePoint (C22) pins: a direct os/exec, an
-// absolute path or a hidden seam would slip past this shim, and every
-// spawn-freedom verifier here would report zero while spawning freely.
+// seam, export or build tag in production code. A direct os/exec, an absolute
+// path or a hidden seam would slip past this shim, and every spawn-freedom
+// verifier here would report zero while spawning freely.
 //
 // Deliberately duplicated in internal/ui: an unexported test helper cannot
-// cross a package boundary, and exporting one would be the seam C22 forbids.
+// cross a package boundary, and exporting one would be such a seam.
 func astrologShim(t *testing.T) (count func() int, clear func()) {
 	t.Helper()
 	dir := t.TempDir()
@@ -205,9 +204,9 @@ func TestTranslateChartFile_DisplayYearFromQB(t *testing.T) {
 	}
 }
 
-// The failure mode behind C3: a -qb line with no parseable year drops the
-// chart, exactly as an unparseable chart is dropped.
-func TestTranslateChartFile_UnparseableYearDrops(t *testing.T) {
+// A -qb line with no parseable year lists without a date: Astrolog says at
+// the pick whether the file is a chart.
+func TestTranslateChartFile_UnparseableYearListsWithoutADate(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "noyear.as", "@AI780\n-qb Jun 15 xxxx 2:30pm DT 1E 11:34E 48:08N\n-zi \"No Year\" \"\"\n")
 	writeChartFile(t, dir, "good.as", munichChart)
@@ -216,30 +215,13 @@ func TestTranslateChartFile_UnparseableYearDrops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lib.Charts) != 1 || lib.Charts[0].Name != "Test Person" {
-		t.Errorf("want only the readable chart, got %v", chartNames(lib.Charts))
+	if len(lib.Charts) != 2 || len(lib.Drops) != 0 {
+		t.Fatalf("want both listed, got %v (drops %+v)", chartNames(lib.Charts), lib.Drops)
 	}
-	if len(lib.Drops) != 1 || lib.Drops[0].File != "noyear.as" {
-		t.Errorf("the yearless file must be named as a drop, got %+v", lib.Drops)
-	}
-}
-
-// A file that opens with @AI and is no chart is refused by the header read exactly as
-// ResolveChartFile refused it, so the listing drops what it always dropped.
-func TestTranslateChartFile_NonChartFileDrops(t *testing.T) {
-	dir := useLibraryDir(t)
-	writeChartFile(t, dir, "junk.as", "@AI780\nthis is not an astrolog chart\n")
-	writeChartFile(t, dir, "good.as", munichChart)
-
-	lib, err := LoadChartLibrary()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(lib.Charts) != 1 || lib.Charts[0].Name != "Test Person" {
-		t.Errorf("want only the valid chart, got %v", chartNames(lib.Charts))
-	}
-	if len(lib.Drops) != 1 || lib.Drops[0].File != "junk.as" {
-		t.Errorf("the non-chart file must be named as a drop, got %+v", lib.Drops)
+	for _, c := range lib.Charts {
+		if c.Name == "No Year" && (c.Year != 0 || c.Month != 0) {
+			t.Errorf("the yearless file lists the date %d-%d-%d", c.Year, c.Month, c.Day)
+		}
 	}
 }
 
@@ -271,7 +253,7 @@ func TestLoadChartLibrary_YAMLIsANamedDropAndSpawnsNothing(t *testing.T) {
 	if len(lib.Charts) != 0 {
 		t.Errorf("a .yaml must not list as a chart, got %v", chartNames(lib.Charts))
 	}
-	if len(lib.Drops) != 1 || lib.Drops[0].File != "saved.yaml" || lib.Drops[0].Reason != "YAML charts are no longer read" {
+	if len(lib.Drops) != 1 || lib.Drops[0].File != "saved.yaml" || lib.Drops[0].Reason != "Sextile no longer reads charts in the old .yaml form" {
 		t.Errorf("want saved.yaml named with the no-longer-read reason, got %+v", lib.Drops)
 	}
 	if got := count(); got != 0 {
@@ -279,30 +261,8 @@ func TestLoadChartLibrary_YAMLIsANamedDropAndSpawnsNothing(t *testing.T) {
 	}
 }
 
-// Without the atlas a .as has no timezone to be given, so it drops — named,
-// per an earlier change, whose contract governs how the drop is reported.
-func TestNoAtlas_ChartFileChartsDrop(t *testing.T) {
-	dir := useLibraryDir(t)
-	t.Setenv("SEXTILE_ATLAS_PATH", filepath.Join(t.TempDir(), "no-atlas.as"))
-	writeChartFile(t, dir, "munich.as", munichChart)
-
-	lib, err := LoadChartLibrary()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(lib.Charts) != 0 {
-		t.Errorf("a .as cannot list without the atlas, got %v", chartNames(lib.Charts))
-	}
-	if lib.AtlasErr == nil {
-		t.Error("the shared cause must come back for the error lane")
-	}
-	if len(lib.Drops) != 1 || lib.Drops[0].File != "munich.as" {
-		t.Errorf("the dropped .as must still be named, got %+v", lib.Drops)
-	}
-}
-
-// And it still spawns nothing on the way there: a broken atlas must not turn
-// the listing back into a subprocess storm.
+// Listing without an atlas spawns nothing either: the list reads only the
+// files' text.
 func TestNoAtlas_ListingStillSpawnFree(t *testing.T) {
 	dir := useLibraryDir(t)
 	t.Setenv("SEXTILE_ATLAS_PATH", filepath.Join(t.TempDir(), "no-atlas.as"))

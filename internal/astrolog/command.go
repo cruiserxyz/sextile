@@ -25,7 +25,7 @@ func shellQuote(s string) string {
 // formatCommand renders one executed spawn as the command line that would
 // re-run it: the resolved binary path first, then every argv element, each
 // quoted by shellQuote. It is the only place in the binary a command string
-// is composed (invariants: TestCommandsAreCarriedNotComposed); every other
+// is composed; every other
 // package carries the result unchanged.
 func formatCommand(path string, argv []string) string {
 	parts := make([]string, 0, len(argv)+1)

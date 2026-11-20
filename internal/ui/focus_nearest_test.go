@@ -13,8 +13,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 )
 
-// the specification.
-
 // detailsLines is the Details panel's inner rows with their escapes kept.
 func detailsLines(m Model) []string {
 	lines := strings.Split(renderDetails(m), "\n")
@@ -127,26 +125,108 @@ func TestEnteringDetailsPutsTheCursorOnTheNearestEvent(t *testing.T) {
 	}
 }
 
-// Rule 5: while attached, a step inside the month keeps the cursor on its
-// event, and the nearest event moves on, so two rows are bold.
-func TestAttachedTimeStepKeepsTheCursorOnItsEvent(t *testing.T) {
-	stubTextCompute(t)
-	m := onTimeline(t, Config{Accessible: true})
-	for i := 0; i < 4; i++ {
-		m, _ = tpress(t, m, runes("j"))
-	}
-	row := m.timeline.rows[m.details.cursor]
-	m, cmd := tpress(t, m, runes("d"))
-	m = pump(t, m, cmd)
-	if got := m.timeline.rows[m.details.cursor]; markOf(got) != markOf(row) {
-		t.Fatalf("after a day step the cursor is on %q, want it still on %q", got.Line, row.Line)
-	}
-	if n := nearestOf(t, m); n == m.details.cursor {
-		t.Fatalf("fixture: nearest event %d did not move off the cursor", n)
-	}
-	if bold, _ := boldRows(m); len(bold) != 2 {
-		t.Fatalf("bold rows %v, want the cursor row and the nearest event", bold)
-	}
+// Rule 5: while attached, a step key brings the cursor to the nearest event
+// (Now) and leaves the window where it is when that row is in sight.
+func TestAttachedTimeStepBringsTheCursorToNow(t *testing.T) {
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		stubTextCompute(t)
+		m := onList(t, lk, Config{Accessible: true})
+		for i := 0; i < 4; i++ {
+			m, _ = tpress(t, m, runes("j"))
+		}
+		off := m.details.rowOffset
+		m, cmd := tpress(t, m, runes("d"))
+		m = pump(t, m, cmd)
+		n := nearestOf(t, m)
+		if n < off || n >= off+m.detailsInnerHeight() {
+			t.Fatalf("fixture: nearest row %d is outside the window at %d", n, off)
+		}
+		if m.details.cursor != n {
+			t.Fatalf("after a day step the cursor is on row %d, want the nearest row %d", m.details.cursor, n)
+		}
+		if m.details.rowOffset != off {
+			t.Fatalf("offset %d after a step with Now in sight, want it kept at %d", m.details.rowOffset, off)
+		}
+	})
+}
+
+// Rule 5: when the nearest row is outside the window after a step, the cursor
+// goes to it and the window centres it.
+func TestAttachedStepScrollsOnlyWhenNowIsOutOfSight(t *testing.T) {
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		stubTextCompute(t)
+		m := onList(t, lk, Config{Accessible: true})
+		m.height = 24
+		m = m.clampTimelineCursor()
+		total, visible := len(m.timelineRows()), m.detailsInnerHeight()
+		if total <= visible {
+			t.Fatalf("fixture: %d rows fit in %d", total, visible)
+		}
+		// The window sits at the top, so the nearest row after the step is below it.
+		m.details.rowOffset, m.details.cursor = 0, 0
+		m, cmd := tpress(t, m, runes("d"))
+		m = pump(t, m, cmd)
+		n := nearestOf(t, m)
+		if n < visible {
+			t.Fatalf("fixture: nearest row %d is still in the window of %d", n, visible)
+		}
+		if m.details.cursor != n {
+			t.Fatalf("cursor %d, want the nearest row %d", m.details.cursor, n)
+		}
+		if want := centreOffset(n, total, visible); m.details.rowOffset != want {
+			t.Fatalf("offset %d, want %d (nearest row centred)", m.details.rowOffset, want)
+		}
+	})
+}
+
+// Enter on a row makes it Now and closes Details. Details opened again puts the
+// cursor on that row, which is now the nearest one, inside the window.
+func TestEnterMakesTheRowNowAndDetailsReopensOnIt(t *testing.T) {
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		stubTextCompute(t)
+		m := onList(t, lk, Config{Accessible: true})
+		for i := 0; i < 6; i++ {
+			m, _ = tpress(t, m, runes("j"))
+		}
+		cursor := m.details.cursor
+		if cursor == nearestOf(t, m) {
+			t.Fatal("fixture: the cursor is on the nearest row")
+		}
+		m, cmd := tpress(t, m, keyEnter)
+		if m.details.attached {
+			t.Fatal("Enter left Details open")
+		}
+		m = pump(t, m, cmd)
+		m = reattachList(t, m, lk)
+		if m.details.cursor != cursor || m.details.cursor != nearestOf(t, m) {
+			t.Fatalf("reopened with the cursor on %d, nearest row %d, want the entered row %d", m.details.cursor, nearestOf(t, m), cursor)
+		}
+		if first, last := m.details.rowOffset, m.details.rowOffset+m.timelineHeight()-1; cursor < first || cursor > last {
+			t.Fatalf("reopened with the window %d-%d, the entered row %d is outside", first, last, cursor)
+		}
+	})
+}
+
+// A cursor key ends the following: a frame that commits after it leaves the
+// cursor where the key put it.
+func TestCursorKeyEndsTheFollowing(t *testing.T) {
+	forEachList(t, func(t *testing.T, lk timelineList) {
+		stubTextCompute(t)
+		m := onList(t, lk, Config{Accessible: true})
+		for i := 0; i < 4; i++ {
+			m, _ = tpress(t, m, runes("j"))
+		}
+		m, cmd := tpress(t, m, runes("d"))
+		m, down := tpress(t, m, keyDown)
+		want := m.details.cursor
+		m = pump(t, m, cmd, down)
+		if m.details.cursor != want {
+			t.Fatalf("cursor %d after the frame committed, want %d where Down put it", m.details.cursor, want)
+		}
+		if n := nearestOf(t, m); n == want {
+			t.Fatalf("fixture: Down landed on the nearest row %d", n)
+		}
+	})
 }
 
 // Rule 5, the other half: a month step loads a list that does not hold the

@@ -37,11 +37,9 @@ func sentJD(sec int64) float64 {
 }
 
 // SlotJD is the one way a slot's instant becomes a Julian Day for a chart,
-// report, wheel or timeline call. Saving a chart (saveArgv) rounds to the minute
-// under its own contract and is not covered by this rule. The
-// instant is made a WHOLE SECOND first, by truncation: the second Sextile shows
-// (23:59:59.9995 reads 23:59, never the next day's midnight) and the second the
-// timeline's -qb natal sends. Because the fraction is gone before any Julian Day
+// report, wheel, timeline call or save. The instant is made a WHOLE SECOND
+// first, by truncation: the second Sextile shows (23:59:59.9995 reads 23:59,
+// never the next day's midnight) and the second a save writes. Because the fraction is gone before any Julian Day
 // exists, julianDayToUTCSecond's 1 ms tolerance only ever absorbs float error
 // (a Julian Day's ulp is under 0.1 ms across Astrolog's whole date range) and
 // never meets a real fraction.

@@ -59,6 +59,10 @@ func clockPrefsBody(c clockCase) string {
 // the way a launch does.
 func coldStart(t *testing.T) Model {
 	t.Helper()
+	// The startup read reads the saved session too: an own, empty state and
+	// data folder, so no session another test left behind is read.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	msg, ok := ingest.ReadStartupPerimeter()().(ingest.StartupPerimeterReadMsg)
 	if !ok {
 		t.Fatal("the startup read did not answer with its message")
@@ -383,7 +387,7 @@ func TestPairReportsReadEachChartsClock(t *testing.T) {
 			utReport, utAspects, err := testenv.UTTransitCross(context.Background(),
 				anchored.Time, testenv.Place{Lon: anchored.Location.Lon, Lat: anchored.Location.Lat},
 				floating.Time, testenv.Place{Lon: floating.Location.Lon, Lat: floating.Location.Lat},
-				lens.Houses, lens.Zodiac, lens.Objects, lens.Aspects, lens.Registry)
+				lens.Houses, lens.Zodiac, lens.Objects, lens.Aspects, lens.Registry, lens.AspectRegistry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -459,7 +463,7 @@ func TestEveryReportPrintsDegreeOrbs(t *testing.T) {
 		t.Fatalf("transit: %v", err)
 	}
 	reports = append(reports, report{"transit cross body", text, command, []stagedChart{local(natal.When, newYork), local(when, place)}, true})
-	text, command, err = lookup.SynastryCrossBodyRawReport(context.Background(), lens, natal, other, place, store.ReportLabel{}, objSun)
+	text, command, err = lookup.SynastryCrossBodyRawReport(context.Background(), lens, natal, store.AnchorChart{When: other, Place: place}, objSun)
 	if err != nil {
 		t.Fatalf("synastry: %v", err)
 	}

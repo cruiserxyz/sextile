@@ -30,12 +30,13 @@ func bothPanesCurrent(m Model) bool {
 }
 
 func TestReconcilerStartsWhatIsOwed(t *testing.T) {
+	twoTabs(t)
 	// C11. Space on the Chart changes what the cursor compares, and with it the
 	// Details tab that lists the compared charts: the Timeline's key names them.
 	// Nothing on the Space path asks for that search; the reconciler does, from
 	// the Update that carried the key. (No report's key depends on the
 	// comparison from the Chart panel: its report is the cursor chart's alone,
-	// and the text frame keeps its own fenced request, TestSpaceOnTheChartFencesTheOldFrame.)
+	// and the text frame keeps its own fenced request.)
 	t.Run("space_on_chart", func(t *testing.T) {
 		stubTimeline(t, nil)
 		// Wide enough for Details beside two charts' columns.
@@ -203,7 +204,7 @@ func TestReconcilerStartsWhatIsOwed(t *testing.T) {
 	t.Run("failure_is_not_retried", func(t *testing.T) {
 		m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
 		stub.failBodies = true
-		m, cmd := pressOnly(t, m, runes("2"))
+		m, cmd := pressOnly(t, m, runes("3"))
 		m = pump(t, m, cmd)
 		if m.detailsReportState() != paneFailed {
 			t.Fatalf("fixture: %v, want the Sun's report failed", m.detailsReportState())
@@ -234,9 +235,9 @@ func TestReconcilerStartsWhatIsOwed(t *testing.T) {
 	// flight asks for nothing.
 	t.Run("one_run_per_key", func(t *testing.T) {
 		m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
-		m, cmd := pressOnly(t, m, runes("2"))
+		m, cmd := pressOnly(t, m, runes("3"))
 		if cmd == nil {
-			t.Fatal("2 started nothing")
+			t.Fatal("3 started nothing")
 		}
 		for i := 0; i < 3; i++ {
 			var c tea.Cmd
@@ -257,6 +258,7 @@ func TestReconcilerStartsWhatIsOwed(t *testing.T) {
 	t.Run("hidden_tab_owes_nothing", func(t *testing.T) {
 		stubTimeline(t, nil)
 		m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
+		m.lens.Registry = registryWithoutMoon() // the strip is the report and the Timeline
 		m = m.withDetailsTab(PanelChart, TabDetailsTimeline)
 		reports := stub.reports
 		m, cmd := pressOnly(t, m, runes("d")) // the floating moment moves: the report's key with it

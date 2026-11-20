@@ -158,6 +158,9 @@ func plainTestModel(t seamT, cfg Config, clock Clock) Model {
 		if s.cast.stations != nil {
 			s.cast.stations = noStations
 		}
+		if s.voidsAhead != nil {
+			s.voidsAhead = noVoids
+		}
 	})
 	return applySpawns(m, stubsFor(t)...)
 }
@@ -356,4 +359,17 @@ func TestSpawnStubsReachOnlyTheModelsTheyAreFiledFor(t *testing.T) {
 	}
 	inner.finish()
 	outer.finish()
+}
+
+// noVoids is the test default for the Moon lane's void search: it finds none and
+// spawns nothing, so a Model that shows a Moon never reaches Astrolog for its
+// lane. A test that wants the search stubs it with stubVoids or stubVoidsAhead.
+func noVoids(context.Context, lookup.VoidRequest) (lookup.VoidResult, error) {
+	return lookup.VoidResult{}, nil
+}
+
+// stubVoidsAhead stands in for both void searches with fn.
+func stubVoidsAhead(t *testing.T, fn func(context.Context, lookup.VoidRequest) (lookup.VoidResult, error)) {
+	t.Helper()
+	stubSpawns(t, func(s *rowSpawns) { s.voids, s.voidsAhead = fn, fn })
 }

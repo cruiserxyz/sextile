@@ -94,10 +94,10 @@ func TestLongNameRefusalSaysWhy(t *testing.T) {
 			t.Errorf("the prompt at 80x24 does not show %q:\n%s", part, flat)
 		}
 	}
-	// It is one row of the message zone, and the box does not grow for it.
+	// The prompt keeps no row for it: the refusal adds its own rows.
 	rested := renderSaveModal(saveModalState{Form: popup.Form{Fields: m.save.Fields}, dest: m.save.dest}, m.cfg, 80, 24)
-	if a, b := strings.Count(rested, "\n"), strings.Count(renderSaveModal(m.save, m.cfg, 80, 24), "\n"); a != b {
-		t.Errorf("the refusal changed the prompt's height: %d lines, then %d", a+1, b+1)
+	if a, b := strings.Count(rested, "\n"), strings.Count(renderSaveModal(m.save, m.cfg, 80, 24), "\n"); b <= a {
+		t.Errorf("the refusal did not add rows to the prompt: %d lines, then %d", a+1, b+1)
 	}
 	// the title form says the same for its fields
 	titleLibrary(t, nil, map[string]string{"NoPlace.as": noPlaceChart})
@@ -130,7 +130,7 @@ func TestSaveCutsALongSlotPlace(t *testing.T) {
 	}
 	var cutLine string
 	for _, l := range m.logLines {
-		if strings.HasPrefix(l.text, "save: Place shortened to 54 bytes for Astrolog: ") {
+		if strings.HasPrefix(l.text, "save: the place name was too long, saved as ") {
 			cutLine = l.text
 		}
 	}
@@ -142,7 +142,7 @@ func TestSaveCutsALongSlotPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logged := strings.TrimPrefix(cutLine, "save: Place shortened to 54 bytes for Astrolog: ")
+	logged := strings.TrimPrefix(cutLine, "save: the place name was too long, saved as ")
 	if len(logged) > 54 || !strings.HasSuffix(logged, "…") || strings.Contains(logged, `"`) {
 		t.Errorf("the Log names %q, want the cut label as written (a single quote, at most 54 bytes)", logged)
 	}

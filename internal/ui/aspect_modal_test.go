@@ -14,8 +14,7 @@ import (
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
-// an earlier change — the aspect chooser. Contract rows C5, C6, C7 and C9
-// (the specification); C1 lives in internal/invariants.
+// The aspect chooser.
 
 // testRegistry is a fixture standing in for `astrolog -HA`. It is deliberately
 // NOT the live binary's: a fixture is how the group predicates can be asserted
@@ -29,18 +28,18 @@ import (
 // restriction pass every test in this file.
 func testRegistry() []aspect.RegistryAspect {
 	return []aspect.RegistryAspect{
-		{Index: 1, Name: "Conjunct", Abbrev: "Con", Angle: 0, Orb: 7, InForce: true},
-		{Index: 2, Name: "Opposite", Abbrev: "Opp", Angle: 180, Orb: 7, InForce: true},
-		{Index: 3, Name: "Square", Abbrev: "Squ", Angle: 90, Orb: 7, InForce: true},
-		{Index: 4, Name: "Trine", Abbrev: "Tri", Angle: 120, Orb: 7, InForce: true},
-		{Index: 5, Name: "Sextile", Abbrev: "Sex", Angle: 60, Orb: 6, InForce: true},
-		{Index: 6, Name: "Inconjunct", Abbrev: "Inc", Angle: 150, Orb: 3},
-		{Index: 7, Name: "SemiSextile", Abbrev: "SSx", Angle: 30, Orb: 3},
-		{Index: 8, Name: "SemiSquare", Abbrev: "SSq", Angle: 45, Orb: 3},
-		{Index: 9, Name: "SesquiQuadrate", Abbrev: "Ses", Angle: 135, Orb: 3},
-		{Index: 10, Name: "Quintile", Abbrev: "Qui", Angle: 72, Orb: 2},
-		{Index: 11, Name: "BiQuintile", Abbrev: "BQn", Angle: 144, Orb: 2},
-		{Index: 13, Name: "Septile", Abbrev: "Sep", Angle: 51.43, Orb: 1},
+		{Kind: aspect.AspectKind{Index: 1, Name: "Conjunct", Abbrev: "Con"}, Angle: 0, Orb: 7, InForce: true},
+		{Kind: aspect.AspectKind{Index: 2, Name: "Opposite", Abbrev: "Opp"}, Angle: 180, Orb: 7, InForce: true},
+		{Kind: aspect.AspectKind{Index: 3, Name: "Square", Abbrev: "Squ"}, Angle: 90, Orb: 7, InForce: true},
+		{Kind: aspect.AspectKind{Index: 4, Name: "Trine", Abbrev: "Tri"}, Angle: 120, Orb: 7, InForce: true},
+		{Kind: aspect.AspectKind{Index: 5, Name: "Sextile", Abbrev: "Sex"}, Angle: 60, Orb: 6, InForce: true},
+		{Kind: aspect.AspectKind{Index: 6, Name: "Inconjunct", Abbrev: "Inc"}, Angle: 150, Orb: 3},
+		{Kind: aspect.AspectKind{Index: 7, Name: "SemiSextile", Abbrev: "SSx"}, Angle: 30, Orb: 3},
+		{Kind: aspect.AspectKind{Index: 8, Name: "SemiSquare", Abbrev: "SSq"}, Angle: 45, Orb: 3},
+		{Kind: aspect.AspectKind{Index: 9, Name: "SesquiQuadrate", Abbrev: "Ses"}, Angle: 135, Orb: 3},
+		{Kind: aspect.AspectKind{Index: 10, Name: "Quintile", Abbrev: "Qui"}, Angle: 72, Orb: 2},
+		{Kind: aspect.AspectKind{Index: 11, Name: "BiQuintile", Abbrev: "BQn"}, Angle: 144, Orb: 2},
+		{Kind: aspect.AspectKind{Index: 13, Name: "Septile", Abbrev: "Sep"}, Angle: 51.43, Orb: 1},
 	}
 }
 
@@ -101,8 +100,8 @@ func TestGroupsAreDefinedByAngle(t *testing.T) {
 	// the angle, and a user's binary can rename aspects with -YAD.
 	renamed := testRegistry()
 	for i := range renamed {
-		renamed[i].Name = "Renamed"
-		renamed[i].Abbrev = "Rnm"
+		renamed[i].Kind.Name = "Renamed"
+		renamed[i].Kind.Abbrev = "Rnm"
 	}
 	rst := popup.OpenAspects(renamed, recipe.AspectPolicy{})
 	for _, f := range aspect.Families() {
@@ -115,7 +114,7 @@ func TestGroupsAreDefinedByAngle(t *testing.T) {
 
 // C5 — a family whose predicate matches nothing still renders its row.
 func TestGroupRowSurvivesEmptyMembership(t *testing.T) {
-	onlyConjunction := []aspect.RegistryAspect{{Index: 1, Name: "Conjunct", Abbrev: "Con", Angle: 0, Orb: 7}}
+	onlyConjunction := []aspect.RegistryAspect{{Kind: aspect.AspectKind{Index: 1, Name: "Conjunct", Abbrev: "Con"}, Angle: 0, Orb: 7}}
 	st := popup.OpenAspects(onlyConjunction, recipe.AspectPolicy{})
 	if got := len(st.FamilyMembers(aspect.FamilyHarmonic)); got != 0 {
 		t.Fatalf("Harmonic has %d members in a conjunction-only registry", got)
@@ -230,16 +229,13 @@ func TestConfirmAppliesCancelRestores(t *testing.T) {
 	}
 }
 
-// C11 — an aspect the enum cannot name is listed, selectable, and reaches the
-// policy under its registry index.
+// C11 — an aspect with no glyph is listed, selectable, and reaches the policy
+// under its registry index.
 func TestUnknownAspectsAreStillSelectable(t *testing.T) {
 	st := openTest(recipe.AspectPolicy{Explicit: true})
-	if _, named := aspect.KindForAngle(51.43); named {
-		t.Fatal("the fixture's septile is supposed to be unnameable by the enum")
-	}
 	found := false
 	for i, r := range st.Matches {
-		if r.Index != 13 {
+		if r.Kind.Index != 13 {
 			continue
 		}
 		found = true
@@ -284,7 +280,7 @@ func TestZeroOrbAspectsAreDistinguished(t *testing.T) {
 
 	// Individually, from the list.
 	for i, r := range st.Matches {
-		if r.Index == 5 {
+		if r.Kind.Index == 5 {
 			st.ToggleAt(popup.FamilyRows() + i)
 		}
 	}
@@ -483,7 +479,7 @@ func TestAspectKeyOpensChooser(t *testing.T) {
 	// only this chooser would make its hotkey behave unlike every other modal.
 	small := readyModelWithRegistry(t, testRegistry())
 	small.width, small.height = 70, 14
-	if view := small.View(); !strings.Contains(view, "Terminal too small") {
+	if view := small.View(); !strings.Contains(view, "The window is too small") {
 		t.Fatalf("70x14 baseline is not tooSmallView:\n%s", view)
 	}
 	smallModel, smallCmd := small.Update(tea.KeyMsg{Type: tea.KeyCtrlA})

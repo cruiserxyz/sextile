@@ -53,7 +53,7 @@ func TestTemplateRunLogTranscript(t *testing.T) {
 		{"ok", []string{"astrolog -z 0 -qy … -dY 13 -b0", "astrolog -qj … -b0 -v -Z -R0 1 4 -RA0 1",
 			"template: body-inferior-planet verdicts from rule rows solar.beams/17, solar.beams/12, solar.combust/8.5"}},
 		{"fail", []string{"astrolog -z 0 -qy … -dY 13 -b0", "astrolog -qj … -b0 -v -Z -R0 1 4 -RA0 1",
-			"Couldn't compute the body-inferior-planet tab. Press ,l l for what Astrolog ran."}},
+			"details: the body-inferior-planet tab did not fill, Astrolog returned nothing usable"}},
 		{"left", []string{"astrolog -left"}},
 	}
 	for _, c := range cases {

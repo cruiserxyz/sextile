@@ -61,7 +61,7 @@ func TestSaveChartWritesAstrologsOwnRecord(t *testing.T) {
 		t.Errorf("record does not open with astrolog's @AI header:\n%s", record)
 	}
 	got := qbFields(t, record)
-	want := []string{"-qb", "Mar", "14", "1987", "4:30pm", "ST", "2E", "4:54E", "52:22N"}
+	want := []string{"-qb", "Mar", "14", "1987", "4:30:00pm", "ST", "2:00E", "4:54'00E", "52:22'00N"}
 	if len(got) != len(want) {
 		t.Fatalf("-qb fields = %q, want %q", got, want)
 	}
@@ -77,11 +77,7 @@ func TestSaveChartWritesAstrologsOwnRecord(t *testing.T) {
 }
 
 // C3a: a zone whose offset is not a whole number of hours is written so that
-// it reads back to the same minute.
-//
-// This is the row that would have caught the spec's `=b0`: with that switch
-// astrolog writes seconds precision instead, and the fields below become
-// "4:30:00pm" and "77:13'00E".
+// it reads back to the same second.
 func TestSaveChartWritesAHalfHourZone(t *testing.T) {
 	when := time.Date(1987, 3, 14, 16, 30, 0, 0, time.FixedZone("IST", 5*3600+1800))
 	record, err := ChartRecord(context.Background(), ChartToSave{
@@ -91,14 +87,8 @@ func TestSaveChartWritesAHalfHourZone(t *testing.T) {
 		t.Fatalf("ChartRecord: %v", err)
 	}
 	got := qbFields(t, record)
-	if len(got) < 7 || got[4] != "4:30pm" || got[6] != "5:30E" {
-		t.Fatalf("-qb fields = %q, want the moment 4:30pm in zone 5:30E", got)
-	}
-	wantRecord := "@AI800  ; Astrolog chart info.\n" +
-		"-qb Mar 14 1987  4:30pm ST 5:30E  77:13E 28:36N\n" +
-		"-zi \"Half Hour\" \"New Delhi\"\n"
-	if string(record) != wantRecord {
-		t.Errorf("half-hour record changed:\n got %q\nwant %q", record, wantRecord)
+	if len(got) < 7 || got[4] != "4:30:00pm" || got[6] != "5:30E" {
+		t.Fatalf("-qb fields = %q, want the moment 4:30:00pm in zone 5:30E", got)
 	}
 	// And it is a real instant to astrolog, not just well-shaped text.
 	assertReadsBackTo(t, record, when)
@@ -125,8 +115,8 @@ func assertAncientChartRoundTrip(t *testing.T, year int, month, day, label strin
 		t.Fatalf("ChartRecord: %v", err)
 	}
 	got := qbFields(t, record)
-	if len(got) < 5 || got[1] != month || got[2] != day || got[3] != strconv.Itoa(year) || got[4] != "12:00pm" {
-		t.Fatalf("-qb fields = %q, want Astrolog's label %s %s %d 12:00pm", got, month, day, year)
+	if len(got) < 5 || got[1] != month || got[2] != day || got[3] != strconv.Itoa(year) || got[4] != "12:00:00pm" {
+		t.Fatalf("-qb fields = %q, want Astrolog's label %s %s %d 12:00:00pm", got, month, day, year)
 	}
 
 	path := filepath.Join(t.TempDir(), "ancient.as")
@@ -150,14 +140,10 @@ func assertAncientChartRoundTrip(t *testing.T, year int, month, day, label strin
 	assertReadsBackTo(t, record, when)
 }
 
-// C4: the saved file reads back through astrolog to the slot's moment rounded
-// to the nearest minute, from a fixture moment whose seconds are NON-ZERO.
-//
-// The non-zero seconds are the point. astrolog records minutes, so a moment
-// carrying 47 seconds must land on the nearest minute rather than the one it
-// started in; a test built on a whole minute would pass against a writer that
-// silently truncated.
-func TestSavedChartRoundTripsToTheSameMinute(t *testing.T) {
+// C4: the saved file reads back through astrolog to the slot's moment to the
+// second, from a fixture moment whose seconds are NON-ZERO: a test built on a
+// whole minute would pass against a writer that dropped the seconds.
+func TestSavedChartRoundTripsToTheSameSecond(t *testing.T) {
 	when := time.Date(1987, 3, 14, 16, 30, 47, 0, amsterdam())
 	record, err := ChartRecord(context.Background(), ChartToSave{
 		Name: "Test Person", Place: "Amsterdam", When: when, Lon: 4.9, Lat: 52.3667,
@@ -165,15 +151,15 @@ func TestSavedChartRoundTripsToTheSameMinute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChartRecord: %v", err)
 	}
-	if got := qbFields(t, record); len(got) < 5 || got[4] != "4:31pm" {
-		t.Fatalf("-qb fields = %q, want 16:30:47 rounded to 4:31pm", got)
+	if got := qbFields(t, record); len(got) < 5 || got[4] != "4:30:47pm" {
+		t.Fatalf("-qb fields = %q, want 4:30:47pm", got)
 	}
-	assertReadsBackTo(t, record, when.Round(time.Minute))
+	assertReadsBackTo(t, record, when)
 }
 
 // assertReadsBackTo writes the record where astrolog can read it and requires
 // astrolog's own resolution of it to be the same instant as want, to the
-// minute. This is the round trip that matters: astrolog wrote the file and
+// second. This is the round trip that matters: astrolog wrote the file and
 // astrolog is asked what it means, so nothing in Sextile re-derives the moment.
 func assertReadsBackTo(t *testing.T, record []byte, want time.Time) {
 	t.Helper()
@@ -185,9 +171,9 @@ func assertReadsBackTo(t *testing.T, record []byte, want time.Time) {
 	if err != nil {
 		t.Fatalf("ResolveChartFile on the record just written: %v\n%s", err, record)
 	}
-	if got := cf.WhenUTC.UTC().Truncate(time.Minute); !got.Equal(want.UTC().Truncate(time.Minute)) {
+	if got := cf.WhenUTC.UTC(); !got.Equal(want.UTC().Truncate(time.Second)) {
 		t.Errorf("round trip: astrolog reads the saved chart as %s, want %s",
-			got.Format(time.RFC3339), want.UTC().Truncate(time.Minute).Format(time.RFC3339))
+			got.Format(time.RFC3339), want.UTC().Truncate(time.Second).Format(time.RFC3339))
 	}
 }
 
@@ -320,25 +306,31 @@ func TestSaveNameWithAQuote(t *testing.T) {
 	}
 }
 
-// The zone parameter is astrolog's, and astrolog counts hours WEST as
-// positive where Go counts seconds EAST. Getting this backwards is a silent
-// wrong-answer bug of up to 2x the offset, so it is pinned directly.
-func TestSaveZoneIsWestPositive(t *testing.T) {
+// The zone a save hands the writer is one Astrolog writes exactly and reads
+// back on the right side of Greenwich: Astrolog counts hours WEST, reads the
+// sign from the hours field (so an east zone under an hour takes `E`), keeps
+// only whole minutes, and takes `LMT` as the longitude's own mean time.
+func TestSaveZoneIsOneAstrologWritesExactly(t *testing.T) {
+	berlin, _ := time.LoadLocation("Europe/Berlin")
+	amsterdam, _ := time.LoadLocation("Europe/Amsterdam")
+	kolkata, _ := time.LoadLocation("Asia/Kolkata")
+	newYork, _ := time.LoadLocation("America/New_York")
 	for _, tc := range []struct {
-		name   string
-		offset int
-		want   string
+		name      string
+		when      time.Time
+		zone, dst string
 	}{
-		{"two hours east", 2 * 3600, "-2:00"},
-		{"five hours west", -5 * 3600, "5:00"},
-		{"five and a half east", 5*3600 + 1800, "-5:30"},
-		{"three and a half west", -(3*3600 + 1800), "3:30"},
-		{"greenwich", 0, "0:00"},
+		{"Berlin before standard time", time.Date(1850, 6, 1, 12, 0, 0, 0, berlin), "LMT", "0"},
+		{"Amsterdam time, 0:19:32 east", time.Date(1930, 6, 1, 12, 0, 0, 0, amsterdam), "0:20E", "1"},
+		{"Berlin in winter", time.Date(1987, 1, 14, 16, 30, 0, 0, berlin), "-1", "0"},
+		{"Berlin in summer", time.Date(1987, 7, 14, 16, 30, 0, 0, berlin), "-1", "1"},
+		{"India", time.Date(1987, 7, 14, 16, 30, 0, 0, kolkata), "-5:30", "0"},
+		{"New York in summer", time.Date(1987, 7, 14, 16, 30, 0, 0, newYork), "5", "1"},
+		{"Greenwich", time.Date(1987, 7, 14, 16, 30, 0, 0, time.UTC), "0", "0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			when := time.Date(1987, 3, 14, 16, 30, 0, 0, time.FixedZone("X", tc.offset))
-			if got := formatSaveZone(when); got != tc.want {
-				t.Errorf("formatSaveZone(%s) = %q, want %q", when.Format(time.RFC3339), got, tc.want)
+			if zone, dst := saveZone(tc.when); zone != tc.zone || dst != tc.dst {
+				t.Errorf("saveZone(%s) = %q %q, want %q %q", tc.when.Format(time.RFC3339), zone, dst, tc.zone, tc.dst)
 			}
 		})
 	}
@@ -433,24 +425,12 @@ func TestSaveChartCoordinatesStayWithinHalfAnArcMinute(t *testing.T) {
 	if len(got) < 9 {
 		t.Fatalf("-qb fields = %q, want the moment, zone, longitude and latitude", got)
 	}
-	lon, lat := parseDegMin(got[len(got)-2]), parseDegMin(got[len(got)-1])
+	lon, _ := parseCoordinate(got[len(got)-2], 'E', 'W')
+	lat, _ := parseCoordinate(got[len(got)-1], 'N', 'S')
 	if d := math.Abs(lon-berlinLon) * 60; d > 0.5 {
 		t.Errorf("longitude %q reads back %.2f arc-minutes from %v, want at most 0.5", got[len(got)-2], d, berlinLon)
 	}
 	if d := math.Abs(lat-berlinLat) * 60; d > 0.5 {
 		t.Errorf("latitude %q reads back %.2f arc-minutes from %v, want at most 0.5", got[len(got)-1], d, berlinLat)
-	}
-	for _, c := range []struct {
-		in   string
-		want float64
-	}{
-		{"13:25E", 13 + 25.0/60},
-		{"13:24:59E", 13 + 24.0/60 + 59.0/3600},
-		{"52:31'30N", 52 + 31.0/60 + 30.0/3600},
-		{"12:30W", -(12 + 30.0/60)},
-	} {
-		if g := parseDegMin(c.in); math.Abs(g-c.want) > 1e-9 {
-			t.Errorf("parseDegMin(%q) = %v, want %v", c.in, g, c.want)
-		}
 	}
 }

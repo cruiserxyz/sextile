@@ -2,6 +2,7 @@ package payload
 
 import (
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -54,6 +55,9 @@ type RawOutput struct {
 	// "" when it printed none (the specification C7). It differs from the
 	// one asked for near the poles.
 	HousesUsed string
+	// Nodes is the form of the Nodes and Lilith the call's own two switches
+	// cast, read off the argv that ran and not from any setting of a chart.
+	Nodes recipe.NodeForm
 	// MissingEphemeris names the Swiss Ephemeris files Astrolog reported absent
 	// on stderr while computing this chart (the expected "SwissEph file '…'
 	// not found" lines, which are filtered out of the refusal rule). In spawn

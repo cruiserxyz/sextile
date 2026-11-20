@@ -161,9 +161,8 @@ func TestChooserBarsSayClose(t *testing.T) {
 		key  tea.KeyType
 		want string
 	}{
-		{"aspects", tea.KeyCtrlA, "Move: ↑↓ | Toggle: space | Close: enter/esc"},
-		// The bodies chooser also offers Ctrl+D, back to the default bodies.
-		{"bodies", tea.KeyCtrlB, "Move: ↑↓ | Toggle: space | Defaults: ⌃d | Close: enter/esc"},
+		{"aspects", tea.KeyCtrlA, "Tick: <space> | Close: <enter>/<esc>"},
+		{"bodies", tea.KeyCtrlB, "Tick: <space> | Close: <enter>/<esc>"},
 	} {
 		m := escBase(t)
 		m.cfg = Config{Color: ColorNever}

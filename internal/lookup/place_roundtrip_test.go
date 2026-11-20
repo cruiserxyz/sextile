@@ -98,9 +98,9 @@ func (e exception) String() string {
 }
 
 // P1: for EVERY entry of the real atlas, a floating slot saved there reopens
-// as the same entry (name, country, timezone) and casts from the same
-// coordinates, written exactly as the save writes them and read back by the
-// reader the library uses.
+// under the place it was saved with and casts from the same coordinates,
+// written exactly as the save writes them and read back by the reader the
+// library uses.
 func TestEveryAtlasPlaceReopensAsItself(t *testing.T) {
 	path, err := location.AtlasPath()
 	if err != nil {
@@ -127,9 +127,8 @@ func TestEveryAtlasPlaceReopensAsItself(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", e.Display(), err)
 		}
-		got, ok := location.NearestNamed(atlas, h.Lon, h.Lat, h.PlaceLabel)
-		if !ok || got.Name != e.Name || got.Country != e.Country || got.TZ != e.TZ ||
-			castText(stagedZL(t, h.Lon, h.Lat)) != castText(zl) {
+		got := filePlace(h.PlaceLabel, h.Lon, h.Lat, h.HasCoords)
+		if got.Display() != astrolog.RecordLabel(label) || castText(stagedZL(t, h.Lon, h.Lat)) != castText(zl) {
 			bad = append(bad, exception{e, got})
 		}
 	}
@@ -147,7 +146,7 @@ func TestEveryAtlasPlaceReopensAsItself(t *testing.T) {
 }
 
 // P1, through the real writer: astrolog itself writes the record and the
-// library's reader and NearestNamed take it back, for places that are the
+// library's reader takes it back, for places that are the
 // likely trouble (a neighbour within an arc-minute, a label over the 54-byte
 // cut, western and southern hemispheres) and an even sample of the rest.
 func TestSavedFloatingSlotReopensAsItselfThroughAstrolog(t *testing.T) {
@@ -205,9 +204,8 @@ func TestSavedFloatingSlotReopensAsItselfThroughAstrolog(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", e.Display(), err)
 		}
-		got, ok := location.NearestNamed(atlas, h.Lon, h.Lat, h.PlaceLabel)
-		if !ok || got.Name != e.Name || got.Country != e.Country || got.TZ != e.TZ {
-			t.Errorf("%s saved and reopened as %s", e.Display(), got.Display())
+		if got := filePlace(h.PlaceLabel, h.Lon, h.Lat, h.HasCoords); got.Display() != astrolog.RecordLabel(label) {
+			t.Errorf("%s saved as %q and reopened as %q", e.Display(), label, got.Display())
 		}
 		if a, b := computeZL(t, e.Lon, e.Lat), computeZL(t, h.Lon, h.Lat); castText(a) != castText(b) {
 			t.Errorf("%s: compute argv %q before saving, %q after reopening", e.Display(), a, b)
@@ -215,7 +213,8 @@ func TestSavedFloatingSlotReopensAsItselfThroughAstrolog(t *testing.T) {
 		// What the exhaustive test assumes: astrolog wrote the coordinates it
 		// was handed, and the staged writer formats them as compute does.
 		zl := computeZL(t, e.Lon, e.Lat)
-		if q := qbCoordinates(string(record)); castText("-zl "+q) != castText(zl) {
+		// The writer states the arc-seconds (`=b0`): a whole minute is `'00`.
+		if q := strings.ReplaceAll(qbCoordinates(string(record)), "'00", ""); castText("-zl "+q) != castText(zl) {
 			t.Errorf("%s: the record carries %q, the compute argv %q", e.Display(), q, zl)
 		}
 		if st := stagedZL(t, e.Lon, e.Lat); st != zl {

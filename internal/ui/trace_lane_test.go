@@ -69,7 +69,7 @@ func TestTraceOnlyInConsole(t *testing.T) {
 			lookup.ForgetEphemeris()
 			m := timelineModel(t, Config{Accessible: true})
 			m.ephemeris = lookup.EphemerisAvailability{Folder: "f", Absent: map[int]string{12: "seas_18.se1"}}
-			m, _ = m.sayEphemeris()
+			m = m.sayEphemeris()
 			return m
 		}},
 		{"ephemeris account, saved bodies", "bodies: the ephemeris account cannot be made: ", func(t *testing.T) Model {
@@ -78,7 +78,7 @@ func TestTraceOnlyInConsole(t *testing.T) {
 			m := timelineModel(t, Config{Accessible: true})
 			m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1}}
 			m.ephemeris = lookup.EphemerisAvailability{Folder: "f", Absent: map[int]string{12: "seas_18.se1"}}
-			m, _ = m.sayEphemeris()
+			m = m.sayEphemeris()
 			return m
 		}},
 		{"drained selection", "bodies: the drained selection cannot be told: ", func(t *testing.T) Model {
@@ -130,7 +130,7 @@ func TestTraceOnlyInConsole(t *testing.T) {
 func TestTraceEvictedWithArgv(t *testing.T) {
 	m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTime()))
 	m = m.logNote("session", "kept note")
-	m = m.logErrorLine("kept error")
+	m = m.logErrorLine("session", "kept error")
 	for i := 0; i < MaxLogLines; i++ {
 		m = m.appendLog(laneArgv, "argv-"+strconv.Itoa(i))
 		m = m.logTrace("t", "trace-%d", i)

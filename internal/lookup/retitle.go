@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
@@ -15,12 +16,12 @@ import (
 
 // retitle.go gives an untitled chart a title (the specification item 3).
 //
-// Sextile authors no byte of a chart file. Astrolog writes the record whole
-// into a temp file store created; this file reads that record back through
-// Astrolog and checks it says what it should; only then does store swap it in,
-// keeping the first original in its backup folder (store.BackupDir), outside
-// the charts folder. Every failure leaves the library as it
-// was.
+// Astrolog writes the record with the new labels into a private temp folder.
+// Reapply puts back every line of the source except the -zi line Astrolog
+// wrote, the result is read back through Astrolog and checked to cast as the
+// same chart with the new labels, and only then does the store door replace
+// the file, keeping a dated copy of it outside the charts folder. Every
+// failure leaves the library as it was.
 
 // Retitled is what one successful retitle produced.
 type Retitled struct {
@@ -28,7 +29,11 @@ type Retitled struct {
 	Name       string // the title Astrolog recorded, read back from the file
 	PlaceLabel string // the place label Astrolog recorded
 	File       string // the chart's file name after the write
-	Backup     string // where the original was kept (absolute; the host's path in Docker), or "" if one already existed
+	Record     string // the file's text after the write, as Astrolog read it back
+	// Clock is the chart's moment as Astrolog read the written file back, for
+	// its row: the moment is unchanged, the place may be new.
+	Clock  store.ChartClock
+	Backup string // the dated copy of the file as it was (absolute; the host's path in Docker)
 
 	// Row is the chart as the library now lists it, read back after the
 	// write: what a caller anchors, so the anchor and the session carry what
@@ -39,24 +44,26 @@ type Retitled struct {
 
 // ErrBadReadBack means the record Astrolog wrote does not read back to the
 // chart it was made from (C3.8). The sentence names which fields.
-var ErrBadReadBack = errors.New("Astrolog's record read back different")
+var ErrBadReadBack = errors.New("the changed file would cast another chart, so nothing was written")
 
 // Test seams. Production never reassigns them.
 var (
-	// beforeVerify runs after Astrolog has written the temp record and before
-	// it is read back: the tests of C3.8 corrupt it here.
-	beforeVerify = func(tmp string) {}
+	// afterAstrologWrite sees Astrolog's record before the re-apply step.
+	afterAstrologWrite = func(b []byte) []byte { return b }
+	// beforeVerify sees the re-applied record before it is read back: the
+	// tests of C3.8 corrupt it here.
+	beforeVerify = func(b []byte) []byte { return b }
 )
 
 // RetitleChart writes title and place into the chart c names, in dir. It
 // refuses any label with a control character (C3.15), and an
-// empty title or place.
+// empty title or place. stamp names the dated copy (store.BackupName).
 //
 // seen is the fingerprint the listing recorded for c's file (Library.Seen).
 // If the file no longer matches it -- or the listing could not record one,
 // because the file changed while it was being read -- nothing is written and
 // the error is store.ErrChartChanged.
-func RetitleChart(ctx context.Context, dir string, c store.NamedChart, seen, title, place string) (Retitled, error) {
+func RetitleChart(ctx context.Context, dir string, c store.NamedChart, seen, title, place string, stamp time.Time) (Retitled, error) {
 	if dir == "" {
 		dir = store.ChartsDir()
 	}
@@ -72,13 +79,16 @@ func RetitleChart(ctx context.Context, dir string, c store.NamedChart, seen, tit
 	if strings.TrimSpace(title) == "" || strings.TrimSpace(place) == "" {
 		return Retitled{}, errors.New("lookup: a title and a place are both needed")
 	}
-	if fp, err := fingerprint(filepath.Join(dir, filepath.Base(c.Source.File))); seen == "" || err != nil || fp != seen {
+	// The file is read once: the fingerprint, the cast before, the re-apply
+	// and the door's own check all use these bytes.
+	original, err := os.ReadFile(filepath.Join(dir, filepath.Base(c.Source.File)))
+	if seen == "" || err != nil || fingerprintOf(original) != seen {
 		return Retitled{}, fmt.Errorf("%w: %s", store.ErrChartChanged, filepath.Base(c.Source.File))
 	}
 	if c.Source.Kind != store.ChartKindFile {
 		return Retitled{}, fmt.Errorf("lookup: RetitleChart: %q has no readable source", c.Name)
 	}
-	r, err := retitleChartFile(ctx, dir, c, title, place)
+	r, err := retitleChartFile(ctx, dir, c, original, title, place, stamp)
 	if err != nil {
 		return Retitled{}, err
 	}
@@ -93,70 +103,58 @@ func RetitleChart(ctx context.Context, dir string, c store.NamedChart, seen, tit
 	return r, nil
 }
 
-func retitleChartFile(ctx context.Context, dir string, c store.NamedChart, title, place string) (Retitled, error) {
+func retitleChartFile(ctx context.Context, dir string, c store.NamedChart, original []byte, title, place string, stamp time.Time) (Retitled, error) {
 	file := filepath.Base(c.Source.File)
 	path := filepath.Join(dir, file)
-	original, err := os.ReadFile(path)
-	if err != nil {
-		return Retitled{}, fmt.Errorf("lookup: reading %s: %w", file, err)
+	if astrolog.KindOfPrefix(original) != astrolog.FileChart {
+		return Retitled{}, fmt.Errorf("lookup: %s is not a chart record", file)
 	}
-	// Re-read rather than trusting the listing: the file may have changed
-	// since the picker was opened. Whatever else it holds, Astrolog writes
-	// back only the record; the first backup keeps every original byte, and
-	// the read-back below refuses a rewrite that moved the chart (C3.8).
-	if _, err := astrolog.ReadChartFileHeader(path); err != nil {
-		return Retitled{}, err
-	}
-	before, err := astrolog.ResolveChartFile(ctx, path)
+	before, err := astrolog.ResolveChartBytes(ctx, original, path)
 	if err != nil {
 		return Retitled{}, err
 	}
-
-	tmp, err := store.CreateChartTemp(dir, stem(file))
+	written, err := astrolog.RetitleRecord(ctx, path, title, place)
 	if err != nil {
 		return Retitled{}, err
 	}
-	keep := false
-	defer func() {
-		if !keep {
-			store.RemoveChartTemp(tmp)
-		}
-	}()
-	if err := astrolog.RetitleTo(ctx, path, title, place, tmp); err != nil {
+	written = afterAstrologWrite(written)
+	record, err := Reapply(file, original, written, OwnsName, false)
+	if err != nil {
 		return Retitled{}, err
 	}
-	beforeVerify(tmp)
-	after, err := astrolog.ResolveChartFile(ctx, tmp)
+	record = beforeVerify(record)
+	after, err := astrolog.ResolveChartBytes(ctx, record, path)
 	if err != nil {
 		return Retitled{}, fmt.Errorf("lookup: Astrolog cannot read back the record it wrote: %w", err)
 	}
-	if err := sameRecord(after, after.JD == before.JD, before.Lon, before.Lat, title, place); err != nil {
+	if err := sameRecord(after, before, title, place); err != nil {
 		return Retitled{}, err
 	}
-
-	backedUp, err := store.ReplaceChartWithBackup(dir, file, tmp, original)
+	backup, err := store.OriginalsDoor(dir).Replace(file, original, record, stamp)
 	if err != nil {
 		return Retitled{}, err
 	}
-	keep = true // renamed into place; there is no temp file left to remove
-	r := Retitled{ID: c.ID, Name: after.Name, PlaceLabel: after.PlaceLabel, File: file}
-	if backedUp {
-		r.Backup = store.ChartBackupDisplay(dir, file)
-	}
-	return r, nil
+	return Retitled{ID: c.ID, Name: after.Name, PlaceLabel: after.PlaceLabel, File: file, Record: after.Record, Clock: ClockOfRead(after), Backup: backup}, nil
 }
 
-// sameRecord is C3.8's check on a read-back: the moment (judged by the
-// caller, who knows the precision it can hold the record to), the
-// coordinates, and both labels after Astrolog's documented quote rewrite.
-// Any difference refuses the write.
-func sameRecord(got astrolog.ChartFile, momentOK bool, lon, lat float64, title, place string) error {
+// sameRecord is the check on a read-back of the re-applied file: the moment,
+// the coordinates and the house system as cast must equal the source's
+// exactly, as must the form of the Nodes and Lilith the file states, and both
+// labels must be the new ones after Astrolog's documented
+// quote rewrite. Any difference refuses the write.
+func sameRecord(got, before astrolog.ChartFile, title, place string) error {
 	var bad []string
-	if !momentOK {
+	if got.JD != before.JD || got.Clock != before.Clock {
 		bad = append(bad, "moment")
 	}
-	if got.Lon != lon || got.Lat != lat {
+	if got.Lon != before.Lon || got.Lat != before.Lat {
 		bad = append(bad, "coordinates")
+	}
+	if got.HasHouses != before.HasHouses || got.Houses != before.Houses {
+		bad = append(bad, "houses")
+	}
+	if got.NodesStated != before.NodesStated || got.Nodes != before.Nodes {
+		bad = append(bad, "form of the Nodes and Lilith")
 	}
 	if got.Name != astrolog.RecordLabel(title) {
 		bad = append(bad, "title")

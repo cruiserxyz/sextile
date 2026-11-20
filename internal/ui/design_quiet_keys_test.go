@@ -208,6 +208,10 @@ func TestKeyBarShowsWhatWorks(t *testing.T) {
 				if !e.Bar {
 					continue
 				}
+				// Typing is how the filter acts: its bar word has no key to press.
+				if e.ID == keys.BindingSearch && len(e.Binding.Keys()) == 0 && s.m.currentOwner() == ownerKeybindings {
+					continue
+				}
 				kmap := append([]string(nil), e.Binding.Keys()...)
 				for _, p := range partnersOf[e.ID] {
 					kmap = append(kmap, keysOf(p)...)
@@ -263,11 +267,11 @@ func TestRoutineWorkIsQuiet(t *testing.T) {
 	})
 	t.Run("a body comes back", func(t *testing.T) {
 		m := escBase(t)
-		m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
-		after := m.reportUnavailable(nil, tUnavailable)
+		m = m.reportUnavailable([]string{"Eris"}, dUnavailable)
+		after := m.reportUnavailable(nil, dUnavailable)
 		quiet(t, "a body becoming available again", m, after)
-		if got := m.logPanelLines(); len(got) == 0 || !strings.Contains(got[len(got)-1], "Eris can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) {
-			t.Errorf("a body with no ephemeris is no longer reported: %q", got)
+		if got := m.consoleLines(); len(got) == 0 || !strings.Contains(got[len(got)-1].text, "Eris can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) {
+			t.Errorf("a body with no ephemeris is no longer noted in the console: %+v", got)
 		}
 	})
 	t.Run("wheel shown", func(t *testing.T) {
@@ -276,7 +280,7 @@ func TestRoutineWorkIsQuiet(t *testing.T) {
 		// The first publish of a session names the address (W1 part 1); a
 		// refresh after it, the routine work, says nothing.
 		after, _ := m.onWheelPublished(wheelPublishedMsg{path: "http://127.0.0.1:1/wheel.png"})
-		if got := after.logPanelLines()[len(m.logPanelLines()):]; len(got) != 1 || got[0] != "Wheel at http://127.0.0.1:1/wheel.png (Ctrl+X again closes it)" {
+		if got := after.logPanelLines()[len(m.logPanelLines()):]; len(got) != 1 || got[0] != "Wheel    served at http://127.0.0.1:1/wheel.png" {
 			t.Errorf("a wheel that opened wrote %q, want the one address line", got)
 		}
 		again, _ := after.onWheelPublished(wheelPublishedMsg{path: "http://127.0.0.1:1/wheel.png"})
@@ -309,7 +313,7 @@ func launchLog(t *testing.T) []string {
 // U3 4, amended 2026-11-07 (operator: a footer message "needs to either
 // overlay or modify the footer content so it has enough space"): with a
 // notice showing, the last row holds the WHOLE notice; the bar yields, and
-// keeps Help and Quit where they still fit (80x24), cut from the right where
+// keeps the pinned Commands, Keybindings and Quit where they still fit (80x24), cut from the right where
 // they do not (66x15).
 func TestNoticeKeepsHelpAndQuit(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {66, 15}} {
@@ -320,8 +324,8 @@ func TestNoticeKeepsHelpAndQuit(t *testing.T) {
 		if !strings.Contains(row, noticeOnlyNow) {
 			t.Errorf("%dx%d: last row %q lacks the whole notice", size[0], size[1], row)
 		}
-		if size[0] == 80 && (!strings.Contains(row, "Help: ?") || !strings.Contains(row, "Quit: q")) {
-			t.Errorf("80x24: last row %q lost Help or Quit", row)
+		if size[0] == 80 && !strings.Contains(row, "Commands: ,") {
+			t.Errorf("80x24: last row %q lost Commands", row)
 		}
 		if w := ansi.StringWidth(row); w > size[0] {
 			t.Errorf("%dx%d: last row is %d wide", size[0], size[1], w)

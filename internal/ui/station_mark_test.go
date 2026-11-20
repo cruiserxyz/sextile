@@ -516,8 +516,7 @@ func TestStationMarkSurvivesACrossAspectError(t *testing.T) {
 }
 
 // stationRowsFixture is the entered fixture's week plus a Venus S/R row, a
-// North Node row Astrolog words S/R (lookup relabels it S/D, C17) and a South
-// Node row it words S/D (relabelled S/R).
+// North Node S/R row and a South Node S/D row, as Astrolog words them.
 func stationRowsFixture(t *testing.T) []lookup.TimelineRow {
 	t.Helper()
 	rows := append([]lookup.TimelineRow(nil), enteredRows(t)...)
@@ -539,8 +538,8 @@ func TestEnterOnAStationRowLandsOnTheDirectSide(t *testing.T) {
 	}{
 		{"Venus <Sco> S/R", 0},
 		{"Pluto <Aqu> S/D", 59 * time.Second},
-		{"North N <Pis> S/D", 59 * time.Second}, // Astrolog's S/R, relabelled
-		{"South N <Vir> S/R", 0},                // Astrolog's S/D, relabelled
+		{"North N <Pis> S/R", 0},
+		{"South N <Vir> S/D", 59 * time.Second},
 		{"Tri (Leo) Mars", 59 * time.Second},
 		{"--> Sagittarius", 59 * time.Second},
 	} {
@@ -603,8 +602,8 @@ func TestEnteredStationRowShowsItsWord(t *testing.T) {
 		frag, label, word, not string
 	}{
 		{"Venus <Sco> S/R", "Venus", "S/R", "℞"},
-		{"North N <Pis> S/D", "N.Node", "S/D", "S/R"},
-		{"South N <Vir> S/R", "S.Node", "S/R", "S/D"},
+		{"North N <Pis> S/R", "N.Node", "S/R", "S/D"},
+		{"South N <Vir> S/D", "S.Node", "S/D", "S/R"},
 		{"Lilith <Leo> S/R", "Lilith", "S/R", "℞"}, // excluded from the 5% rule
 	}
 	for _, tc := range cases {

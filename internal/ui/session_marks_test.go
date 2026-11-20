@@ -178,7 +178,7 @@ func TestMarkOnAnUndrawnObjectIsKept(t *testing.T) {
 	if !m.slots.ObjectSelected(idx, 19) {
 		t.Fatalf("the Fortune mark is not on the floating slot: %v", m.slots.SelectedObjects(idx))
 	}
-	if n := countLines(m, "is not an object of this Astrolog"); n != 0 {
+	if n := countLines(m, "is not known to this Astrolog"); n != 0 {
 		t.Errorf("the Log says %d unknown-object lines for a known object:\n%s", n, strings.Join(logTexts(m), "\n"))
 	}
 	if got := m.markNames(idx); !slices.Equal(got, []string{"Fortune"}) {
@@ -192,7 +192,7 @@ func TestKeptMarkSaidOnceWithDrawn(t *testing.T) {
 	sess := store.Session{Version: 3, Drawn: []string{"Sun", "Nibiru"}, FloatingBodies: []string{"Nibiru", "Sedna"}}
 	m := marksStart(t, lookup.EphemerisAvailability{}, sess)
 	for _, name := range []string{"Nibiru", "Sedna"} {
-		line := name + " is not an object of this Astrolog, kept in the session"
+		line := name + " is not known to this Astrolog, the session keeps its name"
 		if n := countLines(m, line); n != 1 {
 			t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 		}
@@ -203,7 +203,7 @@ func TestKeptMarkSaidOnceWithDrawn(t *testing.T) {
 	}
 }
 
-// `, n` drops the slots, and the kept names with them.
+// the New row drops the slots, and the kept names with them.
 func TestResetClearsKeptMarks(t *testing.T) {
 	sessionSandbox(t)
 	m := marksStart(t, lookup.EphemerisAvailability{}, store.Session{Version: 3, FloatingBodies: []string{"Sun", "Sedna"}})
@@ -216,7 +216,7 @@ func TestResetClearsKeptMarks(t *testing.T) {
 	m = pump(t, m, cmd)
 	idx = len(m.slots.All()) - 1
 	if m.slots.HasMarks(idx) || len(m.slots.KeptMarks(idx)) != 0 {
-		t.Errorf("after `, n` the slot still holds marks %v kept %v", m.slots.SelectedObjects(idx), m.slots.KeptMarks(idx))
+		t.Errorf("after the New row the slot still holds marks %v kept %v", m.slots.SelectedObjects(idx), m.slots.KeptMarks(idx))
 	}
 	if got := m.sessionSnapshot(); len(got.FloatingBodies) != 0 {
 		t.Errorf("the reset session would write %v", got.FloatingBodies)
@@ -302,7 +302,7 @@ func TestMarkedAbsentBodyIsKept(t *testing.T) {
 			t.Error("the Bodies panel shows Chiron without its ephemeris file")
 		}
 	}
-	if n := countLines(m2, "is not an object of this Astrolog"); n != 0 {
+	if n := countLines(m2, "is not known to this Astrolog"); n != 0 {
 		t.Errorf("the Log says %d unknown-object lines for Chiron", n)
 	}
 	if n := countLines(m2, "can't be drawn here"); n != 1 {
@@ -367,7 +367,7 @@ func TestFortuneMarkNarrows(t *testing.T) {
 	if len(m.chart.aspects) >= len(all) {
 		t.Errorf("the Aspects list did not narrow: %d rows, was %d", len(m.chart.aspects), len(all))
 	}
-	pair := func(a aspect.Aspect) [3]int { return [3]int{a.AObject.Number, a.BObject.Number, int(a.Kind)} }
+	pair := func(a aspect.Aspect) [3]int { return [3]int{a.AObject.Number, a.BObject.Number, a.Kind.Index} }
 	var got, wantPairs [][3]int
 	for _, a := range m.chart.aspects {
 		got = append(got, pair(a))
@@ -411,7 +411,7 @@ func TestDuplicateRegistryNameIsKept(t *testing.T) {
 	if m.slots.ObjectSelected(idx, 58) || m.slots.ObjectSelected(idx, 66) || !m.slots.ObjectSelected(idx, 1) {
 		t.Errorf("marks = %v, want the Sun alone", m.slots.SelectedObjects(idx))
 	}
-	line := "Titan is not an object of this Astrolog, kept in the session"
+	line := "Titan is not known to this Astrolog, the session keeps its name"
 	if n := countLines(m, line); n != 1 {
 		t.Errorf("the Log carries %q %d times, want once", line, n)
 	}

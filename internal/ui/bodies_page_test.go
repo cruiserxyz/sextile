@@ -16,7 +16,7 @@ import (
 func bodiesPageModel(t *testing.T, inner int) Model {
 	t.Helper()
 	m := detailsTestModel(t)
-	m.height = inner + 12 // the panel's body is the terminal's height less 12 at this width
+	m.height = inner + 15 // the panel body is the terminal height less 15 at this width: Session 3, Chart 3, Aspects 6, key bar 1, two borders
 	m.chart.positions = withTicked(fullChartPositions(), fullChartCusps(), allPlainCusps...)
 	m.chart.cusps = fullChartCusps()
 	m.focused = PanelBodies
@@ -144,7 +144,7 @@ func TestBodiesWindowFollowsResizeAndRecompute(t *testing.T) {
 		for i := 0; i < 25; i++ {
 			m = pageKey(t, m, "j") // the cursor on the last row, the window scrolled to it
 		}
-		m.height = size + 12
+		m.height = size + 15
 		m2, _ := m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		m = m2.(Model)
 		if got := markedRow(m); got < 0 {

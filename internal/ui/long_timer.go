@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// longTimersSleeping counts the long timers (the leader key's timeout, the copy
+// longTimersSleeping counts the long timers (the copy
 // flash, the Details hold) that are sleeping right now. Tests read it to tell a long timer, which
 // they abandon, from real work, which they wait for however busy the host is
 // (internal/ui pump). It costs one atomic add per timer.

@@ -21,6 +21,9 @@ type AspectsBag struct {
 	// Mark is the entered row's cell on the tab being drawn; zero marks
 	// nothing (renderAspectsBody clears it for any other tab).
 	Mark EnteredMark
+	// Dot draws an aspect without a glyph as a centered dot instead of its
+	// letters (the experiment that shows it).
+	Dot bool
 }
 
 // RenderAspectsTabRows renders the focused slot's own aspects through the
@@ -29,15 +32,15 @@ func RenderAspectsTabRows(bag AspectsBag, innerWidth, innerHeight int, cfg term.
 	if len(bag.Rows) == 0 {
 		return emptyLine(bag.Settled, OwnEmptyLine)
 	}
-	return renderAspectWaterfallMarked(bag.Rows, bag.RowStyles, innerWidth, innerHeight, cfg, bag.Mark)
+	return renderAspectWaterfallMarked(bag.Rows, bag.RowStyles, innerWidth, innerHeight, cfg, bag.Mark, bag.Dot)
 }
 
 // OwnEmptyLine and CrossEmptyLine are the whole body of a tab whose settled
 // frame has no aspects: an explicit statement rather than a blank panel
 // (the specification A6).
 const (
-	OwnEmptyLine   = "(no aspects in orb)"
-	CrossEmptyLine = "(no cross-aspects in orb)"
+	OwnEmptyLine   = "(no aspects within orb)"
+	CrossEmptyLine = "(no aspects between the two charts within orb)"
 )
 
 // emptyLine is line for a settled frame, and nothing while the frame is
@@ -58,5 +61,5 @@ func RenderAspectsTabCross(bag AspectsBag, innerWidth, innerHeight int, cfg term
 	if len(bag.Cross) == 0 {
 		return emptyLine(bag.Settled, CrossEmptyLine)
 	}
-	return renderCrossAspectWaterfallMarked(bag.Cross, bag.CrossStyles, innerWidth, innerHeight, cfg, !bag.Synastry, bag.Mark)
+	return renderCrossAspectWaterfallMarked(bag.Cross, bag.CrossStyles, innerWidth, innerHeight, cfg, !bag.Synastry, bag.Mark, bag.Dot)
 }

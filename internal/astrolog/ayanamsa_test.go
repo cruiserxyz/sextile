@@ -394,11 +394,13 @@ func firstDifference(a, b string) string {
 	return "nowhere (equal)"
 }
 
-// Pass-4 build note: a zodiac switch in a chart file never applies. Otherwise
-// identical files, with and without `_s`, `=s` or `=s Lahiri` (Equinox-2026-03.as
-// carries `_s` today), read to the same moment and place, and the charts cast
-// from that moment and place are equal in every zodiac Sextile offers.
-func TestChartFileZodiacSwitchIsIgnored(t *testing.T) {
+// A chart file's own zodiac is the chart's starting setting (operator,
+// 2026-11-15). Otherwise identical files, with and without `_s`, `=s`,
+// `=s Lahiri`, `=s 0.883208` or `=s -3.075453`, read to the same moment, place
+// and clock. Cast from the file with no zodiac chosen, each follows its own
+// switch: the Lahiri and 0.883208 files cast alike, and unlike the plain one.
+// With a zodiac chosen, the choice wins and every variant casts the same.
+func TestChartFileZodiacIsTheStartingSetting(t *testing.T) {
 	needAstrolog(t)
 	const body = "-qb Sep 23 1995 6:00:00pm DT 1E 11:34E 48:08N\n-zi \"\" \"\"\n-c 14\n"
 	variants := map[string]string{
@@ -413,46 +415,45 @@ func TestChartFileZodiacSwitchIsIgnored(t *testing.T) {
 	paths := map[string]string{}
 	for name, extra := range variants {
 		p := filepath.Join(dir, strings.NewReplacer(" ", "_", "=", "eq", ".", "p").Replace(name)+".as")
-		if err := os.WriteFile(p, []byte("@AI780  ; Astrolog chart info.\n"+body+extra), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte("@AI800  ; Astrolog chart info.\n"+body+extra), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		paths[name] = p
 	}
-	// The control: with the file alone deciding, the switch DOES move a cast, so
-	// the equalities below are not equalities of an inert fixture.
-	rawCast := func(name string) string {
-		out, _, err := spawn(context.Background(), testCall([]string{"-i", paths[name], "-v0", "-k", "-b0"}))
-		if err != nil {
-			t.Fatalf("raw cast of %s: %v", name, err)
-		}
-		return stripSGR(out)
-	}
-	if rawCast("none") == rawCast("=s Lahiri") {
-		t.Fatal("control: a file's own =s Lahiri moves no raw cast, so this test could not see the switch apply")
-	}
-
-	var baseline ChartFile
-	var baseCasts map[recipe.Zodiac]castResult
-	for _, name := range []string{"none", "_s", "=s", "=s Lahiri", "=s 0.88", "=s Deluce "} {
+	read := map[string]ChartFile{}
+	for name := range variants {
 		cf, err := ResolveChartFile(context.Background(), paths[name])
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		moment := recipe.MomentAtPlace{JD: cf.JD, Lon: cf.Lon, Lat: cf.Lat}
-		casts := map[recipe.Zodiac]castResult{}
-		for _, z := range []recipe.Zodiac{recipe.Tropical, recipe.Lahiri, recipe.Deluce} {
-			casts[z] = castChart(t, fixtureSpec(t, moment, recipe.Placidus, z))
+		read[name] = cf
+	}
+	base := read["none"]
+	for name, cf := range read {
+		if cf.WhenUTC != base.WhenUTC || cf.JD != base.JD || cf.Lon != base.Lon || cf.Lat != base.Lat || cf.Clock != base.Clock {
+			t.Errorf("%s: the file reads to another moment or place: %+v, want %+v", name, cf.Clock, base.Clock)
 		}
-		if name == "none" {
-			baseline, baseCasts = cf, casts
-			continue
-		}
-		if cf != baseline {
-			t.Errorf("%s: the file reads as %+v, want the plain file's %+v", name, cf, baseline)
-		}
-		for z, c := range casts {
-			if !sameCast(c, baseCasts[z]) {
-				t.Errorf("%s: the %s cast differs from the plain file's", name, z.Name())
+	}
+	cast := func(name string, chosen bool, z recipe.Zodiac) castResult {
+		cf := read[name]
+		return castChart(t, fixtureSpec(t, recipe.FileChart{Record: cf.Record, JD: cf.JD, Lon: cf.Lon, Lat: cf.Lat, ZodiacChosen: chosen}, recipe.Placidus, z))
+	}
+	// Not chosen: the file's own switch decides.
+	if !sameCast(cast("=s Lahiri", false, recipe.Tropical), cast("=s 0.88", false, recipe.Tropical)) {
+		t.Error("=s Lahiri and =s 0.883208 cast differently, though Astrolog reads both as Lahiri")
+	}
+	if sameCast(cast("none", false, recipe.Tropical), cast("=s Lahiri", false, recipe.Tropical)) {
+		t.Error("a file's =s Lahiri does not reach the cast: the file's zodiac is not the starting setting")
+	}
+	if !sameCast(cast("none", false, recipe.Tropical), cast("_s", false, recipe.Tropical)) {
+		t.Error("a file's _s moved a tropical cast")
+	}
+	// Chosen: the choice wins over every file.
+	for _, z := range []recipe.Zodiac{recipe.Tropical, recipe.Lahiri, recipe.Deluce} {
+		want := cast("none", true, z)
+		for name := range variants {
+			if !sameCast(cast(name, true, z), want) {
+				t.Errorf("%s with %s chosen casts unlike the plain file", name, z.Name())
 			}
 		}
 	}

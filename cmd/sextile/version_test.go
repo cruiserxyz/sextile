@@ -385,12 +385,13 @@ func TestVersionAstrologLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the fake astrolog was never run: %v", err)
 	}
-	// One call: -YQ 0, then the hook-clear band (the specification
-	// C1; its exact order is pinned by internal/astrolog TestEveryCallClearsHooks,
-	// which cmd/sextile may not import), then -Hc.
+	// One call: -YQ 0, the host band, then the hook-clear band (the
+	// specification C1; both are pinned by internal/astrolog,
+	// TestAHostSettingChangesNoCall and TestEveryCallClearsHooks, which
+	// cmd/sextile may not import), then -Hc.
 	call := strings.TrimSuffix(string(got), "\n")
-	if strings.Contains(call, "\n") || !strings.HasPrefix(call, "-YQ 0 -~") || !strings.HasSuffix(call, " -Hc") || strings.Count(call, "-~") != 54 {
-		t.Errorf("astrolog argv log = %q, want exactly one call: -YQ 0, the 54 hook clears, -Hc (C1)", got)
+	if strings.Contains(call, "\n") || !strings.HasPrefix(call, "-YQ 0 ") || !strings.HasSuffix(call, " -Hc") || strings.Count(call, "-~") != 54 {
+		t.Errorf("astrolog argv log = %q, want exactly one call: -YQ 0, the host band, the 54 hook clears, -Hc (C1)", got)
 	}
 }
 

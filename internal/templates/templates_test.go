@@ -162,7 +162,7 @@ func TestAbsentOmitsTheLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	tpl, _, _ := ForObject(ts, venusObject)
-	now := nowFacts(14.87, []string{"Oct 24, 2026   0°45′ Sco"})
+	now := nowFacts(14.87, []string{"Oct 24, 2026   0°45' Sco"})
 	full, err := Render(tpl, "venus", map[string]Section{"now": now}, set(t))
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestAbsentOmitsTheLine(t *testing.T) {
 func TestListFactRepeats(t *testing.T) {
 	ts, _ := Shipped(reg, set(t))
 	tpl, _, _ := ForObject(ts, venusObject)
-	items := []string{"Oct 24, 2026   0°45′ Sco", "Mar 23, 2025   2°50′ Ari", "Aug 13, 2023  20°28′ Leo", "Jan  9, 2022  18°43′ Cap", "Jun  3, 2020  13°36′ Gem"}
+	items := []string{"Oct 24, 2026   0°45' Sco", "Mar 23, 2025   2°50' Ari", "Aug 13, 2023  20°28' Leo", "Jan  9, 2022  18°43' Cap", "Jun  3, 2020  13°36' Gem"}
 	r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, items)}, set(t))
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestListFactRepeats(t *testing.T) {
 	}
 	// A producer that hands over more than the registry's count shows only
 	// that many.
-	six := append(append([]string(nil), items...), "Oct 26, 2018   3°06′ Sco")
+	six := append(append([]string(nil), items...), "Oct 26, 2018   3°06' Sco")
 	r, err = Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, six)}, set(t))
 	if err != nil {
 		t.Fatal(err)
@@ -247,8 +247,8 @@ func nowFacts(elong float64, items []string) factSection {
 		abs = -abs
 	}
 	return factSection{
-		"elongation.lon":                     {Kind: KindValue, Text: "14°52′", Num: elong},
-		"elongation.lon.abs":                 {Kind: KindValue, Text: "14°52′", Num: abs},
+		"elongation.lon":                     {Kind: KindValue, Text: "14°52'", Num: elong},
+		"elongation.lon.abs":                 {Kind: KindValue, Text: "14°52'", Num: abs},
 		"elongation.side":                    {Kind: KindCategory, Term: side},
 		"synodic.conjunction.inferior.last5": {Kind: KindList, Items: items},
 		"synodic.phase":                      {Kind: KindCategory, Term: "evening-star"},
@@ -256,16 +256,16 @@ func nowFacts(elong float64, items []string) factSection {
 		"elongation.trend":                   {Kind: KindCategory, Term: "approaching"},
 		"sign.same-as-sun":                   {Kind: KindCategory, Term: "no"},
 		"motion.direction":                   {Kind: KindCategory, Term: "retrograde"},
-		"station.last":                       {Kind: KindInstant, Term: "station-retrograde", Text: "Oct 3, 2026 7:16 8°29′ Sco"},
-		"station.next":                       {Kind: KindInstant, Term: "station-direct", Text: "Nov 14, 2026 0:27 22°51′ Lib"},
-		"synodic.conjunction.inferior.last":  {Kind: KindInstant, Text: "Mar 23, 2025 1:08 2°39′ Ari"},
-		"synodic.conjunction.inferior.next":  {Kind: KindInstant, Text: "Oct 24, 2026 3:44 0°45′ Sco"},
-		"synodic.conjunction.superior.last":  {Kind: KindInstant, Text: "Jan 6, 2026 16:36 16°22′ Cap"},
-		"synodic.conjunction.superior.next":  {Kind: KindInstant, Text: "Aug 12, 2027 0:21 19°06′ Leo"},
+		"station.last":                       {Kind: KindInstant, Term: "station-retrograde", Text: "Oct 3, 2026 7:16 8°29' Sco"},
+		"station.next":                       {Kind: KindInstant, Term: "station-direct", Text: "Nov 14, 2026 0:27 22°51' Lib"},
+		"synodic.conjunction.inferior.last":  {Kind: KindInstant, Text: "Mar 23, 2025 1:08 2°39' Ari"},
+		"synodic.conjunction.inferior.next":  {Kind: KindInstant, Text: "Oct 24, 2026 3:44 0°45' Sco"},
+		"synodic.conjunction.superior.last":  {Kind: KindInstant, Text: "Jan 6, 2026 16:36 16°22' Cap"},
+		"synodic.conjunction.superior.next":  {Kind: KindInstant, Text: "Aug 12, 2027 0:21 19°06' Leo"},
 		"brightness.magnitude":               {Kind: KindValue, Text: "−4.3"},
 		"brightness.lit":                     {Kind: KindValue, Text: "4%"},
-		"synodic.conjunction.inferior.sixth": {Kind: KindValue, Text: "Mar 25, 2017   4°57′ Ari"},
-		"synodic.conjunction.inferior.drift": {Kind: KindValue, Text: "−2°18′"},
+		"synodic.conjunction.inferior.sixth": {Kind: KindValue, Text: "Mar 25, 2017   4°57' Ari"},
+		"synodic.conjunction.inferior.drift": {Kind: KindValue, Text: "−2°18'"},
 	}
 }
 
@@ -280,25 +280,25 @@ func TestRuleRendersEveryAttestedRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Line{
-		{Label: "elongation", Value: "14°52′ east", Aside: "by longitude"},
+		{Label: "elongation", Value: "14°52' east", Aside: "by longitude"},
 		{Label: "phase", Value: "evening star · occidental"},
 		{Value: "approaching the Sun"},
 		{Label: "under the beams", Value: "yes", Aside: "within 17°"},
 		{Value: "no", Aside: "within 12°"},
-		{Label: "combust", Value: "no (condition)", Aside: "within 8°30′"},
+		{Label: "combust", Value: "no (condition)", Aside: "within 8°30'"},
 		{Blank: true},
 		{Label: "motion", Value: "retrograde"},
-		{Label: "station", Value: "last Oct 3, 2026 7:16 8°29′ Sco", Aside: "ecliptic"},
-		{Label: "station", Value: "next Nov 14, 2026 0:27 22°51′ Lib", Aside: "ecliptic"},
-		{Label: "inner conjunction", Value: "last Mar 23, 2025 1:08 2°39′ Ari"},
-		{Label: "inner conjunction", Value: "next Oct 24, 2026 3:44 0°45′ Sco"},
-		{Label: "outer conjunction", Value: "last Jan 6, 2026 16:36 16°22′ Cap"},
-		{Label: "outer conjunction", Value: "next Aug 12, 2027 0:21 19°06′ Leo"},
+		{Label: "station", Value: "last Oct 3, 2026 7:16 8°29' Sco", Aside: "ecliptic"},
+		{Label: "station", Value: "next Nov 14, 2026 0:27 22°51' Lib", Aside: "ecliptic"},
+		{Label: "inner conjunction", Value: "last Mar 23, 2025 1:08 2°39' Ari"},
+		{Label: "inner conjunction", Value: "next Oct 24, 2026 3:44 0°45' Sco"},
+		{Label: "outer conjunction", Value: "last Jan 6, 2026 16:36 16°22' Cap"},
+		{Label: "outer conjunction", Value: "next Aug 12, 2027 0:21 19°06' Leo"},
 		{Blank: true},
 		{Label: "magnitude", Value: "−4.3 · 4% lit"},
 		{Blank: true},
 		{Label: "inner conjunction"},
-		{Label: "8 years", Value: "Mar 25, 2017   4°57′ Ari · −2°18′"},
+		{Label: "8 years", Value: "Mar 25, 2017   4°57' Ari · −2°18'"},
 	}
 	if fmt.Sprint(r.Lines) != fmt.Sprint(want) {
 		t.Errorf("got\n%+v\nwant\n%+v", r.Lines, want)

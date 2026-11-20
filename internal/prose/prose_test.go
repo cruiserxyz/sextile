@@ -182,3 +182,148 @@ func TestNoSemicolonInReferenceProse(t *testing.T) {
 		}
 	}
 }
+
+// logTexts names the Log helpers of internal/ui and which of their arguments
+// is the line's message. The first argument of each is the scope, which the
+// Log panel shows as a group and the large Log prints before the message.
+var logTexts = map[string]struct {
+	args  []int
+	scope bool
+}{
+	"logNote":      {[]int{1}, false},
+	"logError":     {[]int{1}, false},
+	"logErrorLine": {[]int{1}, false},
+	"logBare":      {[]int{1}, false},
+}
+
+var (
+	formatVerb = regexp.MustCompile(`%(\[\d+\])?[-+# 0-9.]*[a-zA-Z%]`)
+	lineScope  = regexp.MustCompile(`^[a-z][a-z ]*: `)
+)
+
+// A Log line says its scope once, then plain sentences: no second colon, no
+// "settings: " inside a line that already has a scope, and no settings-file
+// key such as "node:" in a sentence. A colon a reader would have to decode
+// belongs in the large log (logTrace), never on screen.
+func TestNoColonInsideALogLine(t *testing.T) {
+	dir := filepath.Join(repoRoot, "internal", "ui")
+	fs := token.NewFileSet()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fs, p, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			c, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := c.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			spec, ok := logTexts[sel.Sel.Name]
+			if !ok {
+				return true
+			}
+			for _, i := range spec.args {
+				if i >= len(c.Args) {
+					continue
+				}
+				b, ok := c.Args[i].(*ast.BasicLit)
+				if !ok || b.Kind != token.STRING {
+					continue
+				}
+				s, err := strconv.Unquote(b.Value)
+				if err != nil {
+					continue
+				}
+				seen++
+				text := formatVerb.ReplaceAllString(s, "")
+				if spec.scope {
+					text = lineScope.ReplaceAllString(text, "")
+				}
+				if strings.Contains(text, ":") {
+					t.Errorf("%s:%d: a colon inside a Log line, say it in plain sentences: %q", p, fs.Position(b.Pos()).Line, s)
+				}
+			}
+			return true
+		})
+	}
+	if seen < 50 {
+		t.Fatalf("only %d Log texts found: the helper names in logTexts no longer match internal/ui", seen)
+	}
+}
+
+// Nothing Sextile shows says it guessed: it states where a fact came from. No
+// string literal of the Go code, no message of the launcher and no prose of the
+// reference page holds the word, in any case.
+func TestNoGuessInShownText(t *testing.T) {
+	guess := regexp.MustCompile(`(?i)guess`)
+	var bad []string
+	literals := 0
+	for _, d := range []string{"internal", "cmd", "tools", "pkg"} {
+		root := filepath.Join(repoRoot, d)
+		_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+				return nil
+			}
+			fs := token.NewFileSet()
+			f, perr := parser.ParseFile(fs, p, nil, 0)
+			if perr != nil {
+				t.Errorf("parse %s: %v", p, perr)
+				return nil
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				b, ok := n.(*ast.BasicLit)
+				if !ok || b.Kind != token.STRING {
+					return true
+				}
+				s, uerr := strconv.Unquote(b.Value)
+				if uerr != nil {
+					return true
+				}
+				literals++
+				if guess.MatchString(s) {
+					bad = append(bad, p+":"+strconv.Itoa(fs.Position(b.Pos()).Line)+": "+strconv.Quote(s))
+				}
+				return true
+			})
+			return nil
+		})
+	}
+	if literals < 1000 {
+		t.Fatalf("only %d string literals read: the walk no longer reaches the code", literals)
+	}
+	for _, f := range []string{"sextile", "scripts/install"} {
+		for _, m := range shellMessages(t, filepath.Join(repoRoot, f)) {
+			if guess.MatchString(m.text) {
+				bad = append(bad, m.loc+": "+m.text)
+			}
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "docs/REFERENCE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, line := range strings.Split(string(raw), "\n") {
+		if guess.MatchString(line) {
+			bad = append(bad, "docs/REFERENCE.md:"+strconv.Itoa(i+1)+": "+line)
+		}
+	}
+	for _, b := range bad {
+		t.Errorf("the word guess in shown text: %s", b)
+	}
+	if !guess.MatchString("Guessed") || guess.MatchString("picked") {
+		t.Error("control: the pattern does not name the word")
+	}
+}

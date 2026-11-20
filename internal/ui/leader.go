@@ -1,9 +1,11 @@
 package ui
 
 import (
-	"github.com/cruiserxyz/sextile/internal/ui/keys"
-	"time"
+	"slices"
+	"strings"
 	"unicode/utf8"
+
+	"github.com/cruiserxyz/sextile/internal/ui/keys"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -17,29 +19,24 @@ import (
 // The resolver below is a prefix tree from the first commit even though the
 // map that ships is one key deep, so handing the operator arbitrary `g s`
 // sequences later needs no change to the input model.
-const (
-	// defaultLeaderKey is the leader when preferences.yaml says nothing.
-	defaultLeaderKey = ","
-	// defaultLeaderTimeout is how long a pending leader waits for the next
-	// key before giving up in silence.
-	defaultLeaderTimeout = 1000 * time.Millisecond
-)
 
-// defaultLeaderMap is the map that ships. No user-writable map exists yet.
+// defaultLeaderKey is the leader when preferences.yaml says nothing.
+const defaultLeaderKey = ","
+
+// defaultLeaderMap is the map that ships: one binding per command of the
+// keys package's table, one letter deep. No user-writable map exists yet.
 // Attached Details uses it too: `y` copies the whole content of whatever has
 // the keyboard, so it is a main-map chord and no longer Details' alone.
 func defaultLeaderMap() []keys.LeaderBinding {
-	return []keys.LeaderBinding{
-		{Seq: []string{"l"}, ID: keys.BindingLogConsole},
-		{Seq: []string{"s"}, ID: keys.BindingSaveChart},
-		{Seq: []string{"h"}, ID: keys.BindingHouses},
-		{Seq: []string{"z"}, ID: keys.BindingZodiac},
-		{Seq: []string{"a"}, ID: keys.BindingHouseDisplay},
-		{Seq: []string{"o"}, ID: keys.BindingSessions},
-		{Seq: []string{"n"}, ID: keys.BindingNewSession, Twice: true},
-		{Seq: []string{"c", "d"}, ID: keys.BindingSaveCity},
-		{Seq: []string{"y"}, ID: keys.BindingCopy},
+	var out []keys.LeaderBinding
+	for _, c := range keys.Commands() {
+		seq := []string{c.Letter}
+		if c.Then != "" {
+			seq = append(seq, c.Then)
+		}
+		out = append(out, keys.LeaderBinding{Seq: seq, ID: c.ID})
 	}
+	return out
 }
 
 // mustDefaultLeaderMap builds the shipped map. An ambiguous compiled-in map
@@ -54,23 +51,11 @@ func mustDefaultLeaderMap() *keys.LeaderNode {
 	return root
 }
 
-// leaderState is the pending prefix: whether one is armed, what has been
-// typed since, and which generation armed it. The generation is what lets a
-// timeout tick tell "the leader I armed" from "a leader armed since".
+// leaderState is the pending prefix: whether one is armed and what has been
+// typed since. A pending leader waits until a key or Esc.
 type leaderState struct {
 	pending bool
 	seq     []string
-	gen     uint64
-}
-
-// leaderTimeoutMsg fires when a pending leader has waited out its window. It
-// carries the generation that armed it, exactly as the refresh coordinator's
-// ticks carry a timer id, so a tick from an older pending state is dropped
-// instead of cancelling a newer one.
-type leaderTimeoutMsg struct{ gen uint64 }
-
-func armLeaderTimeout(gen uint64, d time.Duration) tea.Cmd {
-	return longTimer(d, func(time.Time) tea.Msg { return leaderTimeoutMsg{gen: gen} })
 }
 
 func isStrandingKey(k string) bool {
@@ -86,67 +71,155 @@ func isStrandingKey(k string) bool {
 // The reader parses and reports; every default, every refusal and every Log
 // line is decided here.
 //
-// Silence is the contract for the good cases: a valid leader, a valid
-// timeoutlen, and either one simply absent all pass without a word. Only a
-// refusal or a shadowed binding is worth the operator's attention.
+// Silence is the contract for the good cases: a valid leader, or none, passes
+// without a word. Only a refusal or a shadowed binding is worth the operator's
+// attention. The file's keys.timeoutlen is still read and kept (the
+// preferences file must not lose a line it holds); nothing uses it.
 func (m Model) applyKeyConfig(cfg store.KeysConfig) Model {
 	for _, r := range cfg.Rejections {
-		m = m.logNote("preferences", "%s %q ignored: %s", r.Field, r.Value, r.Reason)
-	}
-	if cfg.TimeoutlenPresent {
-		m.leaderTimeout = time.Duration(cfg.TimeoutlenMS) * time.Millisecond
+		m = m.logNote("settings", "%s %q not valid, ignored", r.Field, r.Value)
 	}
 	if !cfg.LeaderPresent {
 		return m
 	}
 	switch {
 	case isStrandingKey(cfg.Leader):
-		return m.logNote("preferences", "keys.leader %q ignored: %s are the only ways out — leader stays %q",
-			cfg.Leader, keys.ShowSeq(strandingKeys()), m.leaderKey)
+		return m.logNote("settings", "%q cannot start a command, it stays %q",
+			cfg.Leader, m.leaderKey)
 	case utf8.RuneCountInString(cfg.Leader) != 1:
-		return m.logNote("preferences", "keys.leader %q ignored: a leader is one key — leader stays %q",
+		return m.logNote("settings", "%q is not one key, the command key stays %q",
 			cfg.Leader, m.leaderKey)
 	}
 	if shadowed := keys.ShadowedBinding(mainBindings(m.keys), cfg.Leader); shadowed != "" {
-		m = m.logNote("preferences", "leader %q now shadows %s", cfg.Leader, shadowed)
+		m = m.logNote("settings", "%q now starts a command, %s is shadowed", cfg.Leader, shadowed)
 	}
 	m.leaderKey = cfg.Leader
 	return m
 }
 
-// armLeader enters the pending state with nothing typed yet and starts the
-// window. The keystroke is consumed: a leader press is never also a main-mode
+// armLeader enters the pending state with nothing typed yet. The keystroke is consumed: a leader press is never also a main-mode
 // key, which is what makes a configured leader able to shadow one.
 func (m Model) armLeader() (Model, tea.Cmd) {
 	// The operator has moved on from whatever was copied; the footer slot is
 	// the pending leader's now. The flash tick still in flight finds the
 	// confirmation already cleared and does nothing.
 	m.yank.active = false
-	m.leader.gen++
 	m.leader.pending = true
 	m.leader.seq = nil
-	return m, armLeaderTimeout(m.leader.gen, m.leaderTimeout)
+	return m, nil
 }
 
-// clearLeader drops the pending prefix. The generation is left where it is,
-// so the tick already in flight for it arrives stale and is dropped.
+// clearLeader drops the pending prefix.
 func (m Model) clearLeader() Model {
 	m.leader.pending = false
 	m.leader.seq = nil
 	return m
 }
 
+// limitedLeader is whether the command line over owner o takes only some of the
+// chords: the lists with a filter, the open search lines of Details, and the Log
+// console. The main screen, attached Details and the focused Log take every one.
+func (m Model) limitedLeader(o owner) bool {
+	switch o {
+	case ownerCity, ownerOpenChart, ownerBodies, ownerAspects, ownerHouses, ownerZodiac, ownerNodes, ownerKeybindings, ownerConsole, ownerSessions:
+		return true
+	case ownerDetails:
+		return m.detailsSearchLineOpen()
+	}
+	return false
+}
+
+// commandsOver is the one place that says what the command line offers over an
+// owner that takes only some of the chords: exactly the entries its own table
+// marks as chords, each one that can run now. The menu lists them with their
+// own words, and they are the only ones that run. Where that is nothing, the
+// leader key does nothing over the owner: no command line, and no text in the
+// filter. Copy is offered over Details' search lines and the console, where it
+// copies their own content, and over no list: it would copy the panel under it.
+func (m Model) commandsOver(o owner) []keys.BindingID {
+	if !m.limitedLeader(o) {
+		return nil
+	}
+	var offered []keys.BindingID
+	for _, e := range m.ownerBindings(o) {
+		if !e.Chord || !m.leaderRuns(e.ID) || m.blocked(e.ID) != "" {
+			continue
+		}
+		offered = append(offered, e.ID)
+	}
+	return offered
+}
+
+// twinsOver are the comma forms of the Ctrl keys owner o binds, for the facts c
+// of its entries: each entry with a Ctrl+letter key that is available now has
+// the leader then that letter run it, and the menu names it with the entry's own
+// word. Five letters mean one act everywhere (o open, s save, y copy, r rename,
+// d delete), and no table binds one of them to another.
+func (m Model) twinsOver(o owner, c keys.Context) []keys.Twin {
+	if !m.limitedLeader(o) {
+		return nil
+	}
+	var out []keys.Twin
+	for _, e := range m.ownerBindings(o) {
+		if e.When != nil && !e.When(c) {
+			continue
+		}
+		for _, k := range e.Binding.Keys() {
+			if letter, ok := keys.CtrlLetter(k); ok {
+				out = append(out, keys.Twin{Letter: letter, Key: k, Word: strings.ToLower(e.TitleFor(c))})
+			}
+		}
+	}
+	return out
+}
+
+// leaderRuns is whether a chord of the leader map runs id.
+func (m Model) leaderRuns(id keys.BindingID) bool {
+	return slices.ContainsFunc(m.leaderBindings, func(b keys.LeaderBinding) bool { return b.ID == id })
+}
+
+// detailsSearchLineOpen is whether attached Details has a search line taking
+// the keys: the timeline's or the report's.
+func (m Model) detailsSearchLineOpen() bool {
+	return (m.list(m.shownList()).searching && m.timelineSearchLine()) || m.detailsReportSearchOpen()
+}
+
+// leaderOverPopup is the key of a command line that stands over an owner that takes only some of the chords:
+// Esc closes it, an offered chord runs, and any other chord is swallowed and
+// changes nothing. The filter text stays as it was.
+func (m Model) leaderOverPopup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys))) == keys.BindingCancelLeader {
+		return m.clearLeader(), nil
+	}
+	if len(m.leader.seq) == 0 {
+		for _, tw := range m.keysFacts(m.currentOwner()).Leader.Twins {
+			if tw.Letter == msg.String() {
+				// The comma form of a Ctrl key runs the entry the key runs.
+				return m.clearLeader().Update(pressedKey(tw.Key))
+			}
+		}
+	}
+	offered := m.commandsOver(m.currentOwner())
+	seq := append(append([]string{}, m.leader.seq...), msg.String())
+	outcome, id := m.leaderMap.Resolve(seq)
+	if outcome == keys.ResolvePrefix {
+		// The first key of a longer chord, none of which is offered here: it is
+		// taken with the rest, so no key of it reaches the filter.
+		m.leader.seq = seq
+		return m, nil
+	}
+	m = m.clearLeader()
+	if outcome != keys.ResolveAction || !slices.Contains(offered, id) {
+		return m, nil
+	}
+	tm, cmd, _ := m.runAction(id)
+	return tm, cmd
+}
+
 // updateLeaderKey handles the key after a pending leader. Every path here
 // consumes the key: a sequence that resolves to nothing must not fall through
 // to main mode, or a mistyped `,y` would step the chart a year.
 func (m Model) updateLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	return m.updateLeaderKeyAmong(msg, nil)
-}
-
-// updateLeaderKeyAmong is updateLeaderKey for an owner that takes only some of
-// the leader's chords: allowed, when set, names the ids that may run, and a
-// sequence that completes any other is swallowed like a mistyped one.
-func (m Model) updateLeaderKeyAmong(msg tea.KeyMsg, allowed func(keys.BindingID) bool) (tea.Model, tea.Cmd) {
 	if keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys))) == keys.BindingCancelLeader {
 		return m.clearLeader(), nil
 	}
@@ -154,9 +227,6 @@ func (m Model) updateLeaderKeyAmong(msg tea.KeyMsg, allowed func(keys.BindingID)
 	switch outcome, id := m.leaderMap.Resolve(seq); outcome {
 	case keys.ResolveAction:
 		m = m.clearLeader()
-		if allowed != nil && !allowed(id) {
-			return m, nil
-		}
 		// The Log's focus stays for the two chords that act on it; any other
 		// chord leaves it and runs from the screen it came from.
 		if m.logFocus.active && id != keys.BindingCopy && id != keys.BindingLogConsole {
@@ -167,20 +237,9 @@ func (m Model) updateLeaderKeyAmong(msg tea.KeyMsg, allowed func(keys.BindingID)
 		tm, cmd, _ := m.runAction(id)
 		return tm, cmd
 	case keys.ResolvePrefix:
-		m.leader.gen++
 		m.leader.seq = seq
-		return m, armLeaderTimeout(m.leader.gen, m.leaderTimeout)
+		return m, nil
 	default:
 		return m.clearLeader(), nil
 	}
-}
-
-// onLeaderTimeout retires a pending leader that waited too long: no action, no
-// Log line, nothing to see. A tick carrying any generation but the current one
-// belongs to a pending state that is already gone.
-func (m Model) onLeaderTimeout(msg leaderTimeoutMsg) (tea.Model, tea.Cmd) {
-	if !m.leader.pending || msg.gen != m.leader.gen {
-		return m, nil
-	}
-	return m.clearLeader(), nil
 }

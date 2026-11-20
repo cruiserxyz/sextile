@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -247,7 +248,7 @@ esac
 const sudoShim = "#!/usr/bin/env bash\necho sudo >> \"$FAKE_DOCKER_LOG.sudo\"\nexit 1\n"
 
 // tools the script may use besides docker.
-var toolNames = []string{"bash", "id", "mkdir", "mv", "mktemp", "chmod", "readlink", "grep", "git", "rm", "rmdir", "sleep", "head"}
+var toolNames = []string{"bash", "id", "mkdir", "mv", "mktemp", "chmod", "readlink", "grep", "git", "rm", "rmdir", "sleep", "head", "tr", "wc"}
 
 // wrapped tools can be made to fail: FAKE_TOOL_FAIL=mv, or =chmod for `chmod 600`.
 var wrappedTools = map[string]string{
@@ -1135,7 +1136,7 @@ func TestDaemonDenied(t *testing.T) {
 	r.setenv("FAKE_DOCKER_DENIED", "1")
 	res := r.run()
 	r.mustExit2(res)
-	contains(t, res.stderr, "cannot reach the Docker daemon")
+	contains(t, res.stderr, "Docker refuses your user account")
 	contains(t, res.stderr, "docker group")
 	contains(t, res.stderr, "Docker Desktop")
 	if _, err := os.Stat(r.log + ".sudo"); err == nil {
@@ -1186,7 +1187,7 @@ func TestRemoteContextRefused(t *testing.T) {
 	r.setenv("FAKE_DOCKER_IMAGE", "absent")
 	res := r.run("--charts-dir", r.mkdir("c"))
 	r.mustExit2(res)
-	contains(t, res.stderr, "local Docker")
+	contains(t, res.stderr, "needs Docker on this computer")
 	r.noBuildOrRun()
 
 	// DOCKER_HOST wins over the context.
@@ -1195,7 +1196,7 @@ func TestRemoteContextRefused(t *testing.T) {
 	r2.setenv("DOCKER_HOST", "ssh://user@elsewhere")
 	res = r2.run("--charts-dir", r2.mkdir("c"))
 	r2.mustExit2(res)
-	contains(t, res.stderr, "local Docker")
+	contains(t, res.stderr, "needs Docker on this computer")
 	r2.noBuildOrRun()
 
 	// ... and a local DOCKER_HOST passes over a remote context.
@@ -2694,7 +2695,7 @@ func TestDoctorArgs(t *testing.T) {
 
 // ------------------------------------------------------------- C22 to C22c
 
-var doctorNames = []string{"docker", "daemon", "endpoint", "image", "moons", "port", "wheel", "time zone", "charts folder", "config", "state", "other images"}
+var doctorNames = []string{"docker", "daemon", "endpoint", "image", "moons", "port", "wheel", "time zone", "charts folder", "charts folder position", "config", "state", "other images"}
 
 var doctorNativeNames = []string{"go", "astrolog", "astrolog files"}
 
@@ -2750,8 +2751,8 @@ func TestDoctorReportsStateFolders(t *testing.T) {
 	}
 	for _, want := range []string{
 		"session in ~/.local/state/sextile",
-		"preferences in " + r.defaultConfig(),
-		"backups in ~/.local/share/sextile/backup",
+		"settings in " + r.defaultConfig(),
+		"dated copies in ~/.local/share/sextile/backup",
 		"named sessions in ~/.local/share/sextile/sessions",
 	} {
 		if !strings.Contains(row, want) {
@@ -2769,7 +2770,7 @@ func TestDoctorReportsStateFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 	res = r2.run("doctor", "--port", strconv.Itoa(freePort(t)))
-	if res.code != 1 || !strings.Contains(res.stdout, "FAIL  state: "+r2.defaultState()+" is a symlink") {
+	if res.code != 1 || !strings.Contains(res.stdout, "FAIL  state: "+r2.defaultState()+" is a link") {
 		t.Fatalf("a symlinked state folder is a FAIL, exit 1; got exit %d\n%s", res.code, res.stdout)
 	}
 }
@@ -2993,7 +2994,7 @@ func codeBlocks(lines []string) [][]string {
 	return all
 }
 
-// The README's Install and run leads with the one-line installer, at the tag
+// The README's Install leads with the one-line installer, at the tag
 // scripts/install clones, then the command it writes, doctor first.
 func TestReadmeLeadsWithLauncher(t *testing.T) {
 	m := regexp.MustCompile(`(?m)^TAG=(v[0-9.]+)$`).FindStringSubmatch(repoFile(t, "scripts/install"))
@@ -3001,7 +3002,7 @@ func TestReadmeLeadsWithLauncher(t *testing.T) {
 		t.Fatal("scripts/install has no TAG= line")
 	}
 	url := "https://raw.githubusercontent.com/cruiserxyz/sextile/" + m[1] + "/scripts/install"
-	got := codeBlocks(section(t, repoFile(t, "README.md"), "Install and run"))
+	got := codeBlocks(section(t, repoFile(t, "README.md"), "Install"))
 	want := [][]string{
 		{"curl -fsSL " + url + " | sh"},
 		{"sextile doctor", "sextile"},
@@ -3630,4 +3631,72 @@ func TestMoonsUsageText(t *testing.T) {
 	contains(t, res.stdout, "--moons           put the planetary moons' files, about 240 MB, in the image from now on")
 	contains(t, res.stdout, "--no-moons        leave them out from now on")
 	contains(t, res.stdout, "SEXTILE_MOONS=1   (environment) for one run, the same as --moons. It is not remembered")
+}
+
+// The image gives Sextile a private cache in the container's own /tmp, which
+// the launcher mounts as a tmpfs: a --user with no home entry has HOME=/ and
+// could make none, and every chart read needs one. The cache is never in the
+// charts folder, and the launcher does not move it.
+func TestImageCarriesAPrivateCacheOutsideTheChartsFolder(t *testing.T) {
+	docker := repoFile(t, "Dockerfile")
+	final := docker[strings.LastIndex(docker, "\nFROM "):]
+	all := regexp.MustCompile(`(?m)^\s*(?:ENV\s+)?XDG_CACHE_HOME=(\S+)`).FindAllStringSubmatch(final, -1)
+	if all == nil {
+		t.Fatal("the image's final stage sets no XDG_CACHE_HOME")
+	}
+	cache := all[len(all)-1][1] // the last one set is the one in force
+	if cache = path.Clean(cache); !strings.HasPrefix(cache, "/tmp/") {
+		t.Errorf("XDG_CACHE_HOME=%s, want a folder under /tmp, never the charts folder", cache)
+	}
+	launcher := repoFile(t, "sextile")
+	if !strings.Contains(launcher, "--tmpfs /tmp\n") {
+		t.Error("the launcher no longer mounts /tmp as a tmpfs, where the image's cache lives")
+	}
+	if strings.Contains(launcher, "XDG_CACHE_HOME=/") || regexp.MustCompile(`-e "?XDG_CACHE_HOME`).MatchString(launcher) {
+		t.Error("the launcher passes its own XDG_CACHE_HOME into the container")
+	}
+}
+
+// The image builds from the module root's own files too: the program imports
+// the root package (license.go), and that file embeds LICENSE. Each is let into
+// the build context by .dockerignore, an allow-list, and copied by the
+// Dockerfile, or the Docker route fails to build at all.
+func TestTheImageBuildHasTheModuleRootFiles(t *testing.T) {
+	ents, err := os.ReadDir(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	embed := regexp.MustCompile(`(?m)^//go:embed (\S+)$`)
+	var need []string
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		need = append(need, name)
+		for _, m := range embed.FindAllStringSubmatch(repoFile(t, name), -1) {
+			need = append(need, m[1])
+		}
+	}
+	if len(need) == 0 {
+		t.Fatal("the module root has no Go file: this test reads nothing")
+	}
+	ignore, docker := repoFile(t, ".dockerignore"), repoFile(t, "Dockerfile")
+	copied := regexp.MustCompile(`(?m)^COPY ([^\n]+) \./$`)
+	var copies []string
+	for _, m := range copied.FindAllStringSubmatch(docker, -1) {
+		copies = append(copies, strings.Fields(m[1])...)
+	}
+	for _, f := range need {
+		if !strings.Contains(ignore, "!"+f+"\n") {
+			t.Errorf(".dockerignore does not let %s into the build context", f)
+		}
+		found := false
+		for _, c := range copies {
+			found = found || c == f
+		}
+		if !found {
+			t.Errorf("the Dockerfile does not COPY %s into the build", f)
+		}
+	}
 }

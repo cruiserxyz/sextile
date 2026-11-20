@@ -232,7 +232,7 @@ func (r *foreignRun) sameAs(t *testing.T, path, when string) {
 // foreignLine is the Log line a house or zodiac choice leaves in a run that
 // cannot save it.
 func foreignLine(label, what string) string {
-	return "session: " + label + "'s " + what + " for this run only"
+	return "session: " + label + "'s " + what + " kept until quit"
 }
 
 // T1
@@ -261,7 +261,7 @@ func TestForeignSessionSurvivesFrame(t *testing.T) {
 	m, cmd := r.m.chooseHouseSystem(0, recipe.Regiomontanus)
 	m = pump(t, m, cmd)
 	r.untouched(t, "after a house choice")
-	if n := logHas(m, foreignLine("Client One", "houses are")); n != 1 {
+	if n := logHas(m, foreignLine("Client One", "houses")); n != 1 {
 		t.Errorf("the house line appears %d times, want once: %+v", n, m.logLines)
 	}
 	if n := logHas(m, "tried again at quit"); n != 0 {
@@ -274,7 +274,7 @@ func TestForeignSessionSurvivesFrame(t *testing.T) {
 	m, cmd = m.chooseZodiac(0, recipe.FaganBradley)
 	m = pump(t, m, cmd)
 	r.untouched(t, "after a zodiac choice")
-	if n := logHas(m, foreignLine("Client One", "zodiac is")); n != 1 {
+	if n := logHas(m, foreignLine("Client One", "zodiac")); n != 1 {
 		t.Errorf("the zodiac line appears %d times, want once: %+v", n, m.logLines)
 	}
 
@@ -291,8 +291,8 @@ func TestForeignSessionSurvivesFrame(t *testing.T) {
 // T3
 func TestForeignRunSaysSo(t *testing.T) {
 	for _, tc := range []struct{ name, leader, spelled string }{
-		{"default leader", "", ",o"},
-		{"configured leader", `\`, `\o`},
+		{"default leader", "", ",O"},
+		{"configured leader", `\`, `\O`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := foreignLaunch(t, foreignOpt{tweak: func(p *ingest.StartupPerimeterReadMsg) {
@@ -301,8 +301,8 @@ func TestForeignRunSaysSo(t *testing.T) {
 				}
 			}})
 			want := []string{
-				"session: the saved session is another folder's and was not opened",
-				"session: this run is saved only by name (" + tc.spelled + ")",
+				"session: the last session belongs to another charts folder, it was not opened",
+				"session: these charts are not kept unless the session gets a name",
 			}
 			if got := sessionLines(r.m); !reflect.DeepEqual(got, want) {
 				t.Errorf("session lines = %q, want exactly %q", got, want)
@@ -350,8 +350,8 @@ func TestForeignRunNamedKeepsSaving(t *testing.T) {
 		t.Errorf("the quit did not write the named session:\n%s", got)
 	}
 	r.untouched(t, "after the quit")
-	if n := logHas(m, "for this run only"); n != 0 {
-		t.Errorf("a named run says its choices are for this run only (%d lines)", n)
+	if n := logHas(m, "kept only until you quit"); n != 0 {
+		t.Errorf("a named run says its choices are kept only until you quit (%d lines)", n)
 	}
 }
 
@@ -364,12 +364,12 @@ func TestForeignRunNamedThenNew(t *testing.T) {
 		t.Cleanup(store.ReleaseInstanceLock)
 		m = resetKey(t, m)
 		if m.named.running() {
-			t.Fatal("`, n` did not return to the unnamed session")
+			t.Fatal("the New row did not return to the unnamed session")
 		}
 		m, cmd := m.chooseHouseSystem(len(m.slots.All())-1, recipe.Regiomontanus)
 		m = pump(t, m, cmd)
 		r.untouched(t, "after a house choice back in the unnamed session")
-		if n := logHas(m, foreignLine("the floating chart", "houses are")); n != 1 {
+		if n := logHas(m, foreignLine("the floating chart", "houses")); n != 1 {
 			t.Errorf("the house line appears %d times, want once: %+v", n, m.logLines)
 		}
 		quitWindow(t, m)
@@ -390,7 +390,7 @@ func TestForeignRunNamedThenNew(t *testing.T) {
 		r.open(t)
 		file := otherSession(t, "Other work", "Client Zed")
 		m := openSessions(t, r.m)
-		m, _ = press(t, m, "down")
+		m, _ = press(t, m, "down", "down")
 		m, cmd := press(t, m, "enter")
 		if cmd == nil {
 			t.Fatal("Enter on a saved session started nothing")
@@ -473,7 +473,7 @@ func TestNoFolderSessionAsToday(t *testing.T) {
 	if n := r.m.slots.AnchoredCount(); n != 0 {
 		t.Errorf("a session naming no folder restored %d chart(s)", n)
 	}
-	want := "session: the saved session is another folder's and was not opened"
+	want := "session: the last session belongs to another charts folder, it was not opened"
 	if got := sessionLines(r.m); !reflect.DeepEqual(got, []string{want}) {
 		t.Errorf("session lines = %q, want exactly today's %q", got, want)
 	}
@@ -504,7 +504,7 @@ func TestForeignRenameProceeds(t *testing.T) {
 	}
 	t.Run("rename", func(t *testing.T) {
 		r, m, path := setup(t)
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, cmd := submit(t, m)
 		m, _ = finishRename(t, m, cmd)
 		if m.title.Refusal != "" {
 			t.Errorf("the rename was refused: %q", m.title.Refusal)
@@ -515,11 +515,7 @@ func TestForeignRenameProceeds(t *testing.T) {
 		if got := fileText(t, backupFile(path)); !strings.Contains(got, `"Client K"`) {
 			t.Errorf("the backup does not hold the chart as it was:\n%s", got)
 		}
-		fileNamesNoSystem(t, r.b, "K.as")
-		// The chart keeps its houses for this run, in the model.
-		if rec, ok := m.frames.find("K.as", false); !ok || rec.Houses != recipe.Koch || rec.From != store.FrameFromFile {
-			t.Errorf("record for K.as = %+v (found %v), want Koch from file", rec, ok)
-		}
+		fileKeepsItsSystem(t, r.b, "K.as")
 		if n := logHas(m, "Couldn't"); n != 0 {
 			t.Errorf("the rename said it could not: %+v", m.logLines)
 		}
@@ -529,29 +525,25 @@ func TestForeignRenameProceeds(t *testing.T) {
 	})
 	t.Run("failed rewrite", func(t *testing.T) {
 		r, m, path := setup(t)
-		// The file changes after the picker listed it: the rename is refused
-		// after the record was made, and the record is taken back.
+		// The file changes after the picker listed it: the rename is refused.
 		if err := os.WriteFile(path, []byte(kochChart("Client K", true)+"; changed\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, cmd := submit(t, m)
 		m, _ = finishRename(t, m, cmd)
 		if m.title.Refusal == "" {
 			t.Fatal("premise: the rename was not refused")
 		}
 		if _, ok := m.frames.find("K.as", false); ok {
-			t.Error("the failed rename left its record in the model")
-		}
-		if n := logHas(m, "Couldn't restore the session"); n != 0 {
-			t.Errorf("a run with no session of its own tried to put one back (%d lines)", n)
+			t.Error("the failed rename left a record in the model")
 		}
 		r.untouched(t, "after the failed rename")
 	})
 }
 
 // Save defaults freezes the frames of the charts open at the keypress into the
-// session: a run that never saves the general session says so on the error
-// lane, as it does for any write that did not happen.
+// session. A run that never saves the general session keeps nothing of its
+// charts, which its start already said, so Save defaults adds no line about it.
 func TestForeignSaveDefaultsKeepsNothing(t *testing.T) {
 	r := foreignLaunch(t, foreignOpt{})
 	r.open(t)
@@ -562,9 +554,17 @@ func TestForeignSaveDefaultsKeepsNothing(t *testing.T) {
 	msg := DefaultCitySavedMsg{Place: berlinP, FrameSaved: true, Frame: "Whole Sign, tropical", Open: open}
 	m, _ := applyDefaultCitySaved(r.m, msg)
 	r.untouched(t, "after Save defaults")
-	want := "open charts' frames not kept: the saved session is another folder's"
-	if n := logHas(m, want); n != 1 {
-		t.Errorf("the line %q appears %d times, want once: %+v", want, n, m.logLines)
+	for _, l := range m.logLines {
+		if l.lane == laneError || strings.Contains(l.text, "open charts") {
+			t.Errorf("Save defaults in a run of another folder's session wrote %q", l.text)
+		}
+	}
+	saidSaved := false
+	for _, l := range m.logLines {
+		saidSaved = saidSaved || strings.HasPrefix(l.text, "defaults: ")
+	}
+	if !saidSaved {
+		t.Errorf("the saved default is not in the Log: %+v", m.logLines)
 	}
 
 	// Premise: without the mark the same save writes the frames.
@@ -581,7 +581,7 @@ func TestForeignSaveDefaultsKeepsNothing(t *testing.T) {
 // real read of real files, then attempts the writes a run makes (an immediate
 // write and the quit) and compares the files that must survive.
 func TestForeignMarkOnlyWhereSpecified(t *testing.T) {
-	const otherFolder = "session: the saved session is another folder's and was not opened"
+	const otherFolder = "session: the last session belongs to another charts folder, it was not opened"
 	t.Run("a refused file moved aside", func(t *testing.T) {
 		r := foreignLaunch(t, foreignOpt{refuse: true})
 		asides, err := filepath.Glob(r.path + ".refused-*")
@@ -595,7 +595,7 @@ func TestForeignMarkOnlyWhereSpecified(t *testing.T) {
 		if r.m.sessionForeign {
 			t.Error("a refused file the read moved aside marked the run")
 		}
-		for _, want := range []string{otherFolder, "session: refused, kept " + filepath.Base(aside)} {
+		for _, want := range []string{otherFolder, "session: unreadable, kept " + filepath.Base(aside)} {
 			if n := logHas(r.m, want); n != 1 {
 				t.Errorf("%q appears %d times, want once: %+v", want, n, r.m.logLines)
 			}
@@ -695,20 +695,20 @@ func TestForeignMarkOnlyWhereSpecified(t *testing.T) {
 		m, cmd := r.m.chooseHouseSystem(0, recipe.Regiomontanus)
 		m = pump(t, m, cmd)
 		r.untouched(t, "after a house choice")
-		// `, n` returns to the general session. This run never read it, so it is
+		// the New row returns to the general session. This run never read it, so it is
 		// not marked, and the run writes it as before.
 		t.Cleanup(store.ReleaseInstanceLock)
 		m = resetKey(t, m)
 		if m.named.running() {
-			t.Fatal("`, n` did not return to the unnamed session")
+			t.Fatal("the New row did not return to the unnamed session")
 		}
 		m, cmd = m.chooseHouseSystem(len(m.slots.All())-1, recipe.Regiomontanus)
 		m = pump(t, m, cmd)
 		if g, ok, err := store.LoadSession(); err != nil || !ok || g.Folder != store.FolderID(b) {
 			t.Errorf("the unnamed session was not written for B: %+v ok %v err %v", g, ok, err)
 		}
-		if n := logHas(m, "for this run only"); n != 0 {
-			t.Errorf("a run that saves says its choices are for this run only (%d lines)", n)
+		if n := logHas(m, "kept only until you quit"); n != 0 {
+			t.Errorf("a run that saves says its choices are kept only until you quit (%d lines)", n)
 		}
 		quitWindow(t, m)
 		r.untouched(t, "after the quit")
@@ -729,7 +729,7 @@ func TestForeignMarkOnlyWhereSpecified(t *testing.T) {
 }
 
 // T9. A --session launch never reads the general session, so the launch's
-// mark (R1) cannot judge it. When `, n` leaves the named session, the run
+// mark (R1) cannot judge it. When the New row leaves the named session, the run
 // returns to a general session it has not met: it reads that file once, as a
 // launch does (R6), and one that names another charts folder is never written,
 // by the immediate write of a house choice or by the quit.
@@ -739,18 +739,18 @@ func TestForeignAfterNamedLaunchThenNew(t *testing.T) {
 		t.Cleanup(store.ReleaseInstanceLock)
 		m := resetKey(t, r.m)
 		if m.named.running() {
-			t.Fatal("`, n` did not return to the unnamed session")
+			t.Fatal("the New row did not return to the unnamed session")
 		}
 		if !m.sessionForeign {
-			t.Error("`, n` after a --session launch did not mark the run over A's general session")
+			t.Error("the New row after a --session launch did not mark the run over A's general session")
 		}
-		if n := logHas(m, "saved only by name"); n != 1 {
+		if n := logHas(m, "not kept unless the session gets a name"); n != 1 {
 			t.Errorf("the saved-only-by-name line appears %d times, want once: %+v", n, m.logLines)
 		}
 		m, cmd := m.chooseHouseSystem(len(m.slots.All())-1, recipe.Regiomontanus)
 		m = pump(t, m, cmd)
 		r.untouched(t, "after a house choice back in the unnamed session")
-		if n := logHas(m, foreignLine("the floating chart", "houses are")); n != 1 {
+		if n := logHas(m, foreignLine("the floating chart", "houses")); n != 1 {
 			t.Errorf("the house line appears %d times, want once: %+v", n, m.logLines)
 		}
 		quitWindow(t, m)
@@ -761,9 +761,9 @@ func TestForeignAfterNamedLaunchThenNew(t *testing.T) {
 		t.Cleanup(store.ReleaseInstanceLock)
 		m := resetKey(t, r.m)
 		if m.sessionForeign {
-			t.Error("`, n` over this folder's own general session marked the run")
+			t.Error("the New row over this folder's own general session marked the run")
 		}
-		if n := logHas(m, "saved only by name"); n != 0 {
+		if n := logHas(m, "not kept unless the session gets a name"); n != 0 {
 			t.Errorf("a run that saves says it is saved only by name (%d lines)", n)
 		}
 		quitWindow(t, m)
@@ -774,7 +774,7 @@ func TestForeignAfterNamedLaunchThenNew(t *testing.T) {
 }
 
 // T9, the other window (review 2026-11-07, finding 1): a window that does not
-// own the general session keeps nothing, so it reads nothing at `, n`
+// own the general session keeps nothing, so it reads nothing at the New row
 // either: the read can move a refused file aside, and that is the owner's to
 // do. A's refused file stays in place, with no kept copy beside it.
 func TestForeignAfterNamedLaunchOtherWindowReadsNothing(t *testing.T) {
@@ -785,12 +785,12 @@ func TestForeignAfterNamedLaunchOtherWindowReadsNothing(t *testing.T) {
 	t.Cleanup(store.ReleaseInstanceLock)
 	m := resetKey(t, r.m)
 	if m.named.running() || !m.cfg.SecondWindow {
-		t.Fatalf("`, n` did not return to the unnamed session as a second window (named %v, second %v)", m.named.running(), m.cfg.SecondWindow)
+		t.Fatalf("the New row did not return to the unnamed session as a second window (named %v, second %v)", m.named.running(), m.cfg.SecondWindow)
 	}
 	if m.sessionForeign {
 		t.Error("a window that owns nothing marked the run")
 	}
-	r.untouched(t, "after `, n` in a window that owns nothing")
+	r.untouched(t, "after the New row in a window that owns nothing")
 	entries, err := os.ReadDir(filepath.Dir(r.path))
 	if err != nil {
 		t.Fatal(err)

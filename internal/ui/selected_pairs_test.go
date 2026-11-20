@@ -39,7 +39,7 @@ func selectedSet(t *testing.T, anchored int, nowSelected bool, cursor int) Model
 	m.slots.SetSlotSelected(anchored, nowSelected)
 	m.base = nil
 	// Details needs room beside the grown left column (the specification
-	// C5: the left column is 52 + 12 per extra chart shown), so the fixture
+	// C5: the left column is 65 + 12 per extra chart shown), so the fixture
 	// is as wide as its set needs.
 	m.width = max(m.width, dualColumnMinWidth(len(m.slots.SelectedInOrder())))
 	// The cursor's own tab is pre-selected on arrival (C1a).
@@ -101,11 +101,11 @@ func wantNowStrip(tc nowCase, color bool) (titles []string, ids []TabID, active 
 	active = 0
 	if len(titles) == 1 {
 		// A one-tab strip is the plain title (an anchored chart beside now alone).
-		return titles, ids, active, "[3] Aspects"
+		return titles, ids, active, "[4] Aspects"
 	}
 	parts := append([]string(nil), titles...)
 	parts[active] = "[" + parts[active] + "]"
-	return titles, ids, active, "[3] " + strings.Join(parts, " - ")
+	return titles, ids, active, "[4] " + strings.Join(parts, " - ")
 }
 
 func nowCaseModel(t *testing.T, tc nowCase) Model {
@@ -284,7 +284,9 @@ func stubPairCompute(t *testing.T) *pairCalls {
 			calls.mu.Unlock()
 			return lookup.OverlayAspects{Report: fmt.Sprintf("transit %d x now", c.When.Year())}, nil
 		}
-		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
+			when := other.When
+			place := other.Place
 			calls.mu.Lock()
 			calls.synastry = append(calls.synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
 			calls.mu.Unlock()
@@ -356,7 +358,7 @@ func TestAspectsTabIsTheCursorsChart(t *testing.T) {
 			if got := m.activeTabID(PanelAspects); got != TabAspects {
 				t.Errorf("%s: cursor %d (numeral %d): active tab %q, want the chart's own", why, m.cursorIdx, numeral, got)
 			}
-			if !strings.Contains(line, "[Aspects]") && !strings.Contains(line, "[3] Aspects") {
+			if !strings.Contains(line, "[Aspects]") && !strings.Contains(line, "[4] Aspects") {
 				t.Errorf("%s: cursor %d: title %q does not mark the own tab active", why, m.cursorIdx, line)
 			}
 			if m.chart.crossAspectsReport != "" || len(m.chart.crossAspects) != 0 {
@@ -744,8 +746,8 @@ func TestAspectsPairBaselineWithNowIsTodaysTransit(t *testing.T) {
 
 	// The frame band, the reform-date pin (the specification C6), the clock pins
 	// (the specification C1), then the chooser band.
-	pins := []string{"-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd"} // the reform-date pin, then the clock's
-	band := []string{"-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "-Yn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28"}
+	pins := []string{"-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "_Yn", "_Ynn"} // the reform-date pin, the clock's pins, then the mean-node setting the probe carries
+	band := []string{"-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "_Yn", "_Ynn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28"}
 	cat := func(parts ...[]string) []string {
 		var out []string
 		for _, p := range parts {
@@ -792,7 +794,7 @@ func TestAspectsAloneWhenSingle(t *testing.T) {
 		t.Errorf("unselected cursor: compute mode %d, want that chart alone", mode)
 	}
 	m.width, m.height = 132, 40
-	if view := ansi.Strip(m.View()); strings.Contains(view, " vs ") || !strings.Contains(view, "[3] Aspects") {
+	if view := ansi.Strip(m.View()); strings.Contains(view, " vs ") || !strings.Contains(view, "[4] Aspects") {
 		t.Errorf("unselected cursor: the Aspects panel is not single:\n%s", view)
 	}
 
@@ -819,7 +821,9 @@ func stubSynastryBodyReports(t *testing.T) *[]crossBodyCall {
 	t.Helper()
 	calls := []crossBodyCall{}
 	stubSpawns(t, func(s *rowSpawns) {
-		s.reports.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel, body aspect.Object) (string, string, error) {
+		s.reports.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, other store.AnchorChart, body aspect.Object) (string, string, error) {
+			when := other.When
+			place := other.Place
 			calls = append(calls, crossBodyCall{natal: natal, when: when, place: place, body: body})
 			return "synastry raw", "", nil
 		}
@@ -930,7 +934,7 @@ func TestDetailsFollowsThePair(t *testing.T) {
 }
 
 // C14: a selected slot's marker in the Chart panel is its numeral, in list
-// order; an unselected slot's cell stays blank; ⌃k swaps numerals with their
+// order; an unselected slot's cell stays blank; K swaps numerals with their
 // charts. ①–⑥ in Unicode mode, `1`–`6` in ASCII mode.
 func TestSelectedRowsShowTheirNumeral(t *testing.T) {
 	markers := func(m Model, cfg Config) []string {
@@ -963,18 +967,18 @@ func TestSelectedRowsShowTheirNumeral(t *testing.T) {
 		}
 	}
 
-	// ⌃k the 3rd above the 2nd: it now precedes the 2nd (still after the 1st
+	// K the 3rd above the 2nd: it now precedes the 2nd (still after the 1st
 	// in list order): the numerals follow list order, not selection order.
 	m.cursorIdx = 2
 	m.focused = PanelChart
-	m = send(t, m, keyCtrlK) // list: 1st, 3rd, 2nd, 4th, now
-	m = send(t, m, keyCtrlK) // list: 3rd, 1st, 2nd, 4th, now
+	m = send(t, m, keyMoveUp) // list: 1st, 3rd, 2nd, 4th, now
+	m = send(t, m, keyMoveUp) // list: 3rd, 1st, 2nd, 4th, now
 	all := m.slots.All()
 	if all[0].Chart.Name != "Synthetic 3" || all[1].Chart.Name != "Synthetic 1" {
 		t.Fatalf("fixture: list order is %v", order(m))
 	}
 	if got, want := markers(m, Config{Accessible: true, Color: ColorNever}), []string{"1", "2", " ", " ", "3"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("after ⌃k: markers %q, want %q (the 3rd and the 1st swapped)", got, want)
+		t.Errorf("after K: markers %q, want %q (the 3rd and the 1st swapped)", got, want)
 	}
 	// And the selection mark ● never appears on a Chart row.
 	if body := chartSlotsBody(m.slots, 0, true, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, 100, Config{Color: ColorNever}); strings.Contains(body, menu.RowSelectionUnicode) || strings.Contains(body, menu.RowSelectionASCII) {
@@ -1027,9 +1031,9 @@ func TestAspectsPairTabsFrames(t *testing.T) {
 				Positions:     fullChartPositions(),
 				CrossSynastry: true,
 				CrossAspects: []lookup.OverlayAspect{
-					{NatalObject: objSun, TransitObject: objMoon, Kind: aspect.Square, Orb: 0.5, Power: 9},
-					{NatalObject: objVenus, TransitObject: objJupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
-					{NatalObject: objMars, TransitObject: objSaturn, Kind: aspect.Opposition, Orb: 10.2, Power: 3},
+					{NatalObject: objSun, TransitObject: objMoon, Kind: kindOf("Squ"), Orb: 0.5, Power: 9},
+					{NatalObject: objVenus, TransitObject: objJupiter, Kind: kindOf("Tri"), Orb: 1.4, Power: 6},
+					{NatalObject: objMars, TransitObject: objSaturn, Kind: kindOf("Opp"), Orb: 10.2, Power: 3},
 				},
 			})
 			m = withSceneColumns(m)

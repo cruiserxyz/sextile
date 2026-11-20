@@ -58,6 +58,7 @@ func nextMonth(m Model) (Model, tea.Cmd) {
 // the report exactly as it does detached: the previous text stays as drawn
 // until the new report commits (a tap never greys, try of 2026-10-24).
 func TestAttachedReportTabRefreshesLikeDetached(t *testing.T) {
+	twoTabs(t)
 	forceColor(t)
 	spawns := reportSpawns(t)
 	m, _ := enteredFixture(t, 2, true, Config{Color: ColorAlways})
@@ -87,6 +88,7 @@ func TestAttachedReportTabRefreshesLikeDetached(t *testing.T) {
 // Acceptance 2: with the timeline tab active, attached or not, a change of
 // moment starts no report; choosing the report tab then requests one, once.
 func TestHiddenReportAsksOnlyWhenChosen(t *testing.T) {
+	twoTabs(t)
 	for _, attached := range []bool{true, false} {
 		freshModels(t)
 		spawns := reportSpawns(t)
@@ -116,6 +118,7 @@ func TestHiddenReportAsksOnlyWhenChosen(t *testing.T) {
 // search; choosing the timeline tab runs it when its inputs differ from the
 // last list's.
 func TestTimelineSearchesOnlyWhileItsTabIsActive(t *testing.T) {
+	twoTabs(t)
 	calls := stubTimeline(t, monthRows(t))
 	stubTextCompute(t)
 	m := loadedTimeline(t, Config{Accessible: true})
@@ -367,7 +370,7 @@ func TestFailedSearchRemovesTheDimmedList(t *testing.T) {
 	m = pump(t, m, cmd)
 	got := 0
 	for _, l := range m.logLines {
-		if l.lane == laneError && strings.HasPrefix(l.text, "Couldn't read the timeline.") {
+		if l.lane == laneError && strings.HasPrefix(l.text, "timeline: the timeline not read") {
 			got++
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -24,7 +25,8 @@ const repoURL = "https://github.com/cruiserxyz/sextile.git"
 
 // tag is the release scripts/install clones, read from its TAG= line, so a
 // release bumps the script and these tests follow; I1-5 ties that line to
-// CHANGELOG.md's newest dated section.
+// CHANGELOG.md's newest dated section, or the pending one while its release is
+// prepared.
 var tag = func() string {
 	b, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install"))
 	if err != nil {
@@ -843,6 +845,9 @@ func TestInstallNotesTheOldClone(t *testing.T) {
 
 var datedHeading = regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}\s*$`)
 
+// pendingHeading is the one section whose release is being prepared.
+var pendingHeading = regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+)\] - unreleased\s*$`)
+
 // newestDated is the highest version among the dated headings, wherever they
 // sit in the file.
 func newestDated(changelog string) []string {
@@ -858,7 +863,7 @@ func newestDated(changelog string) []string {
 	return best
 }
 
-func TestInstallTagIsTheNewestDatedChangelogSection(t *testing.T) {
+func TestInstallTagIsTheNewestOrPendingChangelogSection(t *testing.T) {
 	changelog := repoFile(t, "CHANGELOG.md")
 	m := newestDated(changelog)
 	if m == nil {
@@ -869,8 +874,12 @@ func TestInstallTagIsTheNewestDatedChangelogSection(t *testing.T) {
 	}
 	script := repoFile(t, "scripts/install")
 	got := regexp.MustCompile(`(?m)^TAG=(\S+)$`).FindStringSubmatch(script)
-	if got == nil || got[1] != "v"+m[1] {
-		t.Fatalf("scripts/install says TAG=%v; CHANGELOG.md's newest dated section is %s, so a release bumps the installer", got, "v"+m[1])
+	allowed := []string{"v" + m[1]}
+	if p := pendingHeading.FindStringSubmatch(changelog); p != nil {
+		allowed = append(allowed, "v"+p[1])
+	}
+	if got == nil || !slices.Contains(allowed, got[1]) {
+		t.Fatalf("scripts/install says TAG=%v; CHANGELOG.md's newest dated or pending section is one of %v, so a release bumps the installer", got, allowed)
 	}
 	if got[1] != tag {
 		t.Fatalf("these tests expect %s, scripts/install and CHANGELOG.md say %s: update the tests with the release", tag, got[1])
@@ -882,6 +891,12 @@ func TestInstallTagIsTheNewestDatedChangelogSection(t *testing.T) {
 	}
 	if n := strings.Count(repoFile(t, "README.md"), want); n != 1 {
 		t.Fatalf("README.md shows %s %d times, want 1 (the one-liner)", want, n)
+	}
+	// Every version the installer names, its comments included, is the tag.
+	for _, v := range regexp.MustCompile(`v\d+\.\d+\.\d+`).FindAllString(script, -1) {
+		if v != got[1] {
+			t.Errorf("scripts/install names %s beside TAG=%s: a release moves every one", v, got[1])
+		}
 	}
 }
 

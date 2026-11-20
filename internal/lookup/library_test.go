@@ -36,8 +36,8 @@ func writeChartFile(t *testing.T, dir, name, body string) {
 	}
 }
 
-// A .as is translated through astrolog (authoritative UT) and the atlas
-// (real country + IANA tz + canonical city), exercising the full an earlier change seam.
+// A .as lists from its own text, and its moment comes from Astrolog at the
+// pick.
 func TestLoadChartLibrary_TranslatesChartFile(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "munich.as", munichChart)
@@ -70,13 +70,9 @@ func TestLoadChartLibrary_TranslatesChartFile(t *testing.T) {
 	if want := time.Date(1995, 9, 23, 16, 0, 0, 0, time.UTC); !when.Equal(want) {
 		t.Errorf("resolved moment = %v, want %v (astrolog UT)", when, want)
 	}
-	// Country + tz borrowed from the nearest atlas city (Munich); precise
-	// coordinates kept from the .as.
-	if c.Place.Country != "DE" {
-		t.Errorf("Country = %q, want DE (from atlas)", c.Place.Country)
-	}
-	if c.Place.TZ != "Europe/Berlin" {
-		t.Errorf("TZ = %q, want Europe/Berlin (from atlas)", c.Place.TZ)
+	// The place is the file's own, with no zone: the file's record casts it.
+	if c.Place.Display() != "Munich, Germany" || c.Place.TZ != "" {
+		t.Errorf("Place = %+v, want the file's \"Munich, Germany\" and no zone", c.Place)
 	}
 	if c.Place.Lon < 11.5 || c.Place.Lon > 11.6 {
 		t.Errorf("Lon = %v, want the .as's precise ~11.567", c.Place.Lon)
@@ -156,8 +152,9 @@ func TestLoadChartLibrary_MissingDirIsEmpty(t *testing.T) {
 	}
 }
 
-// a .as astrolog cannot read is named rather than silently missing.
-func TestLoadChartLibrary_NamesUnreadableChartFile(t *testing.T) {
+// A .as whose text Sextile cannot read still lists: whether it is a chart is
+// Astrolog's to say, and the pick says why it is not.
+func TestLoadChartLibrary_ListsAChartFileAndThePickSaysWhy(t *testing.T) {
 	dir := useLibraryDir(t)
 	writeChartFile(t, dir, "junk.as", "@AI780\nthis is not an astrolog chart\n")
 	writeChartFile(t, dir, "good.as", munichChart)
@@ -166,52 +163,21 @@ func TestLoadChartLibrary_NamesUnreadableChartFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lib.Charts) != 1 || lib.Charts[0].Name != "Test Person" {
-		t.Errorf("want only the valid chart, got %v", lib.Charts)
+	if len(lib.Charts) != 2 || len(lib.Drops) != 0 {
+		t.Fatalf("want both files listed, got %v (drops %+v)", chartNames(lib.Charts), lib.Drops)
 	}
-	if len(lib.Drops) != 1 {
-		t.Fatalf("want the unreadable .as named, got %d: %+v", len(lib.Drops), lib.Drops)
-	}
-	if lib.Drops[0].File != "junk.as" {
-		t.Errorf("drop names %q, want junk.as", lib.Drops[0].File)
-	}
-	if lib.Drops[0].Reason == "" {
-		t.Error("a named drop must carry a reason")
-	}
-	if lib.AtlasErr != nil {
-		t.Errorf("the atlas was available; AtlasErr should be nil, got %v", lib.AtlasErr)
-	}
-}
-
-// Without the atlas there is no timezone to give a .as, so every one of them
-// drops. the contract is that each is still named, and that the shared
-// cause comes back once — the picker puts it on the error lane.
-func TestLoadChartLibrary_NoAtlasNamesEveryChartFileAndReportsTheCauseOnce(t *testing.T) {
-	dir := useLibraryDir(t)
-	t.Setenv("SEXTILE_ATLAS_PATH", filepath.Join(t.TempDir(), "no-atlas-here.as"))
-	writeChartFile(t, dir, "one.as", munichChart)
-	writeChartFile(t, dir, "two.as", munichChart)
-
-	lib, err := LoadChartLibrary()
-	if err != nil {
-		t.Fatalf("a missing atlas must not fail the whole read: %v", err)
-	}
-	if lib.AtlasErr == nil {
-		t.Fatal("a missing atlas must come back as AtlasErr, not as silence")
-	}
-	if len(lib.Charts) != 0 {
-		t.Errorf("a .as cannot list without the atlas, got %v", lib.Charts)
-	}
-	if len(lib.Drops) != 2 {
-		t.Fatalf("want both .as files named, got %d: %+v", len(lib.Drops), lib.Drops)
-	}
-	for _, d := range lib.Drops {
-		if !strings.Contains(d.Reason, "place list") {
-			t.Errorf("%s reason = %q, want it to blame the missing place list", d.File, d.Reason)
+	for _, c := range lib.Charts {
+		if c.Source.File != "junk.as" {
+			continue
 		}
-	}
-	if lib.Drops[0].File != "one.as" || lib.Drops[1].File != "two.as" {
-		t.Errorf("drops should be sorted by filename, got %+v", lib.Drops)
+		if c.Month != 0 || c.Place.Name != "" {
+			t.Errorf("junk.as lists a date or place it does not state: %+v", c)
+		}
+		// Astrolog runs a bare word in a chart file as a switch, so the guard
+		// refuses the file and names the word.
+		if _, err := ResolvePickedChart(context.Background(), c); err == nil || !strings.Contains(err.Error(), `"this"`) {
+			t.Errorf("the pick of junk.as says %v, want a refusal naming \"this\"", err)
+		}
 	}
 }
 
@@ -236,7 +202,7 @@ func TestLoadChartLibrary_CarriesYAMLDropsThrough(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "broken.yaml"), []byte("nothing: useful\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeChartFile(t, dir, "junk.as", "@AI780\nnot a chart\n")
+	writeChartFile(t, dir, "---.as", munichChart)
 
 	lib, err := LoadChartLibrary()
 	if err != nil {
@@ -245,10 +211,10 @@ func TestLoadChartLibrary_CarriesYAMLDropsThrough(t *testing.T) {
 	if len(lib.Drops) != 2 {
 		t.Fatalf("want the YAML and the .as both named, got %+v", lib.Drops)
 	}
-	if lib.Drops[0].File != "broken.yaml" || lib.Drops[1].File != "junk.as" {
+	if lib.Drops[0].File != "---.as" || lib.Drops[1].File != "broken.yaml" {
 		t.Errorf("both kinds should be in one filename-sorted list, got %+v", lib.Drops)
 	}
-	if lib.Drops[0].Reason != "YAML charts are no longer read" {
-		t.Errorf("the .yaml reason = %q, want it to say YAML charts are no longer read", lib.Drops[0].Reason)
+	if lib.Drops[1].Reason != "Sextile no longer reads charts in the old .yaml form" {
+		t.Errorf("the .yaml reason = %q, want it to say Sextile no longer reads charts in the old .yaml form", lib.Drops[0].Reason)
 	}
 }

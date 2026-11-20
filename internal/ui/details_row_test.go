@@ -136,7 +136,7 @@ func TestDetailsRunLogTranscript(t *testing.T) {
 		want []string
 	}{
 		{false, []string{"astrolog -x"}},
-		{true, []string{"astrolog -x", "Couldn't read the full report. Press ,l l for what Astrolog ran."}},
+		{true, []string{"astrolog -x", "details: report not read, Astrolog returned nothing usable"}},
 	}
 	for _, c := range cases {
 		got := detailsRunLog(t, c.fail)

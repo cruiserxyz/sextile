@@ -84,17 +84,17 @@ func TestZodiacFinderKeys(t *testing.T) {
 			}
 		}
 	})
-	t.Run("Help lists both, the key bar neither", func(t *testing.T) {
+	t.Run("Help lists the Ctrl key, the key bar neither", func(t *testing.T) {
 		m := finderModel(t, 2, 0)
 		var key, seq bool
-		for _, l := range m.helpLines() {
+		for _, l := range keybindingLines(m) {
 			if strings.Contains(l.Text, "Choose zodiac") {
-				key = key || strings.Contains(l.Text, "⌃z")
-				seq = seq || strings.Contains(l.Text, ",z")
+				key = key || strings.Contains(l.Text, "<ctrl+z>")
+				seq = seq || strings.HasSuffix(l.Text, "  z")
 			}
 		}
-		if !key || !seq {
-			t.Errorf("Help lists ctrl+z = %v and the leader sequence = %v", key, seq)
+		if !key || seq {
+			t.Errorf("Help lists ctrl+z = %v and its bare letter = %v, want only ctrl+z", key, seq)
 		}
 		for _, e := range m.keyBarEntries() {
 			if e.Bar && (e.ID == keys.BindingZodiac || e.Binding.Help().Desc == "Choose zodiac") {
@@ -270,17 +270,17 @@ func TestZodiacFinderDoesNotStealOtherOwners(t *testing.T) {
 	t.Run("help", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
 		m, _ = press(t, m, "?")
-		if !m.helpOpen {
+		if !m.keybindingsOpen {
 			t.Fatal("setup: help did not open")
 		}
 		m, _ = tpress(t, m, keyCtrlZ)
-		if m.startup == startupZodiacOpen || !m.helpOpen {
-			t.Errorf("ctrl+z over help: startup %q, help open %v", m.startup, m.helpOpen)
+		if m.startup == startupZodiacOpen || !m.keybindingsOpen {
+			t.Errorf("ctrl+z over help: startup %q, help open %v", m.startup, m.keybindingsOpen)
 		}
 	})
 	t.Run("console", func(t *testing.T) {
 		m := finderModel(t, 1, 0)
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		if !m.console.open {
 			t.Fatal("setup: console did not open")
 		}

@@ -27,7 +27,7 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 	// the first drawn cell is the strongest entry.
 	check := func(step string, m Model, want, strongest string) {
 		t.Helper()
-		m.width, m.height = 132, 40
+		m.width, m.height = max(132, dualColumnMinWidth(m.shownCount())), 40
 		_, aspects := leftPanels(t, m.View())
 		drawn := []string{}
 		for _, ln := range aspects {
@@ -62,9 +62,9 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 		s.cast.overlay = func(_ context.Context, _ lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
 			var list []lookup.OverlayAspect
 			for i := 0; i < 39; i++ {
-				list = append(list, lookup.OverlayAspect{TransitObject: bodies[i%8], NatalObject: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+				list = append(list, lookup.OverlayAspect{TransitObject: bodies[i%8], NatalObject: bodies[(i+3)%8], Kind: kindOf("Squ"), Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
 			}
-			list = append(list, lookup.OverlayAspect{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0, Power: 1})
+			list = append(list, lookup.OverlayAspect{TransitObject: objSun, NatalObject: objVenus, Kind: kindOf("Opp"), Orb: 0, Power: 1})
 			return lookup.OverlayAspects{Aspects: list}, nil
 		}
 	})
@@ -73,7 +73,7 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 		t.Fatalf("fixture: the Aspects tab is %q, want 3 in 2", got)
 	}
 	// A cross cell reads transit first, as the row does (operator, 2026-11-06).
-	check("cross list", m, panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus), panel.BodyGlyph(objMoon)+" "+panel.AspectGlyph(aspect.Square)+" "+panel.BodyGlyph(objSaturn))
+	check("cross list", m, panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(kindOf("Opp"))+" "+panel.BodyGlyph(objVenus), panel.BodyGlyph(objMoon)+" "+panel.AspectGlyph(kindOf("Squ"))+" "+panel.BodyGlyph(objSaturn))
 
 	// A sky row (Moon trine Mars) on the Aspects tab: 39 stronger own aspects,
 	// the row's trine at the lowest power.
@@ -87,9 +87,9 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 			res, err := inner(ctx, p, when, place, lens)
 			var list []aspect.Aspect
 			for i := 0; i < 39; i++ {
-				list = append(list, aspect.Aspect{AObject: bodies[i%8], BObject: bodies[(i+3)%8], Kind: aspect.Square, Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
+				list = append(list, aspect.Aspect{AObject: bodies[i%8], BObject: bodies[(i+3)%8], Kind: kindOf("Squ"), Orb: aspect.Orb(1 + i%5), Power: 50 - float64(i)})
 			}
-			list = append(list, aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: aspect.Trine, Orb: 0, Power: 1})
+			list = append(list, aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: kindOf("Tri"), Orb: 0, Power: 1})
 			res.Aspects = list
 			return res, err
 		}
@@ -98,5 +98,5 @@ func TestEnteredAspectCellIsKeptInView(t *testing.T) {
 	if got := activeAspectsTitle(m); got != "Aspects" {
 		t.Fatalf("fixture: the Aspects tab is %q, want Aspects", got)
 	}
-	check("own list", m, glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Trine)+" "+glyphs(objMars), glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Square)+" "+glyphs(objSaturn))
+	check("own list", m, glyphs(objMoon)+" "+panel.AspectGlyph(kindOf("Tri"))+" "+glyphs(objMars), glyphs(objMoon)+" "+panel.AspectGlyph(kindOf("Squ"))+" "+glyphs(objSaturn))
 }

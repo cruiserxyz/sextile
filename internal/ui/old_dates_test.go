@@ -29,7 +29,8 @@ import (
 // binary (`astrolog -qj <jd> -zZ <zone> 0 -v`, 2026-10-11, Astrolog 8.00) and
 // written here as literals. unix is the instant; the zone is the fixed zone of
 // tz. Astrolog names a day before 15 Oct 1582 in the Julian calendar, and
-// inside the 1582 window it is asked for no zone, so the row shows UT.
+// inside the 1582 window it is asked for no zone, so the row shows the clock
+// in UT, whose offset is +0.
 type oldCase struct {
 	name         string
 	unix         int64
@@ -41,13 +42,13 @@ type oldCase struct {
 }
 
 var oldCases = []oldCase{
-	{"1571", -12559271400, "Etc/GMT-1", "+01", "Thu", "Dec", 27, 1571, 2, 30, true, false},
-	{"5 Oct 1582 (Julian)", -12219274800, "Etc/GMT-1", "+01", "Fri", "Oct", 5, 1582, 6, 0, true, false},
-	{"the first Gregorian header", -12218359680, "Etc/GMT-1", "+01", "Mon", "Oct", 25, 1582, 20, 12, false, false},
-	{"the window at +1", -12218430600, "Etc/GMT-1", "UT", "Sun", "Oct", 14, 1582, 23, 30, true, true},
-	{"the window at +5", -12218437440, "Etc/GMT-5", "UT", "Sun", "Oct", 14, 1582, 21, 36, true, true},
-	{"year 0", -62153010000, "Etc/GMT-1", "+01", "Tue", "Jun", 15, 0, 12, 0, true, false},
-	{"2026", 1791223200, "Etc/GMT-1", "+01", "Mon", "Oct", 5, 2026, 19, 0, false, false},
+	{"1571", -12559271400, "Etc/GMT-1", "+1", "Thu", "Dec", 27, 1571, 2, 30, true, false},
+	{"5 Oct 1582 (Julian)", -12219274800, "Etc/GMT-1", "+1", "Fri", "Oct", 5, 1582, 6, 0, true, false},
+	{"the first Gregorian header", -12218359680, "Etc/GMT-1", "+1", "Mon", "Oct", 25, 1582, 20, 12, false, false},
+	{"the window at +1", -12218430600, "Etc/GMT-1", "+0", "Sun", "Oct", 14, 1582, 23, 30, true, true},
+	{"the window at +5", -12218437440, "Etc/GMT-5", "+0", "Sun", "Oct", 14, 1582, 21, 36, true, true},
+	{"year 0", -62153010000, "Etc/GMT-1", "+1", "Tue", "Jun", 15, 0, 12, 0, true, false},
+	{"2026", 1791223200, "Etc/GMT-1", "+1", "Mon", "Oct", 5, 2026, 19, 0, false, false},
 }
 
 func (c oldCase) place() location.PlaceInfo {
@@ -74,15 +75,17 @@ func (c oldCase) stamp(form clockCase) string {
 	if c.julian {
 		mark = " Jul"
 	}
-	clock := fmt.Sprintf("%2d:%02d%s", hour, c.minute, suffix)
+	clock := fmt.Sprintf("%2d:%02d:00%s", hour, c.minute, suffix)
 	if form.dates == "day-first" {
 		return fmt.Sprintf("%s %2d %s %d%s %s", c.wd, c.day, c.mon, c.year, mark, clock)
 	}
 	return fmt.Sprintf("%s %s %2d, %d%s %s", c.wd, c.mon, c.day, c.year, mark, clock)
 }
 
+// noMark is the stamp as Astrolog's header prints it: no ` Jul`, and the
+// clock to the minute.
 func (c oldCase) noMark(form clockCase) string {
-	return strings.Replace(c.stamp(form), " Jul", "", 1)
+	return strings.Replace(strings.Replace(c.stamp(form), " Jul", "", 1), ":00", "", 1)
 }
 
 const oldMomentRE = `[A-Z][a-z]{2} (?:[A-Z][a-z]{2} [ 0-9]\d, -?\d+|[ 0-9]\d [A-Z][a-z]{2} -?\d+)(?: Jul)? [ 0-9]\d:\d{2}(?:am|pm)?`
@@ -99,17 +102,10 @@ func TestOldDatesShowAstrologsDate(t *testing.T) {
 				at, place := c.at(), c.place()
 				want := c.stamp(form)
 
-				// Every row path: the moment, the zone, and the whole row.
-				if got := slotMoment(at, place); got != want {
-					t.Errorf("slotMoment = %q, want %q", got, want)
-				}
-				if got := slotZone(at, place); got != c.zoneText {
-					t.Errorf("slotZone = %q, want %q", got, c.zoneText)
-				}
+				// A row with no name and a named one: the moment and the zone.
 				for name, row := range map[string]string{
-					"floating": tagSlotLine(at, place, "WhTr", 110, cfg),
-					"named":    tagNamedSlotLine("Ann", 3, 4, at, place, "WhTr", 110, cfg),
-					"one":      oneChartLine("Ann", 3, 4, at, place, "WhTr", 110, cfg),
+					"floating": rowText(at, place, "", "WhTr", 110, cfg),
+					"named":    rowText(at, place, "Ann", "WhTr", 110, cfg),
 				} {
 					if !strings.Contains(row, want+" "+c.zoneText) {
 						t.Errorf("%s row %q lacks %q", name, row, want+" "+c.zoneText)
@@ -284,7 +280,7 @@ func oldPlace() location.PlaceInfo {
 func oldTimelineRows(t *testing.T, when time.Time) []lookup.TimelineRow {
 	t.Helper()
 	res, err := lookup.TimelineWith(context.Background(),
-		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry}, When: when, Place: oldPlace(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, oldSearch, stubDefaults)
+		lookup.TimelineRequest{Lens: lookup.Lens{Registry: lookup.Hellenistic.Registry, AspectRegistry: lookup.Hellenistic.AspectRegistry}, When: when, Place: oldPlace(), Natals: []lookup.TimelineNatal{{Numeral: 1, Chart: tlNatal()}}}, oldSearch, stubDefaults)
 	if err != nil {
 		t.Fatalf("old timeline: %v", err)
 	}
@@ -343,9 +339,11 @@ func oldTimelineModel(t *testing.T, when time.Time) (Model, *[]lookup.TimelineRe
 // ---- C9 ----------------------------------------------------------------------
 
 func TestEnterOnAnOldRowLandsOnItsMoment(t *testing.T) {
+	twoTabs(t)
 	stubTextCompute(t)
 	// Julian 10 Feb 1500, noon UT.
 	m, _ := oldTimelineModel(t, time.Unix(julianUnix(1500, 2, 10, 12), 0).UTC())
+	m.lens.Registry = registryWithoutMoon()
 	m, _ = tpress(t, m, runes("0"))
 	m, _ = tpress(t, m, keyEnter)
 	if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline {
@@ -538,7 +536,8 @@ func TestOldDatesFrames(t *testing.T) {
 
 	tl, _ := oldTimelineModel(t, time.Unix(julianUnix(1500, 2, 10, 12), 0).UTC())
 	tl.cfg = cfg
-	tl, _ = tpress(t, tl, runes("0"))
+	tl = tl.withDetailsTab(tl.focused, TabDetailsTimeline).clampTimelineCursor()
+	tl, _ = tl.syncTimeline()
 	tl, _ = tpress(t, tl, keyEnter)
 	writeDesignFrame(t, "old-dates-144x40-timeline", tl.View())
 }

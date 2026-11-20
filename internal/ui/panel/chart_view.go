@@ -15,6 +15,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"github.com/cruiserxyz/sextile/internal/ui/term"
@@ -182,6 +183,14 @@ type HouseOverlay struct {
 	// context; the zero value is the default Form, so a bare HouseOverlay{}
 	// draws today's frame.
 	Form HouseForm
+	// MoonLane is what the Moon's three speed cells show instead of a bar,
+	// by the Moon's object number: MoonLaneVoid, MoonLaneNone, MoonLanePending
+	// or MoonLaneFailed. Only the Moon's number is ever set; it rides here for
+	// the reason Stations does.
+	MoonLane map[int]string
+	// Nodes is the form of the Nodes and Lilith the call that cast the rows
+	// carried: the North Node, the South Node and Lilith name it by a letter.
+	Nodes recipe.NodeForm
 }
 
 func (o HouseOverlay) Active() bool { return o.Cusps.Valid() }
@@ -458,12 +467,46 @@ const bodyNameWidth = 9
 // objects it presents, the object's full name from Astrolog's registry for any
 // other, cut to the column with the repository's mark (term.CutRight, the rule
 // TestTruncationIsMarked pins) and padded to it. A name that fits prints whole.
-func bodyNameCell(p aspect.Position, cfg term.Style) string {
-	name := term.CutRight(BodyName(p.Object), bodyNameWidth, cfg)
+//
+// The North Node, the South Node and Lilith carry one letter after the name:
+// `m` mean, `t` true, `n` natural, the form of the call that cast the row,
+// faint, plain with colours off.
+func bodyNameCell(p aspect.Position, cfg term.Style, ov HouseOverlay) string {
+	letter := nodeLetter(p.Object, ov.Nodes)
+	room := bodyNameWidth
+	if letter != 0 {
+		room -= 2
+	}
+	name := term.CutRight(BodyName(p.Object), room, cfg)
+	if letter != 0 {
+		mark := string(letter)
+		if cfg.UseColor() {
+			mark = term.SGRFaint + mark + term.SGRNormalIntensity
+		}
+		name += " " + mark
+		if w := ansi.StringWidth(name); w < bodyNameWidth {
+			name += strings.Repeat(" ", bodyNameWidth-w)
+		}
+		return name
+	}
 	if w := ansi.StringWidth(name); w < bodyNameWidth {
 		name += strings.Repeat(" ", bodyNameWidth-w)
 	}
 	return name
+}
+
+// nodeLetter is the letter of the form f for o: the Node's for the North and
+// South Node, Lilith's for Lilith, 0 for every other object. An object is what
+// Astrolog's registry names it.
+func nodeLetter(o aspect.Object, f recipe.NodeForm) byte {
+	node, lilith := f.Letters()
+	switch o.Name {
+	case "North Node", "South Node":
+		return node
+	case "Lilith":
+		return lilith
+	}
+	return 0
 }
 
 // bodyRowIdentities is the Bodies rows as the panel draws them, each with its
@@ -480,7 +523,7 @@ func bodyRowIdentities(ps []aspect.Position, cusps aspect.Cusps) (planets, under
 func FormatPositionRowStyled(p aspect.Position, styles astrologstyle.BodyRow, cfg term.Style, ov HouseOverlay) string {
 	useColor := cfg.UseColor()
 	signIdx, deg, min := SplitLongitude(p.Longitude)
-	bodyPart := PositionGlyph(p) + " " + bodyNameCell(p, cfg)
+	bodyPart := PositionGlyph(p) + " " + bodyNameCell(p, cfg, ov)
 	positionPart := fmt.Sprintf(" %s %2d°%02d'",
 		SignAbbrevString(signIdx),
 		deg, min,
@@ -509,7 +552,7 @@ func FormatPositionRowStyled(p aspect.Position, styles astrologstyle.BodyRow, cf
 			// position part (sign, degrees) take the aspect's. The speed lane
 			// and the house column are as they were.
 			glyph := PositionGlyph(p) + " "
-			return RenderSGR(styles.Body, glyph) + RenderSGR(ov.LitSGR, bodyNameCell(p, cfg)+positionPart) + rx + bar + tail
+			return RenderSGR(styles.Body, glyph) + RenderSGR(ov.LitSGR, bodyNameCell(p, cfg, ov)+positionPart) + rx + bar + tail
 		}
 		return RenderSGR(styles.Body, bodyPart) + RenderSGR(styles.Position, positionPart) + rx + bar + tail
 	}
@@ -888,33 +931,39 @@ func BodyGlyph(o aspect.Object) string {
 	return PlaceholderGlyph
 }
 
+// aspectGlyphs is the glyph of the aspects that have one, keyed by Astrolog's
+// three letters. It is the only table of glyphs; any other aspect is drawn as
+// its three letters.
+var aspectGlyphs = map[string]string{
+	"Con": "☌",
+	"Opp": "☍",
+	"Squ": "□",
+	"Tri": "△",
+	"Sex": "⚹",
+	"Inc": "⚻",
+	"SSx": "⚺",
+	"SSq": "∠",
+	"Ses": "⚼",
+	"Qui": "Q",
+	"BQn": "bQ",
+}
+
+// HasGlyph reports whether the aspect has a glyph of its own in the table.
+func HasGlyph(k aspect.AspectKind) bool {
+	_, ok := aspectGlyphs[k.Abbrev]
+	return ok
+}
+
+// AspectGlyph is the mark of an aspect: its glyph where it has one, else
+// Astrolog's three letters; "?" for no aspect.
 func AspectGlyph(k aspect.AspectKind) string {
-	switch k {
-	case aspect.Conjunction:
-		return "☌"
-	case aspect.Opposition:
-		return "☍"
-	case aspect.Square:
-		return "□"
-	case aspect.Trine:
-		return "△"
-	case aspect.Sextile:
-		return "⚹"
-	case aspect.Quincunx:
-		return "⚻"
-	case aspect.Semisextile:
-		return "⚺"
-	case aspect.Semisquare:
-		return "∠"
-	case aspect.Sesquisquare:
-		return "⚼"
-	case aspect.Quintile:
-		return "Q"
-	case aspect.Biquintile:
-		return "bQ"
-	default:
+	if !k.Known() {
 		return "?"
 	}
+	if g, ok := aspectGlyphs[k.Abbrev]; ok {
+		return g
+	}
+	return k.Abbrev
 }
 
 func SignAbbrevString(idx int) string {

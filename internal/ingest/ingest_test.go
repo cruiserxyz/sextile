@@ -9,8 +9,7 @@ import (
 // All chart values in this file are constructed synthetic test inputs.
 
 // perimeterSandbox isolates every file the cold-start read touches: the chart
-// library on its top-precedence tier (the rule
-// invariants.TestTestsIsolateChartsDirOnTopTier holds down), the session under
+// library on its top-precedence tier, the session under
 // XDG_STATE_HOME, and preferences.yaml under XDG_CONFIG_HOME. Without all three
 // the test reads the operator's own files.
 func perimeterSandbox(t *testing.T) (chartsDir, sessionDir string) {

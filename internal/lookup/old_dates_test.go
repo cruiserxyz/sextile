@@ -7,6 +7,7 @@ package lookup
 import (
 	"context"
 	"math"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -48,18 +49,20 @@ func TestTimelineAsksForAstrologsMonth(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			search := &cannedSearch{byMode: map[string]string{}}
-			_, err := TimelineWith(context.Background(), TimelineRequest{When: time.Unix(c.unix, 0).UTC(), Place: utc}, search.run, stubDefaults)
+			_, err := TimelineWith(context.Background(), TimelineRequest{When: time.Unix(c.unix, 0).UTC(), Place: utc, Lens: Lens{Registry: lookupTestRegistry(), AspectRegistry: testAspects()}}, search.run, stubDefaults)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(search.argvs) == 0 {
 				t.Fatal("no search was asked")
 			}
-			argv := search.argvs[0]
+			// The sky's first day search names the month Astrolog is asked for.
+			var argv []string
 			var month, year string
-			for i, a := range argv {
-				if a == "-qm" && i+2 < len(argv) {
-					month, year = argv[i+1], argv[i+2]
+			for _, got := range search.argvs {
+				if i := slices.Index(got, "-qd"); i >= 0 && i+3 < len(got) {
+					argv, month, year = got, got[i+1], got[i+3]
+					break
 				}
 			}
 			if month != strconv.Itoa(c.month) || year != strconv.Itoa(c.year) {

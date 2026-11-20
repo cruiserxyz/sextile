@@ -163,36 +163,34 @@ func TestMinuteStepDeltaIsDurationOnly(t *testing.T) {
 
 // TestBindingTableDeclaresTheMinuteStep is C4: the minute step is one
 // help-visible binding claiming exactly m and M, its label names both keys,
-// and the rendered help modal actually carries that label — a row that is
+// and the Keybindings popup actually carries that label — a row that is
 // declared but never drawn would be a key the operator cannot discover.
 func TestBindingTableDeclaresTheMinuteStep(t *testing.T) {
 	kmap := keys.DefaultKeys()
 
-	var matches []keys.BindingEntry
-	for _, e := range mainBindings(kmap) {
-		got := e.Binding.Keys()
-		if len(got) == 2 && got[0] == "m" && got[1] == "M" {
-			matches = append(matches, e)
+	for _, c := range []struct{ key, word string }{{"m", "forward"}, {"M", "back"}} {
+		var matches []keys.BindingEntry
+		for _, e := range mainBindings(kmap) {
+			if got := e.Binding.Keys(); len(got) == 1 && got[0] == c.key {
+				matches = append(matches, e)
+			}
 		}
-	}
-	if len(matches) != 1 {
-		t.Fatalf("bindings claiming exactly [m M] = %d, want 1", len(matches))
-	}
-	entry := matches[0]
-	if !entry.Help {
-		t.Error("the minute step is not help-visible, so the operator cannot discover it")
-	}
-
-	h := entry.Binding.Help()
-	if !strings.Contains(h.Key, "m") || !strings.Contains(h.Key, "M") {
-		t.Errorf("help label key %q names only one direction; want both m and M", h.Key)
-	}
-	if !strings.Contains(h.Desc, "minute") {
-		t.Errorf("help label description %q does not say what the key does", h.Desc)
-	}
-
-	rendered := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
-	if !strings.Contains(rendered, h.Desc) {
-		t.Errorf("rendered help modal does not contain %q", h.Desc)
+		if len(matches) != 1 {
+			t.Fatalf("bindings claiming exactly [%s] = %d, want 1", c.key, len(matches))
+		}
+		entry := matches[0]
+		if !entry.Help {
+			t.Errorf("the minute step %s is not help-visible, so the operator cannot discover it", c.word)
+		}
+		h := entry.Binding.Help()
+		if h.Key != c.key {
+			t.Errorf("help label key %q, want %q alone", h.Key, c.key)
+		}
+		if !strings.Contains(h.Desc, "minute") || !strings.Contains(h.Desc, c.word) {
+			t.Errorf("help label description %q does not say what the key does", h.Desc)
+		}
+		if rendered := helpListText(kmap, defaultLeaderKey, defaultLeaderMap()); !strings.Contains(rendered, h.Desc) {
+			t.Errorf("Keybindings does not contain %q", h.Desc)
+		}
 	}
 }

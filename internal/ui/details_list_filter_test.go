@@ -80,9 +80,9 @@ func hasSearchBinding(m Model) bool {
 
 func viewText(m Model) string { return strings.Join(m.detailsView().Lines, "\n") }
 
-// Acceptance 2: `/squ` keeps the 2 header lines, every Squ row and the 5
-// footer lines, and the query line says N of M with M the row count.
-func TestSlashKeepsHeaderAndFooterAroundTheMatchingRows(t *testing.T) {
+// Acceptance 2: `/squ` keeps the 2 header lines and every Squ row, hides every
+// line below the list, and the query line says N of M with M the row count.
+func TestSlashKeepsTheHeaderAndTheMatchingRowsOnly(t *testing.T) {
 	body := ownFilterBody(8)
 	m := attachedReport(t, false, "[0] Aspects", body)
 	if !hasSearchBinding(m) {
@@ -98,12 +98,11 @@ func TestSlashKeepsHeaderAndFooterAroundTheMatchingRows(t *testing.T) {
 			want = append(want, l)
 		}
 	}
-	want = append(want, src[10:]...)
 	if got := m.detailsView().Lines; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("lines =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	if len(want) != 2+4+5 {
-		t.Fatalf("fixture: %d lines kept, want 2 header + 4 Squ rows + 5 footer", len(want))
+	if len(want) != 2+4 {
+		t.Fatalf("fixture: %d lines kept, want 2 header + 4 Squ rows", len(want))
 	}
 	rows := detailsBodyRows(renderDetails(m))
 	if last := rows[len(rows)-1]; !strings.HasPrefix(last, "/squ█") || !strings.HasSuffix(last, "4 of 8") {
@@ -128,11 +127,11 @@ func TestSlashFiltersComparisonAndBodyReports(t *testing.T) {
 	m = typeQuery(t, m, "squ")
 	src := panel.ReportLines(body)
 	got := m.detailsView().Lines
-	if strings.Join(got[:3], "\n") != strings.Join(src[:3], "\n") || strings.Join(got[len(got)-3:], "\n") != strings.Join(src[len(src)-3:], "\n") {
-		t.Errorf("comparison header/footer moved:\n%s", strings.Join(got, "\n"))
+	if strings.Join(got[:3], "\n") != strings.Join(src[:3], "\n") {
+		t.Errorf("comparison header moved:\n%s", strings.Join(got, "\n"))
 	}
-	if len(got) != 3+3+3 {
-		t.Errorf("comparison: %d lines kept, want 3 header + 3 Squ rows + 3 footer:\n%s", len(got), strings.Join(got, "\n"))
+	if len(got) != 3+3 {
+		t.Errorf("comparison: %d lines kept, want 3 header + 3 Squ rows:\n%s", len(got), strings.Join(got, "\n"))
 	}
 
 	b := tabsPairModel(t, Config{Accessible: true})
@@ -142,8 +141,8 @@ func TestSlashFiltersComparisonAndBodyReports(t *testing.T) {
 	b.details.title, b.details.body, b.details.attached = "[0] Moon", ownFilterBody(4), true
 	b, _ = tpress(t, b, runes("/"))
 	b = typeQuery(t, b, "/tri")
-	if got := b.detailsView().Lines; len(got) != 2+1+5 {
-		t.Errorf("single body report: %d lines kept, want 2 + 1 Tri row + 5:\n%s", len(got), strings.Join(got, "\n"))
+	if got := b.detailsView().Lines; len(got) != 2+1 {
+		t.Errorf("single body report: %d lines kept, want 2 + 1 Tri row:\n%s", len(got), strings.Join(got, "\n"))
 	}
 }
 
@@ -161,8 +160,7 @@ func TestMultiLineRecordIsKeptWholeWhenAnyLineMatches(t *testing.T) {
 	got := m.detailsView().Lines
 	want := []string{"Astrolog 8.00 chart for X", "",
 		"  1:    Moon (Aqu) Con [Tau] Chiron     - orb: s0°50' - power: 11.09",
-		"        Midpoint Moon makes Con with Chiron", "        second note line",
-		"", "Sum power: 22.18"}
+		"        Midpoint Moon makes Con with Chiron", "        second note line"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("lines =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -245,7 +243,7 @@ func TestQueryLivesAndDiesWithTheReportTitle(t *testing.T) {
 	frame2.AspectsReport = ownFilterBody(8)
 	m, cmd = applyTextCommit(m, frame2)
 	m = pump(t, m, cmd)
-	if m.details.query != "squ" || len(m.detailsView().Lines) != 2+4+5 {
+	if m.details.query != "squ" || len(m.detailsView().Lines) != 2+4 {
 		t.Errorf("after a refresh of the same title: query %q, %d lines, want it kept and 4 Squ rows", m.details.query, len(m.detailsView().Lines))
 	}
 	if m.timeline.query != "" {
@@ -324,7 +322,7 @@ func TestEmptyQueryIsByteIdenticalAndScrollReclamps(t *testing.T) {
 		t.Errorf("offset %d beyond what %d filtered lines can scroll (%d)", m.details.scrollOffset, lines, limit)
 	}
 	box := strings.Join(detailsBodyRows(renderDetails(m)), "\n")
-	if !strings.Contains(box, "Sum power") || !strings.Contains(box, "Astrolog 8.00") && m.details.scrollOffset == 0 {
-		t.Errorf("filtered view lost header or footer:\n%s", box)
+	if strings.Contains(box, "Sum power") || !strings.Contains(box, "Astrolog 8.00") && m.details.scrollOffset == 0 {
+		t.Errorf("filtered view lost its header or kept the footer:\n%s", box)
 	}
 }

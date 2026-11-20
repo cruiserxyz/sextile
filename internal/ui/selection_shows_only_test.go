@@ -36,11 +36,11 @@ import (
 var selFixtureBodies = []aspect.Object{objSun, objMoon, objMercury, objVenus, objMars, objJupiter}
 
 var selFixtureAspects = []aspect.Aspect{
-	{AObject: objSun, BObject: objMoon, Kind: aspect.Trine, Power: 9},
-	{AObject: objSun, BObject: objMars, Kind: aspect.Square, Power: 8},
-	{AObject: objMoon, BObject: objVenus, Kind: aspect.Sextile, Power: 7},
-	{AObject: objMars, BObject: objJupiter, Kind: aspect.Opposition, Power: 6},
-	{AObject: objMercury, BObject: objVenus, Kind: aspect.Conjunction, Power: 5},
+	{AObject: objSun, BObject: objMoon, Kind: kindOf("Tri"), Power: 9},
+	{AObject: objSun, BObject: objMars, Kind: kindOf("Squ"), Power: 8},
+	{AObject: objMoon, BObject: objVenus, Kind: kindOf("Sex"), Power: 7},
+	{AObject: objMars, BObject: objJupiter, Kind: kindOf("Opp"), Power: 6},
+	{AObject: objMercury, BObject: objVenus, Kind: kindOf("Con"), Power: 5},
 }
 
 // selCalls records the lens every seam was handed.
@@ -157,7 +157,7 @@ func stubSelectionSeams(t *testing.T) *selCalls {
 	cross := func(l lookup.Lens) (lookup.OverlayAspects, error) {
 		c.add(&c.cross, l)
 		return lookup.OverlayAspects{
-			Aspects:  []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objMoon, Kind: aspect.Trine, Power: 5}, {TransitObject: objMars, NatalObject: objVenus, Kind: aspect.Square, Power: 4}},
+			Aspects:  []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objMoon, Kind: kindOf("Tri"), Power: 5}, {TransitObject: objMars, NatalObject: objVenus, Kind: kindOf("Squ"), Power: 4}},
 			Report:   "CROSS ASPECTS",
 			Commands: []string{"astrolog -r0 cross"},
 		}, nil
@@ -166,7 +166,7 @@ func stubSelectionSeams(t *testing.T) *selCalls {
 		s.cast.overlay = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
 			return cross(l)
 		}
-		s.cast.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
 			return cross(l)
 		}
 		s.reports.raw = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, req lookup.RawReportRequest) (string, string, error) {
@@ -177,11 +177,11 @@ func stubSelectionSeams(t *testing.T) *selCalls {
 			c.add(&c.pairBody, l)
 			return "PAIR REPORT " + panel.BodyName(b), "astrolog -rt report", nil
 		}
-		s.reports.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel, b aspect.Object) (string, string, error) {
+		s.reports.synastry = func(_ context.Context, l lookup.Lens, _ store.AnchorChart, other store.AnchorChart, b aspect.Object) (string, string, error) {
 			c.add(&c.pairBody, l)
 			return "PAIR REPORT " + panel.BodyName(b), "astrolog -r0 report", nil
 		}
-		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, l lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, l lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
 			c.add(&c.wheel, l)
 			return []byte("wheel " + selBodyNames(visibleIn(l))), nil
 		}
@@ -539,8 +539,8 @@ func TestSelectionDoesNotReachComparisonSurfaces(t *testing.T) {
 	m = pump(t, m, cmd)
 	crossBefore := slices.Clone(m.chart.crossAspects)
 	reportBefore := m.chart.crossAspectsReport
-	if len(crossBefore) == 0 || len(calls.snapshot(&calls.overlay)) == 0 {
-		t.Fatalf("the comparison drew no cross aspects or no bi-wheel: %d, %d", len(crossBefore), len(calls.snapshot(&calls.overlay)))
+	if len(crossBefore) == 0 || len(calls.snapshot(&calls.rings)) == 0 {
+		t.Fatalf("the comparison drew no cross aspects or no bi-wheel: %d, %d", len(crossBefore), len(calls.snapshot(&calls.rings)))
 	}
 	calls.reset()
 
@@ -564,7 +564,7 @@ func TestSelectionDoesNotReachComparisonSurfaces(t *testing.T) {
 	for name, ls := range map[string][]lookup.Lens{
 		"cross aspects": calls.snapshot(&calls.cross),
 		"pair report":   calls.snapshot(&calls.pairBody),
-		"bi-wheel":      calls.snapshot(&calls.overlay),
+		"bi-wheel":      calls.snapshot(&calls.rings),
 	} {
 		if len(ls) == 0 {
 			t.Errorf("%s: nothing was asked for after the selection", name)

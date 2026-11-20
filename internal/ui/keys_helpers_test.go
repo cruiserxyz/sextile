@@ -15,11 +15,6 @@ func (m Model) titleOf(e keys.BindingEntry) string {
 	return e.TitleFor(m.keysFacts(ownerMain))
 }
 
-// helpPopupBlocks is the Keys popup's per-popup blocks for m.
-func (m Model) helpPopupBlocks() []keys.HelpBlock {
-	return keys.HelpPopupBlocks(m.keysContextFor(ownerHelp))
-}
-
 // withoutConditions is a copy of the table whose entries all stand, the bar of
 // every key the table has.
 func withoutConditions(t []keys.BindingEntry) []keys.BindingEntry {

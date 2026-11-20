@@ -1,0 +1,4 @@
+# Stored screen pictures of the tests: generated, so GitHub folds them in diffs
+# and leaves them out of the language counts.
+internal/ui/testdata/** linguist-generated=true
+tools/launcher/testdata/** linguist-generated=true

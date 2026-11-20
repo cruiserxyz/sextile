@@ -256,7 +256,7 @@ func TestBodiesChooserPagesOntoTheProbeStatusRow(t *testing.T) {
 		if c >= 0 && len(markedRows(view)) != 1 {
 			t.Fatalf("step %d (%s): cursor %d offset %d of %d (%d visible): marked rows on screen %q", i, key, c, off, total, v, markedRows(view))
 		}
-		if strings.Contains(ansi.Strip(view), "Astrolog gave") {
+		if strings.Contains(ansi.Strip(view), "Astrolog cannot place") {
 			sawStatus = true
 		}
 		if got := o.drawn(m); got != off {

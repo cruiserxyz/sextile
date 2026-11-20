@@ -63,12 +63,13 @@ func NewSlots(when time.Time, place location.PlaceInfo) (*Slots, error) {
 }
 
 // AddAnchored appends an anchored slot directly above the floating slot.
-// Refuses, leaving the list unchanged, if place lacks an IANA timezone.
+// Refuses, leaving the list unchanged, if place lacks an IANA timezone and the
+// chart is not a chart file (anchoredPlaceOK).
 //
 // The new slot arrives unselected and no selection changes: selection is only
 // ever made by the user.
 func (s *Slots) AddAnchored(chart SessionChart, when time.Time, place location.PlaceInfo) error {
-	if !place.HasTimezone() {
+	if !anchoredPlaceOK(chart, place) {
 		return errors.New("store: Slots.AddAnchored: place.TZ required")
 	}
 	chart.When = when
@@ -76,6 +77,13 @@ func (s *Slots) AddAnchored(chart SessionChart, when time.Time, place location.P
 	slot := &Slot{Time: when, Location: place, Chart: chart}
 	s.anchored = append(s.anchored, slot)
 	return nil
+}
+
+// anchoredPlaceOK says whether an anchored slot may stand at place: a place
+// with an IANA timezone, or any place for a chart file, which Astrolog casts
+// from its own record and which shows the file's own clock.
+func anchoredPlaceOK(chart SessionChart, place location.PlaceInfo) bool {
+	return place.HasTimezone() || chart.Source.Kind == ChartKindFile
 }
 
 // RemoveAnchored takes the anchored slot at list index i out of the workspace.
@@ -111,7 +119,7 @@ func (s *Slots) ReplaceAnchored(i int, chart SessionChart, when time.Time, place
 	if s == nil || i < 0 || i >= len(s.anchored) {
 		return errors.New("store: Slots.ReplaceAnchored: no such slot")
 	}
-	if !place.HasTimezone() {
+	if !anchoredPlaceOK(chart, place) {
 		return errors.New("store: Slots.ReplaceAnchored: place.TZ required")
 	}
 	chart.When = when
@@ -207,8 +215,7 @@ func (s *Slots) All() []*Slot {
 }
 
 // Floating returns a copy of the floating slot. Callers that need to
-// mutate the floating slot's Time must go through AdvanceFloating so the
-// store stays the single owner of the mutation surface.
+// mutate the floating slot's Time go through SetFloatingTime.
 func (s *Slots) Floating() Slot {
 	return s.floating
 }
@@ -447,51 +454,13 @@ func copySlotSelection(dst, src *Slot) {
 // slot Time keeps the chart panel header in lockstep with bodies and
 // aspects through held-key bursts.
 //
-// Unlike AdvanceFloating, this does NOT do calendar arithmetic — the
-// caller has already computed the target moment; this just stores it.
+// It does no calendar arithmetic: the caller has already computed the
+// target moment (lookup.StepMoment); this just stores it.
 // Does nothing if t is zero (defensive — the text commit should
 // always carry a real TransitTime in v1).
 func (s *Slots) SetFloatingTime(t time.Time) {
 	if t.IsZero() {
 		return
-	}
-	s.floating.Time = t
-}
-
-// AdvanceFloating mutates the floating slot's Time by the given calendar
-// delta + duration. Per canonical slot vocabulary the floating slot is
-// the only mutable-Time slot (anchored is the immutable natal moment).
-// Caller is responsible for triggering chart recompute against the new
-// time — store stays passive about compute.
-//
-// Calendar stepping (years/months/days) runs in the floating slot's
-// local timezone so "+1 month at the same local clock time" is
-// preserved across DST boundaries. Without this normalization, a
-// step across the DST transition would silently shift the displayed
-// local time by an hour (the host/UTC clock advances cleanly while
-// the user's wall clock has jumped). `dur` is added as a fixed-offset
-// wall-clock duration (correct semantics for hour/minute steps:
-// "1 hour later" means 1 hour of elapsed real time, not local-clock
-// minute arithmetic).
-//
-// Negative values step backward. Passing all zeros is a no-op. Falls
-// back to UTC arithmetic if the place's TZ fails to load (defensive;
-// NewSlots/AddAnchored gate on HasTimezone so this branch shouldn't fire
-// in practice).
-func (s *Slots) AdvanceFloating(years, months, days int, dur time.Duration) {
-	if years == 0 && months == 0 && days == 0 && dur == 0 {
-		return
-	}
-	t := s.floating.Time
-	if years != 0 || months != 0 || days != 0 {
-		if loc, err := time.LoadLocation(s.floating.Location.TZ); err == nil {
-			t = t.In(loc).AddDate(years, months, days)
-		} else {
-			t = t.AddDate(years, months, days)
-		}
-	}
-	if dur != 0 {
-		t = t.Add(dur)
 	}
 	s.floating.Time = t
 }

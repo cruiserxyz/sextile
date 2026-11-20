@@ -45,11 +45,13 @@ import (
 //     breaks C3-C5, when a Details report breaks C6, and when the world is not
 //     settled 100 delivered messages after input stops.
 
-// chaosSeed and the corpus size: 14 sequences of 36 entry points each (504),
-// about 3,000 delivered messages, a few seconds.
+// chaosSeed and the corpus size: 14 sequences of 30 entry points each (420),
+// a few seconds. The Details strip has three tabs (report, Timeline, Moon list),
+// which spreads the walk thinner over the pane states, so the corpus is 14
+// sequences, not 10, for the coverage below to hold.
 const (
-	chaosSeed      = 20261105
-	chaosSequences = 10
+	chaosSeed      = 20261114
+	chaosSequences = 14
 	chaosPerSeq    = 30
 	chaosSettle    = 100
 	// idleRestSteps is how many steps of the virtual clock the idle rest takes:
@@ -64,7 +66,7 @@ const (
 // chaosRequired are the entry points C10 names, each with its own counters.
 var chaosRequired = []string{
 	"focus digits", "left/right", "tab", "up/down", "pgup/pgdn", "d/D", "n/N",
-	"space on the Chart", "space on Bodies", "0", "enter/esc", ",l", "l",
+	"space on the Chart", "space on Bodies", "0", "enter/esc", ",L", "l",
 	"digit from the Log", "digit from the large log",
 	"body chooser preview", "body chooser confirm", "aspect chooser preview", "aspect chooser confirm",
 	"resize", "minute tick",
@@ -166,7 +168,8 @@ func (s *standIn) install(t *testing.T) {
 			}
 			return lookup.OverlayAspects{Report: "SUBJECT cross " + whoYear(natal.When.Year()) + ">" + whoYear(when.Year()) + "\n"}, nil
 		}
-		r.cast.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		r.cast.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
+			when := other.When
 			if s.failsFor(fmt.Sprintf("synastry|%d|%d", natal.When.UnixNano(), when.UnixNano()), 9) {
 				return lookup.OverlayAspects{}, errStandIn
 			}
@@ -188,7 +191,8 @@ func (s *standIn) install(t *testing.T) {
 			}
 			return fmt.Sprintf("SUBJECT body %s %s>%s\n", panel.BodyName(o), whoYear(natal.When.Year()), whoYear(when.Year())), "", nil
 		}
-		r.reports.synastry = func(_ context.Context, lens lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo, _ store.ReportLabel, o aspect.Object) (string, string, error) {
+		r.reports.synastry = func(_ context.Context, lens lookup.Lens, natal store.AnchorChart, other store.AnchorChart, o aspect.Object) (string, string, error) {
+			when := other.When
 			if s.failsFor(fmt.Sprintf("syn|%d|%d|%d|%v", natal.When.UnixNano(), when.UnixNano(), o.Number, lens.Houses), 22) {
 				return "", "", errStandIn
 			}
@@ -298,6 +302,10 @@ func (w *world) exec(c tea.Cmd) {
 				for _, sub := range msg {
 					w.exec(sub)
 				}
+			case voidLandedMsg:
+				// The Moon lane's answer moves no key and draws no random delay,
+				// so the seeded walk stays the walk it was.
+				w.update(msg)
 			default:
 				delay := 0
 				if _, isResult := resultErr(msg); isResult {
@@ -390,7 +398,7 @@ func (w *world) focus(p PanelID, digit string) {
 
 // toFloating puts the Chart cursor on the floating chart.
 func (w *world) toFloating() {
-	w.focus(PanelChart, "1")
+	w.focus(PanelChart, "2")
 	for i := 0; i < 5 && !w.m.focusedIsFloating(); i++ {
 		w.send(keyDown)
 	}
@@ -405,7 +413,7 @@ func (w *world) toTab(id TabID) {
 
 // toVenus puts the Bodies cursor on Venus, which has a template tab.
 func (w *world) toVenus() {
-	w.focus(PanelBodies, "2")
+	w.focus(PanelBodies, "3")
 	for i := 0; i < 6; i++ {
 		ch := w.m.shownChart()
 		if o, ok := panel.ObjectAtCursor(ch.positions, ch.cusps, w.m.bodyCursorIdx); ok && o.Number == objVenus.Number {
@@ -419,26 +427,29 @@ func (w *world) entries() []entry {
 	openLog := func(w *world) {
 		if !w.m.logFocus.active {
 			w.send(runes(","))
-			w.send(runes("l"))
+			w.send(runes("L"))
 		}
 	}
 	return []entry{
-		{name: "focus digits", act: func(w *world) tea.Msg { return runes(choose(w, "1", "2", "3")) }},
+		{name: "focus digits", act: func(w *world) tea.Msg { return runes(choose(w, "1", "2", "3", "4")) }},
 		{name: "left/right", act: func(w *world) tea.Msg { return choose[tea.Msg](w, keyLeft, keyRight) }},
 		{name: "tab", act: func(w *world) tea.Msg { return keyTab }},
 		{name: "up/down", act: func(w *world) tea.Msg { return choose[tea.Msg](w, keyUp, keyDown) }},
 		{name: "pgup/pgdn", act: func(w *world) tea.Msg { return choose[tea.Msg](w, keyPgUp, keyPgDn) }},
 		{name: "d/D", act: func(w *world) tea.Msg { return runes(choose(w, "d", "D")) }},
-		{name: "n/N", act: func(w *world) tea.Msg { return runes(choose(w, "n", "N")) }},
+		{name: "n/N", act: func(w *world) tea.Msg {
+			w.send(runes("d")) // away from now, so that n has a moment to come back from
+			return runes(choose(w, "n", "N"))
+		}},
 		{name: "space on the Chart", act: func(w *world) tea.Msg {
-			w.focus(PanelChart, "1")
+			w.focus(PanelChart, "2")
 			for k := w.rng.Intn(4); k > 0; k-- {
 				w.send(choose[tea.Msg](w, keyUp, keyDown)) // any chart: the selection it joins or leaves differs
 			}
 			return keySpace
 		}},
 		{name: "space on Bodies", act: func(w *world) tea.Msg {
-			w.focus(PanelBodies, "2")
+			w.focus(PanelBodies, "3")
 			return keySpace
 		}},
 		{name: "0", act: func(w *world) tea.Msg {
@@ -467,12 +478,12 @@ func (w *world) entries() []entry {
 			}
 			return keyEsc
 		}},
-		{name: ",l", inert: true, log: true, act: func(w *world) tea.Msg {
+		{name: ",L", inert: true, log: true, act: func(w *world) tea.Msg {
 			if w.m.logFocus.active || w.m.console.open {
 				w.send(keyEsc)
 			}
-			w.send(runes(",")) // arms the leader; `l` completes it
-			return runes("l")
+			w.send(runes(",")) // arms the leader; `L` completes it
+			return runes("L")
 		}},
 		{name: "l", inert: true, log: true, act: func(w *world) tea.Msg {
 			openLog(w)
@@ -480,12 +491,12 @@ func (w *world) entries() []entry {
 		}},
 		{name: "digit from the Log", log: true, act: func(w *world) tea.Msg {
 			openLog(w)
-			return runes(choose(w, "1", "2", "3"))
+			return runes(choose(w, "1", "2", "3", "4"))
 		}},
 		{name: "digit from the large log", log: true, act: func(w *world) tea.Msg {
 			openLog(w)
 			w.send(runes("l"))
-			return runes(choose(w, "1", "2", "3"))
+			return runes(choose(w, "1", "2", "3", "4"))
 		}},
 		{name: "body chooser preview", modal: true, act: func(w *world) tea.Msg {
 			if w.m.startup != startupBodyOpen {
@@ -516,6 +527,13 @@ func (w *world) entries() []entry {
 		{name: "resize", modal: true, act: func(w *world) tea.Msg {
 			s := choose(w, chaosSizes...)
 			return tea.WindowSizeMsg{Width: s[0], Height: s[1]}
+		}},
+		{name: "resize away and back", modal: true, act: func(w *world) tea.Msg {
+			if w.m.details.attached {
+				w.send(keyEsc) // Details closed, so a small window has no room for it
+			}
+			w.send(tea.WindowSizeMsg{Width: 80, Height: 24}) // what Details held is dropped
+			return tea.WindowSizeMsg{Width: 170, Height: 34}
 		}},
 		{name: "minute tick", modal: true, act: func(w *world) tea.Msg {
 			if w.m.floatingDetached {
@@ -691,13 +709,18 @@ func (w *world) checkFrame(where string) {
 		want, okW := m.wantedPaneKey(p)
 		shown, okS := m.shownPaneKey(p)
 		var expect paneState
+		refused := m.refused.set && want.text == m.refused.key
 		switch {
 		case !okW:
 			continue
+		case refused && okS && shown.subject() == want.subject():
+			expect = paneRefused // the same chart's frame from before the refused cast
+		case refused:
+			expect = paneFailed
 		case !okS:
 			expect = paneEmpty
 		case shown.subject() == want.subject():
-			expect = paneCurrent // the main panels never draw a faint version
+			expect = paneCurrent // the main panels draw a faint version only after a refused cast
 		default:
 			expect = paneEmpty
 		}
@@ -705,8 +728,8 @@ func (w *world) checkFrame(where string) {
 			fail("%v draws state %v, its keys say %v (shown %+v, wanted %+v)", p, got, expect, shown, want)
 		}
 		w.seen[fmt.Sprintf("%v/%s", p, stateName(expect))]++
-		if m.modalOpen() || m.console.open {
-			continue // a popup or the console covers the panel's cells; the keys were held above
+		if m.modalOpen() || m.console.open || m.layout().folded[p] {
+			continue // a popup, the console or a title line covers the panel's cells; the keys were held above
 		}
 		text := panelText(m, screen(), p)
 		if expect == paneEmpty {
@@ -714,7 +737,12 @@ func (w *world) checkFrame(where string) {
 				fail("%v is empty by the rule and draws:\n%s", p, text)
 			}
 		}
-		if p == PanelBodies && expect != paneEmpty && len(m.deriveScene().shown) <= 1 && !m.shown.comparing {
+		if expect == paneFailed {
+			if !strings.Contains(text, "Couldn't cast") || strings.Contains(text, "☉ Sun") {
+				fail("%v is failed by the rule and draws:\n%s", p, text)
+			}
+		}
+		if p == PanelBodies && expect != paneEmpty && expect != paneFailed && len(m.deriveScene().shown) <= 1 && !m.shown.comparing {
 			sc := m.deriveScene()
 			sun := sunOf(2000)
 			if !sc.cursor.Floating {
@@ -734,12 +762,31 @@ func (w *world) checkFrame(where string) {
 	}
 	text := ansi.Strip(renderDetails(m))
 	switch id := m.activeTabID(PanelDetails); {
+	case m.focused == PanelStatus:
+		// The Status panel's Details is read from the model: its Credits or its
+		// session text, no report.
+		want := "Walter D. Pullen"
+		if id == TabStatusSession {
+			want = "Sessions in "
+		}
+		if !strings.Contains(text, want) || subjectMarker.FindString(text) != "" {
+			fail("Details under the Status panel draws:\n%s", text)
+		}
+		w.seen["details/session"]++
 	case id == TabDetailsReport:
 		wnt := m.detailsWanted()
 		var expect paneState
+		textRefused := false
+		if k, ok := m.textKeyFor(); ok && m.refused.set && k == m.refused.key {
+			textRefused = true
+		}
 		switch {
 		case !wnt.has:
 			expect = paneEmpty
+		case textRefused && m.details.keyed && m.details.key.subject() == wnt.key.subject():
+			expect = paneRefused
+		case textRefused:
+			expect = paneFailed
 		case wnt.key.kind == reportRaw && m.details.failed.set && m.details.failed.key == wnt.key.raw:
 			expect = paneFailed
 		case m.details.keyed && m.details.key == wnt.key:
@@ -763,7 +810,7 @@ func (w *world) checkFrame(where string) {
 			if !strings.Contains(text, "Couldn't read") || marker != "" || strings.Contains(text, influenceHead) {
 				fail("Details is failed by the rule and draws:\n%s", text)
 			}
-		case paneCurrent, paneUpdating:
+		case paneCurrent, paneUpdating, paneRefused:
 			want := expectedMarker(m)
 			got := strings.TrimRight(strings.TrimRight(marker, "│| "), " ")
 			if want == "" || got != want {
@@ -793,7 +840,7 @@ func (w *world) checkFrame(where string) {
 }
 
 func stateName(s paneState) string {
-	return [...]string{"current", "updating", "empty", "failed"}[s]
+	return [...]string{"current", "updating", "empty", "failed", "refused"}[s]
 }
 
 var signNames = []string{"Ari", "Tau", "Gem", "Can", "Leo", "Vir", "Lib", "Sco", "Sag", "Cap", "Aqu", "Pis"}
@@ -815,7 +862,10 @@ func (w *world) settled(label string) {
 	}
 	for _, p := range []PanelID{PanelBodies, PanelAspects} {
 		if rendered(m, p) && m.shown.stamped {
-			if st := m.textPaneState(p); st != paneCurrent {
+			// A refused cast is an accepted failure: the pane keeps or says it,
+			// and nothing is held to retry it.
+			st := m.textPaneState(p)
+			if st != paneCurrent && !((st == paneRefused || st == paneFailed) && m.textRefusedNow()) {
 				fail("%v settled on %v, want the frame it asks for", p, st)
 			}
 		}
@@ -824,6 +874,8 @@ func (w *world) settled(label string) {
 		if wnt := m.detailsWanted(); wnt.has {
 			switch st := m.detailsReportState(); {
 			case st == paneCurrent || st == paneFailed:
+			case st == paneRefused && m.textRefusedNow():
+				// The frame beside the report was refused: the report it had stays.
 			case st == paneEmpty && !m.chart.settled && !m.textOutstanding():
 				// The frame beside the report failed: no report is cast over it.
 			default:
@@ -882,7 +934,6 @@ func newWorld(t *testing.T, seed int64) *world {
 	openChart(t, m, 2)
 	m.cursorIdx = len(m.slots.All()) - 1
 	m.focused = PanelChart
-	m.limitedViewShown = true
 	m.aspectRegistry = testRegistry()
 	m.objectRegistry = testObjectRegistry()
 	m.lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3, 4, 5}}
@@ -993,7 +1044,7 @@ func seededEveryFrame(t *testing.T) {
 	// An entry point whose counters the dice left at zero is tried again, in
 	// storms, a few times: the counters still fail the test when it cannot be
 	// made to change a wanted key with a run outstanding and a run failing.
-	for round := 0; round < 6; round++ {
+	for round := 0; round < 12; round++ {
 		lacking := w.lacking(entries)
 		if len(lacking) == 0 {
 			break

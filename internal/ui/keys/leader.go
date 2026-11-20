@@ -34,21 +34,6 @@ type LeaderNode struct {
 type LeaderBinding struct {
 	Seq []string
 	ID  BindingID
-	// Twice marks a sequence that acts on its second press within a moment
-	// (`, n` with charts open): the key column says so after the keys, where
-	// it belongs (operator, 2026-11-07), and the title stays the action.
-	Twice bool
-}
-
-// Spelling is how Help and the Actions list print the binding's keys: the
-// leader and the sequence, then `(twice)` for a binding that asks a second
-// press.
-func (b LeaderBinding) Spelling(leader string) string {
-	s := LeaderSpelling(leader, b.Seq)
-	if b.Twice {
-		s += " (twice)"
-	}
-	return s
 }
 
 // NewLeaderMap builds the prefix tree, refusing any map in which one sequence

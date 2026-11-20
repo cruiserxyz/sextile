@@ -66,19 +66,23 @@ func TestRefusedChartShowsWarningInLog(t *testing.T) {
 	warning := warnOne + "\n" + warnTwo + "\n"
 	check := func(t *testing.T, m Model, subject string) {
 		t.Helper()
+		// A line wider than the Log goes on in indented continuation lines.
 		var line string
 		for _, l := range errorLines(m) {
-			if strings.HasPrefix(l, subject) {
+			switch {
+			case strings.HasPrefix(l, subject):
 				line = l
+			case line != "" && strings.HasPrefix(l, "  "):
+				line += " " + strings.TrimSpace(l)
 			}
 		}
-		if want := subject + " Astrolog warned: " + warnOne + "."; line != want {
+		if want := subject + " Astrolog warned \"" + warnOne + "\""; line != want {
 			t.Errorf("Log error line = %q, want %q (all error lines: %q)", line, want, errorLines(m))
 		}
 		if strings.Contains(strings.Join(m.logPanelLines(), "\n"), warnTwo) {
 			t.Errorf("the second warning line belongs to the console, not the 6-row Log")
 		}
-		console := consoleTexts(m)
+		console := strings.ReplaceAll(consoleTexts(m), "\n  ", " ")
 		for _, w := range []string{warnOne, warnTwo} {
 			if !strings.Contains(console, w) {
 				t.Errorf("the console lost the warning line %q:\n%s", w, console)
@@ -90,20 +94,20 @@ func TestRefusedChartShowsWarningInLog(t *testing.T) {
 		m := textModel(t)
 		m, cmd := m.advanceTime(unitDay, +1)
 		m = pump(t, m, cmd)
-		check(t, m, "Couldn't cast the chart.")
+		check(t, m, "astrolog: Now not cast,")
 	})
 	t.Run("wheel", func(t *testing.T) {
 		astrologWarning(t, warning, serveChart(t))
 		m, cmd := modelWithSlot(t).dispatchRenderWheel()
 		m = pump(t, m, cmd)
-		check(t, m, "Couldn't draw the wheel.")
+		check(t, m, "wheel: wheel not drawn,")
 	})
 	t.Run("details", func(t *testing.T) {
 		astrologWarning(t, warning, serveChart(t))
 		m := detailsTestModel(t)
 		msg := runDetailsCmd(t, m)
 		m, _ = m.commitRefresh(surfaceDetails, msg)
-		check(t, m, "Couldn't read the full report.")
+		check(t, m, "details: report not read,")
 	})
 }
 
@@ -131,7 +135,7 @@ func TestWarningTextRendersWithoutControlBytes(t *testing.T) {
 		if *copied != l.text {
 			t.Errorf("copying line %d gave %q, want the stored text %q", i, *copied, l.text)
 		}
-		sawLine = sawLine || strings.Contains(l.text, "Astrolog warned: aredbell")
+		sawLine = sawLine || strings.Contains(l.text, "Astrolog warned \"aredbell\"")
 		sawDetail = sawDetail || strings.Contains(l.text, "secondline")
 	}
 	if !sawLine || !sawDetail {
@@ -184,10 +188,10 @@ func TestTimelineWarningDropsItsRows(t *testing.T) {
 	// is that BOTH warned searches are named, each with the warning.
 	named := map[string]bool{}
 	for _, l := range errorLines(m) {
-		if !strings.Contains(l, "Astrolog warned: "+warnOne) {
+		if !strings.Contains(l, "Astrolog warned \""+warnOne+"\"") {
 			continue
 		}
-		for _, sw := range []string{"The -tr search", "The -t search"} {
+		for _, sw := range []string{"the -tr events for", "the -t events for"} {
 			if strings.Contains(l, sw) {
 				named[sw] = true
 				break
@@ -241,7 +245,7 @@ func TestRefusedChartLeaksNoPositionsToTheUI(t *testing.T) {
 				all = append(all, l.text)
 			}
 			all = append(all, fmt.Sprintf("%+v", m.details), m.View())
-			joined := strings.Join(all, "\n")
+			joined := strings.ReplaceAll(strings.Join(all, "\n"), "\n  ", " ")
 			if strings.Contains(joined, leakText) {
 				t.Errorf("a refused call's chart output reached the UI text")
 			}
@@ -254,9 +258,26 @@ func TestRefusedChartLeaksNoPositionsToTheUI(t *testing.T) {
 			if name != "details" && len(m.chart.positions) != 0 {
 				t.Errorf("the chart state holds %d positions after a refused call, want none", len(m.chart.positions))
 			}
-			if !strings.Contains(joined, "Astrolog warned: "+warnOne) {
+			if !strings.Contains(joined, "Astrolog warned \""+warnOne+"\"") {
 				t.Errorf("the warning is not shown:\n%s", strings.Join(errorLines(m), "\n"))
 			}
 		})
+	}
+}
+
+// A body whose ephemeris does not reach the date is said in the operator's
+// words, not Astrolog's; Astrolog's own line stays in the console.
+func TestANoDataWarningIsSaidInTheOperatorsWords(t *testing.T) {
+	const warn = "Chiron's ephemeris is restricted to JD 1967601.5 - JD 3419437.5"
+	astrologWarning(t, warn+"\n", serveChart(t))
+	m := textModel(t)
+	m, cmd := m.advanceTime(unitDay, +1)
+	m = pump(t, m, cmd)
+	lines := strings.Join(errorLines(m), "\n")
+	if !strings.Contains(lines, "Astrolog has no data for Chiron at this date") || strings.Contains(lines, "Astrolog warned") {
+		t.Errorf("Log error lines:\n%s\nwant Chiron named in the operator's words", lines)
+	}
+	if !strings.Contains(consoleTexts(m), warn) {
+		t.Errorf("the console lost Astrolog's own line:\n%s", consoleTexts(m))
 	}
 }

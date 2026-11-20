@@ -3,9 +3,9 @@ package ui
 import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -73,6 +73,17 @@ func press(t *testing.T, m Model, kmap ...string) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, k := range kmap {
 		tm, cmd = tm.Update(keyMsg(k))
+	}
+	return tm.(Model), cmd
+}
+
+// runCommand runs a command by its id through the model's action path, the
+// way a key that reaches it does, for a command that no longer has a letter.
+func runCommand(t *testing.T, m Model, id keys.BindingID) (Model, tea.Cmd) {
+	t.Helper()
+	tm, cmd, ok := m.runAction(id)
+	if !ok {
+		t.Fatalf("binding %v is not a command", id)
 	}
 	return tm.(Model), cmd
 }
@@ -146,8 +157,8 @@ func TestDefaultLeaderMapBuilds(t *testing.T) {
 	if _, err := keys.NewLeaderMap(defaultLeaderMap()); err != nil {
 		t.Fatalf("the shipped leader map does not build: %v", err)
 	}
-	if got, id := mustDefaultLeaderMap().Resolve([]string{"l"}); got != keys.ResolveAction || id != keys.BindingLogConsole {
-		t.Errorf("shipped map resolves l to (%v, %v)", got, id)
+	if got, id := mustDefaultLeaderMap().Resolve([]string{"L"}); got != keys.ResolveAction || id != keys.BindingLogConsole {
+		t.Errorf("shipped map resolves L to (%v, %v)", got, id)
 	}
 }
 
@@ -191,8 +202,8 @@ func TestLeaderArmsPending(t *testing.T) {
 	if len(m.leader.seq) != 0 {
 		t.Errorf("pending sequence = %v, want empty", m.leader.seq)
 	}
-	if cmd == nil {
-		t.Error("no timeout was armed with the pending leader")
+	if cmd != nil {
+		t.Error("arming the leader started a command")
 	}
 	if !reflect.DeepEqual(before, m.refresh) {
 		t.Error("arming the leader touched a refresh surface")
@@ -203,7 +214,7 @@ func TestLeaderArmsPending(t *testing.T) {
 // same update.
 func TestLeaderCompletesAction(t *testing.T) {
 	m := leaderModel(t)
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	if m.leader.pending {
 		t.Error("pending survived a completed sequence")
 	}
@@ -220,16 +231,9 @@ func TestLeaderHoldsPrefix(t *testing.T) {
 	if !m.leader.pending || !reflect.DeepEqual(m.leader.seq, []string{"g"}) {
 		t.Fatalf("after g: pending=%v seq=%v", m.leader.pending, m.leader.seq)
 	}
-	gen := m.leader.gen
-	m, cmd := press(t, m, "s")
+	m, _ = press(t, m, "s")
 	if !m.leader.pending || !reflect.DeepEqual(m.leader.seq, []string{"g", "s"}) {
 		t.Fatalf("after g s: pending=%v seq=%v", m.leader.pending, m.leader.seq)
-	}
-	if m.leader.gen == gen {
-		t.Error("extending the sequence did not re-arm the window")
-	}
-	if cmd == nil {
-		t.Error("no timeout was armed for the longer sequence")
 	}
 	m, _ = press(t, m, "x")
 	if m.leader.pending {
@@ -245,7 +249,7 @@ func TestLeaderUnmappedKeySwallowed(t *testing.T) {
 	beforeRefresh := m.refresh
 	beforeLog := len(m.logLines)
 
-	m, cmd := press(t, m, ",", "x")
+	m, cmd := press(t, m, ",", "d")
 	if m.leader.pending {
 		t.Error("pending survived an unmapped key")
 	}
@@ -276,82 +280,44 @@ func TestLeaderEscCancels(t *testing.T) {
 	}
 }
 
-// C8: a leader that waits out its window retires in silence.
-func TestLeaderTimesOutSilently(t *testing.T) {
+// C8: a pending leader has no time limit: whatever else arrives, it waits for
+// a key or Esc.
+func TestLeaderWaitsWithoutALimit(t *testing.T) {
 	m := leaderModel(t)
 	m, _ = press(t, m, ",")
-	beforeLog := len(m.logLines)
-	beforeConsole := m.console
-
 	var tm tea.Model = m
-	tm, cmd := tm.Update(leaderTimeoutMsg{gen: m.leader.gen})
-	m = tm.(Model)
-	if m.leader.pending {
-		t.Error("the timeout did not clear pending")
+	for _, msg := range []tea.Msg{tea.WindowSizeMsg{Width: 120, Height: 40}, yankFlashMsg{}, nowTickMsg{}} {
+		tm, _ = tm.Update(msg)
 	}
-	if len(m.logLines) != beforeLog {
-		t.Error("the timeout wrote a Log line")
-	}
-	if !reflect.DeepEqual(m.console, beforeConsole) {
-		t.Error("the timeout ran an action")
-	}
-	if cmd != nil {
-		t.Error("the timeout returned a command")
+	if !tm.(Model).leader.pending {
+		t.Error("the leader stopped pending without a key")
 	}
 }
 
-// C9: a tick from a pending state that is already gone changes nothing.
-func TestLeaderStaleTickDropped(t *testing.T) {
-	m := leaderModel(t)
-	m, _ = press(t, m, ",")
-	stale := m.leader.gen
-	m, _ = press(t, m, "esc")
-	m, _ = press(t, m, ",") // a newer pending, newer generation
-
-	before := m
-	var tm tea.Model = m
-	tm, cmd := tm.Update(leaderTimeoutMsg{gen: stale})
-	if cmd != nil {
-		t.Error("a stale tick returned a command")
-	}
-	if !sameModel(before, tm.(Model)) {
-		t.Error("a stale tick changed the Model")
-	}
-}
-
-// C10: no modal ever sees a leader; the key reaches the modal's own handler.
-func TestLeaderInertInModal(t *testing.T) {
+// Over a modal with a filter that binds no chord the leader does nothing and never reaches the filter.
+func TestLeaderOverAModalDoesNothing(t *testing.T) {
 	t.Run("help", func(t *testing.T) {
 		m := leaderModel(t)
-		m.helpOpen = true
+		m = openedKeybindings(m)
 		m, _ = press(t, m, ",")
-		if m.leader.pending {
-			t.Error("the leader armed under the help modal")
-		}
-		if !m.helpOpen {
-			t.Error("the key closed the help modal")
+		if m.leader.pending || !m.keybindingsOpen {
+			t.Errorf("the leader over Keybindings: pending %v, open %v, want nothing", m.leader.pending, m.keybindingsOpen)
 		}
 	})
 	t.Run("atlas", func(t *testing.T) {
 		m := leaderModel(t)
 		m.startup = startupAtlasOpen
 		m, _ = press(t, m, ",")
-		if m.leader.pending {
-			t.Error("the leader armed under the atlas modal")
-		}
-		if m.atlas.FilterText != "," {
-			t.Errorf("the atlas filter did not receive the key, it reads %q", m.atlas.FilterText)
+		if m.leader.pending || m.atlas.FilterText != "" {
+			t.Errorf("the leader over the atlas modal: pending %v, filter %q, want nothing", m.leader.pending, m.atlas.FilterText)
 		}
 	})
 	t.Run("charts", func(t *testing.T) {
 		m := leaderModel(t)
 		m.startup = startupChartOpen
 		m, _ = press(t, m, ",")
-		if m.leader.pending {
-			t.Error("the leader armed under the chart picker")
-		}
-		if m.picker.FilterText != "," {
-			t.Errorf("the chart picker did not receive the key, it reads %q", m.picker.FilterText)
+		if m.leader.pending || m.picker.FilterText != "" {
+			t.Errorf("the leader over the chart picker: pending %v, filter %q, want nothing", m.leader.pending, m.picker.FilterText)
 		}
 	})
 }
@@ -363,7 +329,7 @@ func TestLeaderInConsoleTakesOnlyCopy(t *testing.T) {
 	copied := captureYank(t)
 	m := leaderModel(t)
 	m = m.testNote("a line to look at")
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -375,7 +341,7 @@ func TestLeaderInConsoleTakesOnlyCopy(t *testing.T) {
 	if m.leader.pending || !m.console.open || m.startup == startupSaveOpen {
 		t.Errorf(",s inside the console: pending %v, open %v, startup %v", m.leader.pending, m.console.open, m.startup)
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	if m.leader.pending || !m.console.open || m.logFocus.active {
 		t.Errorf(",l inside the console: pending %v, open %v, log focus %v", m.leader.pending, m.console.open, m.logFocus.active)
 	}
@@ -407,12 +373,6 @@ func TestLeaderStartsNoCompute(t *testing.T) {
 	if !reflect.DeepEqual(before, m.refresh) {
 		t.Error("cancelling touched a refresh surface")
 	}
-	m, _ = press(t, m, ",")
-	var tm tea.Model = m
-	tm, _ = tm.Update(leaderTimeoutMsg{gen: m.leader.gen})
-	if !reflect.DeepEqual(before, tm.(Model).refresh) {
-		t.Error("timing out touched a refresh surface")
-	}
 }
 
 // C18: a valid configured leader is applied without a word.
@@ -431,18 +391,6 @@ func TestValidLeaderIsApplied(t *testing.T) {
 	}
 }
 
-// C19: a valid timeoutlen is the window a pending leader waits.
-func TestValidTimeoutlenIsApplied(t *testing.T) {
-	m := leaderModel(t)
-	m = m.applyKeyConfig(store.KeysConfig{TimeoutlenMS: 250, TimeoutlenPresent: true})
-	if m.leaderTimeout != 250*time.Millisecond {
-		t.Errorf("timeout = %v, want 250ms", m.leaderTimeout)
-	}
-	if len(m.logLines) != 0 {
-		t.Errorf("a valid timeoutlen wrote %v", m.logLines)
-	}
-}
-
 // C20: an absent leader defaults to `,` in silence.
 func TestLeaderDefaultsSilently(t *testing.T) {
 	m := leaderModel(t)
@@ -452,18 +400,6 @@ func TestLeaderDefaultsSilently(t *testing.T) {
 	}
 	if len(m.logLines) != 0 {
 		t.Errorf("an absent leader wrote %v", m.logLines)
-	}
-}
-
-// C21: an absent timeoutlen defaults to 1000ms in silence.
-func TestTimeoutlenDefaultsSilently(t *testing.T) {
-	m := leaderModel(t)
-	m = m.applyKeyConfig(store.KeysConfig{})
-	if m.leaderTimeout != 1000*time.Millisecond {
-		t.Errorf("timeout = %v, want 1000ms", m.leaderTimeout)
-	}
-	if len(m.logLines) != 0 {
-		t.Errorf("an absent timeoutlen wrote %v", m.logLines)
 	}
 }
 
@@ -480,8 +416,8 @@ func TestLeaderRejectsStrandingKey(t *testing.T) {
 			if len(m.logLines) != 1 {
 				t.Fatalf("log = %v, want exactly one line", m.logLines)
 			}
-			if !strings.Contains(m.logLines[0].text, k) || !strings.Contains(m.logLines[0].text, "keys.leader") {
-				t.Errorf("the line does not name field and value: %q", m.logLines[0].text)
+			if !strings.Contains(m.logLines[0].text, k) || !strings.Contains(m.logLines[0].text, "cannot start a command") {
+				t.Errorf("the line does not name the key and the reason: %q", m.logLines[0].text)
 			}
 		})
 	}
@@ -517,13 +453,13 @@ func TestLeaderRejectsMultiRune(t *testing.T) {
 }
 
 // C24: every rejection the reader hands over becomes exactly one Log line
-// naming field, value and reason, and the default stands.
+// naming field and value, and the default stands.
 func TestKeyConfigRejectionsReachTheLog(t *testing.T) {
 	m := leaderModel(t)
 	m = m.applyKeyConfig(store.KeysConfig{
 		Rejections: []store.KeyRejection{
-			{Field: "keys.timeoutlen", Value: "soon", Reason: "expected a whole number of milliseconds above zero"},
-			{Field: "keys.timeoutlen", Value: "-4", Reason: "expected a whole number of milliseconds above zero"},
+			{Field: "keys.timeoutlen", Value: "soon", Reason: "It must be a whole number above zero"},
+			{Field: "keys.timeoutlen", Value: "-4", Reason: "It must be a whole number above zero"},
 		},
 	})
 	if len(m.logLines) != 2 {
@@ -531,14 +467,11 @@ func TestKeyConfigRejectionsReachTheLog(t *testing.T) {
 	}
 	for i, want := range []string{"soon", "-4"} {
 		line := m.logLines[i].text
-		for _, part := range []string{"keys.timeoutlen", want, "milliseconds"} {
+		for _, part := range []string{"keys.timeoutlen", want, " not valid, ignored"} {
 			if !strings.Contains(line, part) {
 				t.Errorf("line %d %q does not carry %q", i, line, part)
 			}
 		}
-	}
-	if m.leaderTimeout != 1000*time.Millisecond {
-		t.Errorf("timeout = %v, want the default to stand", m.leaderTimeout)
 	}
 }
 
@@ -566,22 +499,24 @@ func TestLeaderShadowsBinding(t *testing.T) {
 	}
 }
 
-// C49: the help modal names the active leader and lists every leader binding.
+// C49: Keybindings names the active leader and lists each command with its Ctrl key.
 func TestHelpListsLeaderMap(t *testing.T) {
 	kmap := keys.DefaultKeys()
 	for _, leader := range []string{",", ";"} {
 		got := helpListText(kmap, leader, defaultLeaderMap())
-		if !strings.Contains(got, "leader: "+leader) {
-			t.Errorf("help does not name the active leader %q", leader)
+		for _, row := range []string{"Log  ", "Choose houses  "} {
+			if !strings.Contains(got, row) {
+				t.Errorf("help does not carry the description %q", row)
+			}
 		}
-		if !strings.Contains(got, leader+"l") {
-			t.Errorf("help does not list %ql", leader)
+		rowsFound := regexp.MustCompile(`(?m)^(Log|Choose houses) {2,}(.+)$`).FindAllStringSubmatch(got, -1)
+		if len(rowsFound) < 2 {
+			t.Errorf("help lists %d of the Log and Choose houses rows", len(rowsFound))
 		}
-		if !strings.Contains(got, "Log console") {
-			t.Error("help does not carry the binding's description")
-		}
-		if !strings.Contains(got, leader+"c d") || !strings.Contains(got, "Save defaults") {
-			t.Errorf("help does not list %qc d with its description", leader)
+		for _, row := range rowsFound {
+			if want := map[string]string{"Log": leader + " L", "Choose houses": "<ctrl+u>"}[row[1]]; row[2] != want {
+				t.Errorf("help lists %q with %q, want %q", row[1], row[2], want)
+			}
 		}
 	}
 }
@@ -600,47 +535,30 @@ func TestLeaderSurvivesResize(t *testing.T) {
 	}
 }
 
-// Acceptance 9: `c` is only a prefix. The shipped map builds with `c d` in
-// it; `,c` alone does nothing when its window runs out, and `,c x` is a
-// mistyped sequence that is swallowed. Neither writes a Log line, starts a
-// command or touches the profile.
-func TestCommaCIsOnlyAPrefix(t *testing.T) {
-	for name, tree := range map[string]func() (*keys.LeaderNode, error){
-		"main": func() (*keys.LeaderNode, error) { return keys.NewLeaderMap(defaultLeaderMap()) },
-	} {
-		root, err := tree()
-		if err != nil {
-			t.Fatalf("%s: the shipped leader map does not build: %v", name, err)
-		}
-		if got, _ := root.Resolve([]string{"c"}); got != keys.ResolvePrefix {
-			t.Errorf("%s: `c` resolves to %v, want only a prefix", name, got)
-		}
-		if got, id := root.Resolve([]string{"c", "d"}); got != keys.ResolveAction || id != keys.BindingSaveCity {
-			t.Errorf("%s: `c d` resolves to (%v, %v)", name, got, id)
-		}
-	}
+// Acceptance 6: a letter after the leader that is not in the table cancels the
+// menu and does nothing else. `d` is the day step and `q` the quit when no
+// leader is pending; after one neither steps, writes or quits.
+func TestCommaThenAnUnlistedLetterCancels(t *testing.T) {
+	for _, letter := range []string{"d", "q"} {
+		t.Run(letter, func(t *testing.T) {
+			sessionSandbox(t)
+			m := leaderModel(t)
+			m.place, m.placeFromZone = amsterdamNL, true
+			before := profileSnapshot(t)
+			lines := len(m.logLines)
+			target := m.targetFloatingTime
 
-	sessionSandbox(t)
-	m := leaderModel(t)
-	m.place, m.placeGuessed = amsterdamNL, true
-	before := profileSnapshot(t)
-	lines := len(m.logLines)
-
-	m, _ = press(t, m, ",", "c")
-	if !m.leader.pending {
-		t.Fatal("`,c` is not waiting for a second key")
+			m, cmd := press(t, m, ",", letter)
+			if m.leader.pending || cmd != nil || len(m.logLines) != lines {
+				t.Errorf("`, %s`: pending=%v cmd=%v log %d -> %d", letter, m.leader.pending, cmd != nil, lines, len(m.logLines))
+			}
+			if !m.targetFloatingTime.Equal(target) {
+				t.Errorf("`, %s` moved the chart: %v -> %v", letter, target, m.targetFloatingTime)
+			}
+			if !m.placeFromZone {
+				t.Errorf("`, %s` kept the city", letter)
+			}
+			sameProfile(t, before, profileSnapshot(t), "`, "+letter+"`")
+		})
 	}
-	tm, cmd := tea.Model(m).Update(leaderTimeoutMsg{gen: m.leader.gen})
-	m = tm.(Model)
-	if m.leader.pending || cmd != nil || len(m.logLines) != lines {
-		t.Errorf("`,c` then timeout: pending=%v cmd=%v log %d -> %d", m.leader.pending, cmd != nil, lines, len(m.logLines))
-	}
-	m, cmd = press(t, m, ",", "c", "x")
-	if m.leader.pending || cmd != nil || len(m.logLines) != lines {
-		t.Errorf("`,c x`: pending=%v cmd=%v log %d -> %d", m.leader.pending, cmd != nil, lines, len(m.logLines))
-	}
-	if !m.placeGuessed {
-		t.Error("a half-typed sequence kept the city")
-	}
-	sameProfile(t, before, profileSnapshot(t), "a half-typed `,c`")
 }

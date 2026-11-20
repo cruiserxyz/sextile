@@ -17,10 +17,8 @@ import (
 
 // ephemeris.go: the startup account of objects Astrolog has no ephemeris file
 // for. Such an object is never in an argv (astrolog.Availability), so nothing
-// is drawn at a wrong position; this file only makes the absence visible, once.
-
-// ephemerisNoticeMark is in every footer notice of this kind.
-const ephemerisNoticeMark = " can't be drawn here"
+// is drawn at a wrong position. A body without data is left out quietly: the
+// account is written for the large log, never for the Log panel or the footer.
 
 // EphemerisProbedMsg carries the availability probe's answer.
 type EphemerisProbedMsg struct {
@@ -112,20 +110,34 @@ func (m Model) ephemerisAccount(extra []int, lenses ...lookup.Lens) ([]string, e
 // absentWhat is the missing file as the Log words it.
 func absentWhat(file string) string {
 	if file == "" {
-		return "no ephemeris data"
+		return "no data for this date"
 	}
-	return "no ephemeris file " + file
+	return "no file " + file
 }
 
 // logLineLimit is the widest line the Log shows uncut at 132x40 with one chart
 // shown, the width the one-line accounts are measured against. Zero (no bound)
 // when that layout has no Log.
 func (m Model) logLineLimit() int {
-	r, ok := layoutGeometry(132, 40, 1, 1)[PanelLog]
+	l := layoutFor(layoutInput{width: 132, height: 40, focus: PanelChart, charts: 1, shown: 1})
+	if l == nil {
+		return 0
+	}
+	r, ok := l.rects[PanelLog]
 	if !ok {
 		return 0
 	}
 	return r.w - 2
+}
+
+// logMessageLimit is the widest message the Log panel shows uncut in the same
+// layout: the panel's width less its group column and the space after it.
+func (m Model) logMessageLimit() int {
+	l := m.logLineLimit()
+	if l <= 0 {
+		return 0
+	}
+	return l - logGroupCells - 1
 }
 
 // fits reports whether a sentence is no wider than the limit (0: any).
@@ -185,18 +197,16 @@ func (m Model) drainedLine(nums []int) string {
 		}
 		names = append(names, name)
 	}
-	why, plain := "can't be drawn here", "The selected bodies can't be drawn here"
+	// A body the chart has no ephemeris for is selected but cannot be drawn. A
+	// body the chart simply lacks is not among its bodies. The tail is the short one, since the Log holds 65 cells.
+	form, plain := "%s selected but can't be drawn here", "the selected bodies can't be drawn here"
 	if !every {
-		why, plain = "not drawn", "The selected bodies are not drawn"
+		form, plain = "%s not among this chart's bodies", "the selected bodies are not drawn"
 	}
-	tail := ", so all drawn bodies are shown"
+	const tail = ", all are shown"
 	if list, few := nameList(names); few {
-		verb := "is"
-		if len(names) > 1 {
-			verb = "are"
-		}
-		line := fmt.Sprintf("%s %s selected but %s%s", list, verb, why, tail)
-		if fits(line, m.logLineLimit()) {
+		line := fmt.Sprintf(form, list) + tail
+		if fits(line, m.logMessageLimit()) {
 			return line
 		}
 	}
@@ -213,16 +223,26 @@ func applyEphemerisProbed(m Model, msg EphemerisProbedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.ephemeris = msg.Availability
-	return m.sayEphemeris()
+	return m.sayEphemeris(), nil
 }
 
-// logEphemeris appends one account as the order words it, without a scope
-// prefix: the sentence names the bodies and the file and is complete by itself.
-func (m Model) logEphemeris(text string) Model { return m.appendLog(laneNote, text) }
+// logEphemeris appends one account to the large log only: the sentence names
+// the bodies and the file and is complete by itself.
+func (m Model) logEphemeris(text string) Model { return m.logTrace("bodies", "%s", text) }
 
-// sayEphemeris writes the one Log line and shows the footer
-// notice, unless the same account was already given for this data folder.
-func (m Model) sayEphemeris() (Model, tea.Cmd) {
+// allAbsent reports whether every one of nums has no ephemeris file here.
+func (m Model) allAbsent(nums []int) bool {
+	for _, n := range nums {
+		if !m.ephemeris.IsAbsent(n) {
+			return false
+		}
+	}
+	return len(nums) > 0
+}
+
+// sayEphemeris writes the account to the large log, unless the same account was
+// already given for this data folder.
+func (m Model) sayEphemeris() Model {
 	// Saved, not drawn: still part of the account, unless the account already
 	// named it when the defaults were the view (the startup answer comes first).
 	var kept []int
@@ -231,7 +251,7 @@ func (m Model) sayEphemeris() (Model, tea.Cmd) {
 		def.Objects = m.defaultObjects()
 		onDefault, err := lookup.OnScreenObjects(m.ephemeris, def)
 		if err != nil {
-			return m.logTrace("bodies", "the ephemeris account cannot be made: %v", err), nil
+			return m.logTrace("bodies", "the ephemeris account cannot be made: %v", err)
 		}
 		for _, n := range m.keptAbsentNums() {
 			if !slices.Contains(onDefault, n) {
@@ -241,20 +261,17 @@ func (m Model) sayEphemeris() (Model, tea.Cmd) {
 	}
 	lines, err := m.ephemerisAccount(kept, m.viewedLenses()...)
 	if err != nil {
-		return m.logTrace("bodies", "the ephemeris account cannot be made: %v", err), nil
+		return m.logTrace("bodies", "the ephemeris account cannot be made: %v", err)
 	}
 	said := m.ephemeris.Folder + "\n" + strings.Join(lines, "\n")
 	if said == m.ephemerisSaid {
-		return m, nil
+		return m
 	}
 	m.ephemerisSaid = said
-	if len(lines) == 0 {
-		return m, nil
-	}
 	for _, l := range lines {
 		m = m.logEphemeris(l)
 	}
-	return m.showNotice(lines[0])
+	return m
 }
 
 // viewedLenses are the lenses the screens draw bodies under: the workspace's
@@ -278,6 +295,7 @@ func (m Model) viewedLenses() []lookup.Lens {
 // chart that does not match their selection.
 func (m Model) sayDrainedSelection() Model {
 	var lines []string
+	traced := false
 	if m.slots != nil {
 		nums, err := m.showLens(m.focusedSlot()).DrainedObjects()
 		if err != nil {
@@ -285,7 +303,7 @@ func (m Model) sayDrainedSelection() Model {
 		}
 		if len(nums) > 0 {
 			if l := m.drainedLine(nums); l != "" {
-				lines = append(lines, l)
+				lines, traced = append(lines, l), m.allAbsent(nums)
 			}
 		}
 	}
@@ -295,7 +313,35 @@ func (m Model) sayDrainedSelection() Model {
 	}
 	m.drainSaid = line
 	for _, l := range lines {
-		m = m.logEphemeris(l)
+		if traced {
+			m = m.logEphemeris(l)
+		} else {
+			m = m.logBare("bodies", l)
+		}
+	}
+	return m
+}
+
+// logLeftOut writes, for the large log only, which bodies a search left out
+// because Astrolog has no ephemeris data for the date, and Astrolog's own lines
+// about them. The screens say nothing: a body without data is left out quietly.
+func (m Model) logLeftOut(what string, lo lookup.LeftOut) Model {
+	if len(lo.Bodies) == 0 {
+		return m
+	}
+	var names []string
+	for _, n := range lo.Bodies {
+		if !slices.Contains(names, n) {
+			names = append(names, n)
+		}
+	}
+	m = m.logTrace("bodies", "the %s search left out %s: no ephemeris data for this date", what, strings.Join(names, ", "))
+	var said []string
+	for _, l := range lo.Lines {
+		if !slices.Contains(said, l) {
+			said = append(said, l)
+			m = m.logTrace("bodies", "Astrolog said %s", l)
+		}
 	}
 	return m
 }

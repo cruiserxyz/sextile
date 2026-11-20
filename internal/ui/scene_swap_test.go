@@ -44,7 +44,7 @@ func stubSwapLookups(t *testing.T) *swapSpawns {
 	s := &swapSpawns{columns: stubColumnLookups(t, nil)}
 	row := func(other int) lookup.OverlayAspects {
 		return lookup.OverlayAspects{
-			Aspects: []lookup.OverlayAspect{{NatalObject: objSun, TransitObject: objMoon, Kind: aspect.Square, Orb: aspect.Orb(float64(other%9) + 0.5), Power: 5}},
+			Aspects: []lookup.OverlayAspect{{NatalObject: objSun, TransitObject: objMoon, Kind: kindOf("Squ"), Orb: aspect.Orb(float64(other%9) + 0.5), Power: 5}},
 			Report:  "cross",
 		}
 	}
@@ -56,7 +56,8 @@ func stubSwapLookups(t *testing.T) *swapSpawns {
 			s.mu.Unlock()
 			return row(when.Year()), nil
 		}
-		sp.cast.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		sp.cast.synastry = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
+			when := other.When
 			s.mu.Lock()
 			s.cross++
 			s.crossFst = append(s.crossFst, natal)
@@ -67,7 +68,7 @@ func stubSwapLookups(t *testing.T) *swapSpawns {
 	return s
 }
 
-// leftColumn splits a rendered frame into the Chart list (the rows above
+// leftColumn splits a rendered frame into the Session and Chart panels (the rows above
 // Bodies' top border) and the Bodies + Aspects panels, both cut to the left
 // column and stripped of escapes.
 func leftColumn(t *testing.T, view string) (chartList, panels string) {
@@ -75,13 +76,13 @@ func leftColumn(t *testing.T, view string) (chartList, panels string) {
 	lines := strings.Split(ansi.Strip(view), "\n")
 	width := 0
 	for i, r := range []rune(lines[0]) {
-		if r == '╮' {
+		if r == '╮' || r == '╴' {
 			width = i + 1
 			break
 		}
 	}
 	if width == 0 {
-		t.Fatalf("no Chart panel corner in the first line %q", lines[0])
+		t.Fatalf("no panel corner in the first line %q", lines[0])
 	}
 	cut := make([]string, len(lines))
 	for i, ln := range lines {
@@ -95,7 +96,7 @@ func leftColumn(t *testing.T, view string) (chartList, panels string) {
 	for i, ln := range cut {
 		// The Bodies panel by its digit: its title is the view ("2 in 1") while
 		// a pair is on screen.
-		if strings.Contains(ln, "[2] ") && strings.HasPrefix(ln, "╭") {
+		if strings.Contains(ln, "[3] ") && strings.HasPrefix(ln, "╭") {
 			bodies = i
 			break
 		}
@@ -171,7 +172,7 @@ func TestSceneChangeSwapsMainPanelsTogether(t *testing.T) {
 		{"space deselects", true, func(m Model) Model { return m },
 			func(t *testing.T, m Model) (Model, tea.Cmd) { return tpress(t, m, keySpace) }},
 		{"reorder", true, func(m Model) Model { return m },
-			func(t *testing.T, m Model) (Model, tea.Cmd) { return tpress(t, m, keyCtrlJ) }},
+			func(t *testing.T, m Model) (Model, tea.Cmd) { return tpress(t, m, keyMoveDown) }},
 		{"pair cycle", false, func(m Model) Model { m.focused = PanelAspects; return m },
 			func(t *testing.T, m Model) (Model, tea.Cmd) { return tpress(t, m, runes("]")) }},
 	} {
@@ -511,13 +512,10 @@ func TestFailedOrSupersededFrameAndTheHold(t *testing.T) {
 		run, want := ids(m1)
 		_ = cmd // never pumped: the failure below is this run's result
 		m2 := send(t, m1, FirstFrameReadyMsg{Err: errors.New("astrolog: exit status 1"), RunID: run, WantID: want})
-		if m2.shown.held {
-			t.Fatal("a failed frame for the current scene left the old scene held")
+		if _, after := leftColumn(t, m2.View()); after == before || !strings.Contains(after, "Couldn't cast ") {
+			t.Fatalf("Bodies and Aspects do not say the cast failed:\n%s", after)
 		}
-		if _, after := leftColumn(t, m2.View()); after == before {
-			t.Fatalf("Bodies and Aspects still show the old scene after the failed frame:\n%s", after)
-		}
-		if log := strings.Join(m2.logPanelRows(), "\n"); !strings.Contains(log, "Couldn't cast the chart") {
+		if log := strings.Join(m2.logPanelRows(), "\n"); !strings.Contains(log, " not cast,") {
 			t.Fatalf("no error line in the Log:\n%s", log)
 		}
 	})

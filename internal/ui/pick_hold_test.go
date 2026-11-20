@@ -23,7 +23,7 @@ func pickModel(t *testing.T) (Model, *swapSpawns) {
 	freshModels(t)
 	spawns := stubSwapLookups(t)
 	m := settledComparing(t, 1)
-	m.width, m.height = 132, 40
+	m.width, m.height = max(132, dualColumnMinWidth(m.shownCount())), 40 // Details beside: Bodies and Aspects both open
 	return m, spawns
 }
 
@@ -141,8 +141,8 @@ func TestFirstPickHoldsNothing(t *testing.T) {
 	}
 }
 
-// Rules 3 and 4: a pick that fails swaps in with its error and never outlives
-// it; a pick superseded before it lands never swaps in.
+// Rules 3 and 4: a pick that fails says so where the old chart was and never
+// draws it under the new caption; a pick superseded before it lands never swaps in.
 func TestFailedOrSupersededPick(t *testing.T) {
 	ids := func(m Model) (run, want uint64) {
 		return m.refresh[surfaceText].runningRunID, m.refresh[surfaceText].runningWantID
@@ -166,12 +166,12 @@ func TestFailedOrSupersededPick(t *testing.T) {
 		if _, now := leftColumn(t, got.View()); now != before {
 			t.Fatalf("a failed resolve changed Bodies or Aspects:\n%s", now)
 		}
-		if log := strings.Join(got.logPanelRows(), "\n"); !strings.Contains(log, "Couldn't open that chart") {
+		if log := strings.Join(got.logPanelRows(), "\n"); !strings.Contains(log, "chart not opened") {
 			t.Fatalf("no error line in the Log:\n%s", log)
 		}
 	})
 
-	t.Run("refused cast swaps in with its error", func(t *testing.T) {
+	t.Run("refused cast says so in place of the old chart", func(t *testing.T) {
 		m, _ := pickModel(t)
 		_, before := leftColumn(t, m.View())
 		m1, _ := libraryPick(t, m, chartA, pickMoment)
@@ -180,13 +180,10 @@ func TestFailedOrSupersededPick(t *testing.T) {
 		}
 		run, want := ids(m1)
 		m2 := send(t, m1, FirstFrameReadyMsg{Err: errors.New("astrolog: exit status 1"), RunID: run, WantID: want})
-		if m2.shown.held || m2.holding() {
-			t.Fatal("the failed frame left the old chart held")
+		if _, after := leftColumn(t, m2.View()); after == before || !strings.Contains(after, "Couldn't cast Picked A.") {
+			t.Fatalf("Bodies and Aspects do not say the picked chart failed:\n%s", after)
 		}
-		if _, after := leftColumn(t, m2.View()); after == before {
-			t.Fatalf("Bodies and Aspects still show the old chart after the failed frame:\n%s", after)
-		}
-		if log := strings.Join(m2.logPanelRows(), "\n"); !strings.Contains(log, "Couldn't cast the chart") {
+		if log := strings.Join(m2.logPanelRows(), "\n"); !strings.Contains(log, " not cast,") {
 			t.Fatalf("no error line in the Log:\n%s", log)
 		}
 	})

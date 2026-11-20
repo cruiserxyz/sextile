@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,8 +27,7 @@ import (
 //   - ExemptCall: this call shows no bodies, and says why in a reason string.
 //
 // There is no entry point that takes a bare []string. A new call site that
-// does neither fails to compile, or fails internal/invariants
-// TestAstrologSpawnSeamIsTyped by name (the specification).
+// does neither fails to compile.
 
 // ErrBandMissing means a body call reached the seam without carrying its
 // chooser band: either the band was never issued by the compiler, or the argv
@@ -63,8 +65,7 @@ type spawnCall interface{ spawnable() }
 // BodyCall is a spawn whose output can name bodies and aspects. Its fields are
 // unexported, so no code outside this package can pair an argv with a band, and
 // inside it only the functions that EMIT the argv and its band together make
-// one (newBodyCall, called from Invocation.Call and TimelineCall — pinned by
-// TestAstrologSpawnSeamIsTyped). The zero value carries no issued band and is
+// one (newBodyCall, called from Invocation.Call, TimelineCall and VoidCall). The zero value carries no issued band and is
 // refused by the seam.
 type BodyCall struct {
 	argv []string
@@ -81,12 +82,29 @@ type BodyCall struct {
 	// probes set it (RunPositionsProbing, probeCast); reportingMissing alone
 	// keeps refusing every line that is not a missing-ephemeris line.
 	probing bool
+	// leftOut, when set, receives the names of the objects the spawn left out
+	// because their ephemeris does not reach the moment (outOfRange). Like
+	// missing it is not part of the call's identity.
+	leftOut *[]string
+	// leftOutLines, when set, receives the warning lines that said so (Astrolog's
+	// own words, for the large log).
+	leftOutLines *[]string
+	// heard, when set on a probing call, receives every stderr line the spawn
+	// wrote (searchLacking reads which object a warning is about from it).
+	heard *[]string
+	// searching marks an event search (a timeline, the void search): when every
+	// object it draws is one Astrolog cannot place, the answer is an empty list.
+	searching bool
 	// Registry is the binary's object list and Objects the numbers the argv
 	// draws, ascending: what the parsers need to give each printed row
 	// Astrolog's own object. Neither is part of the argv or the band; a
 	// call built without them parses its rows without identity.
 	Registry aspect.Registry
 	Objects  []int
+	// Aspects is the binary's aspect list: what the parsers need to give each
+	// printed aspect row Astrolog's own identity. A row it does not hold
+	// refuses the list. Not part of the argv or the band.
+	Aspects aspect.AspectRegistry
 }
 
 func (BodyCall) spawnable() {}
@@ -110,6 +128,76 @@ func (c BodyCall) sayingFirst(into *string) BodyCall {
 	return c
 }
 
+// reportingLeftOut returns the call with a collector for the objects its spawn
+// leaves out because their ephemeris does not reach the moment.
+func (c BodyCall) reportingLeftOut(into *[]string) BodyCall {
+	c.leftOut = into
+	return c
+}
+
+// reportingLeftOutLines is reportingLeftOut for Astrolog's own warning lines.
+func (c BodyCall) reportingLeftOutLines(into *[]string) BodyCall {
+	c.leftOutLines = into
+	return c
+}
+
+// asSearch marks the call as an event search (see searching).
+func (c BodyCall) asSearch() BodyCall {
+	c.searching = true
+	return c
+}
+
+// without is the call with the objects nums taken out of what it draws, in
+// the argv and in the band alike. A band that lists its objects (`-R0 1 2
+// ...`, and the transiting `-RT0`) loses them from the list. A band that
+// toggles Astrolog's default set (`-R 11` turns Chiron on or off) loses the
+// toggle that turned one on, or gains one that turns a default one off. Only
+// spawn and Run use it, for objects Astrolog cannot place at the moment.
+func (c BodyCall) without(nums []int) BodyCall {
+	listed := slices.Contains(c.argv, flagMainShow)
+	drop := func(toks []string) []string {
+		var out []string
+		inList := false
+		toggled := map[int]bool{}
+		for i := 0; i < len(toks); i++ {
+			t := toks[i]
+			if t == flagMainShow || t == flagTransitShow {
+				inList = true
+				out = append(out, t)
+				continue
+			}
+			n, err := strconv.Atoi(t)
+			if inList && err == nil {
+				if slices.Contains(nums, n) {
+					continue
+				}
+				out = append(out, t)
+				continue
+			}
+			inList = false
+			if !listed && t == "-R" && i+1 < len(toks) {
+				if n, err := strconv.Atoi(toks[i+1]); err == nil && slices.Contains(nums, n) {
+					toggled[n] = true
+					i++
+					continue
+				}
+			}
+			out = append(out, t)
+		}
+		if !listed {
+			for _, n := range nums {
+				if !toggled[n] {
+					out = append(out, "-R", strconv.Itoa(n))
+				}
+			}
+		}
+		return out
+	}
+	objects := slices.DeleteFunc(append([]int(nil), c.Objects...), func(n int) bool { return slices.Contains(nums, n) })
+	return BodyCall{argv: drop(c.argv), band: Band{tokens: drop(c.band.tokens), issued: c.band.issued},
+		missing: c.missing, saying: c.saying, probing: c.probing, leftOut: c.leftOut, leftOutLines: c.leftOutLines, searching: c.searching, Registry: c.Registry, Aspects: c.Aspects, Objects: objects}
+}
+
 // probingCall returns the call marked as a probe: no stderr line refuses it.
 func (c BodyCall) probingCall() BodyCall {
 	c.probing = true
@@ -123,16 +211,27 @@ func (c BodyCall) Argv() []string { return append([]string(nil), c.argv...) }
 // (-R…) or node-mode (-Y…) token to a body call after its band was issued.
 var ErrSmuggledRestriction = errors.New("astrolog: a body call may not gain a -R or -Y token after its band was issued")
 
+// bandSwitch says whether a token is a restriction (`R…`) or `Y…` switch in any
+// of Astrolog's three forms: `-` toggles, `=` sets on, `_` sets off. Those
+// belong to the band, which only the compiler issues; the node mode is `=Yn`
+// or `_Yn` there.
+func bandSwitch(tok string) bool {
+	if len(tok) < 2 || !strings.ContainsRune("-=_", rune(tok[0])) {
+		return false
+	}
+	return tok[1] == 'R' || tok[1] == 'Y'
+}
+
 // with returns the call with extra tokens appended (colour, mode, an image
 // sink). A token that is a restriction or node-mode switch is refused: those
 // belong to the band, which only the compiler issues.
 func (c BodyCall) with(extra ...string) (BodyCall, error) {
 	for _, tok := range extra {
-		if strings.HasPrefix(tok, "-R") || strings.HasPrefix(tok, "-Y") {
+		if bandSwitch(tok) {
 			return BodyCall{}, fmt.Errorf("%w: %q", ErrSmuggledRestriction, tok)
 		}
 	}
-	return BodyCall{argv: append(append([]string(nil), c.argv...), extra...), band: c.band, Registry: c.Registry, Objects: c.Objects}, nil
+	return BodyCall{argv: append(append([]string(nil), c.argv...), extra...), band: c.band, Registry: c.Registry, Aspects: c.Aspects, Objects: c.Objects}, nil
 }
 
 // derive applies a pure argv derivation (colour, an `-aa` list mode) and keeps
@@ -151,12 +250,12 @@ func (c BodyCall) substitute(i int, value string) (BodyCall, error) {
 	if i < 0 || i >= len(c.argv) {
 		return BodyCall{}, fmt.Errorf("astrolog: substitute index %d out of range (argv len %d)", i, len(c.argv))
 	}
-	if strings.HasPrefix(value, "-R") || strings.HasPrefix(value, "-Y") {
+	if bandSwitch(value) {
 		return BodyCall{}, fmt.Errorf("%w: %q", ErrSmuggledRestriction, value)
 	}
 	argv := append([]string(nil), c.argv...)
 	argv[i] = value
-	return BodyCall{argv: argv, band: c.band, Registry: c.Registry, Objects: c.Objects}, nil
+	return BodyCall{argv: argv, band: c.band, Registry: c.Registry, Aspects: c.Aspects, Objects: c.Objects}, nil
 }
 
 // ExemptCall is a spawn that shows no bodies: it reads a metadata list or a
@@ -251,6 +350,12 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 	if err != nil {
 		return "", "", err
 	}
+	if cmd.Dir == "" {
+		// The root folder: it exists everywhere, Sextile writes nothing there,
+		// and it is never the charts folder whatever TMPDIR or the starting
+		// folder say. Docker runs Sextile there already.
+		cmd.Dir = string(filepath.Separator)
+	}
 	// An ExemptCall folds the two streams into one pipe, as it always did: a
 	// metadata answer keeps its warnings in its text. A BodyCall keeps them
 	// apart: its stdout is a chart, and a stderr line means the chart cannot be
@@ -300,6 +405,35 @@ func spawn(ctx context.Context, c spawnCall) (out string, command string, err er
 		// A probing call takes every stderr line as evidence: the object asked
 		// for is absent, with a file name only where a line carries one.
 		warnings = nil
+		if bc, ok := c.(BodyCall); ok && bc.heard != nil {
+			*bc.heard = warningLines(stderr.String())
+		}
+	}
+	if bc, ok := c.(BodyCall); ok && len(warnings) > 0 {
+		nums, names, ok := unplaceable(warnings, out, bc, nil)
+		if !ok {
+			// A line that names no object the output can match: ask which of the
+			// call's objects lack data, by halving what it draws.
+			nums, names, ok = unplaceable(warnings, out, bc, searchLacking(ctx, bc, warnings))
+		}
+		if ok {
+			// Astrolog cannot place these objects at this moment: their
+			// ephemeris does not reach it, or its file for this era is not in
+			// the data folder. It prints them at 0 Aries and finds aspects to
+			// them (NEXT.md BUG 11), so the chart is cast again without them
+			// and the caller is told which were left out.
+			if bc.leftOut != nil {
+				*bc.leftOut = append(*bc.leftOut, names...)
+			}
+			if bc.leftOutLines != nil {
+				*bc.leftOutLines = append(*bc.leftOutLines, warnings...)
+			}
+			if len(nums) == len(bc.Objects) {
+				// An event search with no object left has no events to list.
+				return "", command, nil
+			}
+			return spawn(ctx, bc.without(nums))
+		}
 	}
 	if len(warnings) > 0 {
 		// The refusal carries stderr and the command, never the chart: the
@@ -342,12 +476,15 @@ func buildCmd(ctx context.Context, c spawnCall) (*exec.Cmd, []string, error) {
 	default:
 		return nil, nil, fmt.Errorf("astrolog: spawn: unclassified call %T", c)
 	}
-	// Never page: a user's astrolog.as may set -YQ 24, and a pager waiting for
-	// a keypress on a pipe loops until the process crashes. -YQ 0 comes first,
-	// then the hook-clear band (hooks.go), so the call's own argv is untouched;
-	// a fresh slice keeps the call's backing array from being written through.
-	argv = append(append([]string{"-YQ", "0"}, HookClearBand()...), argv...)
+	// The call's own argv follows CallHead, untouched; a fresh slice keeps the
+	// call's backing array from being written through.
+	argv = append(CallHead(), argv...)
 	cmd := exec.CommandContext(ctx, binary, argv...)
+	// Astrolog reads an astrolog.as from its working directory (io.cpp, after
+	// its own folder), so it never runs where Sextile was started: a charts
+	// folder holding an astrolog.as would otherwise be read as settings, `-o`
+	// lines and all. A call that names no folder gets a fresh, empty one.
+	// spawn makes and removes that folder (buildCmd leaves Dir empty here).
 	cmd.Dir = dir
 	if limited {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -355,4 +492,99 @@ func buildCmd(ctx context.Context, c spawnCall) (*exec.Cmd, []string, error) {
 		cmd.WaitDelay = time.Second
 	}
 	return cmd, argv, nil
+}
+
+// rangeWarning is the line Astrolog writes for an object whose ephemeris does
+// not reach the chart's moment (calc.cpp): "Chiron's ephemeris is restricted
+// to JD 1967601.5 - JD 3419437.5".
+var rangeWarning = regexp.MustCompile(`^(.+)'s ephemeris is restricted to JD -?[0-9.]+ - JD -?[0-9.]+$`)
+
+// apsidesWarning is the line Astrolog writes when the natural Lilith (the
+// interpolated apogee) is asked for outside the range its ephemeris covers
+// (sweph.cpp, swe_calc for SE_INTP_APOG). It names no object, and the row the
+// chart prints for it is the no-data row, as for a missing file.
+var apsidesWarning = regexp.MustCompile(`^Interpolated apsides are restricted to JD +-?[0-9.]+ - JD +-?[0-9.]+$`)
+
+// asteroidWarning is the line Astrolog writes for an asteroid whose file does
+// not reach the moment: "asteroid No. 10 (se00010.se1): jd 1684536.1 < lower
+// limit 2268932.5;". It names the minor planet's number, not an object of the
+// registry, so it is read like a missing file's line.
+var asteroidWarning = regexp.MustCompile(`^asteroid No\. \d+ \([^)]*\): jd -?[0-9.]+ [<>] (?:lower|upper) limit -?[0-9.]+[\x3b]?$`)
+
+// namesNoObject is whether a warning is one of the no-data lines that name no
+// object of the registry: a missing file, the natural Lilith's range, an asteroid's.
+func namesNoObject(w string) bool {
+	return missingEphemeris.MatchString(w) || apsidesWarning.MatchString(w) || asteroidWarning.MatchString(w)
+}
+
+// unplaceable is the objects Astrolog could not place at the chart's moment,
+// when that is all its warnings say: each warning is a range line or a
+// missing-ephemeris line, and every object they concern is one the call draws.
+// A range line names its object; a missing file and the natural Lilith's range
+// line do not, so those objects are the ones stdout prints as the no-data row
+// (0Ari00, no speed), or, for an event search that prints no such rows, the
+// ones searchLacking found out. ok is false when any warning is something else,
+// when a missing file is named and neither shows an object that lacks it, or,
+// outside an event search, when no object would be left.
+func unplaceable(warnings []string, stdout string, c BodyCall, lacking []int) (nums []int, names []string, ok bool) {
+	add := func(o aspect.Object) bool {
+		if !slices.Contains(c.Objects, o.Number) {
+			return false
+		}
+		if !slices.Contains(nums, o.Number) {
+			nums, names = append(nums, o.Number), append(names, o.Name)
+		}
+		return true
+	}
+	missingFile := false
+	for _, w := range warnings {
+		if namesNoObject(w) {
+			missingFile = true
+			continue
+		}
+		m := rangeWarning.FindStringSubmatch(w)
+		if m == nil {
+			return nil, nil, false
+		}
+		o, known := c.Registry.ByName(m[1])
+		if !known || !add(o) {
+			return nil, nil, false
+		}
+	}
+	if missingFile {
+		found := false
+		// An event search prints no rows that name the object: searchLacking asked.
+		for _, n := range lacking {
+			if o, known := c.Registry.ByNumber(n); known && add(o) {
+				found = true
+			}
+		}
+		for _, cut := range unavailableObjects(stdout) {
+			// A row names its object by the first four letters of its name:
+			// it is the one object the call draws whose name begins so.
+			var match []aspect.Object
+			for _, n := range c.Objects {
+				if o, ok := c.Registry.ByNumber(n); ok && strings.HasPrefix(o.Name, cut) {
+					match = append(match, o)
+				}
+			}
+			if len(match) != 1 || !add(match[0]) {
+				return nil, nil, false
+			}
+			found = true
+		}
+		if !found {
+			return nil, nil, false
+		}
+	}
+	return nums, names, len(nums) > 0 && (len(nums) < len(c.Objects) || c.searching)
+}
+
+// NoDataBody is the body a warning line of Astrolog says it cannot place at
+// the chart's moment (rangeWarning), or "" for any other line.
+func NoDataBody(line string) string {
+	if m := rangeWarning.FindStringSubmatch(line); m != nil {
+		return m[1]
+	}
+	return ""
 }

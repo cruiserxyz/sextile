@@ -17,8 +17,8 @@ import (
 //
 // Going back through Update rather than one owner's handler means a key that
 // changes who owns the keyboard hands the rest of the burst to the new owner,
-// as slow typing would: `?jj` opens help and then moves in it. A quit ends the
-// burst: the session is written and nothing after it should act. Whether a
+// as slow typing would: `?jj` opens Keybindings and then types into its
+// filter. A quit ends the burst: the session is written and nothing after it should act. Whether a
 // key quits is asked of the owner that has the keyboard when it arrives, so a
 // `q` typed into a popup's search line stays a `q`.
 //

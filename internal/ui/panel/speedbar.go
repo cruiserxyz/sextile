@@ -2,6 +2,8 @@ package panel
 
 import (
 	"math"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -109,13 +111,35 @@ func StationMarkCells(mark lookup.Station, speed float64, useColor bool) string 
 	return lipgloss.NewStyle().Foreground(term.SpeedGradientColour(term.SpeedRetroGradient[idx])).Render(text)
 }
 
-// speedField is velocityBar for one Bodies row: the bar, or the station mark in
+// The Moon's lane values (HouseOverlay.MoonLane).
+const (
+	MoonLaneVoid    = "v/c"
+	MoonLaneNone    = ""
+	MoonLanePending = "·"
+	MoonLaneFailed  = "?"
+)
+
+// moonLaneCells is the Moon's three cells in place of the bar: the void mark
+// plain, nothing, or a faint dot or question mark. Colours off: the same text.
+func moonLaneCells(word string, useColor bool) string {
+	cells := word + strings.Repeat(" ", max(0, 3-utf8.RuneCountInString(word)))
+	if useColor && (word == MoonLanePending || word == MoonLaneFailed) {
+		return term.SGRFaint + cells + term.SGRReset
+	}
+	return cells
+}
+
+// speedField is velocityBar for one Bodies row: the bar, the Moon's lane word,
+// or the station mark in
 // its three cells when the row carries one (the ℞ cell stays blank). An entered
 // station row's word (ov.forced) outranks the rule's mark and is drawn at the
 // deepest red. Angles never carry a mark.
 func speedField(p aspect.Position, ov HouseOverlay, angle, useColor bool) string {
 	if angle {
 		return VelocityBar(p.Speed, angle, useColor)
+	}
+	if word, ok := ov.MoonLane[p.Object.Number]; ok {
+		return " " + moonLaneCells(word, useColor)
 	}
 	if word := ov.Forced[p.Object.Number]; word != lookup.StationNone {
 		return " " + StationMarkCells(word, 0, useColor)

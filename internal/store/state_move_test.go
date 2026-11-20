@@ -84,7 +84,7 @@ func TestTwoFoldersKeepTwoBackups(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	for _, dir := range []string{a, b} {
 		seedChart(t, dir, "Client.as", retitleBefore+"; "+dir+"\n")
-		if _, err := ReplaceChartWithBackup(dir, "Client.as", tempHolding(t, dir, retitleFirst), []byte(retitleBefore+"; "+dir+"\n")); err != nil {
+		if _, err := OriginalsDoor(dir).Replace("Client.as", []byte(retitleBefore+"; "+dir+"\n"), []byte(retitleFirst), stamp); err != nil {
 			t.Fatalf("retitle in %s: %v", dir, err)
 		}
 	}
@@ -92,7 +92,7 @@ func TestTwoFoldersKeepTwoBackups(t *testing.T) {
 		t.Fatalf("two folders share the backup folder %s", BackupDir(a))
 	}
 	for _, dir := range []string{a, b} {
-		if got := readString(t, filepath.Join(BackupDir(dir), "Client.as")); got != retitleBefore+"; "+dir+"\n" {
+		if got := readString(t, filepath.Join(BackupDir(dir), BackupName("Client.as", stamp))); got != retitleBefore+"; "+dir+"\n" {
 			t.Errorf("%s's backup holds %q, want its own original", dir, got)
 		}
 		onlyEntries(t, dir, "Client.as")
@@ -106,7 +106,7 @@ func TestBackupFolderIsTheFullDigestAndHoldsOnlyBackups(t *testing.T) {
 	stateSandbox(t)
 	dir := t.TempDir()
 	seedChart(t, dir, "Client.as", retitleBefore)
-	if _, err := ReplaceChartWithBackup(dir, "Client.as", tempHolding(t, dir, retitleFirst), []byte(retitleBefore)); err != nil {
+	if _, err := OriginalsDoor(dir).Replace("Client.as", []byte(retitleBefore), []byte(retitleFirst), stamp); err != nil {
 		t.Fatal(err)
 	}
 	physical, err := filepath.EvalSymlinks(dir)
@@ -125,8 +125,8 @@ func TestBackupFolderIsTheFullDigestAndHoldsOnlyBackups(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if strings.Join(names, ",") != "Client.as" {
-		t.Errorf("the backup folder holds %q, want only Client.as", names)
+	if want := BackupName("Client.as", stamp); strings.Join(names, ",") != want {
+		t.Errorf("the backup folder holds %q, want only %s", names, want)
 	}
 	filepath.Walk(os.Getenv("XDG_DATA_HOME"), func(p string, fi os.FileInfo, err error) error {
 		if err == nil && fi.Mode().IsRegular() {

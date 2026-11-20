@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
@@ -48,6 +46,13 @@ type TimelineRequest struct {
 	// it replaces Natal: one sky search plus each natal's own -t and -tr
 	// searches, each run on its own so one failure does not lose the others.
 	Natals []TimelineNatal
+	// Voids answers the void search the sky rows' marks come from; nil runs
+	// the real one. The ui hands one that remembers its answers.
+	Voids VoidSource
+	// Moon makes this the Moon list: the sky search is limited to the Moon's
+	// events, each natal's transit search to the transiting Moon, and no
+	// return search runs (the lunar return is a row of the transit search).
+	Moon bool
 }
 
 // TimelineNatal is one anchored selected slot of a comparing timeline: its
@@ -113,7 +118,14 @@ type TimelineResult struct {
 	// order (only a Natals request produces them: a lone search that fails is
 	// the call's error, as before). Numeral 0 names the sky search.
 	Failures []TimelineFailure
+	// LeftOut is what the searches left out because the ephemeris does not
+	// reach the date. It is for the large log, never for a screen.
+	LeftOut LeftOut
 }
+
+// LeftOut is what a search left out because the ephemeris does not reach the
+// date: the bodies, and Astrolog's own lines about them.
+type LeftOut = astrolog.LeftOut
 
 // TimelineFailure is one search that failed in a Natals request: the slot's
 // numeral (0 for the sky search), Astrolog's own switch for the search ("-d",
@@ -153,7 +165,8 @@ func Timeline(ctx context.Context, req TimelineRequest) (TimelineResult, error) 
 //
 // With a chart anchored it runs the transit, sky and return searches; with
 // none, only the sky search (C9) — a natal search with no natal does not
-// spawn at all. Astrolog computes every row; this function only ARRANGES
+// spawn at all. A Moon request (TimelineRequest.Moon) runs the same without the
+// return searches: the lunar return is already a row of the transit search. Astrolog computes every row; this function only ARRANGES
 // them: the union in ascending instant order (C7), rows sharing an instant in
 // source order then each search's own output order (C8), and one row kept of
 // any that repeat both instant and line — the first under that order, with
@@ -165,7 +178,12 @@ func Timeline(ctx context.Context, req TimelineRequest) (TimelineResult, error) 
 // read refuses the whole timeline with no search spawned: an unbanded search
 // would silently show the bodies the operator hid (C12).
 func TimelineWith(ctx context.Context, req TimelineRequest, search TimelineSearcher, defaults DefaultSetReader) (TimelineResult, error) {
-	zone, err := time.LoadLocation(req.Place.TZ)
+	// An aspect renamed to letters no list can be read with refuses the
+	// timeline before anything is read or run.
+	if text := req.Lens.AspectRegistry.Refusal(); text != "" {
+		return TimelineResult{}, &astrolog.AspectsRefusedError{Text: text}
+	}
+	zone, err := PlaceZone(req.When, req.Place)
 	if err != nil || req.Place.TZ == "" {
 		return TimelineResult{}, fmt.Errorf("lookup: Timeline: the floating slot has no usable zone %q", req.Place.TZ)
 	}
@@ -193,15 +211,23 @@ func TimelineWith(ctx context.Context, req TimelineRequest, search TimelineSearc
 	areq := astrolog.TimelineRequest{
 		Year: year, Month: month, Zone: zone,
 		Houses: req.Lens.Houses, Zodiac: req.Lens.Zodiac,
-		Objects: req.Lens.Objects, Aspects: req.Lens.Aspects, Defaults: sets, Registry: req.Lens.Registry,
+		Objects: req.Lens.Objects, Aspects: req.Lens.Aspects, Defaults: sets, Registry: req.Lens.Registry, AspectRegistry: req.Lens.AspectRegistry,
+		Voids: req.Voids, Moon: req.Moon,
 	}
+	var left astrolog.LeftOut
+	areq.LeftOut = &left
 	if len(req.Natals) > 0 {
-		return timelineNatals(ctx, req.Natals, areq, search)
+		res, err := timelineNatals(ctx, req.Natals, areq, search)
+		res.LeftOut = left
+		return res, err
 	}
 	srcs := []astrolog.TimelineSource{astrolog.TimelineSky}
 	if !req.Natal.IsZero() {
-		areq.Natal = &astrolog.TimelineNatal{When: req.Natal.When, Lon: req.Natal.Place.Lon, Lat: req.Natal.Place.Lat, Objects: req.Lens.Objects}
+		areq.Natal = &astrolog.TimelineNatal{When: req.Natal.When, Lon: req.Natal.Place.Lon, Lat: req.Natal.Place.Lat, Objects: req.Lens.Objects, Record: req.Natal.Record}
 		srcs = []astrolog.TimelineSource{astrolog.TimelineTransit, astrolog.TimelineSky, astrolog.TimelineReturn}
+		if req.Moon {
+			srcs = srcs[:2]
+		}
 	}
 	var run astrolog.TimelineSearcher
 	if search != nil {
@@ -209,9 +235,9 @@ func TimelineWith(ctx context.Context, req TimelineRequest, search TimelineSearc
 	}
 	rows, commands, err := astrolog.ComputeTimeline(ctx, areq, srcs, run)
 	if err != nil {
-		return TimelineResult{Commands: commands}, fmt.Errorf("lookup: Timeline: %w", err)
+		return TimelineResult{Commands: commands, LeftOut: left}, fmt.Errorf("lookup: Timeline: %w", err)
 	}
-	return TimelineResult{Rows: mergeTimeline(rows), Commands: commands}, nil
+	return TimelineResult{Rows: mergeTimeline(rows), Commands: commands, LeftOut: left}, nil
 }
 
 // numberedRow is a row with the numeral of the selected slot whose search
@@ -254,14 +280,16 @@ func timelineNatals(ctx context.Context, natals []TimelineNatal, areq astrolog.T
 	}
 	var plan []one
 	asNatal := func(n TimelineNatal) *astrolog.TimelineNatal {
-		return &astrolog.TimelineNatal{When: n.Chart.When, Lon: n.Chart.Place.Lon, Lat: n.Chart.Place.Lat, Objects: n.Objects}
+		return &astrolog.TimelineNatal{When: n.Chart.When, Lon: n.Chart.Place.Lon, Lat: n.Chart.Place.Lat, Objects: n.Objects, Record: n.Chart.Record}
 	}
 	for _, n := range natals {
 		plan = append(plan, one{n.Numeral, astrolog.TimelineTransit, asNatal(n)})
 	}
 	plan = append(plan, one{0, astrolog.TimelineSky, nil})
 	for _, n := range natals {
-		plan = append(plan, one{n.Numeral, astrolog.TimelineReturn, asNatal(n)})
+		if !areq.Moon {
+			plan = append(plan, one{n.Numeral, astrolog.TimelineReturn, asNatal(n)})
+		}
 	}
 
 	var rows []numberedRow
@@ -349,46 +377,12 @@ func mergeNumbered(rows []numberedRow) []TimelineRow {
 			continue
 		}
 		seen[id] = true
-		r.TimelineRow = relabelNodeStation(r.TimelineRow)
 		out = append(out, TimelineRow{Instant: r.Instant, Line: r.Line, Command: r.Command, Numeral: r.numeral,
 			Weekday: r.Weekday, Date: r.Date, Time: r.Time, Transit: r.Transit, Body: r.Body, Rest: r.Rest, Julian: r.Julian,
 			Kind: r.Kind, Aspect: r.Aspect, Other: r.Other, Sign: r.Sign, Direction: r.Direction, Station: r.Station,
 			Object: r.Object, OtherObject: r.OtherObject, AspectID: r.AspectID, Resolved: r.Resolved})
 	}
 	return out
-}
-
-// stationWord is the `<Sign> S/R` or `<Sign> S/D` token of a station row.
-var stationWord = regexp.MustCompile(`(<[A-Za-z]+> )S/([RD])`)
-
-// relabelNodeStation is C17 of the specification (D39): Astrolog
-// words the North and South Node station rows the wrong way round against its
-// own R column (214 node stations reversed over 2026-27; the planets and
-// Lilith agree). The nodes' Station and the station token of Line and Rest
-// are swapped, S/R <-> S/D, so the timeline, Bodies and the R column say the
-// same thing. Every other body's row passes verbatim (D25).
-//
-// correction: node station words on the timeline
-func relabelNodeStation(r astrolog.TimelineRow) astrolog.TimelineRow {
-	if r.Kind != astrolog.TimelineKindStation || (r.Object.Name != "North Node" && r.Object.Name != "South Node") {
-		return r
-	}
-	swap := func(text string) string {
-		return stationWord.ReplaceAllStringFunc(text, func(tok string) string {
-			if strings.HasSuffix(tok, "S/R") {
-				return strings.TrimSuffix(tok, "S/R") + "S/D"
-			}
-			return strings.TrimSuffix(tok, "S/D") + "S/R"
-		})
-	}
-	r.Line, r.Rest = swap(r.Line), swap(r.Rest)
-	switch r.Station {
-	case "S/R":
-		r.Station = "S/D"
-	case "S/D":
-		r.Station = "S/R"
-	}
-	return r
 }
 
 // DefaultSetsError is the timeline's refusal to run when Astrolog's default

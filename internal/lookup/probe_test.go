@@ -20,7 +20,7 @@ import (
 func TestProbeBodyVerdicts(t *testing.T) {
 	place := location.PlaceInfo{Name: "Testford", Lat: 52, Lon: 13, TZ: "Europe/Berlin"}
 	lens := Hellenistic
-	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3, 16}, TrueNodeMode: true}
+	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3, 16}, Nodes: recipe.NodesTrue}
 	run := func(raw payload.RawOutput) (BodyProbe, recipe.ChartSpec, error) {
 		var got recipe.ChartSpec
 		probers := &Probers{PositionsOnly: func(_ context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
@@ -38,7 +38,7 @@ func TestProbeBodyVerdicts(t *testing.T) {
 		if got := spec.Objects.Selected(); !reflect.DeepEqual(got, []int{43}) {
 			t.Errorf("selection = %v, want only [43]", got)
 		}
-		if !spec.Objects.TrueNodeMode {
+		if spec.Objects.Nodes != recipe.NodesTrue {
 			t.Error("the node mode was dropped")
 		}
 	})

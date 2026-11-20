@@ -141,7 +141,7 @@ func StationMarks(ctx context.Context, probers *Probers, positions []aspect.Posi
 	if len(candidates) == 0 {
 		return nil, nil, nil
 	}
-	spec, err := lens.chartSpecAt(astrolog.SlotJD(moment)+stationProbeDay, place, store.ReportLabel{})
+	spec, err := lens.chartSpecAt(AtMoment(astrolog.SlotJD(moment)+stationProbeDay, place, store.ReportLabel{}))
 	if err != nil {
 		return nil, nil, fmt.Errorf("lookup: StationMarks: %w", err)
 	}

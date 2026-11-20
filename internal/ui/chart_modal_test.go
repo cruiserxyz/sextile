@@ -363,7 +363,7 @@ func TestChartPicker_EndToEnd_RealDir(t *testing.T) {
 	}
 	m, cmd = runCmd(t, m, cmd)
 	want := time.Date(1995, 9, 23, 16, 0, 0, 0, time.UTC)
-	wantPlace := location.PlaceInfo{Name: "Munich", Country: "DE", Lat: 48.13333333333333, Lon: 11.566666666666666, TZ: "Europe/Berlin"}
+	wantPlace := location.PlaceInfo{Name: "Munich, Germany", Lat: 48.13333333333333, Lon: 11.566666666666666}
 	if anchorHandle(m).Place != wantPlace || !anchorHandle(m).When.Equal(want) {
 		t.Errorf("the resolved pick did not become the anchor: %+v", anchorHandle(m))
 	}
@@ -483,43 +483,6 @@ func TestUpdateChartModalKey_EnterIgnoresUnreadableRows(t *testing.T) {
 	}
 }
 
-// The missing atlas is the one library failure that is not about a single file:
-// it drops every .as at once and is fixed outside Sextile, so it goes on the
-// error lane (visible in both the 6-row Log and the console) as well as into
-// the picker's named rows.
-func TestApplyChartsLoaded_MissingAtlasWritesTheErrorLane(t *testing.T) {
-	m := readyModelWithSlots(t, berlinP)
-	m.pickerGen = 1
-	m.picker = chartPickerState{prior: startupReady}
-	drops := []store.ChartDrop{{File: "jung.as", Reason: "no place list, so no city or timezone"}}
-
-	got, _ := applyChartsLoaded(m, ChartsLoadedMsg{
-		Drops:    drops,
-		AtlasErr: errors.New("atlas.as not found in any of: /nowhere"),
-		Gen:      1,
-	})
-
-	if len(got.picker.drops) != 1 {
-		t.Fatalf("picker.drops = %d, want the one named file", len(got.picker.drops))
-	}
-	// an earlier change put this on the error lane; an earlier change made it a sentence. What the
-	// operator has to be told is the same either way: the place list is the
-	// thing that is missing, and it is named.
-	logged := strings.Join(got.logPanelLines(), "\n")
-	if !strings.Contains(logged, "atlas.as") {
-		t.Errorf("the missing atlas is not on the error lane; Log reads:\n%s", logged)
-	}
-	onConsole := false
-	for _, l := range got.consoleLines() {
-		if l.lane == laneError && strings.Contains(l.text, "atlas.as") {
-			onConsole = true
-		}
-	}
-	if !onConsole {
-		t.Error("an error-lane line must reach the console too")
-	}
-}
-
 // A load that succeeds with no failures clears the previous open's drop rows,
 // the same way it clears loadErr — a fixed file must not stay accused.
 func TestApplyChartsLoaded_CleanLoadClearsPriorDrops(t *testing.T) {
@@ -540,13 +503,13 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	colour := Config{Color: ColorAlways}
 
 	t.Run("colours off is plain", func(t *testing.T) {
-		got := menu.Row(chartRow(c, false, today), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, false, today), plainCfg, 60)
 		if !strings.HasPrefix(got, "  Good Fella (46) ") {
 			t.Errorf("row = %q, want `Good Fella (46)` after the cursor column", got)
 		}
 	})
 	t.Run("colours on fades only the age", func(t *testing.T) {
-		got := menu.Row(chartRow(c, false, today), colour, 60)
+		got := menu.Row(chartRow(c, false, false, today), colour, 60)
 		if !strings.Contains(got, "Good Fella"+term.SGRFaint+" (46)"+term.SGRReset) {
 			t.Errorf("row = %q, want the age faint straight after the name", got)
 		}
@@ -560,13 +523,13 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	t.Run("a long name shortens, the age stays whole", func(t *testing.T) {
 		long := c
 		long.Name = strings.Repeat("Longname ", 8)
-		got := ansi.Strip(menu.Row(chartRow(long, false, today), colour, 40))
+		got := ansi.Strip(menu.Row(chartRow(long, false, false, today), colour, 40))
 		if !strings.Contains(got, " (46)") || ansi.StringWidth(got) != 40 {
 			t.Errorf("row = %q (%d cells), want the age kept at width 40", got, ansi.StringWidth(got))
 		}
 	})
 	t.Run("the day before the birthday is a year less", func(t *testing.T) {
-		got := menu.Row(chartRow(c, false, today.AddDate(0, 0, -1)), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, false, today.AddDate(0, 0, -1)), plainCfg, 60)
 		if !strings.Contains(got, "Good Fella (45)") {
 			t.Errorf("row = %q, want (45) the day before the birthday", got)
 		}
@@ -574,7 +537,7 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 	t.Run("under a year is zero", func(t *testing.T) {
 		b := c
 		b.Year, b.Month, b.Day = 2026, 1, 1
-		if got := menu.Row(chartRow(b, false, today), plainCfg, 60); !strings.Contains(got, "Good Fella (0)") {
+		if got := menu.Row(chartRow(b, false, false, today), plainCfg, 60); !strings.Contains(got, "Good Fella (0)") {
 			t.Errorf("row = %q, want (0)", got)
 		}
 	})
@@ -584,13 +547,51 @@ func TestChartRowShowsAgeAfterName(t *testing.T) {
 		fut := c
 		fut.Year = 2030
 		for name, got := range map[string]string{
-			"no date":   menu.Row(chartRow(nd, false, today), plainCfg, 60),
-			"future":    menu.Row(chartRow(fut, false, today), plainCfg, 60),
-			"zero time": menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60),
+			"no date":   menu.Row(chartRow(nd, false, false, today), plainCfg, 60),
+			"future":    menu.Row(chartRow(fut, false, false, today), plainCfg, 60),
+			"zero time": menu.Row(chartRow(c, false, false, time.Time{}), plainCfg, 60),
 		} {
 			if strings.Contains(got, "(") {
 				t.Errorf("%s: row = %q, want no parentheses", name, got)
 			}
 		}
 	})
+}
+
+// A chart file the chart guard refuses is listed with a red ! before its name
+// (the operator, 2026-11-15); with the cursor on it the reason shows inside
+// the list, and Enter starts no read.
+func TestARefusedChartFileIsMarkedInTheList(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SEXTILE_CHARTS_DIR", dir)
+	t.Setenv("SEXTILE_DEV_CHARTS_DIR", "")
+	for name, body := range map[string]string{
+		"Helio.as": "@AI800\n-qb Dec 27 1571 14:37 ST LMT 8:52E 48:45N\n-zi \"A Helio\" \"Here\"\n-h\n",
+		"Plain.as": "@AI800\n-qb Dec 27 1571 14:37 ST LMT 8:52E 48:45N\n-zi \"B Plain\" \"Here\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := readyModelWithSlots(t, berlinP)
+	u, load := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	m, _ = runCmd(t, u.(Model), load)
+	if m.picker.Matches[0].Name != "A Helio" {
+		t.Fatalf("fixture: the first row is %q", m.picker.Matches[0].Name)
+	}
+	view := ansi.Strip(renderChartModal(m.picker, plainCfg, 80, 24))
+	if !strings.Contains(view, ">!A Helio") {
+		t.Errorf("the refused row carries no !:\n%s", view)
+	}
+	if !strings.Contains(view, "heliocentric chart") || !strings.Contains(view, "(-h)") || !strings.Contains(view, "does not open.") {
+		t.Errorf("the reason is not shown under the list:\n%s", view)
+	}
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || u.(Model).picker.resolving {
+		t.Error("Enter on a refused chart started a read")
+	}
+	m.picker.Cursor = 1
+	if view := ansi.Strip(renderChartModal(m.picker, plainCfg, 80, 24)); strings.Contains(view, "heliocentric") || strings.Contains(view, "!B Plain") {
+		t.Errorf("the plain chart shows a refusal:\n%s", view)
+	}
 }

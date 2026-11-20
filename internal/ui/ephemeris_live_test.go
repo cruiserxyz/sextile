@@ -127,14 +127,16 @@ func TestReducedFolderShowsNoBodyAtAFixedPosition(t *testing.T) {
 					t.Errorf("%s screen names %v, bodies Astrolog could not compute:\n%s", name, hit, text)
 				}
 			}
-			if n := countLines(m, c.log); n != 1 {
-				t.Errorf("the Log carries %q %d times, want once:\n%s", c.log, n, strings.Join(logTexts(m), "\n"))
+			for _, l := range m.logPanelLines() {
+				if strings.Contains(l, "can't be drawn") {
+					t.Errorf("the Log panel says %q, a body without data is left out quietly", l)
+				}
 			}
-			if n := countLines(m, "can't be drawn"); n != 1 {
-				t.Errorf("the Log has %d lines about bodies that can't be drawn, want one:\n%s", n, strings.Join(logTexts(m), "\n"))
+			if n := countConsole(m, "bodies: "+strings.TrimSuffix(c.log, ".")); n != 1 {
+				t.Errorf("the console carries %q %d times, want once:\n%s", c.log, n, strings.Join(consoleLineTexts(m), "\n"))
 			}
-			if got := m.footerIndicator(); got != c.log {
-				t.Errorf("footer = %q, want the Log line %q", got, c.log)
+			if got := m.footerIndicator(); strings.Contains(got, "can't be drawn") {
+				t.Errorf("footer = %q, want no notice", got)
 			}
 			if len(m.timeline.rows) == 0 {
 				t.Error("the timeline has no rows (the search was refused, or the narrowing removed more than the absent bodies)")
@@ -162,11 +164,10 @@ func TestCompleteFolderDrawsThemAndSaysNothing(t *testing.T) {
 	}
 }
 
-// A comparing Timeline whose old chart needs a file the folder lacks is
-// refused whole: the modern chart's and the sky's rows must not stand in for a
-// list that lacks the old chart's events. The Log carries the refusal line and
-// the command; nothing is committed.
-func TestComparingTimelineWithAnOldChartIsRefusedWholeNotCommittedPartly(t *testing.T) {
+// A comparing Timeline whose old chart needs a file the folder lacks leaves
+// that body out quietly and lists the rest: no line in the Log panel, and the
+// large log holds Astrolog's own line and the command.
+func TestComparingTimelineWithAnOldChartLeavesTheBodyOutAndListsTheRest(t *testing.T) {
 	if _, err := exec.LookPath("astrolog"); err != nil {
 		t.Skip("astrolog not on PATH; skipping live-binary test")
 	}
@@ -185,11 +186,16 @@ func TestComparingTimelineWithAnOldChartIsRefusedWholeNotCommittedPartly(t *test
 	m, cmd := syncTimelineShown(m)
 	m = pumpPatient(t, m, cmd)
 
-	if len(m.timeline.rows) != 0 || m.timeline.complete {
-		t.Errorf("the timeline committed %d rows (complete=%v) after a refusal", len(m.timeline.rows), m.timeline.complete)
+	if len(m.timeline.rows) == 0 || !m.timeline.complete {
+		t.Errorf("the timeline committed %d rows (complete=%v), want the list without the body", len(m.timeline.rows), m.timeline.complete)
+	}
+	for _, l := range m.logPanelLines() {
+		if strings.Contains(l, "not found") || strings.Contains(l, "Couldn't") {
+			t.Errorf("the Log panel says %q", l)
+		}
 	}
 	if n := countLines(m, "not found in PATH"); n == 0 {
-		t.Errorf("the Log carries no `not found` line:\n%s", strings.Join(logTexts(m), "\n"))
+		t.Errorf("the console carries no `not found` line:\n%s", strings.Join(logTexts(m), "\n"))
 	}
 	if n := countLines(m, "astrolog "); n == 0 {
 		t.Errorf("the Log carries no command:\n%s", strings.Join(logTexts(m), "\n"))
@@ -290,7 +296,7 @@ func TestNoArgvEnablesAbsent(t *testing.T) {
 		class string
 		pick  func([]string) bool
 	}{
-		{"timeline sky (-dm)", func(a []string) bool { return has(a, "-dm") }},
+		{"timeline sky void search (-dY)", func(a []string) bool { return has(a, "-dY") }},
 		{"timeline transit side (-t)", func(a []string) bool { return has(a, "-t") }},
 		{"timeline return side (-tr)", func(a []string) bool { return has(a, "-tr") }},
 	} {
@@ -317,7 +323,7 @@ func TestNoArgvEnablesAbsent(t *testing.T) {
 			return err
 		}},
 		{"synastry cross report", false, true, func() error {
-			_, _, err := lookup.SynastryCrossBodyRawReport(ctx, lens, natal, tlFloatingTime, place, store.ReportLabel{}, objMars)
+			_, _, err := lookup.SynastryCrossBodyRawReport(ctx, lens, natal, store.AnchorChart{When: tlFloatingTime, Place: place}, objMars)
 			return err
 		}},
 		{"pair tab (-rt)", false, false, func() error {
@@ -325,7 +331,7 @@ func TestNoArgvEnablesAbsent(t *testing.T) {
 			return err
 		}},
 		{"pair tab (-r0)", false, false, func() error {
-			_, err := lookup.SynastryCrossAspects(ctx, lens, natal, tlFloatingTime, place, store.ReportLabel{})
+			_, err := lookup.SynastryCrossAspects(ctx, lens, natal, store.AnchorChart{When: tlFloatingTime, Place: place})
 			return err
 		}},
 		{"cycle search", false, false, func() error {
@@ -337,7 +343,7 @@ func TestNoArgvEnablesAbsent(t *testing.T) {
 			return err
 		}},
 		{"wheel (single)", true, false, func() error {
-			_, err := lookup.RenderWheelImage(ctx, tlFloatingTime, place, lens, lookup.WheelHighlight{})
+			_, err := lookup.RenderWheelImage(ctx, store.AnchorChart{When: tlFloatingTime, Place: place}, lens, lookup.WheelHighlight{})
 			return err
 		}},
 		{"wheel (overlay)", true, false, func() error {
@@ -463,11 +469,10 @@ func TestNoArgvEnablesAbsent(t *testing.T) {
 
 // The real refusal through the UI's commit contract: a good frame first, then
 // the floating chart moves to 1500, which needs a file this folder lacks. The
-// accepted state (the session's decision, 2026-11-02) is the CLEARED panels
-// plus the Log's real `not found` line and the command; a held frame of another
-// date under the new caption would be a state that is not true. Asserted here
-// so a later change of that decision is deliberate.
-func TestRefusedOldChartClearsThePanelsAndLogsTheRealLine(t *testing.T) {
+// panels keep the good frame, drawn faint, and the floating chart keeps the
+// moment it was cast at; the Log carries the real `not found` line and the
+// command. No panel shows a 0 Aries row.
+func TestRefusedOldChartKeepsThePanelsAndLogsTheRealLine(t *testing.T) {
 	if _, err := exec.LookPath("astrolog"); err != nil {
 		t.Skip("astrolog not on PATH; skipping live-binary test")
 	}
@@ -495,6 +500,10 @@ func TestRefusedOldChartClearsThePanelsAndLogsTheRealLine(t *testing.T) {
 	m, dcmd := m.requestDetails()
 	m = pumpPatient(t, m, dcmd)
 
+	kept := len(m.chart.positions)
+	if kept == 0 {
+		t.Fatal("fixture: the good frame has no positions")
+	}
 	old := time.Date(1500, 3, 1, 9, 30, 0, 0, time.UTC)
 	m.slots.SetFloatingTime(old)
 	m.targetFloatingTime = old
@@ -521,14 +530,11 @@ func TestRefusedOldChartClearsThePanelsAndLogsTheRealLine(t *testing.T) {
 	if !hasLine("astrolog ") || !hasLine(jdDay) {
 		t.Errorf("no newly appended command for the old date (%q) among:\n%s", jdDay, strings.Join(fresh, "\n"))
 	}
-	if len(m.chart.positions) != 0 {
-		t.Errorf("the refused chart left %d positions (cleared is the accepted state)", len(m.chart.positions))
+	if len(m.chart.positions) != kept {
+		t.Errorf("the refused chart replaced the good frame: %d positions, want %d", len(m.chart.positions), kept)
 	}
-	if len(m.chart.aspects)+len(m.chart.crossAspects) != 0 || m.chart.aspectsReport != "" || m.chart.crossAspectsReport != "" {
-		t.Error("the refused chart left Aspects rows or their report")
-	}
-	if strings.TrimSpace(m.details.body) != "" {
-		t.Errorf("the refused chart left a Details report:\n%.200s", m.details.body)
+	if got := m.textPaneState(PanelBodies); got != paneRefused {
+		t.Errorf("Bodies state = %v, want the kept frame drawn faint", got)
 	}
 	for name, panel := range map[string]string{
 		"default":  ansi.Strip(m.View()),
@@ -677,13 +683,13 @@ func TestRestoredSelectionOfOnlyAnAbsentBodyShowsTheDefaultSetAndSaysWhy(t *test
 	if got := markedObjects(m.slots, len(m.slots.All())-1); !slices.Equal(got, []aspect.Object{objChiron}) {
 		t.Fatalf("fixture: the restored selection is %v", got)
 	}
-	if n := countLines(m, "Chiron can't be drawn here: no ephemeris file seas_18.se1"); n != 1 {
+	if n := countLines(m, "Chiron can't be drawn here: no file seas_18.se1"); n != 1 {
 		t.Errorf("the Log names Chiron's availability %d times, want once:\n%s", n, strings.Join(logTexts(m), "\n"))
 	}
-	if n := countLines(m, "Chiron is selected but can't be drawn here, so all drawn bodies are shown"); n != 1 {
+	if n := countLines(m, "Chiron selected but can't be drawn here, all are shown"); n != 1 {
 		t.Errorf("the Log carries the drain line %d times, want once:\n%s", n, strings.Join(logTexts(m), "\n"))
 	}
-	if n := countLines(m, "Couldn't cast the chart"); n != 0 {
+	if n := countLines(m, " not cast,"); n != 0 {
 		t.Errorf("the cast failed:\n%s", strings.Join(logTexts(m), "\n"))
 	}
 	bodies := chooserLeftPanels(ansi.Strip(m.View()))["bodies"]
@@ -726,8 +732,8 @@ func TestFolderWithoutStarsOrUranianElementsProbesAndSaysOnlyWhatIsDrawn(t *test
 		drawn   string // astrolog.as line that puts it in the view
 		account string
 	}{
-		{"uranian elements", astrodir.ReducedWithoutUranians, 34, "-R 34", "Vulcan can't be drawn here: no ephemeris data"},
-		{"star catalogue", astrodir.ReducedWithoutStars, 84, "-R 84", "Sirius can't be drawn here: no ephemeris data"},
+		{"uranian elements", astrodir.ReducedWithoutUranians, 34, "-R 34", "Vulcan can't be drawn here: no data for this date"},
+		{"star catalogue", astrodir.ReducedWithoutStars, 84, "-R 84", "Sirius can't be drawn here: no data for this date"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			c.folder(t)
@@ -909,10 +915,21 @@ func pairTabNoAbsent(t *testing.T, extra bool, switches, lines []string) {
 	if cmp == 0 {
 		t.Fatalf("no %v spawn recorded (%d spawns): %v", switches, len(argvs), argvs)
 	}
-	if n := countLines(m, "Couldn't cast the chart"); n != 0 {
+	if n := countLines(m, " not cast,"); n != 0 {
 		t.Errorf("the pair tab's cast was refused:\n%s", strings.Join(logTexts(m), "\n"))
 	}
 	if screen := ansi.Strip(m.View()); !strings.Contains(screen, "☉") && !strings.Contains(screen, "Sun") {
 		t.Errorf("the pair tab shows no Sun:\n%s", screen)
 	}
+}
+
+// countConsole is how many console lines equal text.
+func countConsole(m Model, text string) int {
+	n := 0
+	for _, l := range consoleLineTexts(m) {
+		if l == text {
+			n++
+		}
+	}
+	return n
 }

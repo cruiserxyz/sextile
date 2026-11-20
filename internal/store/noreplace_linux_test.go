@@ -51,14 +51,14 @@ func TestPlaceChartFileFallsBackToALinkWithoutNoReplace(t *testing.T) {
 			linkFile = func(from, to string) error { linked++; return prev(from, to) }
 			t.Cleanup(func() { linkFile = prev })
 
-			path, err := PlaceChartFile(dir, []byte(astrologRecord), "client")
+			path, err := OriginalsDoor(dir).Place("client", []byte(astrologRecord))
 			if err != nil {
 				t.Fatalf("first save: %v", err)
 			}
 			if linked != 1 {
 				t.Errorf("%d links, want the save to land by one", linked)
 			}
-			if _, err := PlaceChartFile(dir, []byte("@AI800  ; another chart\n"), "client"); !errors.Is(err, ErrChartExists) {
+			if _, err := OriginalsDoor(dir).Place("client", []byte("@AI800  ; another chart\n")); !errors.Is(err, ErrChartExists) {
 				t.Fatalf("second save: err = %v, want ErrChartExists", err)
 			}
 			if got, err := os.ReadFile(path); err != nil || string(got) != astrologRecord {
@@ -83,11 +83,11 @@ func TestPlaceChartFileWritesInPlaceWithoutAnyNoReplaceMove(t *testing.T) {
 			linkFile = func(from, to string) error { return &os.LinkError{Op: "link", Old: from, New: to, Err: errno} }
 			t.Cleanup(func() { linkFile = prev })
 
-			path, err := PlaceChartFile(dir, []byte(astrologRecord), "client")
+			path, err := OriginalsDoor(dir).Place("client", []byte(astrologRecord))
 			if err != nil {
 				t.Fatalf("first save: %v", err)
 			}
-			if _, err := PlaceChartFile(dir, []byte("@AI800  ; another chart\n"), "client"); !errors.Is(err, ErrChartExists) {
+			if _, err := OriginalsDoor(dir).Place("client", []byte("@AI800  ; another chart\n")); !errors.Is(err, ErrChartExists) {
 				t.Fatalf("second save: err = %v, want ErrChartExists", err)
 			}
 			if got, err := os.ReadFile(path); err != nil || string(got) != astrologRecord {

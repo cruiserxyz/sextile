@@ -15,7 +15,7 @@ var renameat2 = unix.Renameat2
 
 // renameNoReplace moves from onto to in one step, refusing an existing to
 // (os.ErrExist). A kernel or filesystem without RENAME_NOREPLACE falls back to
-// a hard link, and one without either to placeExclusive.
+// a hard link, and one without either to the door's reserved-name placement.
 func renameNoReplace(from, to string) error {
 	err := renameat2(unix.AT_FDCWD, from, unix.AT_FDCWD, to, unix.RENAME_NOREPLACE)
 	switch {

@@ -27,7 +27,6 @@ func escBase(t *testing.T) Model {
 	t.Helper()
 	m := tabsPairModel(t, Config{Accessible: true})
 	m.width, m.height = 132, 40
-	m.limitedViewShown = true // the first-frame notice is not what these tests ask about
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{
 		Positions:    fullChartPositions(),
 		Aspects:      tasteOwnAspects(),
@@ -196,7 +195,7 @@ func TestEscRestoresTheScreen(t *testing.T) {
 				return m
 			},
 			late: func(t *testing.T, m Model) tea.Msg {
-				return SaveChartDoneMsg{Gen: m.saveGen - 1, Saved: lookup.SavedChart{Name: "x", Path: "/nowhere/x.as", AtlasPlaced: true}}
+				return SaveChartDoneMsg{Gen: m.saveGen - 1, Saved: lookup.SavedChart{Name: "x", Path: "/nowhere/x.as"}}
 			},
 		},
 		{
@@ -224,7 +223,7 @@ func TestEscRestoresTheScreen(t *testing.T) {
 			name: "log console",
 			open: func(t *testing.T, m Model) Model {
 				m = m.logCommands([]string{"astrolog -one", "astrolog -two"})
-				m, _ = escSend(t, m, escRunes(","), escRunes("l"))
+				m, _ = escSend(t, m, escRunes(","), escRunes("L"), escRunes("l"))
 				return m
 			},
 			use: func(t *testing.T, m Model) Model { m, _ = escSend(t, m, escKey(tea.KeyUp)); return m },
@@ -239,13 +238,13 @@ func TestEscRestoresTheScreen(t *testing.T) {
 			}
 			before := snapshotForEsc(base)
 			m := tc.open(t, base)
-			if m.startup == base.startup && !m.helpOpen && !m.console.open {
+			if m.startup == base.startup && !m.keybindingsOpen && !m.console.open {
 				t.Fatalf("%s did not open", tc.name)
 			}
 			m = tc.use(t, m)
 			m, _ = escSend(t, m, escKey(tea.KeyEsc))
 			requireSameScreen(t, "after Esc", before, snapshotForEsc(m))
-			if m.helpOpen || m.console.open {
+			if m.keybindingsOpen || m.console.open {
 				t.Error("Esc left the owner open")
 			}
 			if tc.late != nil {

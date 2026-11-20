@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
@@ -28,11 +29,11 @@ func TestRenderWheelImageHighlightComposite(t *testing.T) {
 	// parked path, so it opts in explicitly.
 	t.Setenv(wheelHighlightEnvVar, "1")
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
-	plain, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{})
+	plain, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: londonPlace}, Hellenistic, WheelHighlight{})
 	if err != nil {
 		t.Fatalf("plain render: %v", err)
 	}
-	composite, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{
+	composite, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: londonPlace}, Hellenistic, WheelHighlight{
 		Selected: []int{4, 5},          // Venus, Mars
 		Focused:  registryObject(t, 2), // the Moon
 	})
@@ -63,11 +64,11 @@ func TestRenderWheelImageHighlightParkedByDefault(t *testing.T) {
 	// default this test exists to pin.
 	t.Setenv(wheelHighlightEnvVar, "")
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
-	plain, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{})
+	plain, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: londonPlace}, Hellenistic, WheelHighlight{})
 	if err != nil {
 		t.Fatalf("plain render: %v", err)
 	}
-	highlighted, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, WheelHighlight{
+	highlighted, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: londonPlace}, Hellenistic, WheelHighlight{
 		Selected: []int{4, 5},          // Venus, Mars
 		Focused:  registryObject(t, 2), // the Moon
 	})
@@ -117,7 +118,7 @@ func TestRenderTasteFrames(t *testing.T) {
 		{"v3-sun-split", WheelHighlight{Selected: sel(objSun)}},
 	}
 	for _, f := range frames {
-		img, err := RenderWheelImage(context.Background(), when, londonPlace, Hellenistic, f.hl)
+		img, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: londonPlace}, Hellenistic, f.hl)
 		if err != nil {
 			t.Fatalf("%s: %v", f.name, err)
 		}

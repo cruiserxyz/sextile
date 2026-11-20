@@ -1,5 +1,4 @@
-+-[1m>Open chart[0m----------------------------+
-|                                        |
+[1m+-[0m[1m>Open chart[0m[1m----------------------------+[0m
 |  Search: █                             |
 |  ------------------------------------  |
 |  [1m[7m> Constructed One       Test Bay, TS[0m  |
@@ -7,5 +6,4 @@
 |    Constructed Two       Test Bay, TS  |
 |  ! broken.yaml  —  no birth time       |
 |  ! truncated.yaml  —  unreadable YAML  |
-|                                        |
 +---------------------------------1 of 3-+

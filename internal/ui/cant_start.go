@@ -36,6 +36,10 @@ type cantStartState struct {
 	// the error's own words; empty while it can.
 	objectList string
 
+	// aspectList is the reason Astrolog's aspect list could not be read, in
+	// the error's own words; empty while it can. No chart is read without it.
+	aspectList string
+
 	// ephemerisProbe is the reason the startup check of Astrolog's ephemeris
 	// files failed or ran out of time, in the error's own words; empty while
 	// it has not. It is not the ephemeris reason above, which says every body
@@ -50,7 +54,7 @@ type cantStartState struct {
 }
 
 func (s cantStartState) any() bool {
-	return s.binary || s.ephemeris || s.atlas || s.objectList != "" || s.ephemerisProbe != "" || s.locked()
+	return s.binary || s.ephemeris || s.atlas || s.objectList != "" || s.aspectList != "" || s.ephemerisProbe != "" || s.locked()
 }
 
 // locked reports a launch the instance lock refused.
@@ -134,10 +138,13 @@ func (s cantStartState) reasons() []string {
 		out = append(out, cantStartAtlas)
 	}
 	if s.objectList != "" && !s.binary {
-		out = append(out, "Astrolog's object list could not be read: "+s.objectList)
+		out = append(out, "Astrolog's list of bodies could not be read: "+s.objectList)
+	}
+	if s.aspectList != "" && !s.binary {
+		out = append(out, "Astrolog's list of aspects could not be read: "+s.aspectList)
 	}
 	if s.ephemerisProbe != "" && !s.binary {
-		out = append(out, "Astrolog's ephemeris files could not be checked: "+s.ephemerisProbe)
+		out = append(out, "Astrolog's files for the planets could not be checked: "+s.ephemerisProbe)
 	}
 	return out
 }
@@ -146,8 +153,8 @@ func (s cantStartState) reasons() []string {
 // terminal there is no room for the words, and resizing back brings the box
 // again.
 func (m Model) cantStartView() string {
-	if layoutGeometry(m.width, m.height, chartContentLines(m.slots), m.bodiesView().count()) == nil {
-		return tooSmallView(m.width, m.height, chartContentLines(m.slots), m.cfg)
+	if m.layout() == nil {
+		return tooSmallView(m.width, m.height, m.cfg)
 	}
 	// Roomy padding first; at the minimum terminal it shrinks until the words
 	// fit (C8). Words may wrap, padding may not hold the frame hostage.
@@ -183,7 +190,7 @@ func (m Model) renderCantStart(padV, padH int) string {
 	}
 	lines = append(lines, "", "To fix it, either")
 	lines = append(lines, wrapHanging(bullet+"run Sextile from its Docker image, which builds Astrolog for you, or", inner, strings.Repeat(" ", 4))...)
-	lines = append(lines, wrapHanging(bullet+"install Astrolog 8.00 as README, Install and run says.", inner, strings.Repeat(" ", 4))...)
+	lines = append(lines, wrapHanging(bullet+"install Astrolog 8.00 as REFERENCE, By hand says.", inner, strings.Repeat(" ", 4))...)
 	lines = append(lines, "")
 	last := "Then start Sextile again."
 	const quits = "q quits"

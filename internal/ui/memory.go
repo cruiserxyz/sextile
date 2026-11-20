@@ -104,6 +104,9 @@ type memory struct {
 	report   lru[detailsKey, detailsPayload]
 	timeline lru[timelineKey, timelinePayload]
 	template lru[templateKey, templatePayload]
+	// voids are the void searches that landed with a timeline search, by what
+	// they were asked (spec L6); lookup holds none.
+	voids voidMemory
 	// hits counts the results drawn from memory, per surface, for the
 	// coverage of the every-frame test.
 	hits [numSurfaces]int
@@ -279,8 +282,8 @@ func (m Model) adoptTimelineFromMemory(key timelineKey) (Model, bool) {
 		return m, false
 	}
 	m.mem.timeline = used
-	m.mem.hits[surfaceTimeline]++
-	m = m.fenceForMemory(surfaceTimeline)
+	m.mem.hits[key.list.surface()]++
+	m = m.fenceForMemory(key.list.surface())
 	m = m.logCommands(p.commands)
 	return m.landTimeline(p), true
 }

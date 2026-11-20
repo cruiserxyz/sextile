@@ -40,7 +40,7 @@ func ProbeBody(ctx context.Context, probers *Probers, when time.Time, place loca
 		return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: place %q has no IANA timezone", place.Display())
 	}
 	lens.Objects = lens.Objects.OnlyObject(object)
-	spec, err := lens.chartSpecAt(astrolog.SlotJD(when), place, store.ReportLabel{})
+	spec, err := lens.chartSpecAt(AtMoment(astrolog.SlotJD(when), place, store.ReportLabel{}))
 	if err != nil {
 		return BodyProbe{}, fmt.Errorf("lookup: ProbeBody: %w", err)
 	}

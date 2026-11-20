@@ -24,10 +24,8 @@ import (
 // a stale already-launched computation satisfies while the operator sees the
 // old set".
 //
-// So this test binds to what the COMPUTE receives. Combined with
-// TestAspectPolicyArgv in internal/invariants (policy → `-RA0` argv), the chain
-// from keystroke to Astrolog is covered end to end: here the operator's choice
-// reaches the compute, there it reaches the command line.
+// So this test binds to what the COMPUTE receives: the operator's choice
+// reaches the compute.
 
 // recordLensSeams swaps the three lookup entry points for recorders and returns
 // a pointer to the lens each was handed.

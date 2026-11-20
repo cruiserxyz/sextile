@@ -14,8 +14,7 @@
 // changes is the cost of forgetting one: a stray file in a temp directory
 // rather than the operator's data.
 //
-// It is imported only from _test.go files, and pinned by
-// internal/invariants.TestStoreReachingTestPackagesIsolateByDefault.
+// It is imported only from _test.go files.
 package testenv
 
 import (
@@ -70,9 +69,15 @@ func Run(run func() int) int {
 		// decides which folder's backups and session a run uses. A test
 		// started from a launched shell must not key on the operator's own
 		// charts folder.
-		"SEXTILE_LAUNCH":             "",
-		"SEXTILE_CHARTS_HOST_PATH":   "",
-		"SEXTILE_BACKUP_HOST_PATH":   "",
+		"SEXTILE_LAUNCH":           "",
+		"SEXTILE_CHARTS_HOST_PATH": "",
+		"SEXTILE_BACKUP_HOST_PATH": "",
+		// The launcher's read-only run protects every charts folder; a test
+		// started from such a shell must not inherit it.
+		"SEXTILE_CHARTS_READONLY": "",
+		// The launcher's word for the charts folder, recorded at start.
+		"SEXTILE_ORIGINALS_SET":      "",
+		"SEXTILE_ORIGINALS_CREATED":  "",
 		"SEXTILE_SESSIONS_HOST_PATH": "",
 	} {
 		if err := os.Setenv(k, v); err != nil {

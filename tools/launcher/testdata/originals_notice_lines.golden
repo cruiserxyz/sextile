@@ -1,0 +1,3 @@
+note  charts folder position: protected (launcher-originals.conf has 2 lines for it)
+charts folder protected: launcher-originals.conf has 2 lines for it · this run writes nothing in it
+charts folder protected: its path holds a line break · this run writes nothing in it

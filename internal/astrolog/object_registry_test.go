@@ -281,10 +281,11 @@ func testRegistry(t *testing.T) aspect.Registry {
 
 func loadTestRegistry() (aspect.Registry, error) {
 	testRegistryOnce.Do(func() {
-		// go test runs with the package folder as the working directory. A
+		// go test runs with the package folder as the working directory, and
+		// testPackageDir holds it from before any test can change directory. A
 		// path from runtime.Caller is the module path under -trimpath, which
 		// the release check sets, and the file was not found there.
-		b, err := os.ReadFile(filepath.Join("testdata", "ho-all.txt"))
+		b, err := os.ReadFile(filepath.Join(testPackageDir, "testdata", "ho-all.txt"))
 		if err == nil {
 			testRegistryList, err = ParseObjectRegistry(string(b))
 		}
@@ -292,6 +293,9 @@ func loadTestRegistry() (aspect.Registry, error) {
 	})
 	return testRegistryList, testRegistryErr
 }
+
+// testPackageDir is the package folder, read when the test binary loads.
+var testPackageDir, _ = os.Getwd()
 
 var (
 	testRegistryOnce sync.Once

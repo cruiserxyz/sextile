@@ -27,9 +27,10 @@ type atlasModalState struct {
 // atlasTypeHint is the empty chooser's line (the popup's).
 const atlasTypeHint = popup.AtlasTypeHint
 
-// cityBindings is the City popup's table.
+// cityBindings is the City popup's table. Space types here: city names hold
+// spaces.
 func cityBindings() []keys.BindingEntry {
-	return keys.Titled(append([]keys.BindingEntry{listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), confirm("Choose").ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 }), closeOn("Cancel")}, pageEntries()...))
+	return keys.TitledLocal(append([]keys.BindingEntry{listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), confirm("Choose").ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 }), closeOn("Cancel")}, pageEntries()...))
 }
 
 // openCityPicker is Ctrl+L: the universal re-open of the atlas modal. Honors
@@ -78,9 +79,7 @@ func updateAtlasModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	out := m.atlas.Apply(a, msg, dialog.ListHeight(m.height))
 	switch {
 	case out.Picked:
-		var cmd tea.Cmd
-		m, cmd = applyAtlasPicked(m, AtlasPickedMsg{Place: out.Place})
-		return m, cmd
+		return applyAtlasPicked(m, AtlasPickedMsg{Place: out.Place})
 	case out.Dismissed:
 		// Esc closes the picker and puts back the phase it was opened from:
 		// a running app stays running (the specification C7,

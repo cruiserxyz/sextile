@@ -60,8 +60,8 @@ func TestSessionFromAnotherFolderIsNotRestored(t *testing.T) {
 	if n := inB.slots.AnchoredCount(); n != 0 {
 		t.Errorf("starting in B restored %d chart(s) from A's session", n)
 	}
-	want := "session: the saved session is another folder's and was not opened" +
-		" | session: this run is saved only by name (,o)"
+	want := "session: the last session belongs to another charts folder, it was not opened" +
+		" | session: these charts are not kept unless the session gets a name"
 	if got := strings.Join(sessionLines(inB), " | "); got != want {
 		t.Errorf("session lines in B = %q, want exactly %q", got, want)
 	}
@@ -89,7 +89,7 @@ func TestSessionWithoutAFolderIsNotRestored(t *testing.T) {
 	if n := m.slots.AnchoredCount(); n != 0 {
 		t.Errorf("a session naming no folder restored %d chart(s)", n)
 	}
-	if got := strings.Join(sessionLines(m), " | "); !strings.Contains(got, "is another folder's") {
+	if got := strings.Join(sessionLines(m), " | "); !strings.Contains(got, "belongs to another charts folder") {
 		t.Errorf("session lines = %q", got)
 	}
 }

@@ -90,7 +90,7 @@ func utReport(t *testing.T, f reportFixture) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, err := Hellenistic.specAt(astrolog.GregorianToJD(f.when), f.place)
+	spec, err := Hellenistic.specAt(AtMoment(astrolog.GregorianToJD(f.when), f.place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func utReport(t *testing.T, f reportFixture) string {
 func utPairReport(t *testing.T, natal, transit reportFixture) string {
 	t.Helper()
 	spec, err := Hellenistic.comparisonSpecAt(
-		astrolog.GregorianToJD(natal.when), natal.place, astrolog.GregorianToJD(transit.when), transit.place)
+		AtMoment(astrolog.GregorianToJD(natal.when), natal.place, store.ReportLabel{}), AtMoment(astrolog.GregorianToJD(transit.when), transit.place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,8 +145,8 @@ func afterLines(s string, n int) string {
 // zone. The test parses them; Sextile prints none of them.
 var headerRe = regexp.MustCompile(`(?:chart|comparison) for (\w{3} \w{3} +\d+, \d{4} +\d+:\d{2}) \((ST|DT) Zone ([^)]+)\)`)
 
-// slotLine is what the Chart panel's slot line shows for the instant, in the
-// slot's zone: ui.slotMoment's layout, "Mon Jan 02, 2006 15:04".
+// slotLine is the instant's date and clock to the minute in the slot's zone,
+// "Mon Jan 02, 2006 15:04": what Astrolog's header prints for it.
 func slotLine(t *testing.T, f reportFixture) string {
 	t.Helper()
 	loc, err := time.LoadLocation(f.place.TZ)
@@ -222,7 +222,7 @@ func TestPairReportLocalTime(t *testing.T) {
 		}
 	}
 	spec, err := Hellenistic.localComparisonSpecAt(
-		astrolog.GregorianToJD(natal.when), natal.place, store.ReportLabel{}, astrolog.GregorianToJD(transit.when), transit.place, store.ReportLabel{})
+		AtMoment(astrolog.GregorianToJD(natal.when), natal.place, store.ReportLabel{}), AtMoment(astrolog.GregorianToJD(transit.when), transit.place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestPairReportLocalTime(t *testing.T) {
 func TestComparisonSpecAtStaysInUT(t *testing.T) {
 	natal, transit := fixtureByName(t, "F1"), fixtureByName(t, "F3")
 	spec, err := Hellenistic.comparisonSpecAt(
-		astrolog.GregorianToJD(natal.when), natal.place, astrolog.GregorianToJD(transit.when), transit.place)
+		AtMoment(astrolog.GregorianToJD(natal.when), natal.place, store.ReportLabel{}), AtMoment(astrolog.GregorianToJD(transit.when), transit.place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}

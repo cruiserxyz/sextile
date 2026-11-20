@@ -21,7 +21,7 @@ func TestCycleCallForCeres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(call.argv, " "); !strings.HasSuffix(got, " =Yt _Yd -R0 1 12 -RA0 1") {
+	if got := strings.Join(call.argv, " "); !strings.HasSuffix(got, " =Yt _Yd -R0 1 12 -RA0 1 _Yn _Ynn") {
 		t.Errorf("argv %q does not carry -R0 1 12", got)
 	}
 	if !reflect.DeepEqual(call.Objects, []int{1, 12}) {
@@ -41,7 +41,7 @@ func TestSunPairCallForFortune(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(call.argv, " "); !strings.HasSuffix(got, " =Yt _Yd -R0 1 19 -RA0 1") {
+	if got := strings.Join(call.argv, " "); !strings.HasSuffix(got, " =Yt _Yd -R0 1 19 -RA0 1 _Yn _Ynn") {
 		t.Errorf("argv %q does not carry -R0 1 19", got)
 	}
 	if !reflect.DeepEqual(call.Objects, []int{1, 19}) {

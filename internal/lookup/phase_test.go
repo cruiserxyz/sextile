@@ -21,9 +21,9 @@ func phaseStub(t *testing.T, calls *int) ChartComputer {
 	t.Helper()
 	return func(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
 		*calls++
-		applying := aspect.NewObjectAspect(objSun, objMoon, aspect.Conjunction, aspect.Orb(2))
+		applying := aspect.NewObjectAspect(objSun, objMoon, kindOf("Con"), aspect.Orb(2))
 		applying.Applying = true
-		separating := aspect.NewObjectAspect(objSun, objMars, aspect.Trine, aspect.Orb(1))
+		separating := aspect.NewObjectAspect(objSun, objMars, kindOf("Tri"), aspect.Orb(1))
 		return payload.RawOutput{
 			Positions: []aspect.Position{{Object: objSun, Longitude: 0}, {Object: objMoon, Longitude: 2}, {Object: objMars, Longitude: 121}},
 			Aspects:   []aspect.Aspect{applying, separating},
@@ -79,8 +79,8 @@ func TestFirstCallNatalPositions_CarriesAstrologPhaseWithoutProbe(t *testing.T) 
 // primary/secondary and Astrolog's phase verdict rides along unchanged.
 func TestOverlayAspectsFromCross(t *testing.T) {
 	cross := []aspect.CrossAspect{
-		{PrimaryObject: objSun, SecondaryObject: objSaturn, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
-		{PrimaryObject: objMoon, SecondaryObject: objJupiter, Kind: aspect.Trine, Orb: 1.4, Power: 6},
+		{PrimaryObject: objSun, SecondaryObject: objSaturn, Kind: kindOf("Squ"), Orb: 0.5, Power: 9, Applying: true},
+		{PrimaryObject: objMoon, SecondaryObject: objJupiter, Kind: kindOf("Tri"), Orb: 1.4, Power: 6},
 	}
 	out := overlayAspectsFromCross(cross)
 	if len(out) != 2 {
@@ -98,7 +98,7 @@ func TestOverlayAspectsFromCross(t *testing.T) {
 // raw comparison report compile under: -rt, so Astrolog zeroes the natal
 // velocities before judging phase.
 func TestComparisonSpecIsTransitToNatal(t *testing.T) {
-	spec, err := Hellenistic.comparisonSpecAt(2446232, location.PlaceInfo{Lon: 4.9, Lat: 52.4, TZ: "Europe/Amsterdam"}, 2461000, location.PlaceInfo{Lon: 13.4, Lat: 52.5, TZ: "Europe/Berlin"})
+	spec, err := Hellenistic.comparisonSpecAt(AtMoment(2446232, location.PlaceInfo{Lon: 4.9, Lat: 52.4, TZ: "Europe/Amsterdam"}, store.ReportLabel{}), AtMoment(2461000, location.PlaceInfo{Lon: 13.4, Lat: 52.5, TZ: "Europe/Berlin"}, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}

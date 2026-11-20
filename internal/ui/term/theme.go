@@ -29,6 +29,12 @@ const (
 	// own blue, so it follows the operator's theme. The default;
 	// display.cursor_row_color overrides it (cursorRowColourFor).
 	DefaultCursorRowColour = lipgloss.Color("4")
+	// FooterColour is the key bar's row, words, keys and separators alike: the
+	// terminal's own blue (SGR 34 of the 16 colours, not a 256 number), so it
+	// follows the user's theme as lazygit's does. NoticeColour is the notice at
+	// the right end: the terminal's own cyan (SGR 36).
+	FooterColour = lipgloss.Color("4")
+	NoticeColour = lipgloss.Color("6")
 	// LoadingColour is the Details loading label's text: a neon blue (256-colour
 	// 39, #00afff) that stands out on a dark terminal (operator, 2026-11-06: "make
 	// the blueish load-text colour neon-blueish for better visibility").
@@ -46,17 +52,18 @@ const (
 	// terminal's own red, so it follows the operator's theme
 	// (the specification A1, V1).
 	ErrorColour = lipgloss.Color("1")
-	// WheelOpenColour is the Log line that says where the wheel is served. It
-	// was asked for as a light green, but green means "you are here" on exactly
-	// one frame (DefaultFocusColour), so a second green would be a second owner of the
-	// keyboard. Cyan is the nearest hue that is not that green, and like
-	// ErrorColour it is the terminal's own, so it follows the operator's theme.
-	WheelOpenColour = lipgloss.Color("6")
-	// WheelClosedColour is the Log line that says the wheel was closed: the
-	// error red, the terminal's own, because the wheel has gone away. It is
-	// not an error (the operator asked for it), so the line keeps the error
-	// lane's colour and nothing else of it.
-	WheelClosedColour = ErrorColour
+	// KeyColumnColour is a key in the Keybindings popup: the terminal's own
+	// blue-green, so it follows the operator's theme.
+	KeyColumnColour = lipgloss.Color("6")
+	// LogFactColour is the group column of a Log panel line that states a fact:
+	// the terminal's own cyan, so it follows the operator's theme.
+	LogFactColour = lipgloss.Color("6")
+	// LogSettingsColour is the group column of every Settings line: the
+	// terminal's own yellow.
+	LogSettingsColour = lipgloss.Color("3")
+	// LogAstrologColour is the group column of every Astrolog line: the
+	// terminal's own magenta.
+	LogAstrologColour = lipgloss.Color("5")
 )
 
 // ErrorLinePrefix marks an error line when colours are off (A2). It is drawn,
@@ -120,6 +127,8 @@ const (
 	SGRNormalIntensity = "\x1b[22m"
 	SGRDefaultFg       = "\x1b[39m"
 	SGRReverse         = "\x1b[7m"
+	SGRStrike          = "\x1b[9m"
+	SGRNoStrike        = "\x1b[29m"
 	// SGRReset is the one reset escape internal/ui writes.
 	SGRReset = "\x1b[0m"
 	// SGRIntro opens every SGR sequence; normalWeightSGR rebuilds Astrolog's

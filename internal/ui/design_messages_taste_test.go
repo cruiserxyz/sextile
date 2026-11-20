@@ -21,7 +21,7 @@ func TestDesignMessagesV1(t *testing.T) {
 	}{{"color", Config{Color: ColorAlways}}, {"plain", Config{Accessible: true, Color: ColorNever}}} {
 		m := messagesModel(t, mode.cfg)
 		frames := map[string]string{"log": m.View()}
-		opened, _ := press(t, m, ",", "l", "l")
+		opened, _ := press(t, m, ",", "L", "l")
 		frames["console"] = opened.View()
 		for _, view := range []string{"log", "console"} {
 			frame := frames[view]
@@ -61,7 +61,6 @@ func TestDesignMessagesV2(t *testing.T) {
 	own := readyModelWithSlots(t, berlinP)
 	own.cfg = cfg
 	own.width, own.height = 80, 24
-	own.limitedViewShown = true // the first-frame notice is not what this fixture is about
 	own, _ = applyTextCommit(own, FirstFrameReadyMsg{Positions: fullChartPositions()})
 	own = withSceneColumns(own)
 	own, _ = press(t, own, "3")
@@ -69,7 +68,6 @@ func TestDesignMessagesV2(t *testing.T) {
 
 	cross := tabsPairModel(t, cfg)
 	cross.width, cross.height = 80, 24
-	cross.limitedViewShown = true
 	cross, _ = applyTextCommit(cross, FirstFrameReadyMsg{Positions: fullChartPositions(), Aspects: tasteOwnAspects(), Overlay: true})
 	cross = withSceneColumns(cross)
 	cross, _ = press(t, cross, "3")
@@ -78,7 +76,7 @@ func TestDesignMessagesV2(t *testing.T) {
 	console := tabsPairModel(t, cfg)
 	console.width, console.height = 80, 24
 	console.logLines = nil
-	console, _ = press(t, console, ",", "l", "l")
+	console, _ = press(t, console, ",", "L", "l")
 
 	for name, m := range map[string]Model{"aspects": own, "cross": cross, "console": console} {
 		writeDesignFrame(t, "design-empty-"+name+"-80x24-color", m.View())

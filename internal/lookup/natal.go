@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
@@ -20,11 +19,7 @@ func FirstCallNatalPositions(ctx context.Context, probers *Probers, chart store.
 	if chart.IsZero() {
 		return Result{}, fmt.Errorf("lookup: FirstCallNatalPositions: chart is zero")
 	}
-	if !chart.Place.HasTimezone() {
-		return Result{}, fmt.Errorf("lookup: FirstCallNatalPositions: place %q has no IANA timezone", chart.Place.Display())
-	}
-	jd := astrolog.SlotJD(chart.When)
-	spec, err := lens.chartSpecAt(jd, chart.Place, chart.Label)
+	spec, err := lens.chartSpecAt(AtChart(chart))
 	if err != nil {
 		return Result{}, fmt.Errorf("lookup: FirstCallNatalPositions: %w", err)
 	}
@@ -46,6 +41,7 @@ func FirstCallNatalPositions(ctx context.Context, probers *Probers, chart store.
 		Commands:      raw.Commands,
 		Cusps:         raw.Cusps,
 		HousesUsed:    raw.HousesUsed,
+		Nodes:         raw.Nodes,
 		Unavailable:   raw.Unavailable,
 	}, nil
 }

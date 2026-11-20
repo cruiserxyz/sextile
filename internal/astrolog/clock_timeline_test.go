@@ -44,7 +44,7 @@ const skyTail = "Moon (Gem) --> Cancer"
 func TestTimelineClockBounds(t *testing.T) {
 	ok := func(c Clock, line string, h, m int) {
 		t.Helper()
-		rows, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t))
+		rows, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t), testAspects(t))
 		if err != nil || len(rows) != 1 {
 			t.Errorf("[%s] %q refused: %v", clockName(c), line, err)
 			return
@@ -55,7 +55,7 @@ func TestTimelineClockBounds(t *testing.T) {
 	}
 	bad := func(c Clock, line string) {
 		t.Helper()
-		_, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t))
+		_, err := ParseTimeline(line+"\n", time.UTC, testRegistry(t), testAspects(t))
 		var le *TimelineLineError
 		if !errors.As(err, &le) {
 			t.Errorf("[%s] %q: err = %v, want a timeline-line error", clockName(c), line, err)
@@ -114,7 +114,7 @@ func amsterdamRequest(t *testing.T, year int, month time.Month) TimelineRequest 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return TimelineRequest{Year: year, Month: month, Zone: loc}
+	return TimelineRequest{Year: year, Month: month, Zone: loc, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 }
 
 func instantsOf(rows []TimelineRow) []time.Time {
@@ -141,7 +141,7 @@ func TestTimelineRepeatedHourInEveryForm(t *testing.T) {
 	for _, c := range allClocks {
 		t.Run(clockName(c), func(t *testing.T) {
 			withClock(t, c)
-			rows, _, err := ComputeTimeline(context.Background(), amsterdamRequest(t, 2026, time.October), []TimelineSource{TimelineSky}, stubSearch(events))
+			rows, _, err := ComputeTimeline(context.Background(), withNoVoids(amsterdamRequest(t, 2026, time.October)), []TimelineSource{TimelineSky}, stubSearch(events))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +163,7 @@ func TestTimelineSpringTransitionInEveryForm(t *testing.T) {
 	for _, c := range allClocks {
 		t.Run(clockName(c), func(t *testing.T) {
 			withClock(t, c)
-			rows, _, err := ComputeTimeline(context.Background(), amsterdamRequest(t, 2026, time.March), []TimelineSource{TimelineSky}, stubSearch(events))
+			rows, _, err := ComputeTimeline(context.Background(), withNoVoids(amsterdamRequest(t, 2026, time.March)), []TimelineSource{TimelineSky}, stubSearch(events))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +223,7 @@ func TestTimelineRowsKeepTheirInstantsInEveryForm(t *testing.T) {
 			}
 			withClock(t, c)
 			line := runs[other].lines[0]
-			_, err := ParseTimeline(line+"\n", req.Zone, testRegistry(t))
+			_, err := ParseTimeline(line+"\n", req.Zone, testRegistry(t), testAspects(t))
 			var le *TimelineLineError
 			if !errors.As(err, &le) {
 				t.Errorf("[%s] parsed %q from [%s]: err = %v, want a timeline-line error", clockName(c), line, clockName(other), err)

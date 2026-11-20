@@ -71,3 +71,7 @@ func ForgetEphemeris() {
 	ephemerisMu.Unlock()
 	astrolog.SetAvailability(astrolog.Availability{})
 }
+
+// NoDataBody is the body an Astrolog warning line says has no ephemeris data
+// at the chart's moment, or "".
+var NoDataBody = astrolog.NoDataBody

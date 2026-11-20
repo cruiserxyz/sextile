@@ -9,6 +9,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
@@ -22,7 +23,10 @@ type FirstFrameReadyMsg struct {
 	// Natal/Transit layering was retired when Bodies pinned to the focused
 	// slot): transit positions when the floating slot is focused, natal when
 	// the anchored slot is. Aspects carries the single-chart intra-aspects.
-	Positions      []aspect.Position
+	Positions []aspect.Position
+	// Nodes is the form of the Nodes and Lilith the call that cast Positions
+	// carried (the two switches of its argv): Bodies names it by a letter.
+	Nodes          recipe.NodeForm
 	NatalPositions []aspect.Position
 	// Stations are the focused chart's station marks (lookup.StationMarks),
 	// computed inside the same compute as Positions so Bodies commits both
@@ -84,9 +88,7 @@ type FirstFrameReadyMsg struct {
 	// was superseded (canceled or replaced) and is ignored; a result whose
 	// WantID is below the surface's commitFloor belongs to a superseded
 	// workspace identity (atlas re-pick, anchor change) and never paints.
-	// Exported so cross-package drivers (the invariants first-frame golden)
-	// can hand-construct a result matching the scripted dispatch — after a
-	// single cold-start dispatch both tokens are 1.
+	// After a single cold-start dispatch both tokens are 1.
 	RunID  uint64
 	WantID uint64
 	// TransitTime is the floating-slot moment this compute was
@@ -149,6 +151,7 @@ func computeChartCmd(ctx context.Context, runID, wantID uint64, cast castSpawns,
 			Stations:      stations.marks,
 			StationErr:    stations.err,
 			Positions:     result.Positions,
+			Nodes:         result.Nodes,
 			Cusps:         result.Cusps,
 			BodyStyles:    result.BodyStyles,
 			Aspects:       result.Aspects,
@@ -173,14 +176,14 @@ func computeChartCmd(ctx context.Context, runID, wantID uint64, cast castSpawns,
 // browser preview. The expensive astrolog spawn runs off the Update loop, and a
 // superseded run is SIGKILLed via ctx (astrolog.invoke normalizes that to
 // context.Canceled, which the coordinator drops silently).
-func renderWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, time.Time, location.PlaceInfo, lookup.Lens, lookup.WheelHighlight) ([]byte, error), when time.Time, place location.PlaceInfo, lens lookup.Lens, highlight lookup.WheelHighlight) tea.Cmd {
+func renderWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, store.AnchorChart, lookup.Lens, lookup.WheelHighlight) ([]byte, error), chart store.AnchorChart, lens lookup.Lens, highlight lookup.WheelHighlight, shows string) tea.Cmd {
 	return func() tea.Msg {
-		img, err := render(ctx, when, place, lens, highlight)
+		img, err := render(ctx, chart, lens, highlight)
 		return refreshResultMsg{
 			surface: surfaceImage,
 			runID:   runID,
 			wantID:  wantID,
-			payload: imagePayload{bytes: img},
+			payload: imagePayload{bytes: img, shows: shows},
 			err:     err,
 		}
 	}
@@ -191,14 +194,14 @@ func renderWheelCmd(ctx context.Context, runID, wantID uint64, render func(conte
 // via astrolog's -r0 -XV path, tagged with the image surface's runID/wantID.
 // Same coordinator contract as renderWheelCmd — preview.Show is called once by
 // the coordinator for the latest committed result only, never here.
-func renderOverlayWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, store.AnchorChart, time.Time, location.PlaceInfo, lookup.Lens) ([]byte, error), chart store.AnchorChart, transitWhen time.Time, transitPlace location.PlaceInfo, lens lookup.Lens, labels []string) tea.Cmd {
+func renderOverlayWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, store.AnchorChart, time.Time, location.PlaceInfo, lookup.Lens) ([]byte, error), chart store.AnchorChart, transitWhen time.Time, transitPlace location.PlaceInfo, lens lookup.Lens, labels []string, shows string) tea.Cmd {
 	return func() tea.Msg {
 		img, err := render(ctx, chart, transitWhen, transitPlace, lens)
 		return refreshResultMsg{
 			surface: surfaceImage,
 			runID:   runID,
 			wantID:  wantID,
-			payload: imagePayload{bytes: img, rings: labels},
+			payload: imagePayload{bytes: img, rings: labels, shows: shows},
 			err:     err,
 		}
 	}
@@ -297,6 +300,9 @@ func (m Model) textCompute(ctx context.Context, runID, wantID uint64, transitTim
 		// anchored cursor with a base it does, for Bodies.
 		sc := m.deriveScene()
 		frame, focus, opts := m.overlayInputs(sc, transitTime)
+		// Only the form of the Nodes and Lilith comes from the base: every call
+		// of the comparison is cast in it, the cursor's own too.
+		lens.Objects.Nodes = m.sceneNodes(sc)
 		return computeOverlayCmd(ctx, runID, wantID, cast, m.probers, frame, focus, transitTime, m.place, !m.focusedIsFloating(), lens, opts...)
 	case computeModeNatalSingle:
 		return computeNatalSingleCmd(ctx, runID, wantID, cast, m.probers, m.focusedChart(), lens)
@@ -324,6 +330,7 @@ func (m Model) withSelectedAspects(ctx context.Context, transitTime time.Time, i
 	if len(lens.Objects.Only) == 0 {
 		return inner
 	}
+	lens.Objects.Nodes = m.sceneNodes(m.deriveScene())
 	chart, probers, place := m.focusedChart(), m.probers, m.place
 	cast := m.rows[surfaceText].spawn.cast
 	return func() tea.Msg {
@@ -372,7 +379,10 @@ func (m Model) overlayInputs(sc scene, transitTime time.Time) (frame, focus stor
 	// The frame chart and the comparison are cast in the frame's lens; the
 	// sky in the floating chart's own (its Bodies and its column).
 	sky := m.slots.Floating()
-	opts = []overlayOption{withHouseFrame(sc.cursor != sc.frame), withLenses(m.lensFor(frameSlot), m.lensFor(&sky))}
+	frameLens, skyLens := m.lensFor(frameSlot), m.lensFor(&sky)
+	frameLens.Objects.Nodes = m.sceneNodes(sc)
+	skyLens.Objects.Nodes = frameLens.Objects.Nodes
+	opts = []overlayOption{withHouseFrame(sc.cursor != sc.frame), withLenses(frameLens, skyLens)}
 	if pair := sc.pair; pair == nil {
 		// The `Aspects` tab shows the cursor's own chart: no cross call.
 		opts = append(opts, withoutCross())
@@ -490,6 +500,7 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 	// NATAL slot is focused still paints the natal bodies we already have
 	// (only the floating-focused case legitimately blanks on a transit error).
 	bodies := transit.Positions
+	bodiesNodes := transit.Nodes
 	bodyCusps := transit.Cusps
 	styles := transit.BodyStyles
 	// The focused slot's OWN aspects ride along too: the Aspects
@@ -502,6 +513,7 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 	ownReport := transit.AspectsReport
 	if focusedNatal {
 		bodies = own.Positions
+		bodiesNodes = own.Nodes
 		bodyCusps = own.Cusps
 		styles = own.BodyStyles
 		ownAspects = own.Aspects
@@ -520,7 +532,7 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 	}
 	stations := probeStations(ctx, f.cast, probers, bodies, probeAt, probePlace, lens)
 	if transitErr != nil {
-		return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: transitErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, stations.commands), FailedAt: failedAfter(transit.Commands, natal.Commands, ownCommands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
+		return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Nodes: bodiesNodes, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: transitErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, stations.commands), FailedAt: failedAfter(transit.Commands, natal.Commands, ownCommands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
 	}
 	// Cross-aspects come from astrolog's -rt -aa relationship run (real
 	// power, role-preserving, Astrolog's own applying/separating with the
@@ -540,10 +552,10 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 		// baseline as chart 1. Its applying/separating verdict is a
 		// synthetic one, so the frame says it is a synastry pair and the
 		// renderer never shows it.
-		cross, crossErr = f.cast.synastry(ctx, frameLens, left, plan.synastry.When, plan.synastry.Place, plan.synastry.Label)
+		cross, crossErr = f.cast.synastry(ctx, frameLens, left, plan.synastry)
 	}
 	if crossErr != nil {
-		return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: crossErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, cross.Commands, stations.commands), FailedAt: failedAfter(cross.Commands, natal.Commands, ownCommands, transit.Commands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
+		return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Nodes: bodiesNodes, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: crossErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, cross.Commands, stations.commands), FailedAt: failedAfter(cross.Commands, natal.Commands, ownCommands, transit.Commands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
 	}
 	// One column per shown chart, through the same cache: a chart this run
 	// already looked up is that chart's column, and a chart whose lookup
@@ -585,7 +597,7 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 			}
 			framedCommands = framed.Commands
 			if framedErr != nil {
-				return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: framedErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, cross.Commands, columnCommands, framed.Commands, stations.commands), FailedAt: failedAfter(framed.Commands, natal.Commands, ownCommands, transit.Commands, cross.Commands, columnCommands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
+				return FirstFrameReadyMsg{Overlay: true, Stations: stations.marks, StationErr: stations.err, Positions: bodies, Nodes: bodiesNodes, Cusps: bodyCusps, BodyStyles: styles, Aspects: ownAspects, AspectStyles: ownStyles, AspectsReport: ownReport, Err: framedErr, RunID: runID, WantID: wantID, TransitTime: transitTime, Commands: concatCommands(natal.Commands, ownCommands, transit.Commands, cross.Commands, columnCommands, framed.Commands, stations.commands), FailedAt: failedAfter(framed.Commands, natal.Commands, ownCommands, transit.Commands, cross.Commands, columnCommands), UnavailableUnion: true, Unavailable: unionNames(natal.Unavailable, transit.Unavailable)}
 			}
 			framedPositions = framed.Positions
 		}
@@ -595,6 +607,7 @@ func overlayFrame(f *resultFetcher, ctx context.Context, runID, wantID uint64, p
 		Stations:           stations.marks,
 		StationErr:         stations.err,
 		Positions:          bodies,
+		Nodes:              bodiesNodes,
 		Cusps:              bodyCusps,
 		NatalPositions:     overlayPositions,
 		NatalCusps:         overlayCusps,
@@ -744,6 +757,7 @@ func computeNatalSingleCmd(ctx context.Context, runID, wantID uint64, cast castS
 			Stations:      stations.marks,
 			StationErr:    stations.err,
 			Positions:     natal.Positions,
+			Nodes:         natal.Nodes,
 			Cusps:         natal.Cusps,
 			BodyStyles:    natal.BodyStyles,
 			Aspects:       natal.Aspects,

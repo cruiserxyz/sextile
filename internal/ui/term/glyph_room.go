@@ -70,6 +70,33 @@ func flushByNature(r rune) bool {
 // NeedsRoom reports whether r must be followed by a space of its own style.
 func NeedsRoom(r rune) bool { return roomyGlyph(r) && !flushByNature(r) }
 
+// IsAspectLettersCell is the one exemption from the rule above, for the form of
+// an aspect cell that has no glyph of its own: a planet's glyph (r, the first
+// side), the aspect's three letters, then the second side, with no space
+// between (`☉Sep♄`), so that the cell keeps the width of a cell drawn with a
+// glyph. after holds the runes that follow r. It is exactly: a symbol of the
+// planets' block, a capital and two letters or digits, and then a rune that is
+// a symbol or a digit (the second planet's glyph, or a cusp's number). A glyph
+// followed by a word, by lowercase letters, by four letters, by the end of the
+// line, or any glyph outside the planets' block is not exempt.
+// Why: a wide first glyph may overprint the first letter on some terminals, and the operator chose to accept that to keep the cell's width.
+func IsAspectLettersCell(r rune, after []rune) bool {
+	if r < 0x2600 || r > 0x26FF || len(after) < 4 {
+		return false
+	}
+	if after[0] < 'A' || after[0] > 'Z' {
+		return false
+	}
+	for _, c := range after[1:3] {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	next := after[3]
+	return next >= 0x80 || next >= '0' && next <= '9'
+
+}
+
 // EndsWithRoomyGlyph reports whether the last visible rune of s needs room: a
 // title or a label that ends with one is given its space before whatever
 // follows it (a border, a column).

@@ -62,7 +62,7 @@ func TestPositionsCountMismatchIsAnError(t *testing.T) {
 // two objects, on both sides, in a list and in a comparison.
 func TestAspectRowsResolveTitanAndTitania(t *testing.T) {
 	reg := testRegistry(t)
-	got := parseAspects("   7:   Titan (Ari) Con (Ari) Titania    - orb: s0:00' - power: 27.50\n", reg)
+	got := mustAspects(t, "   7:   Titan (Ari) Con (Ari) Titania    - orb: s0:00' - power: 27.50\n", reg)
 	if len(got) != 1 {
 		t.Fatalf("parsed %d aspects", len(got))
 	}
@@ -70,15 +70,15 @@ func TestAspectRowsResolveTitanAndTitania(t *testing.T) {
 		t.Errorf("sides %+v %+v", a.AObject, a.BObject)
 	}
 	// Titan <Ari> is a body with no speed: not read, as before.
-	if got := parseAspects("   7:   Titan <Ari> Con <Ari> Titania    - orb: s0:00' - power: 27.50\n", reg); len(got) != 0 {
+	if got := mustAspects(t, "   7:   Titan <Ari> Con <Ari> Titania    - orb: s0:00' - power: 27.50\n", reg); len(got) != 0 {
 		t.Errorf("a no-speed row was read: %+v", got)
 	}
-	cross := parseCrossAspects("  14: Titania (Ari) Con with (Ari) Titan      - orb: s0:00' - power: 17.00\n", reg)
+	cross := mustCross(t, "  14: Titania (Ari) Con with (Ari) Titan      - orb: s0:00' - power: 17.00\n", reg)
 	if len(cross) != 1 || cross[0].PrimaryObject.Name != "Titania" || cross[0].SecondaryObject.Name != "Titan" {
 		t.Errorf("cross %+v", cross)
 	}
 	// An object the registry does not list leaves the side the zero Object.
-	odd := parseAspects("   1:     Sun (Ari) Con (Ari) Nibiru      - orb: a0:20' - power:  9.51\n", reg)
+	odd := mustAspects(t, "   1:     Sun (Ari) Con (Ari) Nibiru      - orb: a0:20' - power:  9.51\n", reg)
 	// A pair with an unresolved side keeps its printed order: the zero Object has
 	// no number to order by.
 	if len(odd) != 1 || odd[0].BObject != (aspect.Object{}) || odd[0].AObject.Name != "Sun" {
@@ -86,7 +86,7 @@ func TestAspectRowsResolveTitanAndTitania(t *testing.T) {
 	}
 	// The objects follow their sides through the number-order reorder: the Sun
 	// (1) comes before Ceres, printed first.
-	swapped := parseAspects("   1:  Ceres (Ari) Con (Ari) Sun         - orb: a0:20' - power:  9.51\n", reg)
+	swapped := mustAspects(t, "   1:  Ceres (Ari) Con (Ari) Sun         - orb: a0:20' - power:  9.51\n", reg)
 	if len(swapped) != 1 || swapped[0].AObject != objSun || swapped[0].BObject.Name != "Ceres" {
 		t.Errorf("reorder: %+v", swapped)
 	}
@@ -117,7 +117,7 @@ func TestSunPairRowTakesItsNumberByOrder(t *testing.T) {
 
 // The cycle list reads its two names through the registry as well.
 func TestCycleEventsCarryTheirObjects(t *testing.T) {
-	evs, err := ParseCycleEvents("Thu  1/20/2000 18:23:02     Sun (29Cap59) Con (29Cap59) Venus\n", testRegistry(t))
+	evs, err := ParseCycleEvents("Thu  1/20/2000 18:23:02     Sun (29Cap59) Con (29Cap59) Venus\n", testRegistry(t), testAspects(t))
 	if err != nil || len(evs) != 1 {
 		t.Fatalf("%v %v", evs, err)
 	}

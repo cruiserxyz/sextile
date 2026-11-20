@@ -56,7 +56,7 @@ func TestUnreadableObjectListCannotStart(t *testing.T) {
 	tm, _ = tm.Update(perimeter())
 	tm, _ = tm.Update(ObjectRegistryLoadedMsg{Err: errors.New("astrolog: no object rows found")})
 	m := tm.(Model)
-	want := "Sextile can't start: Astrolog's object list could not be read: astrolog: no object rows found"
+	want := "Sextile can't start: Astrolog's list of bodies could not be read: astrolog: no object rows found"
 	if got := csText(m.View()); !strings.Contains(got, want) {
 		t.Errorf("the screen lacks %q:\n%s", want, got)
 	}

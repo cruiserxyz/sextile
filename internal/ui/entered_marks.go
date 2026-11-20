@@ -42,13 +42,16 @@ func (m Model) enteredMark() panel.EnteredMark {
 	return panel.EnteredMark{}
 }
 
-// enteredTimelineRow finds the pressed row among the timeline's rows by its
+// enteredTimelineRow finds the pressed row among the rows of the lists by its
 // identity, so the mark reads the row's fields afresh and not a copy taken at
-// the press.
+// the press. The pressed row belongs to the list Enter was pressed on, whichever
+// tab shows now.
 func (m Model) enteredTimelineRow() (lookup.TimelineRow, bool) {
-	for _, r := range m.timelineRows() {
-		if markOf(r) == m.details.pressedAt {
-			return r, true
+	for _, k := range allLists {
+		for _, r := range m.timelineRowsFor(k) {
+			if markOf(r) == m.details.pressedAt {
+				return r, true
+			}
 		}
 	}
 	return lookup.TimelineRow{}, false

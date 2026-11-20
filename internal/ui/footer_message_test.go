@@ -64,12 +64,12 @@ func TestFooterCopyReceiptKeepsItsSpace(t *testing.T) {
 func TestFooterMessageColour(t *testing.T) {
 	forceColor(t)
 	on := keys.RenderBar(keys.Context{Footer: noticeOnlyNow, Style: Config{Color: ColorAlways}}, 132)
-	if !strings.Contains(on, "38;5;39") || !strings.Contains(ansi.Strip(on), noticeOnlyNow) {
+	if !strings.Contains(on, "\x1b[36m") || !strings.Contains(ansi.Strip(on), noticeOnlyNow) {
 		t.Errorf("coloured bar = %q", on)
 	}
 	flash := keys.RenderBar(keys.Context{Footer: "Copied", Style: Config{Color: ColorAlways}}, 132)
-	if !strings.Contains(flash, "38;5;39") {
-		t.Errorf("the copy receipt carries no loading colour: %q", flash)
+	if !strings.Contains(flash, "\x1b[36m") {
+		t.Errorf("the copy receipt carries no notice colour (terminal cyan): %q", flash)
 	}
 	off := keys.RenderBar(keys.Context{Footer: noticeOnlyNow, Style: Config{Color: ColorNever}}, 132)
 	if strings.Contains(off, "\x1b[") {

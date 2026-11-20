@@ -1,11 +1,14 @@
 package astrolog
 
-import "context"
+import (
+	"context"
+
+	"github.com/cruiserxyz/sextile/pkg/aspect"
+)
 
 // invoke is the tests' way to start the (real or fake) binary with a bare argv.
 // It is an exempt call on purpose and lives in a _test file: production code has
-// no []string-only entry point (TestAstrologSpawnSeamIsTyped scans the non-test
-// sources).
+// no []string-only entry point.
 func invoke(ctx context.Context, argv []string) (string, string, error) {
 	return spawn(ctx, newExempt("test helper: drives the binary with a hand-written argv", argv...))
 }
@@ -35,5 +38,15 @@ func testCallFor(argv []string, objects ...int) BodyCall {
 	}
 	call := newBodyCall(argv, newBand())
 	call.Registry, call.Objects = reg, objects
+	call.Aspects = mustTestAspects()
 	return call
+}
+
+// mustTestAspects is the fixture's aspect registry for a helper with no t.
+func mustTestAspects() aspect.AspectRegistry {
+	reg, err := loadTestAspects()
+	if err != nil {
+		panic(err)
+	}
+	return reg
 }

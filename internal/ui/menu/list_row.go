@@ -48,6 +48,16 @@ type RowSpec struct {
 	// Dim draws the whole row faint when colours are on. With colours off the
 	// row's own text has to say what the dimming would (the body popup's `!`).
 	Dim bool
+
+	// Alert marks a row that cannot be picked with the error `!` before its
+	// left cell: in the cursor column's gap with colours off, so no other
+	// row's name moves, and as `! ` before the name with colours on.
+	Alert bool
+
+	// Ticked marks a row the operator ticked with a ✓ before the left cell: in
+	// the cursor column's gap with colours off (`>✓` under the cursor), as the
+	// `!` of Alert takes it, and as `✓ ` before the name with colours on.
+	Ticked bool
 }
 
 const (
@@ -70,6 +80,18 @@ func Row(r RowSpec, cfg term.Style, width int) string {
 	mark := ""
 	if !cfg.UseColor() {
 		mark = CursorColumn(r.Cursor, cfg)
+		if r.Alert {
+			mark = strings.TrimRight(mark, " ") + "!"
+			mark += strings.Repeat(" ", max(0, ansi.StringWidth(RowMarkerBlank)-ansi.StringWidth(mark)))
+		}
+		if r.Ticked {
+			mark = strings.TrimRight(mark, " ") + "✓"
+			mark += strings.Repeat(" ", max(0, ansi.StringWidth(RowMarkerBlank)-ansi.StringWidth(mark)))
+		}
+	} else if r.Alert {
+		mark = term.RenderErrorMark("!", cfg) + " "
+	} else if r.Ticked {
+		mark = "✓ "
 	}
 	room := width - ansi.StringWidth(mark)
 
@@ -154,6 +176,8 @@ func RowWidth(r RowSpec, cfg term.Style) int {
 	w := ansi.StringWidth(r.Left) + ansi.StringWidth(r.LeftTail)
 	if !cfg.UseColor() {
 		w += ansi.StringWidth(CursorColumn(false, cfg))
+	} else if r.Alert || r.Ticked {
+		w += 2 // the `! ` or `✓ ` before the name
 	}
 	var right []string
 	for _, c := range r.Right {

@@ -42,7 +42,7 @@ var localMomentFixtures = []struct {
 // tests keep it to check localClock, the one derivation of the marker and the
 // zone `-zZ` speaks, against the fixtures below.
 func localMomentFields(m recipe.LocalMomentAtPlace) ([]string, error) {
-	t, marker, offset, err := localClock(m.JD, m.TZ)
+	t, marker, offset, err := localClock(m.JD, m.TZ, m.Lon)
 	if err != nil {
 		return nil, err
 	}

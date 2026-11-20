@@ -36,6 +36,9 @@ func TestEscGoesBackToTheFilterTheLineOpenedWith(t *testing.T) {
 	m = typeQuery(t, m, "venus")
 	m, _ = tpress(t, m, keyEnter)
 	n := len(m.timelineShown())
+	if !m.details.attached {
+		t.Fatal("fixture: Enter in the line left Details")
+	}
 	m, _ = tpress(t, m, runes("/"))
 	m = typeQuery(t, m, " sq")
 	m, _ = tpress(t, m, keyEsc)
@@ -90,13 +93,12 @@ func TestEscGoesBackInTheDetailsReport(t *testing.T) {
 
 // The bars say which key does which.
 func TestSearchLineBarsNameEnterAndEsc(t *testing.T) {
-	// The Timeline's line jumps on Enter, as its arrows move the row cursor;
-	// the report's line has no rows and Enter applies its filter.
+	// Enter closes either line with its query.
 	for name, tc := range map[string]struct {
 		entries []keys.BindingEntry
 		enter   string
 	}{
-		"timeline": {timelineSearchBindings(), "enter Jump"},
+		"timeline": {timelineSearchBindings(), "enter Apply"},
 		"report":   {reportSearchBindings(), "enter Apply"},
 	} {
 		var got []string

@@ -183,11 +183,10 @@ func TestFormFocusCycle(t *testing.T) {
 	}
 }
 
-// C2.7: the box keeps its size across values, placeholders, the focused field,
-// a value too long for its line and a refusal: the form keeps one empty line
-// under its info from the moment it opens, a refusal appears in that line, and
-// one too long for it is cut (operator, 2026-10-27: a popup's size is decided
-// when it opens and never changes while it is open).
+// C2.7: the box keeps its size across values, placeholders, the focused field
+// and a value too long for its line. A refusal keeps no row: it takes a blank
+// row and its own lines below the info, so the box is taller while it shows
+// and the same width (operator, 2026-11-14: no popup keeps an empty row).
 func TestFormBoxSizeStable(t *testing.T) {
 	forceColor(t)
 	long := strings.Repeat("Constructed Very Long Title ", 6)
@@ -217,7 +216,11 @@ func TestFormBoxSizeStable(t *testing.T) {
 				wantLines, wantWidth = len(lines), width
 				continue
 			}
-			if len(lines) != wantLines || width != wantWidth {
+			if s.refusal != "" {
+				if len(lines) <= wantLines || width != wantWidth {
+					t.Errorf("%+v %s: %d lines × %d wide, want more than %d lines × %d wide:\n%s", cfg, s.name, len(lines), width, wantLines, wantWidth, frame)
+				}
+			} else if len(lines) != wantLines || width != wantWidth {
 				t.Errorf("%+v %s: %d lines × %d wide, want %d × %d as at rest:\n%s", cfg, s.name, len(lines), width, wantLines, wantWidth, frame)
 			}
 			if s.refusal != "" && !strings.Contains(ansi.Strip(frame), ansi.Strip(refusal[:30])) {

@@ -66,6 +66,9 @@ var ErrUnsafeArgv = errors.New("astrolog: CommandSpec.Argv violates the switch-t
 // the astrolog accepts that in exchange for a single-call contract to the
 // payload and a single-call sanity check against the positions chart.
 func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
+	if err := requireReadableAspects(call.Aspects); err != nil {
+		return payload.RawOutput{}, err
+	}
 	if err := validateArgv(call.argv); err != nil {
 		return payload.RawOutput{}, err
 	}
@@ -76,7 +79,8 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	if err != nil {
 		return payload.RawOutput{}, err
 	}
-	positionsOut, command, err := spawn(ctx, positionsCall)
+	var leftOut []string
+	positionsOut, command, err := spawn(ctx, positionsCall.reportingLeftOut(&leftOut))
 	commands = recordCommand(commands, command)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, fmt.Errorf("astrolog positions invocation: %w", err)
@@ -88,7 +92,8 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
-	positions, err := parsePositions(positionsOut, call.Objects, call.Registry)
+	drawn := castObjects(call, leftOut)
+	positions, err := parsePositions(positionsOut, drawn, call.Registry)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
@@ -96,6 +101,18 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 	aspectsCall, err := call.derive(aspectsArgv)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
+	}
+	if len(drawn) < len(call.Objects) {
+		// The aspect list prints no rows that say which objects Astrolog
+		// could not place, so it is cast without the ones the positions
+		// left out.
+		var gone []int
+		for _, n := range call.Objects {
+			if !slices.Contains(drawn, n) {
+				gone = append(gone, n)
+			}
+		}
+		aspectsCall = aspectsCall.without(gone)
 	}
 	aspectsOut, command, err := spawn(ctx, aspectsCall)
 	commands = recordCommand(commands, command)
@@ -107,17 +124,23 @@ func Run(ctx context.Context, call BodyCall) (payload.RawOutput, error) {
 		return payload.RawOutput{Commands: commands}, err
 	}
 
+	aspects, err := parseAspects(aspectsOut, call.Registry, call.Aspects)
+	if err != nil {
+		return payload.RawOutput{Commands: commands}, err
+	}
+
 	return payload.RawOutput{
 		Positions:     positions,
-		Unavailable:   unavailableObjects(positionsOut),
-		BodyStyles:    mapBodyStyles(styles, call.Objects, call.Registry),
-		Aspects:       parseAspects(aspectsOut, call.Registry),
-		AspectStyles:  mapAspectStyles(aspectRows, call.Registry),
+		Unavailable:   append(unavailableObjects(positionsOut), leftOut...),
+		BodyStyles:    mapBodyStyles(styles, drawn, call.Registry),
+		Aspects:       aspects,
+		AspectStyles:  mapAspectStyles(aspectRows, call.Registry, call.Aspects),
 		Raw:           positionsOut + "\n---\n" + aspectsOut,
 		AspectsReport: reportText(aspectsOut),
 		Commands:      commands,
 		Cusps:         parseCusps(positionsOut),
 		HousesUsed:    parseHousesUsed(positionsOut),
+		Nodes:         argvNodeForm(call.argv),
 	}, nil
 }
 
@@ -187,7 +210,8 @@ func runPositions(ctx context.Context, call BodyCall, collect bool) (payload.Raw
 	if collect {
 		positionsCall = positionsCall.reportingMissing(&positionsMissing).sayingFirst(&said).probingCall()
 	}
-	positionsOut, command, err := spawn(ctx, positionsCall)
+	var leftOut []string
+	positionsOut, command, err := spawn(ctx, positionsCall.reportingLeftOut(&leftOut))
 	commands := recordCommand(nil, command)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, fmt.Errorf("astrolog positions invocation: %w", err)
@@ -199,17 +223,20 @@ func runPositions(ctx context.Context, call BodyCall, collect bool) (payload.Raw
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
-	positions, err := parsePositions(positionsOut, call.Objects, call.Registry)
+	drawn := castObjects(call, leftOut)
+	positions, err := parsePositions(positionsOut, drawn, call.Registry)
 	if err != nil {
 		return payload.RawOutput{Commands: commands}, err
 	}
 	return payload.RawOutput{
 		Positions:        positions,
-		BodyStyles:       mapBodyStyles(styles, call.Objects, call.Registry),
+		Unavailable:      leftOut,
+		BodyStyles:       mapBodyStyles(styles, drawn, call.Registry),
 		Raw:              positionsOut,
 		Commands:         commands,
 		Cusps:            parseCusps(positionsOut),
 		HousesUsed:       parseHousesUsed(positionsOut),
+		Nodes:            argvNodeForm(call.argv),
 		MissingEphemeris: mergeFiles(positionsMissing),
 		Said:             said,
 	}, nil
@@ -256,13 +283,13 @@ func mapBodyStyles(rows astrologstyle.Rows, asked []int, reg aspect.Registry) as
 // parseAspects gives the aspect (aspect.NewObjectAspect's), with the spans
 // following their side. A row whose side the registry cannot resolve gets no
 // key: the zero Object is not an identity.
-func mapAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry) astrologstyle.Aspects {
+func mapAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry, aspects aspect.AspectRegistry) astrologstyle.Aspects {
 	out := make(astrologstyle.Aspects)
 	for _, row := range rows {
 		first := resolveSide(reg, row.FirstName, leftNameWidth)
 		second := resolveSide(reg, row.SecondName, rightNameWidth)
-		kind, okKind := aspectAbbrev[row.KindName]
-		if first == (aspect.Object{}) || second == (aspect.Object{}) || !okKind {
+		kind, err := readAspectKind(aspects, row.KindName)
+		if first == (aspect.Object{}) || second == (aspect.Object{}) || err != nil {
 			continue
 		}
 		pair := aspect.NewObjectAspect(first, second, kind, 0)
@@ -277,13 +304,13 @@ func mapAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry) astrol
 
 // mapCrossAspectStyles is mapAspectStyles for a relationship list, which keeps
 // Astrolog's primary and secondary roles instead of reordering.
-func mapCrossAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry) astrologstyle.Aspects {
+func mapCrossAspectStyles(rows []astrologstyle.AspectRow, reg aspect.Registry, aspects aspect.AspectRegistry) astrologstyle.Aspects {
 	out := make(astrologstyle.Aspects)
 	for _, row := range rows {
 		primary := resolveSide(reg, row.FirstName, leftNameWidth)
 		secondary := resolveSide(reg, row.SecondName, rightNameWidth)
-		kind, okKind := aspectAbbrev[row.KindName]
-		if primary == (aspect.Object{}) || secondary == (aspect.Object{}) || !okKind {
+		kind, err := readAspectKind(aspects, row.KindName)
+		if primary == (aspect.Object{}) || secondary == (aspect.Object{}) || err != nil {
 			continue
 		}
 		out[astrologstyle.AspectIdentity{First: primary, Second: secondary, Kind: kind}] = row.Style
@@ -497,20 +524,24 @@ var writeStagedFile = os.WriteFile
 // safe to call (defer it immediately); ctx-cancellation SIGKILLs the subprocess
 // but the deferred cleanup still runs in the Go caller, so temp files don't leak.
 func stageCall(inv Invocation) (call BodyCall, dir string, cleanup func(), err error) {
+	return stageTemps(inv.Call(), inv.TempInputs)
+}
+
+// stageTemps is stageCall for a call and its temp inputs.
+func stageTemps(call BodyCall, temps []TempFileInput) (BodyCall, string, func(), error) {
 	noop := func() {}
-	call = inv.Call()
-	if len(inv.TempInputs) == 0 {
+	if len(temps) == 0 {
 		return call, "", noop, nil
 	}
-	d, err := os.MkdirTemp("", "sextile-r0-*")
+	d, err := privateTempDir("sextile-r0-*")
 	if err != nil {
 		return BodyCall{}, "", noop, fmt.Errorf("astrolog: stage inputs: %w", err)
 	}
-	cleanup = func() { _ = os.RemoveAll(d) }
-	for i, ti := range inv.TempInputs {
-		if ti.ArgIndex < 0 || ti.ArgIndex >= len(inv.Argv) {
+	cleanup := func() { _ = os.RemoveAll(d) }
+	for i, ti := range temps {
+		if ti.ArgIndex < 0 || ti.ArgIndex >= len(call.argv) {
 			cleanup()
-			return BodyCall{}, "", noop, fmt.Errorf("astrolog: stage inputs: ArgIndex %d out of range (argv len %d)", ti.ArgIndex, len(inv.Argv))
+			return BodyCall{}, "", noop, fmt.Errorf("astrolog: stage inputs: ArgIndex %d out of range (argv len %d)", ti.ArgIndex, len(call.argv))
 		}
 		p := filepath.Join(d, fmt.Sprintf("chart%d.as", i))
 		if err := writeStagedFile(p, []byte(ti.Content), 0o600); err != nil {
@@ -523,4 +554,20 @@ func stageCall(inv Invocation) (call BodyCall, dir string, cleanup func(), err e
 		}
 	}
 	return call, d, cleanup, nil
+}
+
+// castObjects is the objects a call drew: the ones it asked for, minus those
+// its spawn left out because their ephemeris does not reach the moment.
+func castObjects(call BodyCall, leftOut []string) []int {
+	if len(leftOut) == 0 {
+		return call.Objects
+	}
+	var out []int
+	for _, n := range call.Objects {
+		if o, ok := call.Registry.ByNumber(n); ok && slices.Contains(leftOut, o.Name) {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }

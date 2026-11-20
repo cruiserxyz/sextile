@@ -26,7 +26,7 @@ func TestChartReportNeverUnderTheSunsCaption(t *testing.T) {
 	if got := detailsPanelText(m); !strings.Contains(got, influenceHead) {
 		t.Fatalf("fixture: the Chart report is not drawn:\n%s", got)
 	}
-	m, _ = pressOnly(t, m, runes("2")) // the Sun's report is not back
+	m, _ = pressOnly(t, m, runes("3")) // the Sun's report is not back
 	if got := stripOfDetails(m); got != "Sun" {
 		t.Fatalf("caption after 2 = %q, want Sun", got)
 	}
@@ -45,7 +45,7 @@ func TestContentCarriesItsKey(t *testing.T) {
 		if !ok || !m.details.keyed || m.details.key != (contentKey{kind: reportRaw, raw: want}) {
 			t.Fatalf("the Chart report carries key %+v (keyed %v), want the key it was asked for %+v", m.details.key, m.details.keyed, want)
 		}
-		m, cmd := pressOnly(t, m, runes("2"))
+		m, cmd := pressOnly(t, m, runes("3"))
 		m = pump(t, m, cmd)
 		want, _ = m.detailsKeyFor()
 		if m.details.key.raw != want || want.object != objSun.Number {
@@ -71,7 +71,7 @@ func TestContentCarriesItsKey(t *testing.T) {
 
 	t.Run("aspects copy", func(t *testing.T) {
 		m, _ := followFixture(t, Config{Accessible: true}, 132, 40)
-		m, cmd := pressOnly(t, m, runes("3"))
+		m, cmd := pressOnly(t, m, runes("4"))
 		m = pump(t, m, cmd)
 		shown, _ := m.shownPaneKey(PanelAspects)
 		if m.details.key.kind != reportFrame || m.details.key.frame != shown {
@@ -115,14 +115,14 @@ func TestCaptionIsTheWantedSubject(t *testing.T) {
 		t.Errorf("Chart on the floating chart: %q, want Now", got)
 	}
 	tabs := m.panelTabs(PanelDetails)
-	if len(tabs) != 2 || tabs[1].Title != tabTitleTimeline {
+	if len(tabs) != 3 || tabs[1].Title != tabTitleTimeline || tabs[2].Title != tabTitleMoon {
 		t.Errorf("the Timeline keeps its own tab beside the subject: %+v", tabs)
 	}
 	up, _ := pressOnly(t, m, keyUp) // the new chart's frame and report are held
 	if got := caption(up); got != "Synthetic 1" {
 		t.Errorf("Chart on an anchored chart: %q, want its name", got)
 	}
-	bodies, _ := pressOnly(t, m, runes("2"))
+	bodies, _ := pressOnly(t, m, runes("3"))
 	if got := caption(bodies); got != "Sun" {
 		t.Errorf("Bodies on the Sun: %q, want Sun", got)
 	}
@@ -130,7 +130,7 @@ func TestCaptionIsTheWantedSubject(t *testing.T) {
 	if got := caption(down); got != "Moon" {
 		t.Errorf("Bodies a row down: %q, want Moon", got)
 	}
-	asp, _ := pressOnly(t, m, runes("3"))
+	asp, _ := pressOnly(t, m, runes("4"))
 	if got := caption(asp); got != "Aspects" {
 		t.Errorf("Aspects: %q, want Aspects", got)
 	}
@@ -178,7 +178,7 @@ func TestViewRule(t *testing.T) {
 					forceColor(t)
 				}
 				m, _ := followFixture(t, cfg, 132, 40)
-				m, cmd := pressOnly(t, m, runes("2"))
+				m, cmd := pressOnly(t, m, runes("3"))
 				m = pump(t, m, cmd) // the Sun's report is committed
 				// `d` on Bodies: the Sun of the floating chart, one day on. Its
 				// frame is committed, its report is held.
@@ -235,7 +235,7 @@ func TestViewRule(t *testing.T) {
 		forceColor(t)
 		m, _ := followFixture(t, Config{Color: ColorAlways}, 132, 40)
 		// Details: the Chart's report under a new panel's caption.
-		on2, _ := pressOnly(t, m, runes("2"))
+		on2, _ := pressOnly(t, m, runes("3"))
 		text := ansi.Strip(detailsPanelText(on2))
 		// Amended 2026-11-06 (no `…` on a blank Details): the pane is blank.
 		if !detailsBodyBlank(text) || strings.Contains(text, influenceHead) || strings.Contains(text, "SUBJECT") {
@@ -250,7 +250,7 @@ func TestViewRule(t *testing.T) {
 			t.Fatalf("after ↑ to another chart: Bodies %v Aspects %v, want empty", up.textPaneState(PanelBodies), up.textPaneState(PanelAspects))
 		}
 		view := ansi.Strip(up.View())
-		for _, content := range []string{"Tau", "Mercury", "(no aspects in orb)"} {
+		for _, content := range []string{"Tau", "Mercury", "(no aspects within orb)"} {
 			if strings.Contains(view, content) {
 				t.Errorf("Bodies or Aspects still draw the other chart's %q:\n%s", content, view)
 			}
@@ -300,7 +300,7 @@ func TestFailedReportLine(t *testing.T) {
 	forceColor(t)
 	m, stub := followFixture(t, Config{Color: ColorAlways}, 132, 40)
 	stub.failBodies = true
-	m, cmd := pressOnly(t, m, runes("2"))
+	m, cmd := pressOnly(t, m, runes("3"))
 	m = pump(t, m, cmd)
 	if m.detailsReportState() != paneFailed {
 		t.Fatalf("after the Sun's report failed: %v, want failed", m.detailsReportState())
@@ -315,7 +315,7 @@ func TestFailedReportLine(t *testing.T) {
 	}
 	logged := false
 	for _, l := range m.logLines {
-		logged = logged || strings.HasPrefix(l.text, "Couldn't read the full report.")
+		logged = logged || strings.HasPrefix(l.text, "details: report not read")
 	}
 	if !logged {
 		t.Errorf("the Log lost its error line: %v", m.logLines)
@@ -346,7 +346,7 @@ func TestFailedReportLine(t *testing.T) {
 // own title for caption, one `…`, no wanted key, nothing scheduled.
 func TestCuspRowHasNoReport(t *testing.T) {
 	m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
-	m, cmd := pressOnly(t, m, runes("2"))
+	m, cmd := pressOnly(t, m, runes("3"))
 	m = pump(t, m, cmd)
 	spawned := stub.reports
 	m.bodyCursorIdx = 99 // past the rows: ObjectAtCursor gives no object
@@ -457,10 +457,10 @@ func TestEveryFrameShowsOneSubject(t *testing.T) {
 		return runes(s)
 	}
 	corpus := [][]string{
-		{"2", "down", "d", "1", "up", "2"},
-		{"up", "2", "3", "1", "down", "2"},
-		{"d", "2", "d", "up", "3", "1"},
-		{"2", "up", "tab", "down", "1", "D"},
+		{"3", "down", "d", "2", "up", "3"},
+		{"up", "3", "4", "2", "down", "3"},
+		{"d", "3", "d", "up", "4", "2"},
+		{"3", "up", "tab", "down", "2", "D"},
 	}
 	// The seeded corpus over the virtual scheduler (every_frame_test.go).
 	t.Run("seeded", seededEveryFrame)

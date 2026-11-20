@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -53,14 +54,14 @@ func TestSaveDefaultsKeepsTheFloatingFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Only the two keys moved: the retired `base:` and the comment stand.
-	want := "version: 1\n# mine\nframe:\n  base: cursor\n  houses: Placidus\n  zodiac: sidereal Lahiri\n" +
+	// Only the four keys moved: the retired `base:` and the comment stand.
+	want := "version: 1\n# mine\nframe:\n  base: cursor\n  houses: Placidus\n  zodiac: sidereal Lahiri\n  node: mean\n  lilith: mean\n" +
 		"location:\n  name: Amsterdam\n  country: NL\n  lat: 52.37\n  lon: 4.89\n  tz: Europe/Amsterdam\n" +
 		"house_display: angularity\n"
 	if string(got) != want {
 		t.Errorf("preferences.yaml:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
-	if n := noteCount(m, "default frame saved: Placidus, Lahiri"); n != 1 {
+	if n := noteCount(m, "defaults: Placidus, Lahiri"); n != 1 {
 		t.Errorf("the Log names the kept frame %d times, want once: %v", n, m.logLines)
 	}
 	if want := "default city saved: Amsterdam, NL"; lastLine(m).text != want {
@@ -77,13 +78,13 @@ func TestSaveDefaultsKeepsTheFloatingFrame(t *testing.T) {
 			t.Errorf("after a restart row %d is tagged %q, want PlLa", i, tag)
 		}
 	}
-	if n := noteCount(fresh, "preferences:"); n != 0 {
+	if n := noteCount(fresh, "settings:"); n != 0 {
 		t.Errorf("a good frame logged %d notes at start, want silence: %v", n, fresh.logLines)
 	}
 }
 
-// A frame that could not be written is one error line, and the city, which was
-// kept, is still said. The failure is a real one: the preferences file holds
+// A frame that could not be written is said whole on the error lane, as the
+// only failure, and the city, which was kept, is still said. The failure is a real one: the preferences file holds
 // `frame: <value>`, which is no block to write keys into, so the store refuses
 // and leaves that line alone while the city and the house display are saved.
 func TestSaveDefaultsFrameFailureIsOneErrorLine(t *testing.T) {
@@ -103,23 +104,20 @@ func TestSaveDefaultsFrameFailureIsOneErrorLine(t *testing.T) {
 	}
 	m = deliver(m, cmd)
 
-	want := "default frame not saved: store: preferences.yaml has 'frame: retired-default', not a block. The frame was not saved"
-	if lastLine(m).text != want || lastLine(m).lane != laneError {
-		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
-	}
-	errors := 0
+	want := []string{"settings: the houses, zodiac and Nodes were not kept as the default"}
+	var said []string
 	for _, l := range m.logLines {
 		if l.lane == laneError {
-			errors++
+			said = append(said, l.text)
 		}
 	}
-	if errors != 1 {
-		t.Errorf("the Log holds %d error lines, want one: %v", errors, m.logLines)
+	if !reflect.DeepEqual(said, want) {
+		t.Errorf("the Log's error lines are %q, want %q", said, want)
 	}
 	if noteCount(m, "default city saved: Amsterdam, NL") != 1 {
 		t.Errorf("the saved city is not in the Log: %v", m.logLines)
 	}
-	if noteCount(m, "default frame saved") != 0 {
+	if noteCount(m, "defaults: ")-noteCount(m, "defaults: houses shown as") != 0 {
 		t.Errorf("the Log claims the frame was kept: %v", m.logLines)
 	}
 	if strings.Contains(ansi.Strip(m.View()), "Defaults saved") {
@@ -155,7 +153,7 @@ func TestSavedFrameResolvesToWhatWasWritten(t *testing.T) {
 			if got := m.ownZodiac(nil); got != zod {
 				t.Fatalf("wrote zodiac %q, the UI resolved %q", zod.RecordName(), got.RecordName())
 			}
-			if n := noteCount(m, "preferences:"); n != 0 {
+			if n := noteCount(m, "settings:"); n != 0 {
 				t.Fatalf("%q, %q: the UI complained about what the store wrote: %v", hs.StoredName(), zod.RecordName(), m.logLines)
 			}
 		}

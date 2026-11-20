@@ -35,7 +35,6 @@ func chartPickTasteModel(t *testing.T, cfg Config, w, h int, failed bool) Model 
 	t.Helper()
 	m := tabsPairModel(t, cfg)
 	m.width, m.height = w, h
-	m.limitedViewShown = true // the first-frame notice is not what this fixture is about
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{
 		Positions:    fullChartPositions(),
 		Aspects:      tasteOwnAspects(),
@@ -81,10 +80,6 @@ func TestChartPickTaste(t *testing.T) {
 				name   string
 				failed bool
 			}{{"resolving", false}, {"failed", true}} {
-				if state.failed && size.name == "80x24" {
-					// Byte-identical to "resolving" at this size.
-					continue
-				}
 				name := fmt.Sprintf("chart-pick-%s-%s-%s", state.name, size.name, mode.name)
 				t.Run(name, func(t *testing.T) {
 					m := chartPickTasteModel(t, mode.cfg, size.w, size.h, state.failed)

@@ -22,6 +22,7 @@ const (
 	surfaceDetails                 // passive raw Astrolog report (strict latest-only)
 	surfaceTimeline                // Details timeline searches (strict latest-only, keyed by search inputs)
 	surfaceTemplate                // a body template tab's facts (strict latest-only, keyed by its inputs)
+	surfaceMoon                    // the Moon list's searches (the Timeline's row, a second instance)
 	numSurfaces
 )
 
@@ -216,6 +217,10 @@ type imagePayload struct {
 	// rings name the charts of a multi-ring render, in ring order, so a staging
 	// failure can say which slot it was (C16). Empty for a single chart.
 	rings []string
+	// shows names the charts the picture draws, as the Log says it: fixed when
+	// the render was asked for, so a picture that is published after the cursor
+	// has moved still names what it shows.
+	shows string
 	// commands are the argv lines of the spawns that started, written to the
 	// Log's argv lane at the commit gate on success and failure alike. Only the multi-ring render reports them.
 	commands []string
@@ -225,9 +230,8 @@ func (imagePayload) isRefreshPayload() {}
 
 // textPayload is surfaceText's result: the chart compute (positions, natal
 // layer, aspects, the moment it was computed for). It wraps the exported
-// FirstFrameReadyMsg so cross-package drivers (the invariants first-frame
-// golden) can hand-construct results; the Update loop converts the exported
-// message into the coordinator's internal result shape.
+// FirstFrameReadyMsg; the Update loop converts the exported message into the
+// coordinator's internal result shape.
 type textPayload struct{ msg FirstFrameReadyMsg }
 
 func (textPayload) isRefreshPayload() {}
@@ -536,6 +540,8 @@ type wheelPublishedMsg struct {
 	err  error
 	// openSeq is the Model's wheelOpenSeq when the publish started.
 	openSeq uint64
+	// shows names the charts of the picture that was published.
+	shows string
 }
 
 // kickWheelPublish starts a publish if bytes are pending and none is in flight.
@@ -546,7 +552,7 @@ func (m Model) kickWheelPublish() (Model, tea.Cmd) {
 	if m.wheelPublishing || m.wheelPublishPending == nil {
 		return m, nil
 	}
-	bytes := m.wheelPublishPending
+	bytes, shows := m.wheelPublishPending, m.wheelPublishShows
 	m.wheelPublishPending = nil
 	// A picture that waited behind another publish while the screen moved to
 	// another plan is dropped, never shown (S4b B4). Plans that differ in the
@@ -555,15 +561,15 @@ func (m Model) kickWheelPublish() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.wheelPublishing = true
-	return m, publishWheelCmd(m.rows[surfaceImage].spawn.wheel.show, bytes, m.wheelOpenSeq)
+	return m, publishWheelCmd(m.rows[surfaceImage].spawn.wheel.show, bytes, m.wheelOpenSeq, shows)
 }
 
 // publishWheelCmd publishes the bytes to the browser preview off the Update
 // loop (preview.Show, held as the Image row's show spawn).
-func publishWheelCmd(show func([]byte) (string, error), img []byte, openSeq uint64) tea.Cmd {
+func publishWheelCmd(show func([]byte) (string, error), img []byte, openSeq uint64, shows string) tea.Cmd {
 	return func() tea.Msg {
 		path, err := show(img)
-		return wheelPublishedMsg{path: path, err: err, openSeq: openSeq}
+		return wheelPublishedMsg{path: path, err: err, openSeq: openSeq, shows: shows}
 	}
 }
 
@@ -592,11 +598,11 @@ func (m Model) onWheelPublished(msg wheelPublishedMsg) (Model, tea.Cmd) {
 		// left. (A wheel that opened names its address too, once, on its own
 		// lane: logWheelOpen.)
 		if msg.path != "" {
-			m = m.logNote("wheel", "open it by hand at %s", msg.path)
+			m = m.logNote("wheel", "the picture is at %s", msg.path)
 		}
 		// Error lane: the publish failed. The address above is a
 		// note; the two are told apart by call site, never by text.
-		return m.noteEphemeris(msg.err).logError("Couldn't show the wheel. %s", m.failureReason(msg.err, wheelPublishFallback)), nil
+		return m.noteEphemeris(msg.err).logError("wheel", "%s", m.failureReason(msg.err, wheelPublishFallback)), nil
 	}
 	// The first publish of a session that answers on an address says where it
 	// is. Later ones, a refresh while the operator moves time, say nothing; a
@@ -605,6 +611,12 @@ func (m Model) onWheelPublished(msg wheelPublishedMsg) (Model, tea.Cmd) {
 	if m.previewActive && m.wheelURL == "" && strings.HasPrefix(msg.path, "http://") {
 		m.wheelURL = msg.path
 		m = m.logWheelOpen(msg.path)
+	}
+	// The picture names its charts once, and again when they change: a held
+	// time step publishes the same two charts every frame.
+	if m.previewActive && msg.shows != "" && msg.shows != m.wheelShown {
+		m.wheelShown = msg.shows
+		m = m.logNote("wheel", "%s", msg.shows)
 	}
 	return m.kickWheelPublish()
 }

@@ -2,7 +2,7 @@
 # sextile: build (once) and run Sextile in Docker, or with --no-docker
 # build this checkout with the host's go and run it.
 #
-#   sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons] [-- APP ARGS...]
+#   sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons] [--originals WORD] [-- APP ARGS...]
 #   sextile doctor [--charts-dir DIR] [--port N]
 #
 # Docker, local daemon only; --no-docker never runs a docker command, and
@@ -59,7 +59,8 @@ ROOT=$(cd -- "$here_dir" >/dev/null 2>&1 && pwd -P) || die "cannot find the fold
 usage() {
   local l
   while IFS= read -r l; do printf '%s\n' "$l"; done <<'EOF'
-usage: sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons] [-- APP-ARGS...]
+usage: sextile [--charts-dir DIR] [--port N] [--rebuild] [--no-open] [--no-docker] [--moons | --no-moons]
+               [--originals WORD] [-- APP-ARGS...]
        sextile doctor [--charts-dir DIR] [--port N]
 
 Builds the Docker image for this checkout when it is missing, then runs Sextile
@@ -74,6 +75,11 @@ in it with your charts folder mounted.
                     instead of Docker
   --moons           put the planetary moons' files, about 240 MB, in the image from now on
   --no-moons        leave them out from now on
+  --originals WORD  what Sextile may do in this charts folder, from now on. WORD is one of
+                      protected  Sextile writes nothing in it, and Docker mounts it read-only
+                      ask        Sextile asks before each write
+                      add        new charts are saved freely, a change asks
+                      allow      Sextile writes without asking
   doctor            say what is wrong, without changing anything
   --                everything after it goes to Sextile unchanged
 
@@ -92,6 +98,7 @@ REBUILD=
 NO_OPEN=
 NATIVE=
 MOONS_FLAG=
+ORIG_WORD=
 SEP=
 FWD=()
 
@@ -140,6 +147,20 @@ while [ $# -gt 0 ]; do
       [ "$MOONS_FLAG" = "$arg" ] && die "$arg was given twice"
       [ -n "$MOONS_FLAG" ] && die "--moons and --no-moons cannot be given together"
       MOONS_FLAG=$arg ;;
+    --originals | --originals=*)
+      [ "$MODE" = doctor ] && die "doctor takes only --port N and --charts-dir DIR (not '--originals')"
+      [ -n "$ORIG_WORD" ] && die "--originals was given twice"
+      if [ "$arg" = --originals ]; then
+        [ $# -gt 0 ] || die "--originals needs one of protected, ask, add or allow"
+        ORIG_WORD=$1
+        shift
+      else
+        ORIG_WORD=${arg#--originals=}
+      fi
+      case $ORIG_WORD in
+        protected | ask | add | allow) ;;
+        *) die "--originals needs one of protected, ask, add or allow (not '$ORIG_WORD')" ;;
+      esac ;;
     --charts-dir | --charts-dir=*)
       [ -n "$CHARTS_SET" ] && die "--charts-dir was given twice"
       if [ "$arg" = --charts-dir ]; then
@@ -206,7 +227,7 @@ check_daemon() {
     ST=FAIL
     case $out in
       *ermission*denied* | *EACCES*)
-        MSG="you cannot reach the Docker daemon (permission denied on its socket). Join the docker group (https://docs.docker.com/engine/install/linux-postinstall/) or start Docker Desktop" ;;
+        MSG="Docker refuses your user account. Add your account to the docker group (https://docs.docker.com/engine/install/linux-postinstall/), or start Docker Desktop" ;;
       *)
         MSG="Docker is not running. Start Docker (Docker Desktop, or the docker service) and try again" ;;
     esac
@@ -242,10 +263,10 @@ check_endpoint() {
       MSG=$ENDPOINT ;;
     '')
       ST=FAIL
-      MSG="only a local Docker is supported, and its endpoint could not be read (docker context inspect)" ;;
+      MSG="Sextile needs Docker on this computer, and could not find out where this Docker runs (docker context inspect)" ;;
     *)
       ST=FAIL
-      MSG="only a local Docker is supported (this endpoint is $ENDPOINT): Sextile mounts a folder of this machine, which a remote Docker cannot see" ;;
+      MSG="Sextile needs Docker on this computer. This Docker runs elsewhere ($ENDPOINT) and cannot see your charts folder" ;;
   esac
 }
 
@@ -661,7 +682,7 @@ config_location() {
   CONF_DIR=$base/sextile
   CONF=$CONF_DIR/launcher.conf
   if [ -L "$CONF_DIR" ]; then
-    CONF_ERR="the config folder $CONF_DIR is a symlink. The launcher will not read or write through it"
+    CONF_ERR="the settings folder $CONF_DIR is a link. Sextile does not read or write through a link. Make it a real folder"
     return 1
   fi
   if [ -L "$CONF" ]; then
@@ -690,7 +711,7 @@ read_config() {
   fi
   CF_ST=invalid
   if [ ! -f "$CONF" ] || [ ! -r "$CONF" ]; then
-    CONF_ERR="the config file $CONF is not a readable file. Delete it to be asked again"
+    CONF_ERR="Sextile cannot read $CONF. Delete it, and Sextile asks for your charts folder again"
     return
   fi
   while IFS= read -r line || [ -n "$line" ]; do
@@ -703,7 +724,7 @@ read_config() {
     val=$line
   done <"$CONF"
   if [ "$n" -ne 1 ]; then
-    CONF_ERR="the config file $CONF is not valid: it must hold exactly one line, charts-dir=<absolute folder>. Fix it or delete it to be asked again"
+    CONF_ERR="$CONF is not valid. It must hold one line: charts-dir=<full path of a folder>. Correct it, or delete it to be asked again"
     return
   fi
   case $val in
@@ -722,7 +743,7 @@ read_config() {
     return
   fi
   if [ ! -d "$dir" ]; then
-    CONF_ERR="the remembered charts folder $dir (from $CONF) does not exist — Sextile will not create it again, in case a disk is not mounted. Restore it, fix the file, or delete the file to be asked again"
+    CONF_ERR="your charts folder $dir (named in $CONF) is not there. Sextile does not make it again, because a disk may be missing. Bring it back, or delete the file to be asked again"
     return
   fi
   CF_ST=valid
@@ -1013,7 +1034,7 @@ prompt_charts() {
       case $path in
         '~') path=$HOME ;;
         '~/'*) path=$HOME/${path#'~/'} ;;
-        '~'*) die "'$path': only ~ and ~/... are understood. Give a path" ;;
+        '~'*) die "'$path' is not a path that Sextile understands. Type a full path, or one that starts with ~/" ;;
       esac
       case $path in
         /*) ;;
@@ -1286,14 +1307,18 @@ prune_native() {
 # process. The XDG variables are the caller's own and pass through untouched:
 # the app keeps its session, preferences and backups in the XDG state, config
 # and data folders (the folders the Docker run mounts), not in the charts
-# folder. SEXTILE_CHARTS_HOST_PATH is the physical charts folder, which the app
-# uses to tell one charts folder from another.
+# folder. The app runs on the physical charts folder the launcher pinned, the
+# one its position was decided for, so a link changed meanwhile cannot hand it
+# another folder.
 native_run() {
-  local phys
+  originals_start
+  unset SEXTILE_ORIGINALS_SET SEXTILE_ORIGINALS_CREATED SEXTILE_CHARTS_READONLY
+  [ -n "$OR_SET" ] && export SEXTILE_ORIGINALS_SET=$OR_SET
+  [ -n "$OR_CREATED" ] && export SEXTILE_ORIGINALS_CREATED=1
+  [ -n "$OR_RO" ] && export SEXTILE_CHARTS_READONLY=1
   start_wheel
-  phys=$(cd -P -- "$CHARTS_DIR" 2>/dev/null && pwd -P) || phys=$CHARTS_DIR
-  export SEXTILE_CHARTS_DIR=$CHARTS_DIR
-  export SEXTILE_CHARTS_HOST_PATH=$phys
+  export SEXTILE_CHARTS_DIR=$CHARTS_PHYS
+  export SEXTILE_CHARTS_HOST_PATH=$CHARTS_PHYS
   export SEXTILE_PREVIEW_MODE=serve
   export SEXTILE_PREVIEW_ADDR=127.0.0.1:$PORT
   export SEXTILE_LAUNCH="no-docker $DESCRIBE"
@@ -1316,6 +1341,195 @@ native_run() {
   [ -f "$NATIVE_BIN" ] && [ -x "$NATIVE_BIN" ] ||
     die "the native build $NATIVE_BIN is gone (another sextile may have removed it). Run sextile --no-docker again"
   exec "$NATIVE_BIN" ${FWD[@]+"${FWD[@]}"}
+}
+
+# ----------------------------------------------------- the charts folder's position
+#
+# Sextile keeps one line per charts folder in launcher-originals.conf beside
+# launcher.conf: <physical path>=<word>, split at the last =. Sextile is its
+# only writer. The launcher reads it, hands Sextile the word it was given or
+# the fact that it made the folder, and mounts a protected folder read-only.
+
+OR_FILE=
+OR_KEY=
+OR_WORD=
+OR_FAULT=
+OR_FILE_FAULT=
+OR_RO=
+OR_SET=
+OR_CREATED=
+OR_NOTICE=
+OR_SAY=
+
+# pin_charts_phys: the charts folder's physical path, resolved once and kept in
+# CHARTS_PHYS. The position-file key, SEXTILE_CHARTS_HOST_PATH and the Docker
+# mount source all use this one value, so a link retargeted later cannot split
+# them. A final line break in the path is kept: the "x" sentinel stops command
+# substitution from eating it, and exactly the one newline pwd adds is cut.
+CHARTS_PHYS=
+CHARTS_PHYS_FOR=
+pin_charts_phys() {
+  local out
+  [ -n "$CHARTS_PHYS_FOR" ] && [ "$CHARTS_PHYS_FOR" = "$CHARTS_DIR" ] && return 0
+  if out=$(cd -P -- "$CHARTS_DIR" 2>/dev/null && pwd -P && printf x); then
+    out=${out%x}
+    CHARTS_PHYS=${out%$'\n'}
+  else
+    CHARTS_PHYS=$CHARTS_DIR
+  fi
+  # A leading // is one /, as the app's path cleaning has it, so both name the
+  # folder alike.
+  while :; do
+    case $CHARTS_PHYS in
+      //*) CHARTS_PHYS=${CHARTS_PHYS#/} ;;
+      *) break ;;
+    esac
+  done
+  CHARTS_PHYS_FOR=$CHARTS_DIR
+}
+
+# originals_read: sets OR_FILE, OR_KEY (CHARTS_PHYS, the same value
+# SEXTILE_CHARTS_HOST_PATH carries), OR_WORD (the word on its one line, or
+# empty) and OR_FAULT (why the file cannot be trusted for this folder, or
+# empty). OR_FILE_FAULT is set alone when the file is not a regular file.
+# Reads only; creates and changes nothing.
+originals_read() {
+  local base line body n=0 id word
+  OR_WORD=
+  OR_FAULT=
+  OR_FILE_FAULT=
+  if [ -n "$NATIVE" ]; then
+    base=${XDG_CONFIG_HOME:-${HOME-}/.config}
+  else
+    base=$(abs_env_or XDG_CONFIG_HOME "${HOME-}/.config")
+  fi
+  OR_FILE=${base%/}/sextile/launcher-originals.conf
+  pin_charts_phys
+  OR_KEY=$CHARTS_PHYS
+  if [ -L "$OR_FILE" ] || { [ -e "$OR_FILE" ] && [ ! -f "$OR_FILE" ]; }; then
+    OR_FILE_FAULT="is not a file"
+    OR_FAULT=$OR_FILE_FAULT
+    return 0
+  fi
+  [ -e "$OR_FILE" ] || return 0
+  if [ ! -r "$OR_FILE" ]; then
+    OR_FAULT="cannot be read"
+    return 0
+  fi
+  if [ "$(tr -d '\000' <"$OR_FILE" | wc -c)" -ne "$(wc -c <"$OR_FILE")" ]; then
+    OR_FAULT="cannot be read"
+    return 0
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    body=$line
+    while [ "${body%$'\r'}" != "$body" ]; do body=${body%$'\r'}; done
+    word=${body#"${body%%[![:space:]]*}"}
+    case $word in '' | '#'*) continue ;; esac
+    case $body in *=*) ;; *) continue ;; esac
+    id=${body%=*}
+    word=${body##*=}
+    word=${word#"${word%%[![:space:]]*}"}
+    word=${word%"${word##*[![:space:]]}"}
+    if [ "$id" = "$OR_KEY" ]; then
+      n=$((n + 1))
+      OR_WORD=$word
+    fi
+  done <"$OR_FILE"
+  if [ "$n" -gt 1 ]; then
+    OR_WORD=
+    OR_FAULT="has $n lines for it"
+  elif [ "$n" -eq 1 ]; then
+    case $OR_WORD in
+      protected | ask | add | allow) ;;
+      *)
+        OR_FAULT="says \"$OR_WORD\" for it"
+        OR_WORD= ;;
+    esac
+  fi
+  return 0
+}
+
+# originals_decide: from --originals, whether this run made the folder, and the
+# file, sets OR_RO (1 at protected), OR_SET and OR_CREATED (what Sextile is
+# told), and OR_SAY and OR_NOTICE (the lines to print). The order is: a path
+# the file cannot hold, or a file that is not a regular file; then the word
+# given; then a folder made in this run; then the file's own line.
+originals_decide() {
+  OR_RO=
+  OR_SET=
+  OR_CREATED=
+  OR_SAY=
+  OR_NOTICE=
+  originals_read
+  case $OR_KEY in
+    *$'\r'* | *$'\n'*)
+      OR_RO=1
+      OR_NOTICE="charts folder protected: its path holds a line break · this run writes nothing in it"
+      return 0 ;;
+  esac
+  if [ -n "$OR_FILE_FAULT" ]; then
+    OR_RO=1
+    OR_NOTICE="charts folder protected: launcher-originals.conf $OR_FILE_FAULT · this run writes nothing in it"
+    return 0
+  fi
+  if [ -n "$ORIG_WORD" ]; then
+    OR_SET=$ORIG_WORD
+    [ "$ORIG_WORD" = protected ] && OR_RO=1
+    case $ORIG_WORD in
+      protected) OR_SAY="charts folder: protected · Sextile writes nothing in it (remembered)" ;;
+      ask) OR_SAY="charts folder: Sextile asks before each write (remembered)" ;;
+      add) OR_SAY="charts folder: new charts are saved freely, a change asks (remembered)" ;;
+      allow) OR_SAY="charts folder: Sextile writes without asking (remembered)" ;;
+    esac
+    return 0
+  fi
+  if [ "$DIR_STATE" = created ]; then
+    OR_CREATED=1
+    return 0
+  fi
+  if [ -n "$OR_FAULT" ]; then
+    OR_RO=1
+    OR_NOTICE="charts folder protected: launcher-originals.conf $OR_FAULT · this run writes nothing in it"
+    return 0
+  fi
+  [ "$OR_WORD" = protected ] && OR_RO=1
+  return 0
+}
+
+# originals_start: decide the position and print what it means. It changes no
+# environment: native_run exports the variables, the Docker run passes them.
+originals_start() {
+  originals_decide
+  [ -n "$OR_SAY" ] && printf '%s\n' "$OR_SAY" >&2
+  [ -n "$OR_NOTICE" ] && printf '%s\n' "$OR_NOTICE" >&2
+  return 0
+}
+
+# report_originals: doctor's position line, after the charts folder line.
+report_originals() {
+  if [ -z "$CHARTS_DIR" ]; then
+    ST=note
+    MSG="not known until a charts folder is chosen"
+    report "charts folder position"
+    return 0
+  fi
+  originals_read
+  ST=ok
+  case $OR_KEY in
+    *$'\r'* | *$'\n'*)
+      ST=note
+      MSG="protected (its path holds a line break)" ;;
+    *)
+      if [ -n "$OR_FAULT" ]; then
+        ST=note
+        MSG="protected (launcher-originals.conf $OR_FAULT)"
+      elif [ -n "$OR_WORD" ]; then
+        MSG=$OR_WORD
+      else
+        MSG="ask (not set)"
+      fi ;;
+  esac
+  report "charts folder position"
 }
 
 # ------------------------------------------------------------------- doctor
@@ -1393,13 +1607,12 @@ CONFIG_SRC=
 BACKUP_SRC=
 SESSIONS_SRC=
 STATE_ERR=
-CHARTS_PHYS=
 
 # state_check P: P is absent or a real folder, never a symlink or a file; or
 # STATE_ERR says why not.
 state_check() {
   if [ -L "$1" ]; then
-    STATE_ERR="$1 is a symlink. The launcher will not keep Sextile's state through it. Make it a folder, or move it away"
+    STATE_ERR="$1 is a link. Sextile does not keep your session through a link. Make it a real folder, or move it away"
     return 1
   fi
   if [ -e "$1" ] && [ ! -d "$1" ]; then
@@ -1460,7 +1673,7 @@ state_folders() {
   # the app can.
   for p in "$ST_PATH" "$CF_PATH" "$DA_PATH/backup" "$DA_PATH/sessions"; do
     if [ ! -d "$p" ] || [ ! -w "$p" ] || [ ! -x "$p" ]; then
-      STATE_ERR="$p cannot be written by you, so Sextile could not keep its state there. Fix its owner or mode"
+      STATE_ERR="You cannot write in $p, so Sextile cannot keep your session there. Change its owner or its permissions"
       return 1
     fi
     if unmountable "$p"; then
@@ -1468,7 +1681,7 @@ state_folders() {
       return 1
     fi
   done
-  CHARTS_PHYS=$(cd -P -- "$CHARTS_DIR" 2>/dev/null && pwd -P) || CHARTS_PHYS=$CHARTS_DIR
+  pin_charts_phys
   STATE_SRC=$(cd -P -- "$ST_PATH" 2>/dev/null && pwd -P) || STATE_SRC=$ST_PATH
   CONFIG_SRC=$(cd -P -- "$CF_PATH" 2>/dev/null && pwd -P) || CONFIG_SRC=$CF_PATH
   BACKUP_SRC=$(cd -P -- "$DA_PATH/backup" 2>/dev/null && pwd -P) || BACKUP_SRC=$DA_PATH/backup
@@ -1607,12 +1820,13 @@ run_doctor() {
   ST=$CH_ST
   MSG=$CH_MSG
   report "charts folder"
+  report_originals
   ST=$CFL_ST
   MSG=$CFL_MSG
   report config
   if state_places; then
     ST=ok
-    MSG="session in $(tilde "$ST_PATH"), preferences in $(tilde "$CF_PATH"), backups in $(tilde "$DA_PATH/backup"), named sessions in $(tilde "$DA_PATH/sessions")"
+    MSG="session in $(tilde "$ST_PATH"), settings in $(tilde "$CF_PATH"), dated copies in $(tilde "$DA_PATH/backup"), named sessions in $(tilde "$DA_PATH/sessions")"
   else
     ST=FAIL
     MSG=$STATE_ERR
@@ -1752,6 +1966,10 @@ prune_images
 
 find_zone
 
+originals_start
+charts_mount="type=bind,source=$CHARTS_PHYS,target=/charts"
+[ -n "$OR_RO" ] && charts_mount=$charts_mount,readonly
+
 args=(run --rm --pull never -i)
 if [ -t 0 ] && [ -t 1 ]; then
   # Docker's detach sequence defaults to Ctrl+P, Ctrl+Q, and its client holds a
@@ -1762,7 +1980,7 @@ if [ -t 0 ] && [ -t 1 ]; then
 fi
 args+=(
   --user "$(id -u):$(id -g)"
-  --mount "type=bind,source=$CHARTS_DIR,target=/charts"
+  --mount "$charts_mount"
   --mount "type=bind,source=$STATE_SRC,target=/state/sextile"
   --mount "type=bind,source=$CONFIG_SRC,target=/config/sextile"
   --mount "type=bind,source=$BACKUP_SRC,target=/data/sextile/backup"
@@ -1778,6 +1996,9 @@ args+=(
   -e "SEXTILE_BACKUP_HOST_PATH=$BACKUP_SRC"
   -e "SEXTILE_SESSIONS_HOST_PATH=$SESSIONS_SRC"
 )
+[ -n "$OR_SET" ] && args+=(-e "SEXTILE_ORIGINALS_SET=$OR_SET")
+[ -n "$OR_CREATED" ] && args+=(-e SEXTILE_ORIGINALS_CREATED=1)
+[ -n "$OR_RO" ] && args+=(-e SEXTILE_CHARTS_READONLY=1)
 [ -n "$ZONE" ] && args+=(-e "TZ=$ZONE")
 for name in TERM COLORTERM NO_COLOR SEXTILE_COLOR; do
   exported "$name" && args+=(-e "$name")

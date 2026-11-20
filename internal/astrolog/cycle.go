@@ -2,6 +2,7 @@ package astrolog
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,7 +14,7 @@ import (
 
 // The cycle search (the specification P11): Astrolog's own
 // event list over whole years (`-dY`) for the Sun and one other body,
-// conjunctions only, at UT (`-z 0`) with seconds (`-b0`). A body template
+// conjunctions only, at UT (`-z 0`) with seconds (`=b0`). A body template
 // reads its synodic events from it: the conjunctions with the Sun, the other
 // body's stations and ingresses, each as Astrolog printed it.
 
@@ -26,6 +27,9 @@ type CycleRequest struct {
 	Houses    recipe.HouseSystem
 	Zodiac    recipe.Zodiac
 	Registry  aspect.Registry
+	// AspectRegistry is the binary's aspect list, carried by the call.
+	AspectRegistry aspect.AspectRegistry
+	Nodes          recipe.NodeForm // the form the Nodes and Lilith are searched in
 }
 
 // cycleFirstYear is the first year the search may start in: Astrolog prints
@@ -43,7 +47,7 @@ func CycleCall(req CycleRequest) (BodyCall, error) {
 	if req.Years < 1 {
 		return BodyCall{}, fmt.Errorf("astrolog: CycleCall: %d years", req.Years)
 	}
-	argv := []string{"-z", "0", "-qy", strconv.Itoa(req.StartYear), "-dY", strconv.Itoa(req.Years), "-b0"}
+	argv := []string{"-z", "0", "-qy", strconv.Itoa(req.StartYear), "-dY", strconv.Itoa(req.Years), "=b0"}
 	frame, err := frameBand(req.Houses, req.Zodiac)
 	if err != nil {
 		return BodyCall{}, err
@@ -53,12 +57,13 @@ func CycleCall(req CycleRequest) (BodyCall, error) {
 	// The list is read, never shown, so its clock is fixed (24-hour, month
 	// first) whatever the operator chose for what Astrolog prints on screen.
 	argv = append(argv, Clock{}.Pins()...)
-	band, err := cycleBand(req.Other)
+	band, err := cycleBand(req.Other, req.Nodes)
 	if err != nil {
 		return BodyCall{}, err
 	}
-	call := newBodyCall(append(argv, band.tokens...), band)
-	call.Registry, call.Objects = req.Registry, []int{sunObjectNumber, req.Other.Number}
+	argv = append(argv, band.tokens...)
+	call := newBodyCall(argv, band).asSearch()
+	call.Registry, call.Aspects, call.Objects = req.Registry, req.AspectRegistry, []int{sunObjectNumber, req.Other.Number}
 	return call, nil
 }
 
@@ -104,7 +109,7 @@ type CycleEvent struct {
 
 var (
 	cycleLineRE = regexp.MustCompile(`^(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) +(\d{1,2})/ ?(\d{1,2})/(\d{4}) +(\d{1,2}):(\d{2}):(\d{2}) +([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)?) ([(\[<])([ \d]\d)([A-Z][a-z]{2})(\d{2})([)\]>]) (.*)$`)
-	cycleConRE  = regexp.MustCompile(`^Con ([(\[<])([ \d]\d)([A-Z][a-z]{2})(\d{2})([)\]>]) ([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)?)(?: \([A-Z][a-z]+(?: [A-Z][a-z]+)* \d{1,3}%\))?$`)
+	cycleConRE  = regexp.MustCompile(`^(` + astrologstyle.AspectLetters + `) ([(\[<])([ \d]\d)([A-Z][a-z]{2})(\d{2})([)\]>]) ([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)?)(?: \([A-Z][a-z]+(?: [A-Z][a-z]+)* \d{1,3}%\))?$`)
 	cycleIngRE  = regexp.MustCompile(`^(?:-->|<--) ([A-Z][a-z]+)(?: \((?:Spring|Summer|Autumn|Winter) (?:Equinox|Solstice)\))?$`)
 	cycleStaRE  = regexp.MustCompile(`^S/([RD])$`)
 	closers     = map[byte]byte{'(': ')', '[': ']', '<': '>'}
@@ -112,14 +117,25 @@ var (
 
 // ParseCycleEvents reads every line of a cycle search or refuses the whole
 // result: an unknown line is an error naming it, never a skipped row.
-func ParseCycleEvents(out string, reg aspect.Registry) ([]CycleEvent, error) {
+//
+// A conjunction row names its aspect by the letters of the binary in use: the
+// reader resolves them through the aspect registry the search's call carries
+// and requires the aspect the search asked for. A conjunction renamed to letters
+// no list can be read with refuses the search, naming it.
+func ParseCycleEvents(out string, reg aspect.Registry, aspects aspect.AspectRegistry) ([]CycleEvent, error) {
+	if text := aspects.RefusalFor(cycleConjunctionAspect); text != "" {
+		return nil, &AspectsRefusedError{Text: text}
+	}
+	if _, ok := aspects.ByIndex(cycleConjunctionAspect); !ok {
+		return nil, fmt.Errorf("astrolog: ParseCycleEvents: %w", ErrAspectsUnread)
+	}
 	var events []CycleEvent
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimRight(line, " \r")
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		ev, err := parseCycleLine(line, reg)
+		ev, err := parseCycleLine(line, reg, aspects)
 		if err != nil {
 			return nil, fmt.Errorf("astrolog: ParseCycleEvents: %q: %w", line, err)
 		}
@@ -131,7 +147,7 @@ func ParseCycleEvents(out string, reg aspect.Registry) ([]CycleEvent, error) {
 	return events, nil
 }
 
-func parseCycleLine(line string, reg aspect.Registry) (CycleEvent, error) {
+func parseCycleLine(line string, reg aspect.Registry, aspects aspect.AspectRegistry) (CycleEvent, error) {
 	m := cycleLineRE.FindStringSubmatch(line)
 	if m == nil {
 		return CycleEvent{}, fmt.Errorf("not a dated event line")
@@ -162,11 +178,18 @@ func parseCycleLine(line string, reg aspect.Registry) (CycleEvent, error) {
 	case cycleConRE.MatchString(rest):
 		c := cycleConRE.FindStringSubmatch(rest)
 		ev.Kind = CycleConjunction
-		if ev.OtherAt, ok = cyclePoint(c[1], c[2], c[3], c[4], c[5]); !ok {
+		kind, err := readAspectKind(aspects, c[1])
+		if err != nil {
+			return CycleEvent{}, err
+		}
+		if kind.Index != cycleConjunctionAspect {
+			return CycleEvent{}, fmt.Errorf("aspect %q is not the conjunction the search asked for", c[1])
+		}
+		if ev.OtherAt, ok = cyclePoint(c[2], c[3], c[4], c[5], c[6]); !ok {
 			return CycleEvent{}, fmt.Errorf("an unreadable position")
 		}
-		if ev.OtherObject, ok = reg.ByCut(c[6], rightNameWidth); !ok {
-			return CycleEvent{}, fmt.Errorf("unknown body %q", c[6])
+		if ev.OtherObject, ok = reg.ByCut(c[7], rightNameWidth); !ok {
+			return CycleEvent{}, fmt.Errorf("unknown body %q", c[7])
 		}
 	case cycleStaRE.MatchString(rest):
 		ev.Kind, ev.Station = CycleStation, rest
@@ -191,7 +214,7 @@ func cyclePoint(open, deg, sign, min, close string) (CyclePoint, bool) {
 }
 
 // SunPairRequest is the Sun and one other body at a moment, read to the
-// second of arc (`-b0`): what a body template's verdicts are judged on
+// second of arc (`=b0`): what a body template's verdicts are judged on
 // (the specification P9), never a display-rounded value.
 type SunPairRequest struct {
 	When     time.Time
@@ -200,10 +223,13 @@ type SunPairRequest struct {
 	Houses   recipe.HouseSystem
 	Zodiac   recipe.Zodiac
 	Registry aspect.Registry
+	// AspectRegistry is the binary's aspect list, carried by the call.
+	AspectRegistry aspect.AspectRegistry
+	Nodes          recipe.NodeForm // the form the Nodes and Lilith are read in
 }
 
 // SunPairCall is the request as a body call: the moment as its Julian Day
-// (momentArg, the same second every call for the slot names), `-b0`, the
+// (momentArg, the same second every call for the slot names), `=b0`, the
 // frame, the reform pin, a fixed clock (the list is read, never shown) and
 // the band of the Sun and the body.
 func SunPairCall(req SunPairRequest) (BodyCall, error) {
@@ -213,7 +239,7 @@ func SunPairCall(req SunPairRequest) (BodyCall, error) {
 	}
 	// -v prints the positions and the retrograde column, -Z the horizon
 	// table with the magnitude and the illuminated fraction: both in one call.
-	argv := []string{"-qj", jd, "-zl", formatLon(req.Lon), formatLat(req.Lat), "-b0", "-v", "-Z"}
+	argv := []string{"-qj", jd, "-zl", formatLon(req.Lon), formatLat(req.Lat), "=b0", "-v", "-Z"}
 	frame, err := frameBand(req.Houses, req.Zodiac)
 	if err != nil {
 		return BodyCall{}, err
@@ -221,17 +247,18 @@ func SunPairCall(req SunPairRequest) (BodyCall, error) {
 	argv = append(argv, frame...)
 	argv = append(argv, reformPin...)
 	argv = append(argv, Clock{}.Pins()...)
-	band, err := cycleBand(req.Other)
+	band, err := cycleBand(req.Other, req.Nodes)
 	if err != nil {
 		return BodyCall{}, err
 	}
-	call := newBodyCall(append(argv, band.tokens...), band)
-	call.Registry, call.Objects = req.Registry, []int{sunObjectNumber, req.Other.Number}
+	argv = append(argv, band.tokens...)
+	call := newBodyCall(argv, band).asSearch()
+	call.Registry, call.Aspects, call.Objects = req.Registry, req.AspectRegistry, []int{sunObjectNumber, req.Other.Number}
 	return call, nil
 }
 
 // PrecisePosition is a body's longitude to the second of arc, its velocity,
-// its sign and retrograde column, and its brightness, as `-b0 -v -Z` printed
+// its sign and retrograde column, and its brightness, as `=b0 -v -Z` printed
 // them.
 type PrecisePosition struct {
 	Object     aspect.Object // Astrolog's object, by order from the numbers asked

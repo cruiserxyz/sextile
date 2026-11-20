@@ -11,7 +11,7 @@ import (
 
 // session_frames.go is the session file's version-3 `frames:` sequence
 // (the specification C11): one record per chart whose house system or
-// zodiac (the specification C6) the operator chose, keyed by the chart file's base name, plus
+// zodiac (the specification C6) or the form of the Nodes and Lilith the operator chose, keyed by the chart file's base name, plus
 // at most one `slot: floating` record. Like `charts:` it is machine-managed
 // and read strictly; unlike `charts:` a bad entry costs only itself.
 
@@ -44,6 +44,13 @@ type FrameRecord struct {
 
 	Zodiac    string
 	HasZodiac bool
+
+	// Nodes is the form of the Nodes and Lilith the operator chose for the
+	// chart, written as `node:` and `lilith:` in words. HasNodes is false when
+	// the record holds no form: the chart then takes the form its file states,
+	// the user's default, or the mean one.
+	Nodes    recipe.NodeForm
+	HasNodes bool
 }
 
 // validFrameFile is the rule for a `file:` value: one base name.
@@ -66,7 +73,10 @@ func (r FrameRecord) writable() bool {
 	if r.HasZodiac && !validZodiac(r.Zodiac) {
 		return false
 	}
-	return r.HasHouses || r.HasZodiac
+	if r.HasNodes && (r.Nodes < recipe.NodesMean || r.Nodes > recipe.NodesTrueNatural) {
+		return false
+	}
+	return r.HasHouses || r.HasZodiac || r.HasNodes
 }
 
 func writeFrames(b *strings.Builder, frames []FrameRecord) {
@@ -88,6 +98,10 @@ func writeFrames(b *strings.Builder, frames []FrameRecord) {
 		if r.HasZodiac {
 			fmt.Fprintf(&out, "    zodiac: %s\n", yamlEscape(r.Zodiac))
 		}
+		if r.HasNodes {
+			node, lilith := r.Nodes.Words()
+			fmt.Fprintf(&out, "    node: %s\n    lilith: %s\n", node, lilith)
+		}
 	}
 	if out.Len() > 0 {
 		b.WriteString("frames:\n")
@@ -95,7 +109,7 @@ func writeFrames(b *strings.Builder, frames []FrameRecord) {
 	}
 }
 
-var frameKeyOrder = map[string]int{"file": 0, "slot": 0, "when": 1, "houses": 2, "from": 3, "zodiac": 4}
+var frameKeyOrder = map[string]int{"file": 0, "slot": 0, "when": 1, "houses": 2, "from": 3, "zodiac": 4, "node": 5, "lilith": 6}
 
 type frameEntry struct {
 	rec    FrameRecord
@@ -104,6 +118,10 @@ type frameEntry struct {
 	reason string // the first reason the entry is not the writer's
 	stray  bool
 	zodBad bool
+	// node and lilith are the words of the form's two keys as read; a form is
+	// kept only when both are present and name a pair Astrolog can cast.
+	node, lilith string
+	nodesBad     bool
 }
 
 func (e *frameEntry) fail(why string) {
@@ -123,7 +141,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 
 	drop := func(why string) {
 		dropped++
-		notes = append(notes, "a frames entry was dropped: "+why)
+		notes = append(notes, "a saved choice of houses or zodiac could not be read and is dropped, "+why)
 	}
 	flush := func() {
 		if cur == nil {
@@ -143,16 +161,30 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 			e.fail("no when")
 		}
 		if e.seen["houses"] != e.seen["from"] {
-			e.fail("houses and from must come together")
+			e.fail("its lines are incomplete")
 		}
 		if e.zodBad {
 			// Only the field goes; the entry keeps whatever else it has.
-			notes = append(notes, "a frames entry's zodiac is not one this build knows. The field was dropped")
+			notes = append(notes, "one saved zodiac is not known to this Sextile and is dropped")
 			dropped++
 			r.HasZodiac, r.Zodiac = false, ""
 		}
-		if !r.HasHouses && !r.HasZodiac {
-			e.fail("it carries neither houses nor zodiac")
+		if e.seen["node"] != e.seen["lilith"] || e.nodesBad {
+			// Only the form goes: the entry keeps its houses and zodiac.
+			e.nodesBad = true
+		} else if e.seen["node"] {
+			if f, ok := recipe.NodeFormFromWords(e.node, e.lilith); ok {
+				r.Nodes, r.HasNodes = f, true
+			} else {
+				e.nodesBad = true
+			}
+		}
+		if e.nodesBad {
+			notes = append(notes, "one saved form of the Nodes and Lilith is not known to this Sextile and is dropped")
+			dropped++
+		}
+		if !r.HasHouses && !r.HasZodiac && !r.HasNodes {
+			e.fail("it names no houses, zodiac or Nodes")
 		}
 		if e.reason != "" {
 			drop(e.reason)
@@ -160,7 +192,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 		}
 		if r.Floating {
 			if floating {
-				drop("a second floating-slot record")
+				drop("Now has two entries")
 				return
 			}
 			floating = true
@@ -197,7 +229,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 				if blocks > 1 {
 					skipBlock = true
 					dropped++
-					notes = append(notes, "a second frames block was dropped")
+					notes = append(notes, "the session file holds its house choices twice, the second list is dropped")
 				}
 			}
 			continue
@@ -248,7 +280,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 		// alone (C6, house-chooser C11b): its field is dropped below and the
 		// entry's houses stand. Every other key still loses the entry.
 		canonical := yamlEscape(val) == rawVal
-		if !canonical && key != "zodiac" {
+		if !canonical && key != "zodiac" && key != "node" && key != "lilith" {
 			cur.fail("a value that is not in the writer's form")
 			continue
 		}
@@ -286,6 +318,14 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 				cur.fail("an unknown from")
 			}
 			cur.rec.From = val
+		case "node", "lilith":
+			if !canonical {
+				cur.nodesBad = true
+			} else if key == "node" {
+				cur.node = val
+			} else {
+				cur.lilith = val
+			}
 		case "zodiac":
 			if canonical && validZodiac(val) {
 				cur.rec.Zodiac, cur.rec.HasZodiac = val, true
@@ -305,7 +345,7 @@ func parseFrames(text string) (frames []FrameRecord, dropped int, notes []string
 	// guards the parser itself, kept as a standalone-parser invariant.
 	if err := sc.Err(); err != nil && inBlock && !skipBlock {
 		dropped++
-		notes = append(notes, "the frames block ended early at a line the reader could not finish ("+err.Error()+"): the records after it were not read")
+		notes = append(notes, "the saved house choices stop at a line that could not be read ("+err.Error()+"), those after it are lost")
 	}
 	return frames, dropped, notes
 }

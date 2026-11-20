@@ -21,7 +21,7 @@ import (
 //     changes the model or returns a command.
 //
 // Promise 3 is the one that matters. A binding can be declared, appear in the
-// help modal, pass the help-parity invariant, and still be wired to nothing,
+// Keybindings popup, pass the key-list parity invariant, and still be wired to nothing,
 // because nothing else in the suite presses every key. That is exactly how a
 // hotkey dies quietly: the table says it exists and the switch never names it.
 //
@@ -63,6 +63,10 @@ func keyMsgFor(t *testing.T, k string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlPgUp}
 	case "ctrl+pgdown":
 		return tea.KeyMsg{Type: tea.KeyCtrlPgDown}
+	case "shift+up":
+		return tea.KeyMsg{Type: tea.KeyShiftUp}
+	case "shift+down":
+		return tea.KeyMsg{Type: tea.KeyShiftDown}
 	case "backspace":
 		return tea.KeyMsg{Type: tea.KeyBackspace}
 	case "delete":
@@ -90,7 +94,12 @@ func TestEveryBindingIsDeclaredWell(t *testing.T) {
 	for _, e := range mainBindings(keys.DefaultKeys()) {
 		name := fmt.Sprintf("binding-%d", int(e.ID))
 		if len(e.Binding.Keys()) == 0 {
-			t.Errorf("%s declares no keys", name)
+			// A command without a Ctrl key (it derives none, or it has only its
+			// comma form or its Actions row) is a palette row; nothing else may
+			// be left without a key.
+			if !e.Palette {
+				t.Errorf("%s declares no keys", name)
+			}
 			continue
 		}
 		for _, k := range e.Binding.Keys() {
@@ -172,7 +181,7 @@ func hotkeyStates(t *testing.T) []Model {
 	scrolled.objectRegistry = testObjectRegistry()
 
 	// A workspace that is a list: three anchored charts above the floating
-	// slot, the cursor on the middle one, so the list keys (⌃k, ⌃j, del) have
+	// slot, the cursor on the middle one, so the list keys (K, J, del) have
 	// somewhere to act (the specification C7, C8).
 	onList := onChart
 	onList.slots = listWorkspace(t, 3)
@@ -180,13 +189,11 @@ func hotkeyStates(t *testing.T) []Model {
 	onList.bodyCursorIdx = 0
 	onList.bodyRows = nil
 
-	// A previous time for `N` to jump back to, and a pending leader for `b`
-	// (it is a leader binding): both keys used to "work" here only by starting
-	// the Details timeline search from Bodies or Aspects focus, which
-	// the specification retires.
+	// A pending leader for `b` (it is a leader binding): it used to "work" here
+	// only by starting the Details timeline search from Bodies or Aspects focus,
+	// which the specification retires.
 	withBack := onChart
 	withBack.targetFloatingTime = time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	withBack.previousFloatingTime = withBack.targetFloatingTime.AddDate(0, 0, -1)
 	leaderArmed := onChart
 	leaderArmed.leader.pending = true
 

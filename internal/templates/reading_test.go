@@ -56,14 +56,14 @@ func TestLeadingTermIsTheLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Lines[0].Label != "elongation" || r.Lines[0].Value != "14°52′" {
+	if r.Lines[0].Label != "elongation" || r.Lines[0].Value != "14°52'" {
 		t.Errorf("leading term: %+v", r.Lines[0])
 	}
-	if r.Lines[1].Label != "" || r.Lines[1].Value != "14°52′ elongation" {
+	if r.Lines[1].Label != "" || r.Lines[1].Value != "14°52' elongation" {
 		t.Errorf("no leading term: %+v", r.Lines[1])
 	}
 	laid := Layout(r.Lines, 54)
-	if !strings.HasPrefix(laid[1].Main, strings.Repeat(" ", LabelWidth+labelGap)+"14°52′") {
+	if !strings.HasPrefix(laid[1].Main, strings.Repeat(" ", LabelWidth+labelGap)+"14°52'") {
 		t.Errorf("an unlabelled line does not start at the value column: %q", laid[1].Main)
 	}
 }
@@ -102,7 +102,7 @@ func TestOutputIsNeutral(t *testing.T) {
 	s := set(t)
 	ts, _ := Shipped(reg, s)
 	for _, tpl := range ts {
-		r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, []string{"Mar 23, 2025   2°39′ Ari"})}, s)
+		r, err := Render(tpl, "venus", map[string]Section{"now": nowFacts(14.87, []string{"Mar 23, 2025   2°39' Ari"})}, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,7 +154,7 @@ func TestQualifiersSitInTheThirdColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l := r.Lines[0]; l.Value != "14°52′ east" || l.Aside != "by longitude" {
+	if l := r.Lines[0]; l.Value != "14°52' east" || l.Aside != "by longitude" {
 		t.Errorf("qualifier: %+v", l)
 	}
 }
@@ -162,7 +162,7 @@ func TestQualifiersSitInTheThirdColumn(t *testing.T) {
 // R10 — too narrow: the aside goes first, then the value is cut at a word
 // boundary with …; the label is never cut and no number is cut in two.
 func TestOverflowDropsTheThirdColumnFirst(t *testing.T) {
-	lines := []Line{{Label: "elongation", Value: "14°52′ east", Aside: "longitude"}}
+	lines := []Line{{Label: "elongation", Value: "14°52' east", Aside: "longitude"}}
 	at := func(w int) Laid { return Layout(lines, w)[0] }
 	if l := at(54); l.Aside != "longitude" || utf8.RuneCountInString(l.Main)+utf8.RuneCountInString(l.Aside) != 54 {
 		t.Errorf("at 54: %+v", l)
@@ -170,10 +170,10 @@ func TestOverflowDropsTheThirdColumnFirst(t *testing.T) {
 	if l := at(40); l.Aside != "longitude" {
 		t.Errorf("at 40 everything still fits exactly: %+v", l)
 	}
-	if l := at(38); l.Aside != "" || l.Main != "elongation         14°52′ east" {
+	if l := at(38); l.Aside != "" || l.Main != "elongation         14°52' east" {
 		t.Errorf("at 38 the aside should go first: %+v", l)
 	}
-	if l := at(28); l.Aside != "" || l.Main != "elongation         14°52′…" {
+	if l := at(28); l.Aside != "" || l.Main != "elongation         14°52'…" {
 		t.Errorf("at 28 the value is cut at the word boundary: %+v", l)
 	}
 	if l := at(22); l.Aside != "" || l.Main != "elongation         …" {

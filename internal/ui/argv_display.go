@@ -10,11 +10,10 @@ import (
 
 // An argv line is stored whole, as the spawn ran, and copied whole. What the
 // console DISPLAYS starts with what names the chart: every call opens with the
-// binary's path, `-YQ 0` and a block of AstroExpression-clearing pairs (`'-~g'
-// ''` and fifty-odd more) that is the same on every line, so the display drops
-// that opening behind `astrolog … ` and keeps the part after the last clearing
-// pair (the hook-pair head of 7a7e5629, brought back by the operator,
-// 2026-10-24). A line still too wide keeps its START and ends in the cut mark.
+// binary's path, `-YQ 0`, the host band and a block of AstroExpression-clearing
+// pairs (`'-~g' ''` and fifty-odd more), the same on every line, so the display
+// drops that opening behind `astrolog … ` and keeps the part after the last
+// clearing pair. A line still too wide keeps its START and ends in the cut mark.
 // A line with no clearing block shows from its first switch, its path shortened
 // to `astrolog`; the whole line is one Enter away.
 

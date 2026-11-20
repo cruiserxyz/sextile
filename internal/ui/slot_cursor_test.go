@@ -158,11 +158,11 @@ func testPlaceAmsterdam() location.PlaceInfo {
 	}
 }
 
-// Eight charts at 80x24 (window of five): the list moves only when the cursor
+// Eight charts at 220x39, Details beside (window of five): the list moves only when the cursor
 // would leave it, in either direction.
 func TestSlotCursorUpWalksBeforeScrolling(t *testing.T) {
 	m := listModel(t, 7, 0)
-	m.width, m.height = 80, 24
+	m.width, m.height = 220, 39 // Details beside: the window is five rows
 	for i := 0; i < 7; i++ {
 		m = send(t, m, keyDown)
 	}
@@ -183,7 +183,7 @@ func TestSlotCursorUpWalksBeforeScrolling(t *testing.T) {
 
 func TestSlotCursorDownWalksBeforeScrolling(t *testing.T) {
 	m := listModel(t, 7, 0)
-	m.width, m.height = 80, 24
+	m.width, m.height = 220, 39 // Details beside: the window is five rows
 	for i := 1; i <= 4; i++ {
 		m = send(t, m, keyDown)
 		if m.chartTop != 0 {

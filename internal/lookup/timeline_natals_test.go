@@ -45,6 +45,7 @@ func comparingRequest() TimelineRequest {
 	return TimelineRequest{
 		When: time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC), Place: timelinePlace(),
 		Natals: []TimelineNatal{{Numeral: 1, Chart: natalOne()}, {Numeral: 2, Chart: natalTwo()}},
+		Lens:   Lens{Registry: lookupTestRegistry(), AspectRegistry: testAspects()},
 	}
 }
 
@@ -76,6 +77,13 @@ func (n *numeralSearch) run(_ context.Context, call BodyCall) (string, string, e
 	key := m + "|" + natal
 	n.calls = append(n.calls, key)
 	command := "astrolog " + strings.Join(argv, " ")
+	if slices.Contains(argv, "-dY") {
+		// The void search prints the Moon's rows only (its `-~d` filter).
+		if err := n.fail[key]; err != nil {
+			return "", command, err
+		}
+		return moonRows(n.out[key]), command, nil
+	}
 	if key == kDay {
 		key = kSky // a sky day search reads the sky's month output
 	}
@@ -143,7 +151,7 @@ func TestTimelineNatalsMergeInOrderWithNumerals(t *testing.T) {
 	}
 	// One sky search, and per natal its -t and -tr, in today's source order
 	// across the set: every -t, the sky, every -tr.
-	// The sky is its void-mark month search, then a day search for each of
+	// The sky is its void search, then a day search for each of
 	// May's 31 days.
 	wantCalls := []string{k1t, k2t, kSky}
 	for range 31 {
@@ -325,6 +333,7 @@ func TestTimelineNatalsDSTSegmentFailureKeepsTheOtherSegment(t *testing.T) {
 	req := TimelineRequest{
 		When: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC), Place: berlin,
 		Natals: []TimelineNatal{{Numeral: 1, Chart: natalOne()}},
+		Lens:   Lens{Registry: lookupTestRegistry(), AspectRegistry: testAspects()},
 	}
 	var calls []string
 	search := func(_ context.Context, call BodyCall) (string, string, error) {
@@ -402,7 +411,7 @@ func TestEachNatalCarriesItsOwnMarks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(argvs) != 36 {
-		t.Fatalf("%d searches, want 36 (two -t, the sky's month search and 31 days, two -tr)", len(argvs))
+		t.Fatalf("%d searches, want 36 (two -t, the sky's void search and 31 days, two -tr)", len(argvs))
 	}
 	natalMark := func(argv []string) string {
 		i := slices.Index(argv, "-R0")
@@ -417,7 +426,7 @@ func TestEachNatalCarriesItsOwnMarks(t *testing.T) {
 	}
 	want := map[string]string{"5 15 1979": "1", "2 3 1985": "2"}
 	for _, argv := range argvs {
-		if !slices.Contains(argv, "-dm") && !slices.Contains(argv, "-d") {
+		if !slices.Contains(argv, "-dY") && !slices.Contains(argv, "-d") {
 			jd, _ := strconv.ParseFloat(argv[slices.Index(argv, "-qj")+1], 64)
 			u := time.Unix(int64(math.Round((jd-2440587.5)*86400)), 0).UTC()
 			key := fmt.Sprintf("%d %d %d", int(u.Month()), u.Day(), u.Year())
@@ -427,8 +436,8 @@ func TestEachNatalCarriesItsOwnMarks(t *testing.T) {
 			continue
 		}
 		want := "1 2 3 4 5 6 7 8 9 10 12 16 22 31"
-		if slices.Contains(argv, "-dm") {
-			want = "1 2 3 4 5 6 7 8 9 10" // the void marks' search: the planets alone
+		if slices.Contains(argv, "-dY") {
+			want = "1 2 3 4 5 6 7 8 9 10" // the void search: the planets, whatever the lens holds
 		}
 		if got := natalMark(argv); got != want {
 			t.Errorf("sky search: -R0 %q, want the unnarrowed ticked list %q", got, want)

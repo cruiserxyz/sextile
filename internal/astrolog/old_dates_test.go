@@ -464,7 +464,9 @@ func TestPreReformChartIsCastForItsMoment(t *testing.T) {
 	for _, m := range ms {
 		t.Run(m.name, func(t *testing.T) {
 			jd := SlotJD(m.when)
-			loc, err := time.LoadLocation(m.tz)
+			// The slot's zone by Sextile's rule: before the zone's standard
+			// time, the local mean time of the slot's own longitude.
+			loc, err := NowZone(m.when, m.tz, 4.9)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -667,7 +669,7 @@ func TestReformDateIsPinned(t *testing.T) {
 		t.Run("live/"+clockName(c), func(t *testing.T) {
 			withClock(t, c)
 			pin := strings.Join(reformPin, " ")
-			rows, commands, err := ComputeTimeline(context.Background(), TimelineRequest{Year: 1582, Month: time.October, Zone: time.UTC}, []TimelineSource{TimelineSky}, nil)
+			rows, commands, err := ComputeTimeline(context.Background(), TimelineRequest{Year: 1582, Month: time.October, Zone: time.UTC, Registry: testRegistry(t), AspectRegistry: testAspects(t)}, []TimelineSource{TimelineSky}, nil)
 			if err != nil || len(rows) == 0 {
 				t.Fatalf("%d rows, err %v: the pin did not parse under %s", len(rows), err, clockName(c))
 			}
@@ -688,7 +690,7 @@ func TestReformDateIsPinned(t *testing.T) {
 		withClock(t, Clock{})
 		rowsOf := func(t *testing.T) (instants []time.Time, jd float64) {
 			t.Helper()
-			req := TimelineRequest{Year: 1582, Month: time.October, Zone: time.UTC}
+			req := TimelineRequest{Year: 1582, Month: time.October, Zone: time.UTC, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 			rows, _, err := ComputeTimeline(context.Background(), req, []TimelineSource{TimelineSky}, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -760,7 +762,7 @@ func TestPreReformTimelineMatchesAstrolog(t *testing.T) {
 				name := fmt.Sprintf("%s/%d-%02d/natal=%v", zone, my.year, int(my.month), withNatal)
 				t.Run(name, func(t *testing.T) {
 					withClock(t, Clock{})
-					req := TimelineRequest{Year: my.year, Month: my.month, Zone: zone}
+					req := TimelineRequest{Year: my.year, Month: my.month, Zone: zone, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 					srcs := []TimelineSource{TimelineSky}
 					if withNatal {
 						req.Natal = &TimelineNatal{When: natalWhen, Lon: 4.9, Lat: 52.37}
@@ -810,7 +812,7 @@ func TestPreReformTimelineMatchesAstrolog(t *testing.T) {
 								astrologOut(t, append(append([]string{"-z", zoneArg}, natal...), "-tr", mo, yr, "=Yt", "_Yd")...))
 						}
 						for _, raw := range raws {
-							got, err := ParseTimeline(raw, time.FixedZone("", seg.Offset), testRegistry(t))
+							got, err := ParseTimeline(raw, time.FixedZone("", seg.Offset), testRegistry(t), testAspects(t))
 							if err != nil {
 								t.Fatalf("raw rows are not readable through Parse: %v", err)
 							}
@@ -857,7 +859,7 @@ func TestPreReformTimelineMatchesAstrolog(t *testing.T) {
 		for _, year := range []int{5, 500, 1500, -5, -100} {
 			t.Run(fmt.Sprintf("years/%s/%d", clockName(c), year), func(t *testing.T) {
 				withClock(t, c)
-				req := TimelineRequest{Year: year, Month: time.March, Zone: time.UTC}
+				req := TimelineRequest{Year: year, Month: time.March, Zone: time.UTC, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 				rows, _, err := ComputeTimeline(context.Background(), req, []TimelineSource{TimelineSky}, nil)
 				if err != nil {
 					t.Fatalf("year %d under %s: %v", year, clockName(c), err)
@@ -937,7 +939,7 @@ func TestOldTimelineRowRefusesAnImpossibleDate(t *testing.T) {
 		transit(" 2/29/2024"),
 	}
 	for _, line := range valid {
-		rows, err := ParseTimeline(line, time.UTC, testRegistry(t))
+		rows, err := ParseTimeline(line, time.UTC, testRegistry(t), testAspects(t))
 		if err != nil || len(rows) != 1 {
 			t.Errorf("%q: %d rows, err %v, want one row", line, len(rows), err)
 		}
@@ -953,7 +955,7 @@ func TestOldTimelineRowRefusesAnImpossibleDate(t *testing.T) {
 		"minute 60":                              " 3/ 1/1500  1:60 trans    Moon (Pis) Con natal (Ari) Venus",
 	}
 	for name, line := range invalid {
-		rows, err := ParseTimeline(line, time.UTC, testRegistry(t))
+		rows, err := ParseTimeline(line, time.UTC, testRegistry(t), testAspects(t))
 		var lineErr *TimelineLineError
 		if !errors.As(err, &lineErr) || lineErr.Line != line || rows != nil {
 			t.Errorf("%s: %q gave %d rows and err %v, want a TimelineLineError naming the row and no row", name, line, len(rows), err)

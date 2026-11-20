@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/store"
@@ -119,7 +120,7 @@ func TestRetitleChartFile(t *testing.T) {
 		calls := recordingAstrolog(t, "")
 		original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
 
-		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany")
+		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,13 +133,14 @@ func TestRetitleChartFile(t *testing.T) {
 		if write == nil {
 			t.Fatalf("no `-i <file> -zi <title> <place> =o <tmp>` call among %q", calls())
 		}
-		if write[1] != filepath.Join(dir, "Equinox-2026-09.as") || write[2] != "-zi" || write[3] != "Constructed One" ||
-			write[4] != "Bremen, Germany" || filepath.Dir(write[6]) != dir {
-			t.Errorf("write argv = %q, want -i <the chart> -zi <title> <place> =o <a temp file in its directory>", write)
+		// Astrolog reads the guarded copy in its private folder, never the
+		// chart file itself.
+		if write[1] != "source.as" || write[2] != "-zi" || write[3] != "Constructed One" ||
+			write[4] != "Bremen, Germany" || write[6] != "chart.as" {
+			t.Errorf("write argv = %q, want -i source.as -zi <title> <place> =o chart.as (in a private folder)", write)
 		}
-		// The temp file Astrolog wrote IS the chart now, byte for byte: the
-		// expected bytes are what Astrolog writes for the same argv into a
-		// file of our own.
+		// The chart is the original with only its -zi line taken from what
+		// Astrolog writes for the same argv into a file of our own.
 		want := filepath.Join(t.TempDir(), "want.as")
 		probe := filepath.Join(t.TempDir(), "Equinox-2026-09.as")
 		if err := os.WriteFile(probe, []byte(original), 0o600); err != nil {
@@ -147,13 +149,23 @@ func TestRetitleChartFile(t *testing.T) {
 		if out, err := exec.Command("astrolog", "-i", probe, "-zi", "Constructed One", "Bremen, Germany", "=o", want).CombinedOutput(); err != nil {
 			t.Fatalf("reference write: %v %s", err, out)
 		}
-		if g, w := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")), fileBytes(t, want); g != w {
-			t.Errorf("the chart is not Astrolog's record byte for byte.\n got: %q\nwant: %q", g, w)
+		var zi string
+		for _, l := range strings.SplitAfter(fileBytes(t, want), "\n") {
+			if strings.HasPrefix(l, "-zi ") {
+				zi = l
+			}
 		}
-		if g := fileBytes(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); g != original {
+		if zi == "" {
+			t.Fatalf("Astrolog's reference record holds no -zi line: %q", fileBytes(t, want))
+		}
+		w := strings.Replace(original, "-zi \"\" \"Bremen, Germany\"\n", zi, 1)
+		if g := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")); g != w {
+			t.Errorf("the chart is not the original with Astrolog's -zi line.\n got: %q\nwant: %q", g, w)
+		}
+		if g := fileBytes(t, got.Backup); g != original {
 			t.Errorf("backup = %q, want the original", g)
 		}
-		if got.Name != "Constructed One" || got.Backup != store.ChartBackupDisplay(dir, "Equinox-2026-09.as") || got.ID != row.ID {
+		if got.Name != "Constructed One" || filepath.Dir(got.Backup) != store.BackupDir(dir) || got.ID != row.ID {
 			t.Errorf("result = %+v", got)
 		}
 		noTempLeft(t, dir)
@@ -163,14 +175,14 @@ func TestRetitleChartFile(t *testing.T) {
 		dir, row := untitledEquinox(t)
 		recordingAstrolog(t, "=o")
 		original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
-		_, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany")
+		_, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp())
 		if err == nil || !strings.Contains(err.Error(), "injected failure") {
 			t.Fatalf("err = %v, want Astrolog's own first line", err)
 		}
 		if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 			t.Error("the chart changed after a failed write")
 		}
-		if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
+		if noBackup(t, dir) != "" {
 			t.Error("a failed write left a backup")
 		}
 		noTempLeft(t, dir)
@@ -183,20 +195,24 @@ func TestRetitleChartFile(t *testing.T) {
 		dir, row := untitledEquinox(t)
 		original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
 		readOnlyChartDir(t, dir)
-		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany"); err == nil {
+		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp()); err == nil {
 			t.Fatal("a write into a read-only directory succeeded")
 		}
 		if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 			t.Error("the chart changed")
 		}
-		if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
-			t.Error("a backup was created")
+		// The dated copy is written first, outside the charts folder, and
+		// holds the file as it was.
+		for _, name := range strings.Split(noBackup(t, dir), ",") {
+			if name != "" && fileBytes(t, filepath.Join(store.BackupDir(dir), name)) != original {
+				t.Errorf("the copy %s is not the original", name)
+			}
 		}
 	})
 
 	t.Run("double quote", func(t *testing.T) {
 		dir, row := untitledEquinox(t)
-		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), `Constructed "Q" One`, "Bremen, Germany")
+		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), `Constructed "Q" One`, "Bremen, Germany", nextStamp())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,21 +224,20 @@ func TestRetitleChartFile(t *testing.T) {
 		}
 	})
 
-	t.Run("second retitle keeps the first backup", func(t *testing.T) {
+	t.Run("every retitle keeps a dated copy", func(t *testing.T) {
 		dir, row := untitledEquinox(t)
 		original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
-		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany"); err != nil {
-			t.Fatal(err)
-		}
-		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed Two", "Bremen, Germany")
+		first, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Backup != "" {
-			t.Errorf("Backup = %q on the second write, want \"\" (the first is kept)", got.Backup)
+		between := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
+		second, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed Two", "Bremen, Germany", nextStamp())
+		if err != nil {
+			t.Fatal(err)
 		}
-		if fileBytes(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")) != original {
-			t.Error("the second retitle replaced the first backup")
+		if first.Backup == second.Backup || fileBytes(t, first.Backup) != original || fileBytes(t, second.Backup) != between {
+			t.Errorf("copies %q and %q, want the original and the first rename, each its own", first.Backup, second.Backup)
 		}
 	})
 
@@ -250,7 +265,7 @@ func TestRetitleKeepsTheOriginalOfAFullFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			row := rowByFile(t, lib, "Equinox-2026-09.as")
-			got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed Full", "Bremen, Germany")
+			got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed Full", "Bremen, Germany", nextStamp())
 			if err != nil {
 				t.Fatalf("a full file was refused: %v", err)
 			}
@@ -269,7 +284,7 @@ func TestRetitleKeepsTheOriginalOfAFullFile(t *testing.T) {
 		original := fileBytes(t, filepath.Join(dir, "FullMoon-2026-02.as"))
 		lib, _ := LoadChartLibrary()
 		row := rowByFile(t, lib, "FullMoon-2026-02.as")
-		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed", "Hamburg")
+		got, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed", "Hamburg", nextStamp())
 		if err != nil {
 			t.Fatalf("FullMoon-2026-02.as was refused: %v", err)
 		}
@@ -297,6 +312,23 @@ func sameMomentAndPlace(t *testing.T, original, rewritten string) {
 	}
 }
 
+// A record that reads back asking for another form of the Nodes and Lilith is
+// never swapped in either: the rename keeps every line it does not own.
+func TestRetitleRefusesAChangedNodeForm(t *testing.T) {
+	dir, row := untitledEquinox(t)
+	original := fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as"))
+	prev := beforeVerify
+	t.Cleanup(func() { beforeVerify = prev })
+	beforeVerify = func(rec []byte) []byte { return append(append([]byte(nil), rec...), []byte("\n=Yn =Ynn\n")...) }
+	_, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp())
+	if !errors.Is(err, ErrBadReadBack) || !strings.Contains(err.Error(), "form of the Nodes and Lilith") {
+		t.Fatalf("err = %v, want a read-back refusal naming the form of the Nodes and Lilith", err)
+	}
+	if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
+		t.Error("the original changed")
+	}
+}
+
 // C3.8: a record that reads back to a different moment, title, place or
 // coordinates is never swapped in; a title holding `"` passes once read as
 // Astrolog rewrites it.
@@ -315,17 +347,15 @@ func TestRetitleRefusesABadReadBack(t *testing.T) {
 			prev := beforeVerify
 			t.Cleanup(func() { beforeVerify = prev })
 			corrupted := false
-			beforeVerify = func(tmp string) {
-				b := fileBytes(t, tmp)
+			beforeVerify = func(rec []byte) []byte {
+				b := string(rec)
 				if !strings.Contains(b, tc.from) {
 					t.Fatalf("the corruption no longer applies: %q not in %q", tc.from, b)
 				}
-				if err := os.WriteFile(tmp, []byte(strings.Replace(b, tc.from, tc.to, 1)), 0o600); err != nil {
-					t.Fatal(err)
-				}
 				corrupted = true
+				return []byte(strings.Replace(b, tc.from, tc.to, 1))
 			}
-			_, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany")
+			_, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp())
 			if !corrupted {
 				t.Fatal("the seam never ran")
 			}
@@ -335,7 +365,7 @@ func TestRetitleRefusesABadReadBack(t *testing.T) {
 			if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
 				t.Error("the original changed")
 			}
-			if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
+			if noBackup(t, dir) != "" {
 				t.Error("a refused write made a backup")
 			}
 			noTempLeft(t, dir)
@@ -343,7 +373,7 @@ func TestRetitleRefusesABadReadBack(t *testing.T) {
 	}
 	t.Run("double quote passes", func(t *testing.T) {
 		dir, row := untitledEquinox(t)
-		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), `Constructed "Q" One`, `Bremen "Old Town"`); err != nil {
+		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), `Constructed "Q" One`, `Bremen "Old Town"`, nextStamp()); err != nil {
 			t.Fatalf("a title holding a double quote was refused: %v", err)
 		}
 	})
@@ -362,17 +392,20 @@ func TestRetitleRefusesAChangedFile(t *testing.T) {
 		row := rowByFile(t, lib, "Equinox-2026-09.as")
 		path := filepath.Join(dir, "Equinox-2026-09.as")
 		// Still untitled and plain, so only the fingerprint can tell.
-		edited := strings.Replace(fileBytes(t, path), "2026 2:06 DT", "2026 2:36 DT", 1)
+		edited := strings.Replace(fileBytes(t, path), "2026  2:06 DT", "2026  2:36 DT", 1)
+		if edited == fileBytes(t, path) {
+			t.Fatal("the edit no longer applies to the fixture")
+		}
 		if err := os.WriteFile(path, []byte(edited), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := RetitleChart(context.Background(), dir, row, lib.Seen["Equinox-2026-09.as"], "Constructed One", "Bremen, Germany"); !errors.Is(err, store.ErrChartChanged) {
+		if _, err := RetitleChart(context.Background(), dir, row, lib.Seen["Equinox-2026-09.as"], "Constructed One", "Bremen, Germany", nextStamp()); !errors.Is(err, store.ErrChartChanged) {
 			t.Fatalf("err = %v, want ErrChartChanged", err)
 		}
 		if fileBytes(t, path) != edited {
 			t.Error("the edited chart was rewritten")
 		}
-		if _, err := os.Stat(filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))); !os.IsNotExist(err) {
+		if noBackup(t, filepath.Dir(path)) != "" {
 			t.Error("a refused write made a backup")
 		}
 		if lib.Seen["Equinox-2026-09.as"] == "" {
@@ -385,18 +418,19 @@ func TestRetitleRefusesAChangedFile(t *testing.T) {
 	prev := beforeVerify
 	t.Cleanup(func() { beforeVerify = prev })
 	const edited = "@AI780  ; Astrolog chart info.\n-qb Mar 20 1995 12:00pm DT 1E   8:48E 53:04N\n-zi \"Edited Elsewhere\" \"Bremen, Germany\"\n"
-	beforeVerify = func(string) {
+	beforeVerify = func(b []byte) []byte {
 		if err := os.WriteFile(path, []byte(edited), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		return b
 	}
-	if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany"); !errors.Is(err, store.ErrChartChanged) {
+	if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp()); !errors.Is(err, store.ErrChartChanged) {
 		t.Fatalf("err = %v, want ErrChartChanged", err)
 	}
 	if fileBytes(t, path) != edited {
 		t.Error("the edit made meanwhile was overwritten")
 	}
-	if _, err := os.Stat(filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))); !os.IsNotExist(err) {
+	if noBackup(t, filepath.Dir(path)) != "" {
 		t.Error("a refused write made a backup")
 	}
 	noTempLeft(t, dir)
@@ -410,7 +444,7 @@ func TestRetitleRefusesControlChars(t *testing.T) {
 		{"Constructed\tOne", "Bremen, Germany"},
 		{"Constructed One", "Bremen,\nGermany"},
 	} {
-		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), tc.title, tc.place); !errors.Is(err, astrolog.ErrLabelHasControlChar) {
+		if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), tc.title, tc.place, nextStamp()); !errors.Is(err, astrolog.ErrLabelHasControlChar) {
 			t.Errorf("%q / %q: err = %v, want ErrLabelHasControlChar", tc.title, tc.place, err)
 		}
 	}
@@ -418,7 +452,7 @@ func TestRetitleRefusesControlChars(t *testing.T) {
 		t.Error("the chart changed")
 	}
 	noTempLeft(t, dir)
-	if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); !os.IsNotExist(err) {
+	if noBackup(t, dir) != "" {
 		t.Error("a refused write made a backup")
 	}
 }
@@ -441,7 +475,10 @@ func TestRetitleNeedsAFingerprintFromTheListing(t *testing.T) {
 	dir := useLibraryDir(t)
 	copyFixture(t, dir, "Equinox-2026-09.as")
 	path := filepath.Join(dir, "Equinox-2026-09.as")
-	edited := strings.Replace(fileBytes(t, path), "2026 2:06 DT", "2026 2:36 DT", 1)
+	edited := strings.Replace(fileBytes(t, path), "2026  2:06 DT", "2026  2:36 DT", 1)
+	if edited == fileBytes(t, path) {
+		t.Fatal("the edit no longer applies to the fixture")
+	}
 	prev := betweenListingReads
 	t.Cleanup(func() { betweenListingReads = prev })
 	betweenListingReads = func() { os.WriteFile(path, []byte(edited), 0o600) }
@@ -453,7 +490,7 @@ func TestRetitleNeedsAFingerprintFromTheListing(t *testing.T) {
 		t.Errorf("a file saved during the listing got a fingerprint %q", fp)
 	}
 	row := rowByFile(t, lib, "Equinox-2026-09.as")
-	if _, err := RetitleChart(context.Background(), dir, row, lib.Seen["Equinox-2026-09.as"], "Constructed One", "Bremen, Germany"); !errors.Is(err, store.ErrChartChanged) {
+	if _, err := RetitleChart(context.Background(), dir, row, lib.Seen["Equinox-2026-09.as"], "Constructed One", "Bremen, Germany", nextStamp()); !errors.Is(err, store.ErrChartChanged) {
 		t.Fatalf("err = %v, want ErrChartChanged", err)
 	}
 	if fileBytes(t, path) != edited {
@@ -461,10 +498,10 @@ func TestRetitleNeedsAFingerprintFromTheListing(t *testing.T) {
 	}
 }
 
-// stripSpawnPrefix returns argv without `-YQ 0` and the hook-clear band, or
-// false when argv does not start with exactly that.
+// stripSpawnPrefix returns argv without the head every call starts with
+// (astrolog.CallHead), or false when argv does not start with exactly that.
 func stripSpawnPrefix(argv []string) ([]string, bool) {
-	want := append([]string{"-YQ", "0"}, astrolog.HookClearBand()...)
+	want := astrolog.CallHead()
 	if len(argv) < len(want) || !slices.Equal(argv[:len(want)], want) {
 		return nil, false
 	}
@@ -499,7 +536,7 @@ func TestRetitleRefusesALinkedBackupFolder(t *testing.T) {
 			if err := os.Symlink(outside, link); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany"); err == nil {
+			if _, err := RetitleChart(context.Background(), dir, row, seenOf(t, dir, row), "Constructed One", "Bremen, Germany", nextStamp()); err == nil {
 				t.Fatal("the retitle went ahead through a linked backup folder")
 			}
 			if fileBytes(t, filepath.Join(dir, "Equinox-2026-09.as")) != original {
@@ -517,4 +554,29 @@ func mustMkdirAll(t *testing.T, p string) {
 	if err := os.MkdirAll(p, 0o700); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// stampN counts the dated copies the tests ask for, so two renames in one test
+// never share a stamp.
+var stampN int
+
+// nextStamp is a distinct stamp for each rename a test makes.
+func nextStamp() time.Time {
+	stampN++
+	return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC).Add(time.Duration(stampN) * time.Second)
+}
+
+// noBackup is "" when dir's backup folder is absent or empty, else what it
+// holds.
+func noBackup(t *testing.T, dir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(store.BackupDir(dir))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return strings.Join(names, ",")
 }

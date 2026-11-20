@@ -29,8 +29,14 @@ import (
 // row's aspect beside a decoy. cfg is the screen's.
 func markFixture(t *testing.T, cfg Config) (Model, *[]textCall) {
 	t.Helper()
+	return markFixtureRows(t, enteredRows(t), cfg)
+}
+
+// markFixtureRows is markFixture over a caller's timeline rows.
+func markFixtureRows(t *testing.T, rows []lookup.TimelineRow, cfg Config) (Model, *[]textCall) {
+	t.Helper()
 	freshModels(t)
-	m, text := enteredFixture(t, 2, true, cfg)
+	m, text := enteredFixtureRows(t, rows, 2, true, cfg)
 	m = withSpawns(m, func(s *rowSpawns) {
 		if s.cast.transit == nil {
 			return
@@ -46,12 +52,12 @@ func markFixture(t *testing.T, cfg Config) (Model, *[]textCall) {
 				return aspect.Aspect{AObject: a, BObject: b, Kind: k, Orb: orb, Power: 10 - float64(orb)}
 			}
 			res.Aspects = []aspect.Aspect{
-				own(objSun, objMoon, aspect.Square, 0.5), own(objSun, objMoon, aspect.Sextile, 1),
-				own(objMoon, objMars, aspect.Trine, 0), own(objMoon, objMars, aspect.Opposition, 2),
-				own(objMoon, objMars, aspect.Square, 3), own(objSun, objMars, aspect.Trine, 4),
+				own(objSun, objMoon, kindOf("Squ"), 0.5), own(objSun, objMoon, kindOf("Sex"), 1),
+				own(objMoon, objMars, kindOf("Tri"), 0), own(objMoon, objMars, kindOf("Opp"), 2),
+				own(objMoon, objMars, kindOf("Squ"), 3), own(objSun, objMars, kindOf("Tri"), 4),
 			}
 			res.AspectStyles = astrologstyle.Aspects{
-				{First: objMoon, Second: objMars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
+				{First: objMoon, Second: objMars, Kind: kindOf("Tri")}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
 			}
 			return res, err
 		}
@@ -69,14 +75,14 @@ func markFixture(t *testing.T, cfg Config) (Model, *[]textCall) {
 			}
 			if natal.When.Equal(enteredSecondNatal) {
 				return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{
-					x(objSun, objVenus, aspect.Opposition, 0), x(objVenus, objSun, aspect.Opposition, 1), x(objSun, objVenus, aspect.Square, 2),
+					x(objSun, objVenus, kindOf("Opp"), 0), x(objVenus, objSun, kindOf("Opp"), 1), x(objSun, objVenus, kindOf("Squ"), 2),
 				}}, nil
 			}
 			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{
-				x(objMoon, objMoon, aspect.Conjunction, 0), x(objMars, objMoon, aspect.Square, 3), x(objMoon, objMars, aspect.Conjunction, 4),
+				x(objMoon, objMoon, kindOf("Con"), 0), x(objMars, objMoon, kindOf("Squ"), 3), x(objMoon, objMars, kindOf("Con"), 4),
 				// The same cell as chart ②'s transit row, in chart ①'s list: it is
 				// bold only on the tab of the chart whose row was entered.
-				x(objSun, objVenus, aspect.Opposition, 0),
+				x(objSun, objVenus, kindOf("Opp"), 0),
 			}}, nil
 		}
 	})
@@ -108,19 +114,19 @@ func leftPanels(t *testing.T, view string) (bodies, aspects []string) {
 	lines := strings.Split(view, "\n")
 	width := 0
 	for i, r := range []rune(ansi.Strip(lines[0])) {
-		if r == '╮' {
+		if r == '╮' || r == '╴' {
 			width = i + 1
 			break
 		}
 	}
 	if width == 0 {
-		t.Fatalf("no Chart panel corner in the first line %q", ansi.Strip(lines[0]))
+		t.Fatalf("no panel corner in the first line %q", ansi.Strip(lines[0]))
 	}
 	var into *[]string
 	for _, ln := range lines {
 		plain := ansi.Strip(ln)
 		switch {
-		case strings.HasPrefix(plain, "╭") && strings.Contains(leftCells(plain, width), "[2] "):
+		case strings.HasPrefix(plain, "╭") && strings.Contains(leftCells(plain, width), "[3] "):
 			into = &bodies
 			continue
 		case strings.HasPrefix(plain, "╭") && strings.Contains(leftCells(plain, width), aspectsStripPrefix):
@@ -181,7 +187,7 @@ func TestEnteredAspectCellIsBold(t *testing.T) {
 	}
 	_, aspects := leftPanels(t, m.View())
 	got := boldSpanTexts(aspects)
-	if len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus)+" ") {
+	if len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(kindOf("Opp"))+" "+panel.BodyGlyph(objVenus)+" ") {
 		t.Errorf("transit row: bold cells = %q, want exactly the transiting-Sun-opposite-natal-Venus cell, read as the row\n%s", got, strings.Join(aspects, "\n"))
 	}
 
@@ -193,7 +199,7 @@ func TestEnteredAspectCellIsBold(t *testing.T) {
 	}
 	_, aspects = leftPanels(t, m.View())
 	got = boldSpanTexts(aspects)
-	if len(got) != 1 || !strings.HasPrefix(got[0], glyphs(objMoon)+" "+panel.AspectGlyph(aspect.Trine)+" "+glyphs(objMars)+" ") {
+	if len(got) != 1 || !strings.HasPrefix(got[0], glyphs(objMoon)+" "+panel.AspectGlyph(kindOf("Tri"))+" "+glyphs(objMars)+" ") {
 		t.Errorf("sky row: bold cells = %q, want exactly the Moon-trine-Mars cell\n%s", got, strings.Join(aspects, "\n"))
 	}
 
@@ -312,11 +318,11 @@ func TestEnteredIngressMovesTheBodiesCursor(t *testing.T) {
 		if got := bodyBold(m2); len(got) != 1 || !strings.Contains(got[0], tc.body) {
 			t.Errorf("%s: bold Bodies rows = %q, want exactly the %s row", tc.row, got, tc.body)
 		}
-		// `Esc`, `2`: Bodies is entered on that body.
+		// `Esc`, `3`: Bodies is entered on that body.
 		m2, _ = tpress(t, m2, keyEsc)
-		m2, _ = tpress(t, m2, runes("2"))
+		m2, _ = tpress(t, m2, runes("3"))
 		if m2.focused != PanelBodies || m2.bodyCursorIdx != tc.want {
-			t.Errorf("%s: after Esc, 2 the focus is %v on row %d, want Bodies on row %d", tc.row, m2.focused, m2.bodyCursorIdx, tc.want)
+			t.Errorf("%s: after Esc, 3 the focus is %v on row %d, want Bodies on row %d", tc.row, m2.focused, m2.bodyCursorIdx, tc.want)
 		}
 		// A later Up moves from there: it is a cursor, not a mark.
 		m2, cmd = tpress(t, m2, keyUp)
@@ -442,18 +448,18 @@ func TestEnteredMarksEndWithTheRow(t *testing.T) {
 	freshModels(t)
 	stubSpawns(t, func(s *rowSpawns) {
 		s.cast.overlay = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo) (lookup.OverlayAspects, error) {
-			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0, Power: 10}}}, nil
+			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: kindOf("Opp"), Orb: 0, Power: 10}}}, nil
 		}
 	})
 	m = fresh()
 	m, _ = tpress(t, m, keyEsc)
-	m, _ = tpress(t, m, runes("3"))
+	m, _ = tpress(t, m, runes("4"))
 	m, cmd = tpress(t, m, runes("["))
 	m = pump(t, m, cmd)
 	if m.deriveScene().entered == nil || activeAspectsTitle(m) != "3 in 1" {
 		t.Fatalf("fixture: after `[` the tab is %q, entered %v, want 3 in 1", activeAspectsTitle(m), m.deriveScene().entered != nil)
 	}
-	if _, aspects := leftPanels(t, m.View()); !strings.Contains(strings.Join(aspects, "\n"), panel.AspectGlyph(aspect.Opposition)) {
+	if _, aspects := leftPanels(t, m.View()); !strings.Contains(strings.Join(aspects, "\n"), panel.AspectGlyph(kindOf("Opp"))) {
 		t.Fatalf("fixture: chart 1's list does not hold the row's cell:\n%s", strings.Join(aspects, "\n"))
 	}
 	if got := marks(m); got != 0 {
@@ -476,10 +482,10 @@ func TestLabelledRowsMarkTheirAspect(t *testing.T) {
 		want       string
 		cross      bool
 	}{
-		{"a phase label and a void tail", "Sun (Lib) Squ (Cap) Moon (Half Moon) (v/c 9:27)", glyphs(objSun) + " " + panel.AspectGlyph(aspect.Square) + " " + glyphs(objMoon), false},
-		{"an occultation label", "Moon (Aqu) Opp (Leo) Mars (Total Occultation)", glyphs(objMoon) + " " + panel.AspectGlyph(aspect.Opposition) + " " + glyphs(objMars), false},
-		{"a void tail", "Sun (Lib) Sex (Sag) Moon (v/c 15:01)", glyphs(objSun) + " " + panel.AspectGlyph(aspect.Sextile) + " " + glyphs(objMoon), false},
-		{"a return row", "Moon (Cap) Con natal (Cap) Moon (Lunar Return)", panel.BodyGlyph(objMoon) + " " + panel.AspectGlyph(aspect.Conjunction) + " " + panel.BodyGlyph(objMoon), true},
+		{"a phase label and a void tail", "Sun (Lib) Squ (Cap) Moon (Half Moon) (v/c 9:27)", glyphs(objSun) + " " + panel.AspectGlyph(kindOf("Squ")) + " " + glyphs(objMoon), false},
+		{"an occultation label", "Moon (Aqu) Opp (Leo) Mars (Total Occultation)", glyphs(objMoon) + " " + panel.AspectGlyph(kindOf("Opp")) + " " + glyphs(objMars), false},
+		{"a void tail", "Sun (Lib) Sex (Sag) Moon (v/c 15:01)", glyphs(objSun) + " " + panel.AspectGlyph(kindOf("Sex")) + " " + glyphs(objMoon), false},
+		{"a return row", "Moon (Cap) Con natal (Cap) Moon (Lunar Return)", panel.BodyGlyph(objMoon) + " " + panel.AspectGlyph(kindOf("Con")) + " " + panel.BodyGlyph(objMoon), true},
 	} {
 		m, _ := markFixture(t, cfg)
 		m = enter(t, m, timelineRowWith(t, m.timeline.rows, tc.frag))
@@ -504,16 +510,16 @@ var sgrRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // byte; and the cell of a full screen is bold over Astrolog's own colours.
 func TestEnteredBoldKeepsAstrologsColour(t *testing.T) {
 	cfg := Config{Color: ColorAlways}
-	moonMars := aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: aspect.Trine, Orb: 0, Power: 10}
+	moonMars := aspect.Aspect{AObject: objMoon, BObject: objMars, Kind: kindOf("Tri"), Orb: 0, Power: 10}
 	state := chartViewState{
-		aspects: []aspect.Aspect{moonMars, {AObject: objSun, BObject: objMoon, Kind: aspect.Square, Orb: 1, Power: 9}},
+		aspects: []aspect.Aspect{moonMars, {AObject: objSun, BObject: objMoon, Kind: kindOf("Squ"), Orb: 1, Power: 9}},
 		aspectStyles: astrologstyle.Aspects{
-			{First: objMoon, Second: objMars, Kind: aspect.Trine}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
+			{First: objMoon, Second: objMars, Kind: kindOf("Tri")}: {First: "\x1b[31m", Kind: "\x1b[32m", Second: "\x1b[34m"},
 		},
 		settled: true,
 	}
 	plain := renderAspectsBody(state, TabAspects, 64, 4, cfg)
-	state.mark = panel.EnteredMark{Tab: string(TabAspects), First: objMars, Other: objMoon, Kind: aspect.Trine}
+	state.mark = panel.EnteredMark{Tab: string(TabAspects), First: objMars, Other: objMoon, Kind: kindOf("Tri")}
 	marked := renderAspectsBody(state, TabAspects, 64, 4, cfg)
 	if marked == plain {
 		t.Fatal("the mark changed nothing")

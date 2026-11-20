@@ -13,20 +13,25 @@ import (
 type TabID string
 
 const (
-	TabChart   TabID = "chart"
-	TabBodies  TabID = "bodies"
-	TabAspects TabID = "aspects"
+	TabStatus TabID = "status"
+	// TabStatusSession is the Status panel's Details tab that lists the saved
+	// sessions; its first tab, Credits, is the report tab (TabDetailsReport).
+	TabStatusSession TabID = "status-session"
+	TabChart         TabID = "chart"
+	TabBodies        TabID = "bodies"
+	TabAspects       TabID = "aspects"
 	// TabAspectsCross is REUSED, not retired: it is the ID of the FIRST declared
 	// pair tab, which every comparing selected set has (`N in ①` with the
 	// floating slot selected, `k₁ in c` without it). The other pairs are
 	// "aspects-pair-<left>-<right>" (the specification),
 	// so a reader of the old ID still finds the first pair.
 	TabAspectsCross TabID = "aspects-cross"
-	// Details declares two tabs on every subject (specs/details-timeline-
-	// tab.md C11): Astrolog's report for the subject, and the dated-event
-	// timeline for the floating slot's month.
+	// Details declares the report on every subject (specs/details-timeline-
+	// tab.md C11) and, where the Timeline is offered, the dated-event Timeline
+	// for the floating slot's month and the Moon list beside it.
 	TabDetailsReport   TabID = "report"
 	TabDetailsTimeline TabID = "timeline"
+	TabDetailsMoon     TabID = "moon"
 	TabLog             TabID = "log"
 )
 
@@ -38,19 +43,25 @@ type Tab struct {
 }
 
 // tabStrip is the resolved title-border content of one panel: the Jump-digit
-// prefix (`[3] `, empty for Log), the derived tab list and the effective
+// prefix (`[4] `, empty for Log), the derived tab list and the effective
 // active index. A one-tab strip renders byte-identical to the pre-tab title
 // (prefix + title in one styled run).
 type tabStrip struct {
 	prefix string
 	tabs   []Tab
 	active int
+	// origin is the panel Details was entered from: its title is drawn in the
+	// focus colour, as the mark on its border is.
+	origin bool
 }
 
-// tabTitleFor is the tab title a one-tab panel prints; the compose-time
+// The tab titles a one-tab panel prints; the compose-time
 // prefix (`[1] `, `[2] `, …) is kept separate so the strip can style the
 // prefix and each tab title independently.
 const (
+	tabTitleStatus  = "Status"
+	tabTitleCredits = "Credits"
+	tabTitleSession = "Session"
 	tabTitleChart   = "Chart"
 	tabTitleBodies  = "Bodies"
 	tabTitleAspects = "Aspects"
@@ -58,11 +69,12 @@ const (
 	// `② in ①` … (pairTabTitle, C1). The old "Transit aspects" title is gone
 	// with the single cross tab it named.
 	tabTitleTimeline = "Timeline"
+	tabTitleMoon     = "Moon"
 	tabTitleLog      = "Log"
 )
 
 // aspectsStripPrefix is the Aspects strip's Jump-digit prefix.
-const aspectsStripPrefix = "[3] "
+const aspectsStripPrefix = "[4] "
 
 // detailsPendingMark ends the active Details tab's title, in every mode, while
 // the content under it is the same subject at another version and its
@@ -70,7 +82,7 @@ const aspectsStripPrefix = "[3] "
 const detailsPendingMark = " …"
 
 // detailsPrefix is Details' strip prefix and the head of every report title:
-// `0` is Details' digit as `1`/`2`/`3` are the ring's (D14, D16), and the Log
+// `0` is Details' digit as `1` to `4` are the ring's (D14, D16), and the Log
 // keeps none.
 const detailsPrefix = "[0] "
 
@@ -89,6 +101,8 @@ const detailsPrefix = "[0] "
 // strip still says what the report is about.
 func (m Model) panelTabs(p PanelID) []Tab {
 	switch p {
+	case PanelStatus:
+		return []Tab{{ID: TabStatus, Title: tabTitleStatus}}
 	case PanelChart:
 		return []Tab{{ID: TabChart, Title: tabTitleChart}}
 	case PanelBodies:
@@ -110,10 +124,18 @@ func (m Model) panelTabs(p PanelID) []Tab {
 		// never "Details" itself, in the frame of the key: it is derived from
 		// the wanted key (detailsWanted), not from the report on screen.
 		tabs := []Tab{{ID: TabDetailsReport, Title: m.detailsWanted().caption}}
+		if m.focused == PanelStatus {
+			// Credits first, then the saved sessions of this charts folder.
+			return append(tabs, Tab{ID: TabStatusSession, Title: tabTitleSession})
+		}
 		// The timeline belongs to the Chart panel and to the floating chart's
 		// month: see timelineTabOffered for whose cursor it is offered on.
 		if m.timelineTabOffered() {
-			tabs = append(tabs, Tab{ID: TabDetailsTimeline, Title: tabTitleTimeline})
+			for _, k := range allLists {
+				if m.listDeclared(k) {
+					tabs = append(tabs, Tab{ID: k.tab(), Title: k.title()})
+				}
+			}
 		}
 		// A body a shipped template lists gains the template's tab while its
 		// Bodies row has the cursor (the specification P1).
@@ -174,6 +196,17 @@ func (m Model) timelineTabOffered() bool {
 	return false
 }
 
+// listDeclared is whether Details declares list k's tab, given that it offers
+// the Timeline: the Timeline always, the Moon list while the registry in use
+// names a Moon (M1).
+func (m Model) listDeclared(k timelineList) bool {
+	if !k.moon() {
+		return true
+	}
+	_, ok := m.lens.Registry.ByName("Moon")
+	return ok
+}
+
 // focusedPanelTitle is the ring panel's own title, which the Details caption
 // shows until a report names a subject. Details is never the focused panel
 // (C15), so the Chart's title covers every other case.
@@ -204,8 +237,9 @@ func (m Model) detailsTabWaiting(id TabID) bool {
 			return m.detailsWanted().has
 		}
 		return false
-	case id == TabDetailsTimeline:
-		return m.timelineWaiting()
+	case isListTab(id):
+		k, _ := listOfTab(id)
+		return m.timelineWaitingFor(k)
 	case isTemplateTab(id):
 		return m.templateWaiting()
 	}
@@ -222,8 +256,9 @@ func (m Model) detailsTabDimmed(id TabID) bool {
 	switch {
 	case id == TabDetailsReport:
 		return m.detailsReportState() == paneUpdating
-	case id == TabDetailsTimeline:
-		return m.timelinePaneState() == paneUpdating
+	case isListTab(id):
+		k, _ := listOfTab(id)
+		return m.timelinePaneStateFor(k) == paneUpdating
 	case isTemplateTab(id):
 		return m.templatePaneState() == paneUpdating
 	}
@@ -235,7 +270,7 @@ func (m Model) detailsTabDimmed(id TabID) bool {
 // Space, `/` and the scroll keys): the rows on screen are the previous inputs'
 // and must not be acted on. A future tab with a row cursor is added here.
 func detailsTabHasRowCursor(id TabID) bool {
-	return id == TabDetailsTimeline
+	return isListTab(id)
 }
 
 // detailsRowKeysBlocked is whether the active Details tab has a row cursor
@@ -317,6 +352,11 @@ func (m Model) focusedView() PanelID {
 	if m.focused == PanelChart || m.focused == PanelBodies {
 		return PanelAspects
 	}
+	// The Status panel has one tab of its own, so its keys go to the Details
+	// that opens under it (Credits and Session).
+	if m.focused == PanelStatus && m.detailsVisible() {
+		return PanelDetails
+	}
 	return m.focused
 }
 
@@ -344,7 +384,7 @@ func (m Model) cycleTab(p PanelID, step int) (Model, tea.Cmd) {
 		switch id := tabs[next].ID; {
 		case id == TabDetailsReport:
 			return m.catchUpDetails()
-		case id == TabDetailsTimeline:
+		case isListTab(id):
 			return m.syncTimeline()
 		}
 	case PanelAspects:
@@ -364,12 +404,27 @@ func (m Model) cycleTab(p PanelID, step int) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// focusedPanelName is the title of the panel in focus, as the key bar names
+// the panel Esc goes back to.
+func (m Model) focusedPanelName() string {
+	switch m.focused {
+	case PanelStatus:
+		return tabTitleStatus
+	case PanelBodies:
+		return tabTitleBodies
+	case PanelAspects:
+		return tabTitleAspects
+	}
+	return tabTitleChart
+}
+
 // tabStrips resolves every titled panel's strip for one render.
 func (m Model) tabStrips() map[PanelID]tabStrip {
-	strips := make(map[PanelID]tabStrip, 5)
+	strips := make(map[PanelID]tabStrip, 6)
 	for p, prefix := range map[PanelID]string{
-		PanelChart:   "[1] ",
-		PanelBodies:  "[2] ",
+		PanelStatus:  "[1] ",
+		PanelChart:   "[2] ",
+		PanelBodies:  "[3] ",
 		PanelAspects: aspectsStripPrefix,
 		PanelDetails: detailsPrefix,
 		PanelLog:     "",

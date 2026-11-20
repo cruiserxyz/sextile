@@ -48,7 +48,7 @@ func logTexts(m Model) []string {
 
 func openedConsole(t *testing.T, lines int) Model {
 	t.Helper()
-	m, _ := press(t, consoleModel(t, lines), ",", "l", "l")
+	m, _ := press(t, consoleModel(t, lines), ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -101,7 +101,7 @@ func consoleBodyLines(t *testing.T, m Model) []string {
 func TestLeaderLOpensConsole(t *testing.T) {
 	m := consoleModel(t, 20)
 	m.focused = PanelBodies
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console is not open")
 	}
@@ -121,21 +121,21 @@ func TestConsoleDoesNotChangePanelFocus(t *testing.T) {
 	m.focused = PanelAspects
 	wantPanels := focusablePanels()
 
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if m.focused != PanelAspects {
 		t.Errorf("m.focused = %q, want it untouched", m.focused)
 	}
 	if !reflect.DeepEqual(wantPanels, focusablePanels()) {
 		t.Errorf("focusablePanels = %v, want %v", focusablePanels(), wantPanels)
 	}
-	if m.nextFocus() != PanelChart || m.prevFocus() != PanelBodies {
+	if m.nextFocus() != PanelStatus || m.prevFocus() != PanelBodies {
 		t.Errorf("the tab cycle moved: next=%q prev=%q", m.nextFocus(), m.prevFocus())
 	}
 	// And once it closes, Tab still cycles exactly as it did.
 	m, _ = press(t, m, "esc")
 	m, _ = press(t, m, "tab")
-	if m.focused != PanelChart {
-		t.Errorf("after closing, tab put focus on %q, want chart", m.focused)
+	if m.focused != PanelStatus {
+		t.Errorf("after closing, tab put focus on %q, want session", m.focused)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestConsoleTakesMainAreaWhenNarrow(t *testing.T) {
 	m := consoleModel(t, 40)
 	var tm tea.Model = m
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = press(t, tm.(Model), ",", "l", "l")
+	m, _ = press(t, tm.(Model), ",", "L", "l")
 
 	r, ok := m.consoleRect()
 	if !ok {
@@ -212,7 +212,7 @@ func TestConsoleLeavesLeftColumnAlone(t *testing.T) {
 		unfocused := m
 		unfocused.focused = PanelNone
 		closed := columnSpan(unfocused.View(), 0, leftBaseWidth)
-		opened, _ := press(t, m, ",", "l", "l")
+		opened, _ := press(t, m, ",", "L", "l")
 		got := columnSpan(opened.View(), 0, leftBaseWidth)
 		if len(closed) != len(got) {
 			t.Fatalf("%+v: frame height changed: %d -> %d", cfg, len(closed), len(got))
@@ -386,7 +386,7 @@ func TestConsoleCarriesScrollIndicator(t *testing.T) {
 func TestConsoleEscRestoresFocus(t *testing.T) {
 	m := consoleModel(t, 20)
 	m.focused = PanelAspects
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	m, _ = press(t, m, "esc")
 	if m.console.open {
 		t.Error("esc did not close the console")
@@ -415,11 +415,13 @@ func TestConsoleOwnsKeyboard(t *testing.T) {
 
 	// A panel's digit is not swallowed: it leaves for that panel
 	// (TestConsoleDigitLeavesForThePanel, operator 2026-11-05).
-	for _, k := range []string{"?", "tab", " ", "y", "Y", "d", "n", "N", "t", "pgup", "pgdown", "ctrl+l", "ctrl+o", "ctrl+x"} {
+	for _, k := range []string{"tab", " ", "y", "Y", "d", "n", "N", "t", "pgup", "pgdown", "ctrl+l", "ctrl+o", "ctrl+x"} {
 		m, _ = press(t, m, k)
 	}
-	if m.helpOpen {
-		t.Error("? opened the help modal from inside the console")
+	if opened, _ := press(t, m, "?"); !opened.keybindingsOpen || opened.keybindings.Origin != ownerConsole {
+		t.Error("? did not open Keybindings over the console")
+	} else if closed, _ := press(t, opened, "esc"); closed.keybindingsOpen || !closed.console.open {
+		t.Error("Esc in Keybindings did not return to the console")
 	}
 	if m.startup != startupReady {
 		t.Errorf("a modal opened from inside the console: startup = %q", m.startup)
@@ -456,7 +458,7 @@ func TestConsoleStartsNoCompute(t *testing.T) {
 	m := consoleModel(t, 20)
 	before := m.refresh
 
-	m, cmd := press(t, m, ",", "l", "l")
+	m, cmd := press(t, m, ",", "L", "l")
 	if !reflect.DeepEqual(before, m.refresh) {
 		t.Error("opening touched a refresh surface")
 	}
@@ -481,7 +483,7 @@ func TestConsoleDoesNotBlockCommits(t *testing.T) {
 	if st.runningRunID == 0 {
 		t.Fatal("no text run is in flight to complete")
 	}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}
@@ -543,7 +545,7 @@ func TestConsoleSurvivesTooSmall(t *testing.T) {
 	var tm tea.Model = m
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
 	m = tm.(Model)
-	if !strings.Contains(ansi.Strip(m.View()), "Terminal too small") {
+	if !strings.Contains(ansi.Strip(m.View()), "The window is too small") {
 		t.Error("the too-small notice did not render")
 	}
 	if !m.console.open || m.console.cursor != cursor {
@@ -573,7 +575,7 @@ func TestConsoleEmptyBuffer(t *testing.T) {
 	if len(m.logLines) != 0 {
 		t.Fatalf("this workspace already logged %v", m.logLines)
 	}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open over an empty buffer")
 	}
@@ -605,7 +607,7 @@ func TestConsoleEmptyBuffer(t *testing.T) {
 // the cursor lands on the newest line of the trimmed list.
 func TestConsoleCursorSurvivesTrim(t *testing.T) {
 	m := consoleModel(t, MaxLogLines)
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if m.console.cursor != MaxLogLines-1 {
 		t.Fatalf("cursor = %d, want the newest of a full buffer", m.console.cursor)
 	}

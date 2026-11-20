@@ -62,6 +62,9 @@ func renderTabbedBox(strip tabStrip, width, height int, focused bool, cfg Config
 	borderColor := pane.BorderColour(focused, cfg)
 	titleColor := term.TitleColour
 	bold := false
+	if strip.origin {
+		titleColor = cfg.FocusColour()
+	}
 	if focused {
 		titleColor = cfg.FocusColour()
 		bold = true
@@ -109,7 +112,7 @@ const (
 
 // tabChromeDim is the V1 taste switch for multi-tab strips: false renders the
 // `[N] ` prefix and ` - ` separators in the title color (the operator's pick,
-// matching the one-tab `[1] Chart` look); true renders them in the dim border
+// matching the one-tab `[2] Chart` look); true renders them in the dim border
 // gray so the active tab is the only lit text in the strip.
 var tabChromeDim = false
 
@@ -119,7 +122,13 @@ var tabChromeDim = false
 // border; a multi-tab strip styles prefix, separators, active and inactive
 // titles apart and fits itself into width-4 cells (layoutTabStrip).
 func renderTopBorder(width int, strip tabStrip, borderColor, titleColor lipgloss.Color, bold bool, cfg Config, leftCorner, rightCorner, dash string) string {
-	borderStyle := lipgloss.NewStyle()
+	return renderTopBorderEdge(width, strip, borderColor, titleColor, bold, false, cfg, leftCorner, rightCorner, dash)
+}
+
+// renderTopBorderEdge is renderTopBorder with the edge itself, the corners and
+// dashes, drawn bold when boldEdge is set: a popup's top edge.
+func renderTopBorderEdge(width int, strip tabStrip, borderColor, titleColor lipgloss.Color, bold, boldEdge bool, cfg Config, leftCorner, rightCorner, dash string) string {
+	borderStyle := lipgloss.NewStyle().Bold(boldEdge)
 	titleStyle := lipgloss.NewStyle()
 	if cfg.UseColor() {
 		borderStyle = borderStyle.Foreground(borderColor)
@@ -225,9 +234,10 @@ func renderTabStrip(strip tabStrip, maxCells int, titleStyle lipgloss.Style, bol
 // by renderLogPanel because its body is dynamic per-frame (from Model state).
 func defaultPanels() []Panel {
 	return []Panel{
-		basicPanel{name: PanelChart, title: "[1] Chart"},
-		basicPanel{name: PanelBodies, title: "[2] Bodies"},
-		basicPanel{name: PanelAspects, title: "[3] Aspects"},
+		basicPanel{name: PanelStatus, title: "[1] Status"},
+		basicPanel{name: PanelChart, title: "[2] Chart"},
+		basicPanel{name: PanelBodies, title: "[3] Bodies"},
+		basicPanel{name: PanelAspects, title: "[4] Aspects"},
 		basicPanel{name: PanelDetails, title: detailsPrefix + focusedPanelTitle(PanelChart)},
 	}
 }

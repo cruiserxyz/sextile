@@ -315,8 +315,7 @@ func TestNamedChart_IncompleteReason(t *testing.T) {
 // C12: after a save, ChartsDir() resolves to the directory it resolved to
 // before the save.
 //
-// This test lives here, in the one file TestTestsIsolateChartsDirOnTopTier
-// exempts, and deliberately leaves SEXTILE_CHARTS_DIR UNSET: the precedence it
+// This test deliberately leaves SEXTILE_CHARTS_DIR UNSET: the precedence it
 // guards is between the XDG default and the dev fixtures, and an explicit
 // SEXTILE_CHARTS_DIR outranks both, so isolating this test the usual way would
 // make the thing it checks unreachable.
@@ -344,7 +343,7 @@ func TestSaveDoesNotChangeChartsDirPrecedence(t *testing.T) {
 		t.Fatalf("precondition: ChartsDir() = %q, want the dev fixtures %q", before, dev)
 	}
 
-	if _, err := PlaceChartFile(before, []byte("@AI800  ; Astrolog chart info.\n"), "test-person"); err != nil {
+	if _, err := OriginalsDoor(before).Place("test-person", []byte("@AI800  ; Astrolog chart info.\n")); err != nil {
 		t.Fatalf("PlaceChartFile: %v", err)
 	}
 

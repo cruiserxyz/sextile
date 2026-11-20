@@ -131,6 +131,7 @@ func fixtureSpec(t *testing.T, src recipe.Source, houses recipe.HouseSystem, z r
 		t.Fatalf("spec: %v", err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	return spec
 }
 
@@ -319,6 +320,15 @@ func TestStagedChartFilePinsZodiac(t *testing.T) {
 	}
 }
 
+// dropHostBand takes the host band out of every call until the returned func
+// runs: the band sets the zodiac too, so a control that shows what the frame
+// band is for must cut both.
+func dropHostBand() (restore func()) {
+	prev := hostBand
+	hostBand = nil
+	return func() { hostBand = prev }
+}
+
 // C3 (and C4's control): the hostile astrolog.as cannot move a single chart,
 // a comparison, or a staged chart of either, in either zodiac.
 func TestHostAstrologAsCannotMoveTheFrame(t *testing.T) {
@@ -334,6 +344,7 @@ func TestHostAstrologAsCannotMoveTheFrame(t *testing.T) {
 			}
 			return out
 		}
+		defer dropHostBand()()
 		clean, hostile := underBoth(t, raw)
 		sunClean, sunHostile := sunRow(t, clean), sunRow(t, hostile)
 		if sunClean == sunHostile {
@@ -345,6 +356,11 @@ func TestHostAstrologAsCannotMoveTheFrame(t *testing.T) {
 	// switch it neutralises has an observable effect on a raw call. A switch
 	// with no effect proves nothing, so it is not in the band.
 	t.Run("neutralisers", func(t *testing.T) {
+		// The host band (host_band.go) sets some of these back on every call;
+		// off here, so each host line is seen acting on the raw call.
+		band := hostBand
+		hostBand = nil
+		t.Cleanup(func() { hostBand = band })
 		rawCall := func(frame ...string) []string {
 			return append([]string{"-qj", "2450000.500000", "-zl", "0E", "51:30N"}, append(frame, "-v0", "-k")...)
 		}
@@ -682,7 +698,7 @@ func TestHostAstrologAsCannotMoveTimeline(t *testing.T) {
 	for _, c := range frameCases() {
 		for _, src := range []TimelineSource{TimelineSky, TimelineTransit, TimelineReturn} {
 			t.Run(c.name+"/"+src.String(), func(t *testing.T) {
-				req := TimelineRequest{Year: 2026, Month: time.October, Zone: zone, Houses: c.houses, Zodiac: c.zodiac, Defaults: measuredSets}
+				req := TimelineRequest{Year: 2026, Month: time.October, Zone: zone, Houses: c.houses, Zodiac: c.zodiac, Defaults: measuredSets, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 				if src != TimelineSky {
 					req.Natal = liveNatal
 				}
@@ -735,7 +751,9 @@ func TestHostAstrologAsCannotMoveTimeline(t *testing.T) {
 					}
 					return out
 				}
+				restore := dropHostBand()
 				rc, rh := underBoth(t, rawOut)
+				restore()
 				if rc == rh {
 					t.Errorf("a raw %s search without the pin is not moved by the hostile file: the control proves nothing", src)
 				}

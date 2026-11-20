@@ -31,7 +31,7 @@ func liveObjectRows(t *testing.T, month time.Month, o recipe.ObjectPolicy) []str
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := TimelineRequest{Year: 2026, Month: month, Zone: time.UTC, Natal: liveObjectsNatal(o), Objects: o, Defaults: sets}
+	req := TimelineRequest{Year: 2026, Month: month, Zone: time.UTC, Natal: liveObjectsNatal(o), Objects: o, Defaults: sets, AspectRegistry: mustTestAspects()}
 	rows, _, err := ComputeTimeline(context.Background(), req, []TimelineSource{TimelineTransit}, nil)
 	if err != nil {
 		t.Fatal(err)

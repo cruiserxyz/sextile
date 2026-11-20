@@ -69,7 +69,7 @@ func tickOn(row string) bool { return strings.Contains(row, "[✓]") }
 func openExperimentsFromLog(t *testing.T) Model {
 	t.Helper()
 	m := logModel(t, 4)
-	m, _ = press(t, m, ",", "l", "p")
+	m, _ = press(t, m, ",", "L", "p")
 	if m.currentOwner() != ownerExperiments {
 		t.Fatalf("owner = %v after ,l p, want the Experiments popup", m.currentOwner())
 	}
@@ -94,7 +94,7 @@ func TestLogPOpensExperiments(t *testing.T) {
 	// From the console, where ,l lands with no Log panel on screen.
 	c := logModel(t, 4)
 	c.width, c.height = 80, 24
-	c, _ = press(t, c, ",", "l")
+	c, _ = press(t, c, ",", "L")
 	if !c.console.open {
 		t.Fatal("fixture: the console did not open")
 	}
@@ -123,17 +123,13 @@ func TestExperimentsDoorIsHidden(t *testing.T) {
 			}
 		}
 	}
-	logged, _ := press(t, m, ",", "l")
+	logged, _ := press(t, m, ",", "L")
 	if bar := ansi.Strip(logged.View()); strings.Contains(bar, "Experiments") || strings.Contains(bar, "xperiment") {
 		t.Errorf("the focused Log's frame names the popup:\n%s", bar)
 	}
-	help := ansi.Strip(keys.RenderHelp(m.keysContextFor(ownerHelp), popupChrome(m.cfg), 132, 200))
-	if strings.Contains(help, "xperiment") {
-		t.Errorf("Help names the popup:\n%s", help)
-	}
-	palette := ansi.Strip(renderActions(m.refilterActions(actionsState{}), m.blocked, m.cfg, 132, 200))
-	if strings.Contains(palette, "xperiment") {
-		t.Errorf("the Actions list names the popup:\n%s", palette)
+	kb := openedKeybindings(m)
+	if popup := ansi.Strip(renderKeybindings(kb.keybindings, kb.kbOff, kb.cfg, 132, 200)); strings.Contains(popup, "xperiment") {
+		t.Errorf("Keybindings names the popup:\n%s", popup)
 	}
 }
 
@@ -194,7 +190,7 @@ func TestExperimentsWriteFailureKeepsTheRow(t *testing.T) {
 	if tickOn(experimentsRow(t, m)) || m.experiment("enter-colour") {
 		t.Error("a failed write changed the row")
 	}
-	if !strings.Contains(plain, "Not saved:") || !strings.Contains(plain, "not a block") {
+	if !strings.Contains(plain, "Not saved:") || !strings.Contains(plain, "expects a list") {
 		t.Errorf("the popup's foot does not say why:\n%s", plain)
 	}
 	if len(m.logLines) != lines {
@@ -226,7 +222,7 @@ func TestExperimentsRememberedAtStart(t *testing.T) {
 	if m.experiment("gone-switch") {
 		t.Error("an id the table does not have is on")
 	}
-	m, _ = press(t, m, ",", "l", "p")
+	m, _ = press(t, m, ",", "L", "p")
 	row := experimentsRow(t, m)
 	if !tickOn(row) {
 		t.Errorf("the tick is off at start: %q", row)
@@ -311,7 +307,7 @@ func enterColourModel(t *testing.T, on bool, cfg Config) Model {
 	if on {
 		m.experimentsOn = map[string]bool{"enter-colour": true}
 	}
-	m.width, m.height = 132, 40
+	m.width, m.height = dualColumnMinWidth(m.shownCount()), 40 // wide enough that Bodies and Aspects stay open beside Details
 	return enter(t, m, timelineRowWith(t, m.timeline.rows, "Moon (Sag) Tri (Leo) Mars"))
 }
 
@@ -426,7 +422,7 @@ func TestExperimentsAreSilent(t *testing.T) {
 	lines := len(m.logLines)
 	before := ansi.Strip(m.View())
 
-	m, _ = press(t, m, ",", "l", "p")
+	m, _ = press(t, m, ",", "L", "p")
 	m, cmd := press(t, m, " ")
 	tm, _ := m.Update(cmd())
 	m = tm.(Model)
@@ -445,7 +441,7 @@ func TestExperimentsAreSilent(t *testing.T) {
 	writePrefs(t, path, "experimental: on\n")
 	f := logModel(t, 3)
 	n := len(f.logLines)
-	f, _ = press(t, f, ",", "l", "p")
+	f, _ = press(t, f, ",", "L", "p")
 	f, cmd = press(t, f, " ")
 	tm, _ = f.Update(cmd())
 	f = tm.(Model)

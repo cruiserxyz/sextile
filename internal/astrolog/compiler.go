@@ -16,9 +16,8 @@ import (
 // switch ordering and toggle/last-wins semantics live: a recipe.ChartSpec is a
 // validated, order-free description; Compile walks a fixed sequence of bands
 // (Source → Frame → Object → Mode → Render) so an unsafe ordering cannot be
-// expressed. buildChartArgv (compute.go) was the legacy hand-assembler this
-// superseded; it was retired in the v0b cutover, and ComputeChart now lowers a
-// typed recipe.ChartSpec — built by internal/lookup — through Compile directly.
+// expressed. ComputeChart lowers a typed recipe.ChartSpec — built by
+// internal/lookup — through Compile.
 
 // ArtifactKind classifies what an invocation produces, so the runner knows how
 // to consume it — and, per the compiler invariant, never routes an image
@@ -134,7 +133,7 @@ func Compile(spec recipe.ChartSpec, p recipe.Projection) (ExecutionPlan, error) 
 	return ExecutionPlan{Projection: p.Label(), Invocations: invs}, nil
 }
 
-// carryRegistry hands the spec's object list, and the numbers its argv draws,
+// carryRegistry hands the spec's object list and aspect list, and the numbers its argv draws,
 // to each call the compiler issued, so the parsers can name every row. It
 // fails when the objects the host draws are not known (drawnObjectNumbers).
 func carryRegistry(invs []Invocation, spec recipe.ChartSpec) error {
@@ -144,6 +143,7 @@ func carryRegistry(invs []Invocation, spec recipe.ChartSpec) error {
 	}
 	for i := range invs {
 		invs[i].call.Registry = spec.Registry
+		invs[i].call.Aspects = spec.AspectRegistry
 		invs[i].call.Objects = objects
 	}
 	return nil
@@ -245,7 +245,7 @@ func CompileBundle(spec recipe.ChartSpec, ps ...recipe.Projection) (PlanBundle, 
 //	        chart's header — labelArgv)
 //	Frame:  -c <code> <zodiac pin> _Ys _sr0 :sz   (see frameBand)
 //	        then the clock pins and the reform-date pin
-//	Object: [-Yn] [-R <n> …]   (toggles sorted ascending by object number)
+//	Object: =Yn|_Yn =Ynn|_Ynn [-R <n> …]   (toggles sorted ascending by object number)
 //
 // LocalMomentAtPlace (single chart, raw report only):
 //
@@ -257,7 +257,7 @@ func CompileBundle(spec recipe.ChartSpec, ps ...recipe.Projection) (PlanBundle, 
 //
 //	Source: -r0 <FILE0> <FILE1>     (the two charts staged as chart files)
 //	Frame:  -c <code> <zodiac pin> _Ys _sr0 :sz   (see frameBand)
-//	Object: [-Yn] [-R <n> …]        (honored — -r0 respects the object band)
+//	Object: =Yn|_Yn =Ynn|_Ynn [-R <n> …]        (honored — -r0 respects the object band)
 func emitPrefix(spec recipe.ChartSpec, zoned, labelled bool) ([]string, []TempFileInput, Band, error) {
 	frame, err := emitFrame(spec)
 	if err != nil {
@@ -297,12 +297,25 @@ func emitPrefix(spec recipe.ChartSpec, zoned, labelled bool) ([]string, []TempFi
 		asp := emitAspects(spec.Aspects)
 		argv = append(argv, obj...)
 		return append(argv, asp...), nil, newBand(obj, asp), nil
+	case recipe.FileChart:
+		argv, temps, err := fileChartSource(src, spec, labelled)
+		if err != nil {
+			return nil, nil, Band{}, err
+		}
+		argv = append(argv, CurrentClock().Pins()...)
+		obj, err := emitObjects(spec.Objects)
+		if err != nil {
+			return nil, nil, Band{}, err
+		}
+		asp := emitAspects(spec.Aspects)
+		argv = append(argv, obj...)
+		return append(argv, asp...), temps, newBand(obj, asp), nil
 	case recipe.LocalMomentAtPlace:
 		jd, err := momentArg(src.JD)
 		if err != nil {
 			return nil, nil, Band{}, fmt.Errorf("astrolog: Compile: %w", err)
 		}
-		zone, err := zoneArgs(src.JD, src.TZ)
+		zone, err := zoneArgs(src.JD, src.TZ, src.Lon)
 		if err != nil {
 			return nil, nil, Band{}, err
 		}
@@ -386,11 +399,71 @@ func emitPrefix(spec recipe.ChartSpec, zoned, labelled bool) ([]string, []TempFi
 	}
 }
 
+// fileChartSource is the source and frame of a FileChart: the chart's own
+// guarded record, handed to Astrolog on the command line as the switches it
+// holds (InlineRecord), so the moment, the zone and the place are the file's
+// exactly, the command in the log console is the command that ran, and no copy
+// of the chart is written for the call. Measured equal, to the arc-second, to
+// Astrolog reading the file itself (TestInlineRecordIsTheFilesChartToTheArcSecond).
+//
+// The order decides who wins. Sextile's DEFAULTS (a house system and a zodiac
+// the operator did not choose) go BEFORE `-i`, so a file that names its own
+// overrides them: the file's settings are the chart's starting settings. What
+// the operator CHOSE goes AFTER it, so it overrides the file. The frame's
+// plane and display pins (`_Ys _sr0 :sz`) always follow the record. The reform
+// date is pinned BEFORE it: the record's own `-qb` fields become a Julian Day
+// by the rule in force when Astrolog reads them, as in ResolveChartBytes. A
+// chart sent unlabelled has its own `-zi` blanked after the record.
+//
+//	<reform pin> [-c <default>] [<default zodiac pin>] <record> [-c <chosen>] [<chosen zodiac pin>] _Ys _sr0 :sz [-zi "" ""]
+func fileChartSource(src recipe.FileChart, spec recipe.ChartSpec, labelled bool) ([]string, []TempFileInput, error) {
+	code, ok := houseCode(spec.Houses)
+	if !ok {
+		return nil, nil, fmt.Errorf("astrolog: Compile: unknown HouseSystem %d", int(spec.Houses))
+	}
+	pin, ok := zodiacPin(spec.Zodiac)
+	if !ok {
+		return nil, nil, fmt.Errorf("astrolog: Compile: unknown Zodiac %d", int(spec.Zodiac))
+	}
+	houses := []string{"-c", code}
+	before := append([]string(nil), reformPin...)
+	var after []string
+	if src.HousesChosen {
+		after = append(after, houses...)
+	} else {
+		before = append(before, houses...)
+	}
+	if src.ZodiacChosen {
+		after = append(after, pin...)
+	} else {
+		// The default also sets the offset, so a file's bare `-s` turns on
+		// Fagan-Bradley (offset 0) whatever offset a host astrolog.as holds.
+		if len(pin) == 1 && pin[0] == "_s" {
+			pin = []string{"_s", "0"}
+		}
+		before = append(before, pin...)
+	}
+	argv := append(before, InlineRecord(src.Record)...)
+	argv = append(argv, after...)
+	argv = append(argv, "_Ys", "_sr0", ":sz")
+	if !labelled {
+		argv = append(argv, "-zi", "", "")
+	}
+	return argv, nil, nil
+}
+
 // stageChart renders one sub-source of a Comparison as its chart file. A
 // MomentAtPlace is written in UT; a LocalMomentAtPlace carries the local clock
 // and zone (the report path only, the specification).
 func stageChart(src recipe.Source, houses recipe.HouseSystem, zodiac recipe.Zodiac, labelled bool) (string, error) {
 	switch m := src.(type) {
+	case recipe.FileChart:
+		// The record as the file holds it. The comparison's frame follows the
+		// staged files on the argv, so it is the pair's, as for every operand.
+		if !labelled {
+			return m.Record + "\n-zi \"\" \"\"\n", nil
+		}
+		return m.Record, nil
 	case recipe.MomentAtPlace:
 		if !labelled {
 			m.Name, m.Place = "", ""
@@ -441,9 +514,10 @@ func frameBand(houses recipe.HouseSystem, zodiac recipe.Zodiac) ([]string, error
 	return append(argv, "_Ys", "_sr0", ":sz"), nil
 }
 
-// emitObjects builds the object-policy band for a single chart. `-Yn` leads it
-// under either profile — it selects the true-node/Lilith variants of objects 16
-// and 18, which is orthogonal to which objects are drawn.
+// emitObjects builds the object-policy band for a single chart. The two Node
+// switches of the policy's form (`=Yn`/`_Yn`, `=Ynn`/`_Ynn`) lead it under
+// either profile — they select the variants of objects 16, 17 and 18, which is
+// orthogonal to which objects are drawn.
 //
 // A delta baseline emits `-R <n>` toggles, sorted ascending. An Explicit policy
 // emits `-R0` followed by the chosen object numbers, the exact counterpart of
@@ -626,24 +700,24 @@ func deltaToggles(nums []int, av Availability) []int {
 	return out
 }
 
-// The four band switches. Each is written ONCE, here, and every emitter in this
-// package spells it through the constant: that is what internal/invariants
-// TestOneEncoderPerBand counts, and why the Details timeline cannot carry a
-// second, drifting encoding of the chart's body, aspect or node-mode band.
+// The band switches. Each is written ONCE, here, and every emitter in this
+// package spells it through the constant, so the Details timeline cannot carry
+// a second, drifting encoding of the chart's body, aspect or node-mode band.
 const (
-	flagTrueNode      = "-Yn"  // true node / Lilith variants of objects 16 and 18
 	flagMainShow      = "-R0"  // exact show-list for the main (natal / sky) object set
 	flagTransitShow   = "-RT0" // exact show-list for the transiting object set
 	flagTransitToggle = "-RT"  // flips one object of the transiting set against the host
 	flagAspectShow    = "-RA0" // exact show-list for aspects
 )
 
-// emitNodeMode is the `-Yn` token of a policy, or nothing.
+// emitNodeMode is the two node switches of a policy's form: `Yn` for the Node
+// and Lilith, then `Ynn` for Lilith. Both always SET or CLEAR, never toggle: a
+// bare `-Yn` flips whatever a host astrolog.as left, so the same argv would
+// draw the true Node on one machine and the mean Node on another, and a host
+// `=Ynn` outranks the true Lilith (calc.cpp:2594).
 func emitNodeMode(o recipe.ObjectPolicy) []string {
-	if o.TrueNodeMode {
-		return []string{flagTrueNode}
-	}
-	return nil
+	sw := o.Nodes.Switches()
+	return sw[:]
 }
 
 // emitShowList is the exact show-list form of a band: the flag (flagMainShow,
@@ -825,40 +899,36 @@ func emitProjection(prefix []string, temps []TempFileInput, band Band, objects r
 	}
 }
 
-// emitRender turns a RenderSpec into its -X* styling switches in a fixed order
-// (legacy lazyastro order). It never emits -Xo: the output path is appended by
-// the image runner, not the compiler.
+// emitRender turns a RenderSpec into its -X* styling switches in a fixed order,
+// after wheelBand, so an option set here outranks a pin there.
+// It never emits -Xo: the output path is appended by the image runner, not the
+// compiler.
 func emitRender(r recipe.RenderSpec) []string {
-	var sw []string
+	// Every option is set, on or off, never toggled: a host astrolog.as
+	// may have turned any of them the other way (`=Xu` is Astrolog's own).
+	set := func(on bool, sw string) string {
+		if on {
+			return "=" + sw
+		}
+		return "_" + sw
+	}
+	sw := append([]string(nil), wheelBand...)
 	if r.Width > 0 {
 		sw = append(sw, "-Xw", strconv.Itoa(r.Width))
 	}
-	if r.Enhanced {
-		sw = append(sw, "-Xi")
-	}
-	if r.AspectGlyphs {
-		sw = append(sw, "-XA")
-	}
-	if r.ThickLines {
-		sw = append(sw, "-Xx", "-Xx0")
-	}
-	if r.ReverseColors {
-		sw = append(sw, "-Xr")
-	}
-	if r.NoBorder {
-		sw = append(sw, "-Xu")
-	}
+	sw = append(sw,
+		set(r.Enhanced, "Xi"),
+		set(r.AspectGlyphs, "XA"),
+		set(r.ThickLines, "Xx"), set(r.ThickLines, "Xx0"),
+		set(r.ReverseColors, "Xr"),
+		set(!r.NoBorder, "Xu"),
+		set(!r.NoInfoText, "Xt"),
+		set(r.DegreeWheel, "XL"))
 	if r.SymbolScale > 0 {
 		sw = append(sw, "-Xs", strconv.Itoa(r.SymbolScale))
 	}
 	if r.TextScale > 0 {
 		sw = append(sw, "-XS", strconv.Itoa(r.TextScale))
-	}
-	if r.NoInfoText {
-		sw = append(sw, "-Xt")
-	}
-	if r.DegreeWheel {
-		sw = append(sw, "-XL")
 	}
 	return sw
 }
@@ -1097,6 +1167,11 @@ func houseCode(h recipe.HouseSystem) (string, bool) {
 //
 // A cusp point has no sky rows, so a sky search carries it harmlessly. An empty
 // Explicit set stays the bare `-R0` and `-RT0`.
+//
+// moon is the Moon's registry number for the Moon list (0 otherwise): the
+// transiting side of its transit search is exactly that one object, whatever the
+// lens or the marks hold, because the list is about the Moon.
+//
 // transitMarks are the now slot's marks: they narrow the transiting side of a
 // transit or return search the way a chart's own marks (o.Only) narrow its
 // natal side, as Astrolog's -RT0 list, never by filtering rows (operator,
@@ -1104,11 +1179,7 @@ func houseCode(h recipe.HouseSystem) (string, bool) {
 // object the side leaves out stays out, so a mark on the transiting Moon, which
 // the binary keeps off that side, narrows nothing. Marks that leave nothing on
 // the side, for any reason, are ignored, as for o.Only (narrowByMarks).
-//
-// voids narrows a sky search's side to the Moon and the planets, the objects
-// Astrolog's void-of-course rule counts (FAspectVoid, extern.h: both objects up
-// to Pluto), for the month search that only marks the Moon void (skySegment).
-func timelineBand(src TimelineSource, o recipe.ObjectPolicy, transitMarks recipe.ObjectSet, a recipe.AspectPolicy, d DefaultSets, voids bool) (Band, error) {
+func timelineBand(src TimelineSource, o recipe.ObjectPolicy, transitMarks recipe.ObjectSet, a recipe.AspectPolicy, d DefaultSets, moon int) (Band, error) {
 	av := CurrentAvailability()
 	visible := visibleObjectNumbers(o, d.Main)
 	// An object without its ephemeris file is not visible, whatever the policy
@@ -1129,19 +1200,14 @@ func timelineBand(src TimelineSource, o recipe.ObjectPolicy, transitMarks recipe
 			}
 		}
 	}
-	if voids {
-		planets := make(map[int]bool, len(natal))
-		for n := range natal {
-			planets[n] = natal[n] && n <= voidObjectLast
-		}
-		natal = planets
-	}
 	objects := emitNodeMode(o)
 	if show, banded := bandedList(natal, d.Main); banded {
 		objects = append(objects, emitShowList(flagMainShow, show)...)
 	}
-	switch src {
-	case TimelineTransit:
+	switch {
+	case src == TimelineTransit && moon != 0:
+		objects = append(objects, emitShowList(flagTransitShow, []int{moon})...)
+	case src == TimelineTransit:
 		transiting := make(map[int]bool, len(visible))
 		for n := range visible {
 			transiting[n] = !isCuspPoint(n)
@@ -1155,7 +1221,7 @@ func timelineBand(src TimelineSource, o recipe.ObjectPolicy, transitMarks recipe
 		if show, banded := bandedList(transiting, d.Transit); banded {
 			objects = append(objects, emitShowList(flagTransitShow, show)...)
 		}
-	case TimelineReturn:
+	case src == TimelineReturn:
 		transiting := make(map[int]bool, len(visible))
 		for n := range visible {
 			transiting[n] = !isCuspPoint(n)
@@ -1205,10 +1271,6 @@ func narrowByMarks(side map[int]bool, marks recipe.ObjectSet, av Availability) {
 	}
 }
 
-// voidObjectLast is Astrolog's Pluto (oPlu), the last object its void-of-course
-// rule counts.
-const voidObjectLast = 10
-
 // isCuspPoint is the class fact that an object is one of the house wheel's
 // points (objects 22 to 33): a transiting one is a daily flood, a natal one
 // is a handful of rows.
@@ -1222,11 +1284,12 @@ func isCuspPoint(n int) bool {
 const cycleConjunctionAspect = 1
 
 // cycleBand is the cycle search's band: the Sun and one other object on the
-// main side, and the conjunction alone, built from the compiler's own
+// main side, and the conjunction alone, then the two node switches of the
+// form the search is cast in, last (N5), built from the compiler's own
 // emitters (C9). It takes an object, not a policy: the cycle's objects are the
 // template's subject and the Sun, never the lens's show list. The object is
 // Astrolog's own number (the Sun is 1), so any object the binary prints works.
-func cycleBand(other aspect.Object) (Band, error) {
+func cycleBand(other aspect.Object, nodes recipe.NodeForm) (Band, error) {
 	n := other.Number
 	if n <= 0 || n == sunObjectNumber {
 		return Band{}, fmt.Errorf("astrolog: cycle band: object %d (%q) cannot be searched against the Sun", n, other.Name)
@@ -1234,7 +1297,7 @@ func cycleBand(other aspect.Object) (Band, error) {
 	if av := CurrentAvailability(); av.IsAbsent(n) {
 		return Band{}, fmt.Errorf("%w: %s, no ephemeris file %s", ErrBodyUnavailable, other.Name, av.Absent[n])
 	}
-	return newBand(emitShowList(flagMainShow, []int{sunObjectNumber, n}), emitShowList(flagAspectShow, []int{cycleConjunctionAspect})), nil
+	return newBand(emitShowList(flagMainShow, []int{sunObjectNumber, n}), emitShowList(flagAspectShow, []int{cycleConjunctionAspect}), emitNodeMode(recipe.ObjectPolicy{Nodes: nodes})), nil
 }
 
 // visibleObjectNumbers is the policy's visible set as Astrolog object numbers,

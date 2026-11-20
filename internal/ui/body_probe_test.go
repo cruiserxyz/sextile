@@ -361,7 +361,9 @@ func TestPopupProbesTheBodyUnderTheCursor(t *testing.T) {
 				m.frames.defZ, m.frames.defZSet = recipe.Lahiri, true
 			}
 			// The active selection must not leak into the probe.
-			m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3, 16, 18}, TrueNodeMode: tc.trueNode}
+			m.lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 3, 16, 18}}
+			// The chart's form, through the user's default (a chart's form is its own).
+			m.frames.defN, m.frames.defNSet = nodesOf(tc.trueNode), true
 			m, _ = openProbePopup(t, m)
 			m, _ = probeKey(m, tea.KeyMsg{Type: tea.KeyDown})
 			m, cmd := probeKey(m, tea.KeyMsg{Type: tea.KeyDown}) // Mars (5)
@@ -382,8 +384,8 @@ func TestPopupProbesTheBodyUnderTheCursor(t *testing.T) {
 				}
 				return false
 			}
-			if has("-Yn") != tc.trueNode {
-				t.Errorf("-Yn present = %v, want %v (the chart's node mode); argv %v", has("-Yn"), tc.trueNode, argv)
+			if has("=Yn") != tc.trueNode || has("_Yn") == tc.trueNode {
+				t.Errorf("=Yn present = %v, _Yn present = %v, want true node %v (the chart's node mode); argv %v", has("=Yn"), has("_Yn"), tc.trueNode, argv)
 			}
 			// The compiler spells "no label" as `-zi "" ""`; a name or place
 			// would be client text in the argv.
@@ -428,7 +430,7 @@ func frameBand(argv []string) []string {
 		}
 		var out []string
 		for _, t := range argv[i:] {
-			if t == "-Yn" || t == "-R0" || t == "-v0" {
+			if t == "=Yn" || t == "_Yn" || t == "-R0" || t == "-v0" {
 				break
 			}
 			out = append(out, t)
@@ -860,4 +862,11 @@ func TestLateProbeAfterReopenChangesNothing(t *testing.T) {
 		t.Errorf("a stale result changed the new popup:\n%s\nlog %v", after, m.logLines)
 	}
 	_ = rec
+}
+
+func nodesOf(trueNode bool) recipe.NodeForm {
+	if trueNode {
+		return recipe.NodesTrue
+	}
+	return recipe.NodesMean
 }

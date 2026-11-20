@@ -93,21 +93,24 @@ type fitCase struct {
 	// part of typing, written out as the floor it is.
 	fill string
 	// blanks is how many blank rows the content has on purpose (the line
-	// before the house display's example, the line kept for a refusal, the
-	// rows the City list keeps for results); -1 when the state is a smaller
+	// before the house display's example); -1 when the state is a smaller
 	// step of a popup sized for a larger one, or the content is a document with
 	// blank lines of its own (Help).
 	blanks int
 	// taller is the rows the popup adds to the list area every popup gets
 	// (dialog.Box.Taller): seven group rows against the five the list area was
-	// sized for, so the Bodies box is two rows taller and its list keeps its rows.
+	// sized for, and the lead row, so the Bodies box is three rows taller and its
+	// list keeps its rows.
 	taller int
-	// zone is whether the popup keeps the message zone (dialog.Box.Zone): a
-	// blank row and a row for a message, on top of the rows the terminal gives.
+	// zone is whether the popup keeps the message zone's two rows (a Foot,
+	// dialog.Box.Zone), on top of the rows the terminal gives.
 	zone bool
-	// endsBlank is whether the last content row is the blank line kept for
-	// something that is not there yet (a refusal, the Bodies note); otherwise
-	// the content ends in a row with something in it.
+	// grows is a popup whose height follows what it shows (the City matches,
+	// a failed flip, a refusal): its width holds, its height is not held to one
+	// size across states or steps.
+	grows bool
+	// endsBlank is whether the last content row is the Bodies note's blank
+	// line; otherwise the content ends in a row with something in it.
 	endsBlank bool
 }
 
@@ -225,11 +228,11 @@ func slicesRepeat(s string, n int) []string {
 func fitCases() []fitCase {
 	const searchPrompt, bodiesPrompt = "Search: ", "Search bodies: "
 	search := len(searchPrompt) + 24 + 1
-	// A form is the width of the line kept for a refusal.
+	// A form is as wide as a refusal's line.
 	form := dialog.ProseWidth
 
 	atlas := func(state string, filter string) fitCase {
-		return fitCase{popup: "renderAtlasModal", state: state, group: "atlas", title: "City", typing: search, inputs: 1, blanks: -1,
+		return fitCase{popup: "renderAtlasModal", state: state, group: "atlas", title: "City", typing: search, inputs: 1, blanks: -1, grows: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupAtlasOpen
@@ -264,7 +267,7 @@ func fitCases() []fitCase {
 		// The bottom line: the count at its widest.
 		n := len(fitBodyState("").Registry)
 		tagBar := ansi.StringWidth(fmt.Sprintf("%d of %d selected · ● all ◐ some ○ none", n, n))
-		return fitCase{popup: "renderBodyModal", state: state, title: "Bodies", typing: max(len(bodiesPrompt)+24+1, tagBar, dialog.ProseWidth), inputs: 1, fill: " selected ", blanks: 1, zone: true, taller: 2,
+		return fitCase{popup: "renderBodyModal", state: state, title: "Bodies", typing: max(len(bodiesPrompt)+24+1, tagBar, dialog.ProseWidth), inputs: 1, fill: " selected ", blanks: 1, zone: true, taller: 3,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupBodyOpen
@@ -294,7 +297,9 @@ func fitCases() []fitCase {
 		}
 	}
 	houses := func(state string) fitCase {
-		return fitCase{popup: "renderHouseFinder", state: state, title: "Houses", typing: search, inputs: 1,
+		// taller: the Shown as part (its rule, heading and four forms) under the
+		// systems.
+		return fitCase{popup: "renderHouseFinder", state: state, title: "Houses", typing: search, inputs: 1, taller: 6,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				next, _ := openHouseFinder(fitBase(t, cfg, w, h))
 				return next.(Model)
@@ -313,41 +318,19 @@ func fitCases() []fitCase {
 			steps:  listSteps("fa"),
 		}
 	}
-	// The Actions palette: a search line over the commands. Its rows read the
-	// model, and the box is the size of the widest row it showed when it opened.
-	actions := func(state string) fitCase {
-		return fitCase{popup: "renderActions", state: state, title: "Actions", typing: search, inputs: 1,
+	nodes := func(state string) fitCase {
+		return fitCase{popup: "renderNodesFinder", state: state, title: "Nodes and Lilith", typing: search, inputs: 1,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
-				next, _ := openActions(fitBase(t, cfg, w, h))
+				next, _ := openNodesFinder(fitBase(t, cfg, w, h))
 				return next.(Model)
 			},
-			render: func(m Model, cfg Config, w, h int) string { return renderActions(m.actions, m.blocked, cfg, w, h) },
-			steps: listSteps("ch", fitStep{"a refused Enter says why", func(t *testing.T, m Model) Model {
-				m.actions.Notice = "Back to the previous time: no earlier time to go back to"
-				return m
-			}}),
+			render: func(m Model, cfg Config, w, h int) string { return renderNodesFinder(m.nodesFinder, cfg, w, h) },
+			steps:  listSteps("tr"),
 		}
-	}
-	display := func(form int) fitCase {
-		c := fitCase{popup: "renderHouseDisplay", state: fmt.Sprintf("form %d", form), group: "display", title: "House display", blanks: -1,
-			model: func(t *testing.T, cfg Config, w, h int) Model {
-				next, _ := openHouseDisplay(fitBase(t, cfg, w, h))
-				m := next.(Model)
-				m.houseDisplayPopup.List.Cursor = form
-				return m
-			},
-			render: func(m Model, cfg Config, w, h int) string { return renderHouseDisplay(m.houseDisplayPopup, cfg, w, h) },
-			steps: []fitStep{{"cursor down", fitKeys("down")}, {"cursor down", fitKeys("down")}, {"cursor down", fitKeys("down")},
-				{"cursor up", fitKeys("up")}, {"cursor to the top", fitKeys("up", "up", "up")}, {"choose", fitKeys(" ")}},
-		}
-		if form == 0 {
-			c.blanks = 1 // the tallest form: the line before its example
-		}
-		return c
 	}
 	// The hidden Experiments popup: one row per switch and a foot line; its size
 	// is the table's, whatever a flip does.
-	experimentsCase := fitCase{popup: "renderExperiments", state: "enter-colour", title: "Experiments", blanks: -1,
+	experimentsCase := fitCase{popup: "renderExperiments", state: "enter-colour", title: "Experiments", blanks: -1, grows: true,
 		model: func(t *testing.T, cfg Config, w, h int) Model {
 			next, _ := fitBase(t, cfg, w, h).openExperiments()
 			return next.(Model)
@@ -401,22 +384,20 @@ func fitCases() []fitCase {
 		chart("empty", nil, nil),
 		chart("many", fitCharts(60), nil),
 		bodies("all"), aspects("all"),
-		{popup: "renderHelpModal", state: "help", title: "Help", blanks: -1,
+		{popup: "renderKeybindings", state: "all", title: "Keybindings", blanks: -1, typing: len(keys.FilterPrompt) + dialog.SearchRoom + 2,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m, _ := press(t, fitBase(t, cfg, w, h), "?")
 				return m
 			},
 			render: func(m Model, cfg Config, w, h int) string {
-				c := m.keysContextFor(ownerHelp)
-				c.Style = cfg
-				return keys.RenderHelp(c, popupChrome(cfg), w, h)
+				return renderKeybindings(m.keybindings, m.kbOff, cfg, w, h)
 			},
-			steps: []fitStep{{"scroll down", fitKeys("down", "down", "pgdown")}, {"to the bottom", fitKeys("end")}, {"to the top", fitKeys("home")}},
+			steps: []fitStep{{"down", fitKeys("down", "down", "pgdown")}, {"to the bottom", fitKeys("end")}, {"to the top", fitKeys("home")}, {"a filter", fitKeys("z", "o", "d")}},
 		},
-		houses("all"), zodiacs("all"), actions("all"),
-		display(0), display(1), display(2), display(3), experimentsCase,
+		houses("all"), zodiacs("all"), nodes("all"),
+		experimentsCase,
 		sessions("rows", fitSessions()), sessions("none", nil),
-		{popup: "renderSaveModal", state: "empty", title: "Save chart", typing: form, inputs: 1, blanks: 2, endsBlank: true, zone: true,
+		{popup: "renderSaveModal", state: "empty", title: "Save chart", typing: form, inputs: 1, blanks: 0, grows: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSaveOpen
@@ -426,7 +407,7 @@ func fitCases() []fitCase {
 			render: func(m Model, cfg Config, w, h int) string { return renderSaveModal(m.save, cfg, w, h) },
 			steps:  formSteps(`"jane-doe" is taken — try another name.`, func(m Model, r string) Model { m.save.Refusal = r; return m }),
 		},
-		{popup: "renderTitleForm", state: "ask", group: "title", title: "Chart title", typing: max(form, len("Place: ")+40+1), inputs: 2, blanks: -1, zone: true,
+		{popup: "renderTitleForm", state: "ask", title: "Name this chart", typing: max(form, len(placeLabel)+40+1, titleFixedWidth(fitEquinox())), inputs: 3, blanks: -1, grows: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				c := fitEquinox()
@@ -436,28 +417,9 @@ func fitCases() []fitCase {
 			},
 			render: func(m Model, cfg Config, w, h int) string { return renderTitleForm(m.title, cfg, w, h) },
 			steps: append(formSteps("Add a place to save this title.", func(m Model, r string) Model { m.title.Refusal = r; return m }),
-				fitStep{"the second field", fitKeys("tab")},
-				fitStep{"the second step", func(t *testing.T, m Model) Model {
-					m.title.Confirming, m.title.dir = true, store.ChartsDir()
-					return m
-				}},
-				fitStep{"the second step, its backup already kept", func(t *testing.T, m Model) Model {
-					m.title.backupHeld = true
-					return m
-				}}),
+				fitStep{"the second field", fitKeys("tab")}),
 		},
-		{popup: "renderTitleForm", state: "confirm", group: "title", title: "Chart title", typing: max(form, len("Place: ")+40+1), inputs: 2, blanks: -1, zone: true,
-			model: func(t *testing.T, cfg Config, w, h int) Model {
-				m := fitBase(t, cfg, w, h)
-				c := fitEquinox()
-				m.startup = startupTitleOpen
-				m.title = titleFormState{Form: popup.Form{Fields: newTitleForm(c), Confirming: true}, chart: c, dir: store.ChartsDir()}
-				m.title.Fields.Fields[0].Value = "Constructed One"
-				return m
-			},
-			render: func(m Model, cfg Config, w, h int) string { return renderTitleForm(m.title, cfg, w, h) },
-		},
-		{popup: "renderSessionName", state: "save as", title: "Save session", typing: form, inputs: 1, blanks: 2, endsBlank: true, zone: true,
+		{popup: "renderSessionName", state: "save as", title: "Save session", typing: form, inputs: 1, blanks: 0, grows: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSessionNameOpen
@@ -467,7 +429,7 @@ func fitCases() []fitCase {
 			render: func(m Model, cfg Config, w, h int) string { return renderSessionName(m, w, h) },
 			steps:  formSteps("That name is taken. Try another.", func(m Model, r string) Model { m.sessions.Refusal = r; return m }),
 		},
-		{popup: "renderSessionName", state: "rename", title: "Rename session", typing: form, inputs: 1, blanks: 2, endsBlank: true, zone: true,
+		{popup: "renderSessionName", state: "rename", title: "Rename session", typing: form, inputs: 1, blanks: 0, grows: true,
 			model: func(t *testing.T, cfg Config, w, h int) Model {
 				m := fitBase(t, cfg, w, h)
 				m.startup = startupSessionNameOpen
@@ -487,13 +449,12 @@ var (
 	fitRuleRow = regexp.MustCompile(`^[─┈┄\-]+$`)
 )
 
-// fitBoxRows are the box's inner rows as plain text, the border and the
-// padding taken off: rows[0] and rows[len-1] are the padding rows. Fails on a
-// box that is not a rectangle.
+// fitBoxRows are the box's inner rows as plain text, the border and the side
+// padding taken off. Fails on a box that is not a rectangle.
 func fitBoxRows(t *testing.T, box string) (rows []string, width int) {
 	t.Helper()
 	lines := strings.Split(ansi.Strip(box), "\n")
-	if len(lines) < 4 {
+	if len(lines) < 3 {
 		t.Fatalf("a popup of %d lines:\n%s", len(lines), box)
 	}
 	width = ansi.StringWidth(lines[0])
@@ -513,12 +474,12 @@ func fitBoxRows(t *testing.T, box string) (rows []string, width int) {
 // they are given), and blank rows dropped. If narrowing or
 // shortening the box changes it, the box needed what it had.
 func fitContent(rows []string, c fitCase) string {
-	start := 1 + c.inputs
+	start := c.inputs
 	if c.inputs > 0 {
 		start++ // the rule under the inputs
 	}
 	var parts []string
-	for i := start; i < len(rows)-1; i++ {
+	for i := start; i < len(rows); i++ {
 		if t := strings.TrimSpace(rows[i]); t == "" || fitRuleRow.MatchString(t) {
 			continue // a blank row, or a rule: it spans whatever width it is given
 		}
@@ -540,13 +501,14 @@ func fitProbe(narrow int, uncapped bool) func() {
 type fitResult struct {
 	width int  // the box's content width
 	rows  int  // and its height
+	grows bool // the height follows the content
 	floor int  // the width the frame and the input lines ask for
 	lost  bool // narrowing the box by one cell cut or pushed out something
 }
 
 // TestEveryPopupFitsItsContent is the rule at the moment a popup opens: it is
 // as wide as the widest line it could show during this opening and as tall as
-// all of its entries (and the line kept for a refusal), at 132x40 and 80x24,
+// all of its entries, at 132x40 and 80x24,
 // colour and colourless, in each state its table row lists.
 func TestEveryPopupFitsItsContent(t *testing.T) {
 	forceColor(t)
@@ -562,10 +524,17 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					box := c.open(t, mode.cfg, size.w, size.h)
 					rows, cw := fitBoxRows(t, box)
+					// The Keybindings popup draws no side padding (its rows are
+					// bars from edge to edge), so fitBoxRows has cut four cells
+					// of its content.
+					chromeW := 6
+					if c.popup == "renderKeybindings" {
+						cw, chromeW = cw+4, 2
+					}
 
 					// The box sits inside the terminal.
-					if cw+6 > size.w || len(rows)+2 > size.h {
-						t.Fatalf("the box is %dx%d in a %dx%d terminal", cw+6, len(rows)+2, size.w, size.h)
+					if cw+chromeW > size.w || len(rows)+2 > size.h {
+						t.Fatalf("the box is %dx%d in a %dx%d terminal", cw+chromeW, len(rows)+2, size.w, size.h)
 					}
 
 					// The floors that are not content: the typing room, the
@@ -576,10 +545,10 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 					if !mode.cfg.UseColor() {
 						mark = 1
 					}
-					floor = max(floor, ansi.StringWidth(c.title)+mark+4-6)
+					floor = max(floor, ansi.StringWidth(c.title)+mark+4-chromeW)
 					edge := strings.Split(ansi.Strip(box), "\n")
 					if m := fitCounter.FindStringSubmatch(edge[len(edge)-1]); m != nil {
-						floor = max(floor, len(m[2])*2+len(" of ")+4-6)
+						floor = max(floor, len(m[2])*2+len(" of ")+4-chromeW)
 					}
 					if cw < floor {
 						t.Errorf("the box is %d cells wide inside, below its floor %d", cw, floor)
@@ -596,21 +565,24 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 					narrow := c.open(t, mode.cfg, size.w, size.h)
 					restore()
 					nrows, ncw := fitBoxRows(t, narrow)
+					if c.popup == "renderKeybindings" {
+						ncw += 4
+					}
 					if ncw != cw-1 {
 						t.Fatalf("the probe did not narrow the box: %d then %d", cw, ncw)
 					}
 					groups[key] = append(groups[key], fitResult{
-						width: cw, rows: len(rows), floor: floor,
+						width: cw, rows: len(rows), floor: floor, grows: c.grows,
 						lost: fitContent(nrows, c) != fitContent(allRows, c) || len(nrows) != len(allRows),
 					})
 
 					// Height. The popup with every row on show (the terminal's
 					// height lifted) is its content: it has no blank row but
-					// the ones the content asks for (the line kept for a
-					// refusal, the line before the House display's example). The popup
+					// the ones the content asks for (the line before the
+					// House display's example). The popup
 					// in the terminal is that, or as much of it as the
 					// terminal gives.
-					chrome := 2 + c.inputs // the padding rows and the input lines
+					chrome := c.inputs // the input lines
 					capRows := dialog.ListHeight(size.h) + c.taller
 					if c.inputs > 0 {
 						chrome++ // the rule under the inputs
@@ -625,7 +597,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 					}
 					if c.blanks >= 0 {
 						blank := 0
-						for _, r := range allRows[1 : len(allRows)-1] {
+						for _, r := range allRows {
 							if strings.TrimSpace(r) == "" {
 								blank++
 							}
@@ -634,7 +606,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 							t.Errorf("%d blank rows in the content, %d wanted: a row nothing needs, or content missing:\n%s", blank, c.blanks, ansi.Strip(all))
 						}
 					}
-					if c.blanks >= 0 && !c.endsBlank && strings.TrimSpace(allRows[len(allRows)-2]) == "" {
+					if c.blanks >= 0 && !c.endsBlank && strings.TrimSpace(allRows[len(allRows)-1]) == "" {
 						t.Errorf("the content ends in a blank row:\n%s", ansi.Strip(all))
 					}
 					listRows, needRows := len(rows)-chrome, len(allRows)-chrome
@@ -665,7 +637,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 		rs := groups[k]
 		lost, floor := false, 0
 		for _, r := range rs {
-			if r.width != rs[0].width || r.rows != rs[0].rows {
+			if r.width != rs[0].width || (r.rows != rs[0].rows && !r.grows) {
 				t.Errorf("%s: the states are not one size (%dx%d and %dx%d): the box moves under the operator", k, rs[0].width, rs[0].rows, r.width, r.rows)
 			}
 			lost = lost || r.lost
@@ -677,7 +649,7 @@ func TestEveryPopupFitsItsContent(t *testing.T) {
 	}
 }
 
-// fitStartups maps each popup to the startup state that shows it ("" for help,
+// fitStartups maps each popup to the startup state that shows it ("" for Keybindings,
 // which has its own flag). startupShowsModal lists the states a modal can be
 // in; the test below holds that list to this one.
 var fitStartups = map[string]string{
@@ -685,11 +657,10 @@ var fitStartups = map[string]string{
 	"renderChartModal":   "startupChartOpen",
 	"renderBodyModal":    "startupBodyOpen",
 	"renderAspectModal":  "startupAspectOpen",
-	"renderHelpModal":    "",
-	"renderActions":      "", // a flag beside Help's, never a startup state
+	"renderKeybindings":  "", // a flag over whatever has the keyboard, never a startup state
 	"renderHouseFinder":  "startupHouseOpen",
 	"renderZodiacFinder": "startupZodiacOpen",
-	"renderHouseDisplay": "startupDisplayOpen",
+	"renderNodesFinder":  "startupNodesOpen",
 	"renderExperiments":  "startupExperimentsOpen",
 	"renderSessions":     "startupSessionsOpen",
 	"renderSaveModal":    "startupSaveOpen",
@@ -756,8 +727,7 @@ func TestEveryPopupIsInTheFitGuard(t *testing.T) {
 	// The popups draw their boxes inside internal/ui/popup: the method that calls
 	// the box is the caller there, and the row it answers to is named below.
 	popupFiles := map[string]*ast.File{}
-	// The Keys popup is drawn by internal/ui/keys: its function is the caller.
-	for _, dir := range []string{"popup", "keys"} {
+	for _, dir := range []string{"popup"} {
 		pkgs, err := parser.ParseDir(token.NewFileSet(), dir, func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -772,12 +742,10 @@ func TestEveryPopupIsInTheFitGuard(t *testing.T) {
 	popupRows := map[string][]string{
 		"Body.Render": {"renderBodyModal"}, "Aspects.Render": {"renderAspectModal"},
 		"Atlas.Render":    {"renderAtlasModal"},
-		"Finder.Render":   {"renderHouseFinder", "renderZodiacFinder"},
+		"Finder.Render":   {"renderHouseFinder", "renderZodiacFinder", "renderNodesFinder"},
 		"Sessions.Render": {"renderSessions"}, "Sessions.RenderName": {"renderSessionName"},
-		"HouseDisplay.Render": {"renderHouseDisplay"},
-		"Experiments.Render":  {"renderExperiments"},
-		"Form.Render":         {"renderSaveModal", "renderTitleForm"},
-		".RenderHelp":         {"renderHelpModal"},
+		"Experiments.Render": {"renderExperiments"},
+		"Form.Render":        {"renderSaveModal", "renderTitleForm"},
 	}
 	for _, f := range popupFiles {
 		for _, d := range f.Decls {
@@ -875,9 +843,10 @@ func sortedKeys(set map[string]bool) []string {
 	return out
 }
 
-// TestEveryPopupKeepsItsSizeWhileOpen: a popup's size is decided once, when it
-// opens, and never changes while it is open, in either direction (operator,
-// 2026-10-27). Each popup in the table is opened and its box measured, then
+// TestEveryPopupKeepsItsSizeWhileOpen: a popup's width is decided once, when it
+// opens, and never changes while it is open (operator, 2026-10-27); its height
+// too, except for the popups that keep no empty row and grow by what they show
+// (grows, operator 2026-11-14). Each popup in the table is opened and its box measured, then
 // the operator types a filter, takes it back, walks the list to its ends,
 // is refused, or sees an entry join, and the box is measured again after every
 // step. Rows a filter removed are blank; a joining entry scrolls.
@@ -898,7 +867,7 @@ func TestEveryPopupKeepsItsSizeWhileOpen(t *testing.T) {
 						m = s.do(t, m)
 						box := c.render(m, mode.cfg, size.w, size.h)
 						r, w := fitBoxRows(t, box)
-						if w != width || len(r) != len(rows) {
+						if w != width || (len(r) != len(rows) && !c.grows) {
 							t.Errorf("after %q the box is %dx%d, it opened %dx%d:\n%s", s.name, w+6, len(r)+2, width+6, len(rows)+2, ansi.Strip(box))
 							return
 						}
@@ -976,9 +945,9 @@ func TestCursorStaysVisibleWhenAMessageTakesRows(t *testing.T) {
 	}
 }
 
-// On the smallest terminal (66x15) the confirm step has no row to spare for the
-// message zone: the zone is empty rows until something is said, then the message
-// takes them from the foot of the text, and the box is the same size.
+// On the smallest terminal (66x15) the change question keeps no row for a
+// message: the box is as tall as its text until something is said, then it grows
+// by the message's rows and stays inside the terminal, at the same width.
 func TestMessageOnTheSmallestTerminal(t *testing.T) {
 	cfg := Config{Accessible: true, Color: ColorNever}
 	long := store.NamedChart{ID: "x", Name: "x", Untitled: true, PlaceLabel: "Munich",
@@ -987,8 +956,8 @@ func TestMessageOnTheSmallestTerminal(t *testing.T) {
 	quiet := strings.Split(renderTitleForm(st, cfg, MinPanelWidth, MinTerminalHeight), "\n")
 	st.Refusal = "Couldn't write the file."
 	said := strings.Split(renderTitleForm(st, cfg, MinPanelWidth, MinTerminalHeight), "\n")
-	if len(quiet) > MinTerminalHeight || len(said) != len(quiet) || ansi.StringWidth(said[0]) != ansi.StringWidth(quiet[0]) {
-		t.Errorf("the box moved: %dx%d quiet, %dx%d with a message (terminal %d rows)", ansi.StringWidth(quiet[0]), len(quiet), ansi.StringWidth(said[0]), len(said), MinTerminalHeight)
+	if len(said) > MinTerminalHeight || len(said) <= len(quiet) || ansi.StringWidth(said[0]) != ansi.StringWidth(quiet[0]) {
+		t.Errorf("the box did not grow inside the terminal: %dx%d quiet, %dx%d with a message (terminal %d rows)", ansi.StringWidth(quiet[0]), len(quiet), ansi.StringWidth(said[0]), len(said), MinTerminalHeight)
 	}
 	if !strings.Contains(strings.Join(said, "\n"), "Couldn't write the file.") {
 		t.Errorf("the message is not shown:\n%s", strings.Join(said, "\n"))
@@ -1005,7 +974,7 @@ func TestKnownRefusalsFitOneRow(t *testing.T) {
 	for _, what := range []string{"name", "title", "place"} {
 		labels = append(labels, (&astrolog.LabelTooLongError{What: what, Bytes: 100}).Error())
 	}
-	for _, s := range append(labels, backupRefusal, emptyPlaceRefusal, nameRefusal(store.ErrSessionNameTaken),
+	for _, s := range append(labels, emptyPlaceRefusal, nameRefusal(store.ErrSessionNameTaken),
 		nameRefusal(store.ErrSessionNameEmpty), nameRefusal(store.ErrSessionOpenElsewhere), "That name has no letters or digits to save under.") {
 		if w := ansi.StringWidth(s); w > dialog.RefusalRoom {
 			t.Errorf("%q is %d cells, the message zone's row holds %d", s, w, dialog.RefusalRoom)
@@ -1015,3 +984,10 @@ func TestKnownRefusalsFitOneRow(t *testing.T) {
 
 // longSaid is a line of Astrolog's that needs more than one row of the Bodies box.
 const longSaid = "SwissEph file 'seas_18.se1' not found in PATH '/usr/local/share/astrolog/ephemerides/swiss/'"
+
+// titleFixedWidth is the cells the name form's coordinates line asks for:
+// its label, the coordinates, two spaces and the note.
+func titleFixedWidth(c store.NamedChart) int {
+	f := titleFixed(c)[0]
+	return ansi.StringWidth(f.Label + f.Value + "  " + f.Note)
+}

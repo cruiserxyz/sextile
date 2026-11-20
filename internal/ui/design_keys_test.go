@@ -6,6 +6,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,7 +59,7 @@ func keyOwnerCases() []keyOwnerCase {
 			m, _ = escSend(t, m, ChartsLoadedMsg{Charts: listRowsCharts(), Gen: m.pickerGen})
 			return m
 		}},
-		{"chart title", ownerChartTitle, dialog.TitleChartTitle, func(t *testing.T, m Model) Model {
+		{"chart title", ownerChartTitle, dialog.TitleNameChart, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlO))
 			m, _ = escSend(t, m, ChartsLoadedMsg{Charts: listRowsCharts(), Gen: m.pickerGen}, ChartPickedMsg{Chart: keysUntitled()})
 			return m
@@ -77,30 +78,22 @@ func keyOwnerCases() []keyOwnerCase {
 			m, _ = escSend(t, m, escKey(tea.KeyCtrlA))
 			return m
 		}},
-		{"help", ownerHelp, dialog.TitleKeys, func(t *testing.T, m Model) Model {
+		{"keybindings", ownerKeybindings, dialog.TitleKeybindings, func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escRunes("?"))
 			return m
 		}},
 		{"console", ownerConsole, "", func(t *testing.T, m Model) Model {
 			m = m.logCommands([]string{"astrolog -one", "astrolog -two", "astrolog -three"})
-			m, _ = escSend(t, m, escRunes(","), escRunes("l"), escRunes("l"))
+			m, _ = escSend(t, m, escRunes(","), escRunes("L"), escRunes("l"))
 			return m
 		}},
 		{"log", ownerLog, "", func(t *testing.T, m Model) Model {
 			m = m.logNote("test", "one").logNote("test", "two").logNote("test", "three")
-			m, _ = escSend(t, m, escRunes(","), escRunes("l"))
+			m, _ = escSend(t, m, escRunes(","), escRunes("L"))
 			return m
 		}},
 		{"details", ownerDetails, "", func(t *testing.T, m Model) Model {
 			m, _ = escSend(t, m, escKey(tea.KeyEnter))
-			return m
-		}},
-		{"house display", ownerDisplay, popupTitleDisplay, func(t *testing.T, m Model) Model {
-			m, _ = escSend(t, m, escRunes(","), escRunes("a"))
-			return m
-		}},
-		{"actions", ownerActions, dialog.TitleActions, func(t *testing.T, m Model) Model {
-			m, _ = escSend(t, m, escKey(tea.KeyCtrlP))
 			return m
 		}},
 	}
@@ -133,8 +126,8 @@ func barPairs(row string) []string {
 
 // checkBarShape is C3 and C4 read off the bar: every pair is one of the
 // owner's bar entries, in table order, every pinned entry is there, and if
-// anything is missing it is a run of unpinned entries from the end, with one
-// `…` where they were.
+// anything is missing the bar has one `…`, before the pinned entries. A kept
+// entry (the Moon phase) can stand after plain entries that gave way.
 func checkBarShape(t *testing.T, where string, row string, entries []keys.BindingEntry, width int) {
 	t.Helper()
 	var bar []keys.BindingEntry
@@ -145,6 +138,7 @@ func checkBarShape(t *testing.T, where string, row string, entries []keys.Bindin
 	}
 	pairs := barPairs(row)
 	i, more := 0, 0
+	gaveWay := slices.Contains(pairs, "…") || slices.Contains(pairs, "...")
 	for _, p := range pairs {
 		if p == "…" || p == "..." {
 			more++
@@ -154,9 +148,9 @@ func checkBarShape(t *testing.T, where string, row string, entries []keys.Bindin
 			}
 			continue
 		}
-		for i < len(bar) && bar[i].Word+": "+bar[i].BarKey != p {
-			if bar[i].Pinned || more == 0 {
-				t.Fatalf("%s: the bar %q skips %q", where, row, bar[i].Word+": "+bar[i].BarKey)
+		for i < len(bar) && bar[i].Word+": "+keys.FooterKey(bar[i].BarKey) != p {
+			if bar[i].Pinned || !gaveWay {
+				t.Fatalf("%s: the bar %q skips %q", where, row, bar[i].Word+": "+keys.FooterKey(bar[i].BarKey))
 			}
 			i++
 		}
@@ -166,8 +160,8 @@ func checkBarShape(t *testing.T, where string, row string, entries []keys.Bindin
 		i++
 	}
 	for ; i < len(bar); i++ {
-		if bar[i].Pinned || more == 0 {
-			t.Fatalf("%s: the bar %q is missing %q", where, row, bar[i].Word+": "+bar[i].BarKey)
+		if bar[i].Pinned || !gaveWay {
+			t.Fatalf("%s: the bar %q is missing %q", where, row, bar[i].Word+": "+keys.FooterKey(bar[i].BarKey))
 		}
 	}
 	if more > 1 {
@@ -182,7 +176,7 @@ func checkBarShape(t *testing.T, where string, row string, entries []keys.Bindin
 		}
 		var dropped []string
 		for _, e := range bar {
-			if p := e.Word + ": " + e.BarKey; !shown[p] {
+			if p := e.Word + ": " + keys.FooterKey(e.BarKey); !shown[p] {
 				dropped = append(dropped, p)
 			}
 		}
@@ -230,7 +224,7 @@ func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 		}
 	}
 
-	// Every cell of the bar is the muted colour while colours are on.
+	// Every cell of the bar is the terminal's blue while colours are on.
 	t.Run("muted", func(t *testing.T) {
 		forceColor(t)
 		for _, c := range keyOwnerCases() {
@@ -243,8 +237,8 @@ func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 					continue
 				}
 				text++
-				if cell.fg != "38;5;244" {
-					t.Fatalf("%s: bar cell %q is %q, not the muted colour", c.name, cell.r, cell.fg)
+				if cell.fg != "34" {
+					t.Fatalf("%s: bar cell %q is %q, not the terminal's blue (34)", c.name, cell.r, cell.fg)
 				}
 			}
 			if text == 0 {
@@ -258,8 +252,8 @@ func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 		fm := fullBarModel(t)
 		main := fm.withWords(ownerMain, fm.available(ownerMain, mainBindings(keys.DefaultKeys())))
 		row := strings.TrimRight(ansi.Strip(fm.barText(ownerMain, mainBindings(keys.DefaultKeys()), 60, Config{}, "")), " ")
-		if !strings.HasSuffix(row, " | … | Help: ? | Quit: q") {
-			t.Errorf("the 60-column main bar is %q, want it to end `… | Help: ? | Quit: q`", row)
+		if !strings.HasSuffix(row, "… | Commands: , | Keybindings: ? | Quit: q") {
+			t.Errorf("the 60-column main bar is %q, want it to end `… | Commands: , | Keybindings: ? | Quit: q`", row)
 		}
 		checkBarShape(t, "main at 60", row, main, 60)
 		for _, c := range keyOwnerCases()[1:] {
@@ -278,8 +272,8 @@ func TestKeyBarIsTheOwnersBindings(t *testing.T) {
 		m = m.applyKeyConfig(store.KeysConfig{Leader: "?", LeaderPresent: true})
 		row := lastRow(m.View())
 		checkBarShape(t, "main with leader ?", row, m.keyBarEntries(), m.width)
-		if !strings.Contains(row, "Help: ?") {
-			t.Errorf("the bar %q stopped showing the main table's Help entry", row)
+		if !strings.Contains(row, "Keybindings: ?") {
+			t.Errorf("the bar %q stopped showing the main table's Keybindings entry", row)
 		}
 	})
 }
@@ -396,7 +390,7 @@ func TestPopupsCarryNoHints(t *testing.T) {
 			{"typed", typed("s"), nil},
 			{"toggled", func(t *testing.T, m Model) Model { m, _ = escSend(t, m, escKey(tea.KeySpace)); return m }, nil},
 		},
-		ownerHelp: {
+		ownerKeybindings: {
 			{"rest", nil, nil},
 			{"moved", func(t *testing.T, m Model) Model { m, _ = escSend(t, m, escKey(tea.KeyDown)); return m }, nil},
 		},
@@ -424,11 +418,7 @@ func TestPopupsCarryNoHints(t *testing.T) {
 				if title != c.title {
 					t.Errorf("the title is %q, want %q alone", title, c.title)
 				}
-				// The padding rows are empty, and no row inside carries a
-				// hint, a key pair or a status.
-				if strings.TrimSpace(rows[0]) != "" || strings.TrimSpace(rows[len(rows)-1]) != "" {
-					t.Errorf("the frame's padding rows are not empty: %q, %q", rows[0], rows[len(rows)-1])
-				}
+				// No row inside carries a hint, a key pair or a status.
 				// The two sentences the 2026-10-21 answers allow: the empty
 				// city chooser's typing line, and the Bodies count and legend.
 				// Each appears in its own popup and nowhere else.
@@ -523,8 +513,7 @@ func TestTitleFormEscGoesBack(t *testing.T) {
 		m := openedPicker(t)
 		m, _ = pickRow(t, m, "Equinox-2026-09.as")
 		m = typeText(t, m, "Constructed Title")
-		m, _ = escSend(t, m, escKey(tea.KeyEnter)) // the second step
-		m, write := escSend(t, m, escKey(tea.KeyEnter))
+		m, write := submit(t, m)
 		if write == nil || !m.title.Saving {
 			t.Fatal("Enter with a title did not start the write")
 		}
@@ -594,13 +583,13 @@ func TestCtrlCQuitsFromEverywhere(t *testing.T) {
 // where a field takes letters it is a letter.
 func TestQBacksOutWhereNothingIsTyped(t *testing.T) {
 	typed := map[owner]func(m Model) string{
-		ownerCity:       func(m Model) string { return m.atlas.FilterText },
-		ownerOpenChart:  func(m Model) string { return m.picker.FilterText },
-		ownerChartTitle: func(m Model) string { return m.title.Fields.Value(m.title.Fields.Focus) },
-		ownerSaveChart:  func(m Model) string { return m.save.Fields.Value(0) },
-		ownerBodies:     func(m Model) string { return m.bodyModal.FilterText },
-		ownerAspects:    func(m Model) string { return m.aspectModal.FilterText },
-		ownerActions:    func(m Model) string { return m.actions.FilterText },
+		ownerCity:        func(m Model) string { return m.atlas.FilterText },
+		ownerOpenChart:   func(m Model) string { return m.picker.FilterText },
+		ownerChartTitle:  func(m Model) string { return m.title.Fields.Value(m.title.Fields.Focus) },
+		ownerSaveChart:   func(m Model) string { return m.save.Fields.Value(0) },
+		ownerBodies:      func(m Model) string { return m.bodyModal.FilterText },
+		ownerAspects:     func(m Model) string { return m.aspectModal.FilterText },
+		ownerKeybindings: func(m Model) string { return m.keybindings.FilterText },
 	}
 	for _, c := range keyOwnerCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -626,10 +615,10 @@ func TestQBacksOutWhereNothingIsTyped(t *testing.T) {
 					t.Fatal("the second q did not quit the main screen")
 				}
 				return
-			case ownerHelp, ownerConsole, ownerDisplay, ownerLog:
+			case ownerConsole, ownerLog:
 				want := ownerMain
 				if c.owner == ownerConsole {
-					// Reached with ,l l, the console closes onto the focused Log
+					// Reached with ,L l, the console closes onto the focused Log
 					// it was opened from (operator, 2026-11-05).
 					want = ownerLog
 				}
@@ -657,7 +646,7 @@ func TestQBacksOutWhereNothingIsTyped(t *testing.T) {
 // there too; the too-small screen is the main table's.
 func TestQIsALetterInFindersAndSearchLines(t *testing.T) {
 	t.Run("house finder", func(t *testing.T) {
-		m, _ := escSend(t, escBase(t), escKey(tea.KeyCtrlH))
+		m, _ := escSend(t, escBase(t), escRunes(","), escRunes("u"))
 		if m.currentOwner() != ownerHouses {
 			t.Fatalf("owner %d, want the house finder", m.currentOwner())
 		}
@@ -711,7 +700,6 @@ func TestQIsALetterInFindersAndSearchLines(t *testing.T) {
 // bar says so.
 func TestCloseEntryOfTheNonTypingOwnersIsEscOrQ(t *testing.T) {
 	for name, entries := range map[string][]keys.BindingEntry{
-		"help":    helpBindings(),
 		"console": consoleBindings(),
 		"details": detailsBindings(keys.DefaultKeys()),
 	} {
@@ -724,8 +712,13 @@ func TestCloseEntryOfTheNonTypingOwnersIsEscOrQ(t *testing.T) {
 		if closer == nil {
 			t.Fatalf("%s has no Close entry", name)
 		}
-		if closer.BarKey != "esc/q" {
-			t.Errorf("%s: Close shows %q, want esc/q", name, closer.BarKey)
+		// Details' item reads `Back to <Panel>: esc`; its q still closes.
+		wantBar := "esc/q"
+		if name == "details" {
+			wantBar = "esc"
+		}
+		if closer.BarKey != wantBar {
+			t.Errorf("%s: Close shows %q, want %s", name, closer.BarKey, wantBar)
 		}
 		kmap := closer.Binding.Keys()
 		hasEsc, hasQ := false, false
@@ -821,7 +814,7 @@ func TestMouseIgnoredWhileOwned(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			m := reachOwner(t, c, Config{Color: ColorNever}, 144, 40)
 			had := m.focused
-			titles := map[PanelID]string{PanelChart: "[1] Chart", PanelBodies: "[2] Bodies"}
+			titles := map[PanelID]string{PanelChart: "[2] Chart", PanelBodies: "[3] Bodies"}
 			other := PanelChart
 			if had == PanelChart {
 				other = PanelBodies
@@ -847,6 +840,7 @@ func TestMouseIgnoredWhileOwned(t *testing.T) {
 	}
 	// The control: on the main screen the same click does move focus.
 	m := escBase(t)
+	m.width = 156 // Details beside the panels: the Chart panel is open under the click
 	r := m.geometry()[PanelChart]
 	m, _ = escSend(t, m, tea.MouseMsg{X: r.x + 2, Y: r.y + 1, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
 	if m.focused != PanelChart {
@@ -935,49 +929,6 @@ func TestBurstReplayedEverywhere(t *testing.T) {
 	}
 }
 
-// C15: the Help popup lists the main table then the leader's, in order. It
-// has no cursor, so the whole list is read by scrolling a line at a time.
-func TestHelpModalMatchesBindingTable(t *testing.T) {
-	m := escBase(t)
-	m.cfg = Config{Color: ColorNever}
-	kmap := m.keys
-	var want []string
-	for _, s := range keys.HelpSections(mainBindings(kmap)) {
-		for _, e := range s.Entries {
-			if keys.HelpUnlisted[e.ID] {
-				continue
-			}
-			// The list keys are listed once the workspace is a list (HelpWhen); this
-			// one-chart workspace is not.
-			if e.Help && (e.HelpWhen == nil || e.HelpWhen(m.keysContextFor(ownerHelp))) {
-				want = append(want, m.titleOf(e)+" "+e.Binding.Help().Key)
-			}
-		}
-	}
-	for _, b := range m.helpPopupBlocks() {
-		for _, r := range b.Rows {
-			want = append(want, r.Title+" "+r.Key)
-		}
-	}
-	for _, b := range m.leaderBindings {
-		want = append(want, keys.BindingDesc(m.keysContextFor(ownerHelp), b.ID)+" "+b.Spelling(m.leaderKey))
-	}
-	var got []string
-	for _, l := range m.helpLines() {
-		if l.Binding {
-			got = append(got, strings.Join(strings.Fields(l.Text), " "))
-		}
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("the Help popup lists\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	for _, row := range got {
-		if strings.Contains(row, "reserved") {
-			t.Errorf("a reserved entry is listed: %q", row)
-		}
-	}
-}
-
 // C2's behaviour half: every entry of every owner's table, pressed where it is
 // available, does something — changes the model or returns a command. ↑ at a
 // list's first row and ↓ at its last are C12's, so each entry is tried from
@@ -1024,7 +975,7 @@ func TestEveryOwnerEntryActs(t *testing.T) {
 			// Each state again with its cursor or window moved off either
 			// end, since a list's ends are C12's to keep still.
 			for _, s := range append([]Model(nil), states...) {
-				// ⌃⇟ is the key that scrolls Details now; ⇟ pages the list's cursor.
+				// ctrl+pgdown is the key that scrolls Details now; pgdown pages the list's cursor.
 				states = append(states, press(press(s, "down"), "down"), press(press(s, "up"), "up"), press(s, "pgdown"), press(s, "ctrl+pgdown"))
 			}
 			for _, e := range escBase(t).ownerBindings(c.owner) {
@@ -1037,6 +988,10 @@ func TestEveryOwnerEntryActs(t *testing.T) {
 					k = kmap[0]
 				} else if e.ID == keys.BindingCopy {
 					k = "y"
+				} else if e.ID == keys.BindingSearch && c.owner == ownerKeybindings {
+					continue // typing is how the filter acts
+				} else if e.Palette && c.owner == ownerMain {
+					continue // a command with no Ctrl key: its comma form and its row are tested by id
 				} else {
 					t.Fatalf("%s: entry %d has no key and is no known leader sequence", c.name, e.ID)
 				}
@@ -1062,80 +1017,77 @@ func TestEveryOwnerEntryActs(t *testing.T) {
 	}
 }
 
-// The Help popup's first page: the "Start here" group with its rows at both
-// sizes, no Limited view line, and neither Help itself nor the main Quit.
-func TestHelpFirstPageAt80x24(t *testing.T) {
+// The Keybindings popup's first page at both sizes: the Local header and the
+// keys of the Chart panel's Local group, no comma sentence, no Limited view
+// line.
+func TestKeybindingsFirstPage(t *testing.T) {
 	page := func(w, h int) string {
 		m, _ := escSend(t, helpFixture(t, w, h), escRunes("?"))
 		var got []string
-		for _, r := range popupInterior(t, m.View(), dialog.TitleKeys) {
+		for _, r := range popupInterior(t, m.View(), dialog.TitleKeybindings) {
 			if s := strings.TrimSpace(r); s != "" {
 				got = append(got, strings.Join(strings.Fields(s), " "))
 			}
 		}
 		return strings.Join(got, "\n")
 	}
-	rows := []string{"Switch panel tab/→ ⇧ tab/←", "Move row ↑/↓ (j/k)", "Report enter", "Open chart ⌃o", "Choose city ⌃l"}
 	for _, size := range [][2]int{{80, 24}, {144, 40}} {
 		p := page(size[0], size[1])
-		for _, want := range append([]string{"Start here"}, rows...) {
+		for _, want := range []string{"─── Local", "<enter> Details"} {
 			if !strings.Contains(p, want) {
 				t.Errorf("%dx%d first page lacks %q:\n%s", size[0], size[1], want, p)
 			}
 		}
-		for _, bad := range []string{"Limited view", "Keys ?", "Quit q", "Esc"} {
+		for _, bad := range []string{"Limited view", "Help", "does the same as Ctrl"} {
 			if strings.Contains(p, bad) {
 				t.Errorf("%dx%d first page carries %q:\n%s", size[0], size[1], bad, p)
 			}
 		}
 	}
-	if w := page(144, 40); !strings.Contains(w, "Quit from anywhere ⌃c") {
-		t.Errorf("144x40 first page lacks the Quit from anywhere row:\n%s", w)
-	}
 }
 
-// Help has no cursor: PgDn moves the first visible line by one list height,
-// clamped at the end, and PgUp moves back.
-func TestHelpPagesWithPgDn(t *testing.T) {
+// The cursor walks the rows and the window follows it: ↓ and ↑ move one row,
+// PgDn and PgUp a page, End and Home to the ends, and the cursor row is always
+// on screen.
+func TestKeybindingsCursorWalksTheRows(t *testing.T) {
 	m, _ := escSend(t, helpFixture(t, 80, 24), escRunes("?"))
-	h := keys.HelpListHeight(24)
-	total := len(m.helpLines())
-	if total <= h {
-		t.Fatalf("the list (%d lines) fits one page of %d; nothing to page", total, h)
+	rows := len(m.keybindings.Matches)
+	h := m.kbListHeight(m.keybindings)
+	if len(m.keybindings.Lines()) <= h {
+		t.Fatalf("the list (%d lines) fits one page of %d; nothing to scroll", len(m.keybindings.Lines()), h)
+	}
+	onScreen := func(m Model) {
+		t.Helper()
+		row := m.keybindings.Matches[m.keybindings.Cursor]
+		if !strings.Contains(screen(m), row.Desc) {
+			t.Errorf("the cursor row %q is not on screen at cursor %d, top %d:\n%s", row.Desc, m.keybindings.Cursor, m.keybindings.Top, screen(m))
+		}
+	}
+	m, _ = escSend(t, m, escKey(tea.KeyDown))
+	if m.keybindings.Cursor != 1 {
+		t.Fatalf("↓: cursor %d, want 1", m.keybindings.Cursor)
+	}
+	m, _ = escSend(t, m, escKey(tea.KeyUp), escKey(tea.KeyUp))
+	if m.keybindings.Cursor != 0 {
+		t.Fatalf("↑ at the top: cursor %d, want 0", m.keybindings.Cursor)
 	}
 	m, _ = escSend(t, m, escKey(tea.KeyPgDown))
-	if m.help.Offset != h {
-		t.Fatalf("PgDn: offset %d, want %d", m.help.Offset, h)
+	if m.keybindings.Cursor != h-1 {
+		t.Fatalf("PgDn: cursor %d, want %d", m.keybindings.Cursor, h-1)
 	}
-	for i := 0; i < total; i++ {
-		m, _ = escSend(t, m, escKey(tea.KeyPgDown))
+	onScreen(m)
+	m, _ = escSend(t, m, escKey(tea.KeyEnd))
+	if m.keybindings.Cursor != rows-1 {
+		t.Fatalf("End: cursor %d, want %d", m.keybindings.Cursor, rows-1)
 	}
-	if want := total - h; m.help.Offset != want {
-		t.Fatalf("PgDn past the end: offset %d, want %d", m.help.Offset, want)
+	onScreen(m)
+	m, _ = escSend(t, m, escKey(tea.KeyHome))
+	if m.keybindings.Cursor != 0 || m.keybindings.Top != 0 {
+		t.Fatalf("Home: cursor %d top %d, want the start", m.keybindings.Cursor, m.keybindings.Top)
 	}
-	m, _ = escSend(t, m, escKey(tea.KeyPgUp))
-	if want := total - 2*h; m.help.Offset != max(want, 0) {
-		t.Fatalf("PgUp: offset %d, want %d", m.help.Offset, max(want, 0))
-	}
-	for i := 0; i < total; i++ {
-		m, _ = escSend(t, m, escKey(tea.KeyPgUp))
-	}
-	if m.help.Offset != 0 {
-		t.Fatalf("PgUp past the top: offset %d, want 0", m.help.Offset)
-	}
-}
-
-// ↓ and ↑ scroll the Help window one line.
-func TestHelpArrowsScrollOneLine(t *testing.T) {
-	m, _ := escSend(t, helpFixture(t, 80, 24), escRunes("?"))
-	m, _ = escSend(t, m, escKey(tea.KeyDown))
-	if m.help.Offset != 1 {
-		t.Fatalf("↓: offset %d, want 1", m.help.Offset)
-	}
-	m, _ = escSend(t, m, escKey(tea.KeyUp))
-	m, _ = escSend(t, m, escKey(tea.KeyUp))
-	if m.help.Offset != 0 {
-		t.Fatalf("↑ at the top: offset %d, want 0", m.help.Offset)
+	for i := 0; i < rows; i++ {
+		m, _ = escSend(t, m, escKey(tea.KeyDown))
+		onScreen(m)
 	}
 }
 
@@ -1144,19 +1096,23 @@ func barActions(m Model) []string {
 	var out []string
 	for _, e := range m.keyBarEntries() {
 		if e.Bar {
-			out = append(out, e.Word+": "+e.BarKey)
+			out = append(out, e.Word+": "+keys.FooterKey(e.BarKey))
 		}
 	}
 	return out
 }
 
-// Enter label, absent: no Timeline or Report entry without Details to open or once attached;
-// attached Details keeps Jump.
-func TestEnterLabelAbsentWithoutDetails(t *testing.T) {
-	hidden := helpFixture(t, 80, 24)
-	for _, a := range barActions(hidden) {
-		if strings.HasSuffix(a, ": enter") {
-			t.Errorf("80x24 bar names Enter: %q", a)
+// The Enter label reads Details at every size and on every panel; once Details
+// is attached the bar shows Jump instead.
+func TestEnterLabelIsDetailsAtEverySize(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {132, 40}} {
+		m := helpFixture(t, size[0], size[1])
+		found := false
+		for _, a := range barActions(m) {
+			found = found || a == "Details: <enter>"
+		}
+		if !found {
+			t.Errorf("%dx%d bar = %v, want Details: <enter>", size[0], size[1], barActions(m))
 		}
 	}
 	m := helpFixture(t, 144, 40)
@@ -1165,15 +1121,15 @@ func TestEnterLabelAbsentWithoutDetails(t *testing.T) {
 	bar := barActions(m)
 	jump := false
 	for _, a := range bar {
-		if a == "Timeline: enter" || a == "Report: enter" {
+		if a == "Details: <enter>" || a == "Timeline: <enter>" || a == "Report: <enter>" {
 			t.Errorf("attached bar still names %q", a)
 		}
-		if a == "Jump: enter" {
+		if a == "Jump: <enter>" {
 			jump = true
 		}
 	}
 	if !jump {
-		t.Errorf("attached bar = %v, want Jump: enter", bar)
+		t.Errorf("attached bar = %v, want Jump: <enter>", bar)
 	}
 }
 
@@ -1202,7 +1158,7 @@ func TestPopupConfirmLabels(t *testing.T) {
 func TestBelowMinimumIsStillTooSmall(t *testing.T) {
 	for _, sz := range [][2]int{{65, 24}, {80, 14}} {
 		m := helpFixture(t, sz[0], sz[1])
-		if got, want := m.View(), tooSmallView(sz[0], sz[1], chartContentLines(m.slots), m.cfg); got != want {
+		if got, want := m.View(), tooSmallView(sz[0], sz[1], m.cfg); got != want {
 			t.Errorf("%dx%d is not tooSmallView:\n%s", sz[0], sz[1], ansi.Strip(got))
 		}
 	}

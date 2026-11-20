@@ -110,7 +110,7 @@ func (a Atlas) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome, co
 	ctr, text := counter(a.Cursor, total)
 	box := dialog.Box{
 		Title:    dialog.TitleCity,
-		Fit:      AtlasFit(),
+		Fit:      a.Fit(),
 		Position: ctr,
 		Scroll: func(height int) (pane.Viewport, int) {
 			_, offset := a.WindowAt(a.Cursor, height)
@@ -120,7 +120,7 @@ func (a Atlas) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome, co
 	}
 	// A name the row had to cut is shown whole in the bottom edge, where the
 	// counter is, for as long as the cursor is on it.
-	if total > 0 && a.Cursor < len(a.Matches) {
+	if total > 0 && a.Cursor >= 0 && a.Cursor < len(a.Matches) {
 		p := a.Matches[a.Cursor]
 		row := menu.RowSpec{Left: p.Name, Right: []string{p.Country}}
 		if w := dialog.ContentWidth(box, cfg, termW); menu.RowWidth(row, cfg) > w {
@@ -132,17 +132,24 @@ func (a Atlas) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome, co
 	})
 }
 
-// AtlasFit is the place picker's size, and it is always the same: as wide as
-// its hint line, and eight rows tall (operator, 2026-10-27: a popup's size is
-// decided once, when it opens, and never changes while it is open). The atlas
-// has 33,627 places and one of 57 cells, so no size follows its content: a
-// longer name is cut with the cut mark, and while its row is under the cursor
-// the box's bottom edge shows the name.
-func AtlasFit() dialog.Fit {
-	return dialog.Fit{Width: ansi.StringWidth(AtlasTypeHint), Rows: atlasRows}
+// Fit is the place picker's size: as wide as its hint line and as tall as what
+// it shows, up to eight rows (operator, 2026-11-14: no popup keeps an empty
+// row, so the box grows with the matches and shrinks back). The atlas has
+// 33,627 places and one of 57 cells, so no width follows its content: a longer
+// name is cut with the cut mark, and while its row is under the cursor the
+// box's bottom edge shows the name.
+func (a Atlas) Fit() dialog.Fit {
+	rows := 1
+	if a.LoadErr == nil && a.Index != nil && a.FilterText != "" {
+		rows = max(len(a.Matches), 1)
+		if a.Truncated {
+			rows++
+		}
+	}
+	return dialog.Fit{Width: ansi.StringWidth(AtlasTypeHint), Rows: min(rows, atlasRows)}
 }
 
-// atlasRows is the result rows the City list always has.
+// atlasRows is the most result rows the City list shows.
 const atlasRows = 8
 
 // AtlasTypeHint is the empty chooser's line: what to type, with a query that

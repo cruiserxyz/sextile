@@ -56,10 +56,10 @@ func send(t *testing.T, m Model, k tea.KeyMsg) Model {
 }
 
 var (
-	keyCtrlK  = tea.KeyMsg{Type: tea.KeyCtrlK}
-	keyCtrlJ  = tea.KeyMsg{Type: tea.KeyCtrlJ}
-	keyDelete = tea.KeyMsg{Type: tea.KeyDelete}
-	keySpace  = tea.KeyMsg{Type: tea.KeySpace}
+	keyMoveUp   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("K")}
+	keyMoveDown = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")}
+	keyDelete   = tea.KeyMsg{Type: tea.KeyDelete}
+	keySpace    = tea.KeyMsg{Type: tea.KeySpace}
 )
 
 // order is the anchored slots' names in list order.
@@ -84,7 +84,7 @@ func selections(m Model) []bool {
 }
 
 func barKeys(m Model) string {
-	return lastRow(m.barText(m.currentOwner(), m.ownerBindings(m.currentOwner()), 200, Config{Accessible: true}, ""))
+	return lastRow(m.barText(m.currentOwner(), m.ownerBindings(m.currentOwner()), 300, Config{Accessible: true}, ""))
 }
 
 // C3: a picked chart that is not in the list becomes a new slot directly above
@@ -363,7 +363,7 @@ func TestFloatingSlotRefusesListKeys(t *testing.T) {
 	}
 	before := fmt.Sprintf("%v %v %d", order(m), selections(m), m.cursorIdx)
 	logged := len(m.logLines)
-	for _, k := range []tea.KeyMsg{keyDelete, keyCtrlK, keyCtrlJ} {
+	for _, k := range []tea.KeyMsg{keyDelete, keyMoveUp, keyMoveDown} {
 		tm, cmd := m.Update(k)
 		after := tm.(Model)
 		if cmd != nil {
@@ -377,7 +377,7 @@ func TestFloatingSlotRefusesListKeys(t *testing.T) {
 		}
 	}
 	bar := barKeys(m)
-	for _, word := range []string{"del", "⌃k", "⌃j"} {
+	for _, word := range []string{"del", "Move up", "Move down"} {
 		if strings.Contains(bar, word) {
 			t.Errorf("the bar offers %q while now is focused: %q", word, bar)
 		}
@@ -390,15 +390,15 @@ func TestFloatingSlotRefusesListKeys(t *testing.T) {
 	}
 }
 
-// C8: ⌃k and ⌃j swap the focused chart with its neighbour and the cursor
+// C8: K and J swap the focused chart with its neighbour and the cursor
 // follows; at the ends they do nothing and are not on the bar.
 func TestCtrlJKReorderAnchoredSlots(t *testing.T) {
 	m := listModel(t, 3, 2)
 	m.slots.ToggleSlotSelection(2)            // select the 3rd
 	m.slots.ToggleObjectSelection(2, objMoon) // and mark it
-	m = send(t, m, keyCtrlK)
+	m = send(t, m, keyMoveUp)
 	if want := []string{"Synthetic 1", "Synthetic 3", "Synthetic 2", "now"}; !reflect.DeepEqual(order(m), want) {
-		t.Fatalf("⌃k on the third: %v, want %v", order(m), want)
+		t.Fatalf("K on the third: %v, want %v", order(m), want)
 	}
 	if m.cursorIdx != 1 {
 		t.Errorf("cursor = %d, want it following the moved chart (1)", m.cursorIdx)
@@ -408,9 +408,9 @@ func TestCtrlJKReorderAnchoredSlots(t *testing.T) {
 	}
 
 	m = listModel(t, 3, 0)
-	m = send(t, m, keyCtrlJ)
+	m = send(t, m, keyMoveDown)
 	if want := []string{"Synthetic 2", "Synthetic 1", "Synthetic 3", "now"}; !reflect.DeepEqual(order(m), want) {
-		t.Fatalf("⌃j on the first: %v, want %v", order(m), want)
+		t.Fatalf("J on the first: %v, want %v", order(m), want)
 	}
 	if m.cursorIdx != 1 {
 		t.Errorf("cursor = %d, want it following the moved chart (1)", m.cursorIdx)
@@ -421,28 +421,28 @@ func TestCtrlJKReorderAnchoredSlots(t *testing.T) {
 	// second the baseline; with only the first selected, moving it changes nothing.
 	swap := listModel(t, 3, 0)
 	swap.slots.ToggleSlotSelection(1)
-	if _, cmd := swap.Update(keyCtrlJ); cmd == nil {
-		t.Error("⌃j changed the baseline and did not recompute the comparison")
+	if _, cmd := swap.Update(keyMoveDown); cmd == nil {
+		t.Error("J changed the baseline and did not recompute the comparison")
 	}
 	still := listModel(t, 3, 0)
-	if _, cmd := still.Update(keyCtrlJ); cmd != nil {
-		t.Error("⌃j left the baseline alone and still recomputed")
+	if _, cmd := still.Update(keyMoveDown); cmd != nil {
+		t.Error("J left the baseline alone and still recomputed")
 	}
 
 	// The ends: inert, and not offered.
 	top := listModel(t, 3, 0)
-	if got := send(t, top, keyCtrlK); !reflect.DeepEqual(order(got), order(top)) || got.cursorIdx != 0 {
-		t.Errorf("⌃k on the first chart moved something: %v cursor %d", order(got), got.cursorIdx)
+	if got := send(t, top, keyMoveUp); !reflect.DeepEqual(order(got), order(top)) || got.cursorIdx != 0 {
+		t.Errorf("K on the first chart moved something: %v cursor %d", order(got), got.cursorIdx)
 	}
-	if bar := barKeys(top); strings.Contains(bar, "⌃k") || !strings.Contains(bar, "⌃j") {
-		t.Errorf("the bar at the first chart is %q, want ⌃j offered and ⌃k not", bar)
+	if bar := barKeys(top); strings.Contains(bar, "Move up: K") || !strings.Contains(bar, "Move down: J") {
+		t.Errorf("the bar at the first chart is %q, want J offered and K not", bar)
 	}
 	last := listModel(t, 3, 2)
-	if got := send(t, last, keyCtrlJ); !reflect.DeepEqual(order(got), order(last)) || got.cursorIdx != 2 {
-		t.Errorf("⌃j on the last anchored chart moved something: %v cursor %d", order(got), got.cursorIdx)
+	if got := send(t, last, keyMoveDown); !reflect.DeepEqual(order(got), order(last)) || got.cursorIdx != 2 {
+		t.Errorf("J on the last anchored chart moved something: %v cursor %d", order(got), got.cursorIdx)
 	}
-	if bar := barKeys(last); strings.Contains(bar, "⌃j") || !strings.Contains(bar, "⌃k") {
-		t.Errorf("the bar at the last anchored chart is %q, want ⌃k offered and ⌃j not", bar)
+	if bar := barKeys(last); strings.Contains(bar, "Move down: J") || !strings.Contains(bar, "Move up: K") {
+		t.Errorf("the bar at the last anchored chart is %q, want K offered and J not", bar)
 	}
 }
 
@@ -497,7 +497,7 @@ func TestEveryAnchoredRowNamesItsChart(t *testing.T) {
 		when := time.Date(1960+n, time.Month(n), 10+n, 6, n, 0, 0, time.UTC)
 		all[i] = facts{
 			name:   fmt.Sprintf("Synthetic %d", n),
-			moment: refMoment(when.In(ny), clockCase{"24", "month-first"}) + " " + when.In(ny).Format("MST"),
+			moment: clockSeconds(refMoment(when.In(ny), clockCase{"24", "month-first"})) + " " + zoneCell(when.In(ny)),
 			place:  fmt.Sprintf("Testford %d, TS", n),
 		}
 	}
@@ -598,9 +598,9 @@ func TestBodiesRowsFollowTheirSlotsThroughDelAndMove(t *testing.T) {
 		t.Fatalf("fixture: slot %d row %d", m.cursorIdx, m.bodyCursorIdx)
 	}
 	// Move chart 2 down below chart 3: it keeps row 5 under the cursor.
-	m = send(t, m, keyCtrlJ)
+	m = send(t, m, keyMoveDown)
 	if order(m)[2] != "Synthetic 2" || m.bodyCursorIdx != 5 {
-		t.Fatalf("after ⌃j: %v row %d, want Synthetic 2 last at row 5", order(m), m.bodyCursorIdx)
+		t.Fatalf("after J: %v row %d, want Synthetic 2 last at row 5", order(m), m.bodyCursorIdx)
 	}
 	// Up to the chart that moved into index 1 (chart 3): its own row, 9.
 	m = send(t, m, keyUp)
@@ -684,7 +684,8 @@ func TestRestoreDropsUnresolvableSlots(t *testing.T) {
 	notUsable := listEntry(2, true)
 	notUsable.Usable = false
 	noZone := listEntry(4, false, "Venus")
-	noZone.Chart.Place.TZ = "" // usable by the store's say-so, refused by the workspace
+	noZone.Chart.Place.TZ = ""                // usable by the store's say-so, refused by the workspace
+	noZone.Chart.Source = store.ChartSource{} // not a chart file, which needs no zone
 	sess := v2([]store.SessionSlot{
 		listEntry(1, true, "Sun"), notUsable, listEntry(3, false, "Moon"), noZone, listEntry(5, true),
 	}, true)
@@ -700,7 +701,7 @@ func TestRestoreDropsUnresolvableSlots(t *testing.T) {
 	if !reflect.DeepEqual(markedObjects(m.slots, 0), []aspect.Object{objSun}) || !reflect.DeepEqual(markedObjects(m.slots, 1), []aspect.Object{objMoon}) || len(markedObjects(m.slots, 2)) != 0 {
 		t.Errorf("marks followed the wrong entries: %v / %v / %v", markedObjects(m.slots, 0), markedObjects(m.slots, 1), markedObjects(m.slots, 2))
 	}
-	if want := []string{"Couldn't restore 2 of the open charts."}; !reflect.DeepEqual(errorLines(m), want) {
+	if want := []string{"session: 2 of the open charts not restored"}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
 	}
 }
@@ -751,7 +752,7 @@ func TestRestoreFromSnapshotWhenFileIsGone(t *testing.T) {
 			said = append(said, l.text)
 		}
 	}
-	if want := []string{"session: synthetic-1.as is no longer in the library"}; !reflect.DeepEqual(said, want) {
+	if want := []string{"session: synthetic-1.as is not in the charts folder"}; !reflect.DeepEqual(said, want) {
 		t.Errorf("the re-check said %q, want exactly %q", said, want)
 	}
 	slot = firstAnchor(m.slots)
@@ -776,7 +777,7 @@ func TestRestoreReportsSelectionsItCouldNotKeep(t *testing.T) {
 	if m.slots.SlotSelected(6) {
 		t.Error("the seventh chart stayed selected")
 	}
-	if want := []string{"Couldn't keep 1 of the selections. At most six slots can be selected."}; !reflect.DeepEqual(errorLines(m), want) {
+	if want := []string{"chart: 1 of the selections not kept, at most six charts can be selected"}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
 	}
 }
@@ -811,7 +812,7 @@ func TestAListSurvivesAQuitAndARelaunch(t *testing.T) {
 // The window's rows may now open with a numeral (selected-charts-compare C14),
 // which the row scan skips beside the cursor and the old selection marks.
 func TestSlotListWindowsAroundTheCursor(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {132, 40}} {
+	for _, size := range [][2]int{{220, 39}, {220, 40}} { // Details beside, where the caps hold
 		for _, tc := range []struct {
 			cursor int
 			reads  string
@@ -819,18 +820,19 @@ func TestSlotListWindowsAroundTheCursor(t *testing.T) {
 			t.Run(fmt.Sprintf("%dx%d/cursor %d", size[0], size[1], tc.cursor), func(t *testing.T) {
 				m := withFrame(listModel(t, 9, tc.cursor))
 				m.width, m.height = size[0], size[1]
+				m.focused = PanelChart // the rects below are the Chart panel's with the focus on it
 				view := ansi.Strip(m.View())
 
-				rects := layoutGeometry(size[0], size[1], chartContentLines(m.slots), m.shownCount())
+				rects := rectsAt(size[0], size[1], chartContentLines(m.slots), m.shownCount())
 				chart, bodies := rects[PanelChart], rects[PanelBodies]
-				wantRows := map[int]int{24: 5, 40: 7}[size[1]]
+				wantRows := map[int]int{39: 5, 40: 7}[size[1]]
 				if chart.h-2 != wantRows {
 					t.Errorf("the Chart panel has %d rows, want %d", chart.h-2, wantRows)
 				}
 
 				lines := strings.Split(view, "\n")
 				var rows []string
-				for _, l := range lines[1 : 1+chart.h-2] {
+				for _, l := range lines[chart.y+1 : chart.y+chart.h-1] {
 					r := []rune(l)
 					rows = append(rows, strings.TrimSpace(string(r[:min(len(r), 66)])))
 				}
@@ -860,8 +862,8 @@ func TestSlotListWindowsAroundTheCursor(t *testing.T) {
 				if !sawCursor {
 					t.Errorf("the window %v does not hold the cursor (slot %d)\n%s", rows, tc.cursor, view)
 				}
-				if !strings.Contains(strings.Join(lines[:chart.h], "\n"), tc.reads) {
-					t.Errorf("the Chart frame does not read %q:\n%s", tc.reads, strings.Join(lines[:chart.h], "\n"))
+				if !strings.Contains(strings.Join(lines[chart.y:chart.y+chart.h], "\n"), tc.reads) {
+					t.Errorf("the Chart frame does not read %q:\n%s", tc.reads, strings.Join(lines[chart.y:chart.y+chart.h], "\n"))
 				}
 				if bodies.h < 5 {
 					t.Errorf("Bodies is %d rows tall; the layout floor is 5", bodies.h)
@@ -895,7 +897,9 @@ func TestFocusedAnchoredSlotComputesItsOwnChart(t *testing.T) {
 			crossed = append(crossed, c)
 			return lookup.OverlayAspects{}, nil
 		}
-		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, when time.Time, place location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(_ context.Context, _ lookup.Lens, c store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
+			when := other.When
+			place := other.Place
 			synastry = append(synastry, [2]store.AnchorChart{c, {When: when, Place: place}})
 			return lookup.OverlayAspects{}, nil
 		}
@@ -1018,7 +1022,7 @@ func TestHelpListsListKeys(t *testing.T) {
 	if got := send(t, rebound(), tea.KeyMsg{Type: tea.KeyCtrlY}); got.slots.AnchoredCount() != 2 {
 		t.Errorf("the rebound remove key did not act: %v", order(got))
 	}
-	for _, old := range []tea.KeyMsg{keyCtrlK, keyCtrlJ, keyDelete} {
+	for _, old := range []tea.KeyMsg{keyMoveUp, keyMoveDown, keyDelete} {
 		if got := send(t, rebound(), old); !reflect.DeepEqual(order(got), order(rebound())) {
 			t.Errorf("the old key %v still acts after rebinding: %v", old, order(got))
 		}
@@ -1026,7 +1030,7 @@ func TestHelpListsListKeys(t *testing.T) {
 
 	// The Keys popup shows the new spellings, and the bar the new actions.
 	var listing []string
-	for _, l := range m.helpLines() {
+	for _, l := range keybindingLines(m) {
 		listing = append(listing, l.Text)
 	}
 	text := strings.Join(listing, "\n")
@@ -1043,7 +1047,7 @@ func TestHelpListsListKeys(t *testing.T) {
 	// With one chart open the popup lists all three; with none, none.
 	listed := func(m Model) []string {
 		var out []string
-		for _, l := range m.helpLines() {
+		for _, l := range keybindingLines(m) {
 			for _, w := range []string{"Remove chart", "Move chart up", "Move chart down"} {
 				if strings.Contains(l.Text, w) {
 					out = append(out, w)
@@ -1061,12 +1065,12 @@ func TestHelpListsListKeys(t *testing.T) {
 }
 
 // The bar shows exactly the list keys that act right now (D29): del on an
-// anchored chart under the Chart panel's cursor, ⌃k unless it is the first
-// anchored chart, ⌃j unless it is the last — with one chart open as with many.
+// anchored chart under the Chart panel's cursor, K unless it is the first
+// anchored chart, J unless it is the last — with one chart open as with many.
 func TestBarOffersListKeysWhereTheyAct(t *testing.T) {
 	has := func(m Model) (del, up, down bool) {
 		bar := barKeys(m)
-		return strings.Contains(bar, "Remove: del"), strings.Contains(bar, "Move up: ⌃k"), strings.Contains(bar, "Move down: ⌃j")
+		return strings.Contains(bar, "Remove: <delete>"), strings.Contains(bar, "Move up: K"), strings.Contains(bar, "Move down: J")
 	}
 	check := func(name string, m Model, wantDel, wantUp, wantDown bool) {
 		t.Helper()
@@ -1099,7 +1103,9 @@ func TestPickRefreshesAnOpenWheel(t *testing.T) {
 	}
 	var calls []call
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, when time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			when := chart.When
+			place := chart.Place
 			calls = append(calls, call{when, place.Name})
 			return []byte("BM-wheel"), nil
 		}
@@ -1163,7 +1169,8 @@ func TestPickOfAnEditedOpenChartTakesTheFile(t *testing.T) {
 	stubShowWheel(t)
 	var renders []string
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, _ time.Time, place location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			place := chart.Place
 			renders = append(renders, place.Name)
 			return []byte("BM-wheel"), nil
 		}
@@ -1301,7 +1308,7 @@ func TestTooLongSessionLineSurvivesAQuit(t *testing.T) {
 	if m.slots.AnchoredCount() != 0 {
 		t.Errorf("%d slots restored from a refused file", m.slots.AnchoredCount())
 	}
-	if want := []string{"Couldn't restore the last session. Its file cannot be used."}; !reflect.DeepEqual(errorLines(m), want) {
+	if want := []string{"session: the last session did not open, its file cannot be read"}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
 	}
 	if _, cmd := press(t, m, "q"); cmd == nil {
@@ -1382,13 +1389,14 @@ func TestSlotListShowsWholeListWhenItFits(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d with %d charts", tc.w, tc.h, tc.charts), func(t *testing.T) {
 			m := withFrame(listModel(t, tc.charts, 0))
 			m.width, m.height = tc.w, tc.h
-			rects := layoutGeometry(tc.w, tc.h, chartContentLines(m.slots), m.shownCount())
+			m.focused = PanelChart // the rects below are the Chart panel's with the focus on it
+			rects := rectsAt(tc.w, tc.h, chartContentLines(m.slots), m.shownCount())
 			chart := rects[PanelChart]
 			if got := chart.h - 2; got != tc.charts+1 {
 				t.Fatalf("the Chart panel has %d rows, want all %d", got, tc.charts+1)
 			}
 			var frame []string
-			for _, l := range strings.Split(ansi.Strip(m.View()), "\n")[:chart.h] {
+			for _, l := range strings.Split(ansi.Strip(m.View()), "\n")[chart.y : chart.y+chart.h] {
 				r := []rune(l)
 				frame = append(frame, string(r[:min(len(r), chart.w)]))
 			}
@@ -1498,7 +1506,7 @@ func TestRestoreRefusesALaterVersionWithOneErrorLine(t *testing.T) {
 	if m.slots.AnchoredCount() != 0 {
 		t.Errorf("%d slots restored from a version-4 file", m.slots.AnchoredCount())
 	}
-	if want := []string{"Couldn't restore the last session. Its file cannot be used."}; !reflect.DeepEqual(errorLines(m), want) {
+	if want := []string{"session: the last session did not open, its file cannot be read"}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
 	}
 }
@@ -1614,7 +1622,7 @@ func TestSessionKindFile(t *testing.T) {
 	if want := []string{"now"}; !reflect.DeepEqual(order(m), want) {
 		t.Errorf("restored %v, want only the floating slot", order(m))
 	}
-	if want := []string{"Couldn't restore 1 of the open charts."}; !reflect.DeepEqual(errorLines(m), want) {
+	if want := []string{"session: 1 of the open charts not restored"}; !reflect.DeepEqual(errorLines(m), want) {
 		t.Errorf("error lines = %q, want %q", errorLines(m), want)
 	}
 }

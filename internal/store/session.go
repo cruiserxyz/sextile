@@ -69,11 +69,20 @@ type SessionChart struct {
 	// also holds the file stem of an untitled chart, so a restored chart sends
 	// no name until its file has been read again.
 	Label ReportLabel
+	// Record is the chart file's text from the read that resolved When, the
+	// chart Astrolog casts (AnchorChart.Record). Not part of the session file
+	// either: a restored chart casts from its snapshot until its file has been
+	// read again.
+	Record string
+	// Clock is the chart's moment as Astrolog read it from the file, for its
+	// row. Like Record, never stored and rebuilt at every read.
+	Clock ChartClock
 }
 
 // Usable reports whether this record can anchor a workspace on its own: it has
 // a label, a moment, a named place, coordinates that are places rather than
-// arithmetic, and a timezone the host can load.
+// arithmetic, and a timezone the host can load unless it is a chart file, which
+// Astrolog casts from the file itself.
 //
 // It is the ONE predicate for that question, so a chart arriving from the
 // library is held to the same bar as one arriving from the snapshot. Without
@@ -105,13 +114,13 @@ func (c SessionChart) UnusableReason() string {
 	case c.Name == "":
 		return "no name"
 	case c.When.IsZero():
-		return "no birth time"
+		return "no time"
 	case c.Place.Name == "":
-		return "no birth place"
+		return "no place"
 	case !finite(c.Place.Lat) || !finite(c.Place.Lon):
-		return "no numeric coordinates"
-	case !loadableTimezone(c.Place.TZ):
-		return "an unknown timezone"
+		return "no coordinates"
+	case c.Source.Kind != ChartKindFile && !loadableTimezone(c.Place.TZ):
+		return "an unknown time zone"
 	default:
 		return ""
 	}
@@ -171,6 +180,13 @@ type Session struct {
 	// never produces it. A reader before 0.1.3 ignores the line as an
 	// unknown top-level key.
 	Drawn []string
+
+	// Actions are the titles of the commands last run through the Actions
+	// list, newest first, written as the top-level `actions:` block, one title
+	// per item. Nil writes no block; an empty, non-nil list writes the bare
+	// `actions:` line, which reads back as an empty list. The store keeps every
+	// title as written: which ones still name a command is the ui's to judge.
+	Actions []string
 
 	Slots []SessionSlot
 
@@ -285,6 +301,12 @@ func formatSessionAt(v int, s Session) string {
 		// 2026-11-04): nothing ticked in the body chooser is the default set, so
 		// the ui gives nil, not empty, and the next save drops an old bare line.
 		b.WriteString("drawn:\n")
+	}
+	if s.Actions != nil {
+		b.WriteString("actions:\n")
+		for _, a := range s.Actions {
+			fmt.Fprintf(&b, "  - %s\n", yamlEscape(a))
+		}
 	}
 	if len(s.Slots) > 0 {
 		b.WriteString("charts:\n")
@@ -407,6 +429,7 @@ func parseSessionFile(path string, b []byte) (Session, bool, error) {
 	s.Folder = sessionFolder(text)
 	if v > 1 {
 		s.Drawn = sessionDrawn(text)
+		s.Actions = sessionActions(text)
 	}
 	return s, true, nil
 }
@@ -425,6 +448,29 @@ func sessionDrawn(text string) []string {
 			}
 			return names
 		}
+	}
+	return nil
+}
+
+// sessionActions is the items of the first column-zero `actions:` block, in
+// the file's order, repeats included; nil when the file has no such block, and
+// empty but not nil when the block holds no item. The block ends at the first
+// line that is not an item.
+func sessionActions(text string) []string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if strings.TrimRight(line, "\r") != "actions:" {
+			continue
+		}
+		titles := []string{}
+		for _, item := range lines[i+1:] {
+			v, ok := strings.CutPrefix(strings.TrimRight(item, "\r"), "  - ")
+			if !ok {
+				break
+			}
+			titles = append(titles, unquoteScalar(strings.TrimSpace(v)))
+		}
+		return titles
 	}
 	return nil
 }

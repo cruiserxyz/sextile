@@ -262,7 +262,7 @@ func TestCantStartListsEachOnceInOrder(t *testing.T) {
 			// Every bullet sits two spaces under its lead line, and a wrapped
 			// continuation lines up with the bullet's text (four spaces).
 			csCheckIndent(t, m.View())
-			for _, once := range []string{"To fix it, either", "run Sextile from its Docker image, which builds Astrolog for you, or", "install Astrolog 8.00 as README, Install and run says.", "Then start Sextile again."} {
+			for _, once := range []string{"To fix it, either", "run Sextile from its Docker image, which builds Astrolog for you, or", "install Astrolog 8.00 as REFERENCE, By hand says.", "Then start Sextile again."} {
 				if n := strings.Count(got, once); n != 1 {
 					t.Errorf("%q appears %d times:\n%s", once, n, got)
 				}
@@ -338,7 +338,7 @@ func TestTooSmallWinsOverCantStart(t *testing.T) {
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 10})
 	small := tm.(Model)
 	got := small.View()
-	if !strings.Contains(got, "Terminal too small") || strings.Contains(got, "can't start") {
+	if !strings.Contains(got, "The window is too small") || strings.Contains(got, "can't start") {
 		t.Errorf("below the minimum the view must be the too-small screen:\n%s", got)
 	}
 	plain := csSized(t, Config{}, 50, 10)
@@ -379,7 +379,7 @@ func TestCantStartFitsTheMinimum(t *testing.T) {
 
 func TestCantStartKeepsLogLines(t *testing.T) {
 	m := csSized(t, Config{}, 132, 40)
-	m = csSend(t, m, csBinaryMsg(), AtlasLoadedMsg{Err: os.ErrNotExist}, ChartsLoadedMsg{Gen: m.pickerGen, AtlasErr: os.ErrNotExist})
+	m = csSend(t, m, csBinaryMsg(), AtlasLoadedMsg{Err: os.ErrNotExist})
 	lines := errorLines(m)
 	count := func(s string) (n int) {
 		for _, l := range lines {
@@ -391,9 +391,6 @@ func TestCantStartKeepsLogLines(t *testing.T) {
 	}
 	if count(probeLine) != 1 {
 		t.Errorf("probe line written %d times: %v", count(probeLine), lines)
-	}
-	if count(atlasLine) != 1 {
-		t.Errorf("picker atlas line written %d times: %v", count(atlasLine), lines)
 	}
 }
 

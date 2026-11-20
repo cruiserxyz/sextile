@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 		// Every call carries the binary's object list (objects slice 0b): the
 		// package's lens has it, as a Model's has once the list lands.
 		lookup.Hellenistic.Registry = startObjectList()
+		lookup.Hellenistic.AspectRegistry = testAspects()
 		// A started app holds the host's default object set before it casts
 		// anything (the ephemeris probe answered): the compiler has no other
 		// baseline, so the tests that compile a chart start from it too.

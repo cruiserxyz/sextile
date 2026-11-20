@@ -11,7 +11,7 @@ import (
 
 // A save that fails partway through the record leaves the library as it was:
 // nothing under the chart's name, and no temp file holding half a record.
-func TestPlaceChartFileFailingMidwayLeavesNothing(t *testing.T) {
+func TestPlaceFailingMidwayLeavesNothing(t *testing.T) {
 	for name, write := range map[string]func(io.Writer, []byte) (int, error){
 		"write error": func(w io.Writer, b []byte) (int, error) {
 			n, _ := w.Write(b[:len(b)/2])
@@ -27,7 +27,7 @@ func TestPlaceChartFileFailingMidwayLeavesNothing(t *testing.T) {
 			writeChartRecord = write
 			t.Cleanup(func() { writeChartRecord = prev })
 
-			_, err := PlaceChartFile(dir, []byte(astrologRecord), "client")
+			_, err := OriginalsDoor(dir).Place("client", []byte(astrologRecord))
 			if err == nil {
 				t.Fatal("PlaceChartFile succeeded with a write that failed midway")
 			}
@@ -47,7 +47,7 @@ func TestPlaceChartFileFailingMidwayLeavesNothing(t *testing.T) {
 
 // The record is on disk whole before the chart's name exists: the temp file
 // is synced while the name is still free.
-func TestPlaceChartFileSyncsTheWholeRecordBeforeItTakesTheName(t *testing.T) {
+func TestPlaceSyncsTheWholeRecordBeforeItTakesTheName(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "client"+ChartFileExt)
 	synced := 0
@@ -64,8 +64,8 @@ func TestPlaceChartFileSyncsTheWholeRecordBeforeItTakesTheName(t *testing.T) {
 	}
 	t.Cleanup(func() { syncTemp = prev })
 
-	if _, err := PlaceChartFile(dir, []byte(astrologRecord), "client"); err != nil {
-		t.Fatalf("PlaceChartFile: %v", err)
+	if _, err := OriginalsDoor(dir).Place("client", []byte(astrologRecord)); err != nil {
+		t.Fatalf("Place: %v", err)
 	}
 	if synced != 1 {
 		t.Errorf("%d syncs of the temp file, want 1", synced)

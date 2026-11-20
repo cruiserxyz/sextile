@@ -40,11 +40,10 @@ var reChart2Header = regexp.MustCompile(`(?m)^\s*Chart #2 comparison for `)
 //   - aspect-shaped lines exist but the STRICT parser pattern (crossAspectLinePat)
 //     matches NONE of them → the line FORMAT drifted past the parser.
 //
-// Crucially, "aspect-shaped lines but zero PARSED" is NOT itself fatal:
-// parseCrossAspects intentionally skips lines with unknown bodies / unsupported
-// aspect kinds (exactly as the single-chart parser does). Those lines still match
-// the strict pattern, so a run that is all-unsupported filters to empty WITHOUT
-// erroring — only a true format change (loose match, no strict match) is drift.
+// Crucially, "aspect-shaped lines but zero PARSED" is NOT itself fatal: a line
+// the strict pattern matches is parsed or, for an aspect the registry does not
+// hold, refuses the list in parseCrossAspects. Only a true format change (loose
+// match, no strict match) is drift.
 func checkCrossAspectSanity(stdout string) error {
 	plain := astrologstyle.StripSGR(stdout)
 	if !reChart2Header.MatchString(plain) {

@@ -30,5 +30,5 @@ func TestPlaceChartFileKilledMidWriteHelper(t *testing.T) {
 		io.Copy(io.Discard, os.Stdin)
 		return n, errors.New("the parent never killed this process")
 	}
-	PlaceChartFile(dir, []byte(astrologRecord), "client")
+	OriginalsDoor(dir).Place("client", []byte(astrologRecord))
 }

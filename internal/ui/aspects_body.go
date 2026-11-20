@@ -4,7 +4,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/panel"
 )
 
-// renderAspectsBody returns the contents (no border) of the [3] Aspects panel
+// renderAspectsBody returns the contents (no border) of the [4] Aspects panel
 // for the active tab: the focused slot's own power-sorted waterfall on
 // TabAspects, the active pair's cross waterfall on a pair tab (TabAspectsCross
 // for the first pair, aspects-pair-N for the rest; see aspects_tabs.go).
@@ -21,4 +21,12 @@ func renderAspectsBody(state chartViewState, active TabID, innerWidth, innerHeig
 		bag.Mark = panel.EnteredMark{} // the marks stay on the row's own tab (rule 5)
 	}
 	return render(bag, innerWidth, innerHeight, cfg)
+}
+
+// aspectsRowsHeld is how many rows the Aspects panel's active tab needs to show
+// everything it holds at innerWidth.
+func aspectsRowsHeld(state chartViewState, active TabID, innerWidth int) int {
+	_, own := aspectsRenderers[active]
+	cross := !own && isAspectsPairTab(active) || active == TabAspectsCross
+	return panel.AspectRowsHeld(resolveAspectsBag(state), cross, innerWidth)
 }

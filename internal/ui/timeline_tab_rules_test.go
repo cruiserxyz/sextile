@@ -36,27 +36,31 @@ func ruleModel(t *testing.T, c ruleCase) Model {
 	return m.noteArrival()
 }
 
+// timelineTabRuleCases are the rows of T1's table and the cases around it; the
+// Moon tab is declared in exactly the same states (M1).
+var timelineTabRuleCases = []ruleCase{
+	// The table, row by row.
+	{name: "floating, in the group with a chart", selected: []int{0, 2}, cursor: 2, tab: true, natals: []int{1}},
+	{name: "a chart in the group with the floating slot", selected: []int{0, 2}, cursor: 0, tab: true, natals: []int{1}},
+	{name: "a chart outside the group with the floating slot", selected: []int{0, 2}, cursor: 1, tab: false},
+	{name: "floating, not selected", selected: []int{0}, cursor: 2, tab: true, natals: nil},
+	{name: "a chart in a group without the floating slot", selected: []int{0, 1}, cursor: 0, tab: false},
+	{name: "a chart outside a group without the floating slot", selected: []int{0}, cursor: 1, tab: false},
+	// Nothing selected: the floating slot shows the reduced list, a chart none.
+	{name: "nothing selected, on floating", selected: nil, cursor: 2, tab: true, natals: nil},
+	{name: "nothing selected, on a chart", selected: nil, cursor: 0, tab: false},
+	// The floating slot selected alone: in the group, with no chart to add.
+	{name: "floating selected alone", selected: []int{2}, cursor: 2, tab: true, natals: nil},
+	// Every chart selected: the full list carries both, whichever one the cursor is on.
+	{name: "all three, on the second chart", selected: []int{0, 1, 2}, cursor: 1, tab: true, natals: []int{1, 2}},
+	{name: "all three, on floating", selected: []int{0, 1, 2}, cursor: 2, tab: true, natals: []int{1, 2}},
+}
+
 // T1: the six rows of the rule's table, the nothing-selected case, and the
 // floating slot selected alone. Where the tab exists, the searches it asks for
 // say which list it is: Natals set is the full list, empty is the sky alone.
 func TestTimelineTabFollowsTheGroup(t *testing.T) {
-	for _, c := range []ruleCase{
-		// The table, row by row.
-		{name: "floating, in the group with a chart", selected: []int{0, 2}, cursor: 2, tab: true, natals: []int{1}},
-		{name: "a chart in the group with the floating slot", selected: []int{0, 2}, cursor: 0, tab: true, natals: []int{1}},
-		{name: "a chart outside the group with the floating slot", selected: []int{0, 2}, cursor: 1, tab: false},
-		{name: "floating, not selected", selected: []int{0}, cursor: 2, tab: true, natals: nil},
-		{name: "a chart in a group without the floating slot", selected: []int{0, 1}, cursor: 0, tab: false},
-		{name: "a chart outside a group without the floating slot", selected: []int{0}, cursor: 1, tab: false},
-		// Nothing selected: the floating slot shows the reduced list, a chart none.
-		{name: "nothing selected, on floating", selected: nil, cursor: 2, tab: true, natals: nil},
-		{name: "nothing selected, on a chart", selected: nil, cursor: 0, tab: false},
-		// The floating slot selected alone: in the group, with no chart to add.
-		{name: "floating selected alone", selected: []int{2}, cursor: 2, tab: true, natals: nil},
-		// Every chart selected: the full list carries both, whichever one the cursor is on.
-		{name: "all three, on the second chart", selected: []int{0, 1, 2}, cursor: 1, tab: true, natals: []int{1, 2}},
-		{name: "all three, on floating", selected: []int{0, 1, 2}, cursor: 2, tab: true, natals: []int{1, 2}},
-	} {
+	for _, c := range timelineTabRuleCases {
 		t.Run(c.name, func(t *testing.T) {
 			calls := stubTimeline(t, nil)
 			m := ruleModel(t, c)
@@ -142,8 +146,8 @@ func TestAbsentTimelineTabIsSkippedAndFallsBack(t *testing.T) {
 	if got := m.activeTabID(PanelDetails); got != TabDetailsReport {
 		t.Fatalf("a remembered Timeline on a chart without one shows %s, want the report", got)
 	}
-	if got := m.attachTitle(); got != "Report" {
-		t.Errorf("the Enter label is %q on a chart without a Timeline, want Report", got)
+	if got := m.attachTitle(); got != "Details" {
+		t.Errorf("the Enter label is %q on a chart without a Timeline, want Details", got)
 	}
 	m, cmd := tpress(t, m, keyEnter)
 	m = pump(t, m, cmd)

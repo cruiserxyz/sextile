@@ -22,7 +22,7 @@ func TestCrashLine(t *testing.T) {
 				line = l
 			}
 		}
-		want := subject + " Astrolog crashed."
+		want := subject + " Astrolog crashed"
 		if line != want {
 			t.Fatalf("Log error line = %q, want %q (all error lines: %q)", line, want, errorLines(m))
 		}
@@ -37,21 +37,21 @@ func TestCrashLine(t *testing.T) {
 		m := textModel(t)
 		m, cmd := m.advanceTime(unitDay, +1)
 		m = pump(t, m, cmd)
-		crashed(t, m, "Couldn't cast the chart.")
+		crashed(t, m, "astrolog: Now not cast,")
 	})
 	t.Run("details", func(t *testing.T) {
 		astrologWarning(t, "", kill)
 		m := detailsTestModel(t)
 		msg := runDetailsCmd(t, m)
 		m, _ = m.commitRefresh(surfaceDetails, msg)
-		crashed(t, m, "Couldn't read the full report.")
+		crashed(t, m, "details: report not read,")
 	})
 }
 
 // Every site that calls failureReason gets the case by construction, and none
 // adds a pointer: the cast, the Details report, the template tab and the
 // timeline (console pointer sites) and the wheel render, wheel publish, chart
-// file, save and title sites all read "Astrolog crashed.".
+// file, save and title sites all read "Astrolog crashed".
 func TestCrashClauseAtEverySite(t *testing.T) {
 	m := errLaneModel(t)
 	err := fmt.Errorf("astrolog: ComputeRawReport: %w", &lookupCrash{})
@@ -64,12 +64,12 @@ func TestCrashClauseAtEverySite(t *testing.T) {
 		"wheel publish": wheelPublishFallback,
 		"save":          "some file error",
 	} {
-		if got := m.failureReason(err, fallback); got != "Astrolog crashed." {
+		if got := m.failureReason(err, fallback); got != "Astrolog crashed" {
 			t.Errorf("%s: %q", name, got)
 		}
 	}
 	// A site that would point at the console still names the cause alone.
-	if got := m.failureReason(err, m.consolePointer(true)); got != "Astrolog crashed." {
+	if got := m.failureReason(err, m.consolePointer(true)); got != "Astrolog crashed" {
 		t.Errorf("a site with a console pointer: %q", got)
 	}
 }

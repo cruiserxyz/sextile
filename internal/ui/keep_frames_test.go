@@ -167,6 +167,7 @@ func TestSaveDefaultsLeavesAChartsOwnRecord(t *testing.T) {
 	own := func(m Model) Model {
 		m, _ = m.chooseHouseSystem(0, recipe.Koch)
 		m, _ = m.chooseZodiac(0, recipe.Lahiri)
+		m, _ = m.chooseNodes(0, recipe.NodesTrue)
 		before, _ = m.frames.find("synthetic-1.as", false)
 		return m
 	}
@@ -215,7 +216,7 @@ func TestSaveDefaultsRefusesInASecondWindow(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("`,c d` scheduled a save in a second window")
 	}
-	want := "Save defaults is for the first window, which keeps the session. This window keeps nothing"
+	want := "settings: " + saveDefaultsSecondWindow
 	if lastLine(m).text != want || lastLine(m).lane != laneError {
 		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 	}
@@ -235,11 +236,11 @@ func TestSaveDefaultsOpenChartsFailureIsOneErrorLine(t *testing.T) {
 		return m
 	}
 	m := savedFrameModel(t, 2, kept)
-	want := "open charts' frames not kept: the refused session file was left in place"
+	want := "settings: the houses and zodiac of the open charts were not saved"
 	if lastLine(m).text != want || lastLine(m).lane != laneError {
 		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 	}
-	if noteCount(m, "default frame saved: Placidus, Lahiri") != 1 {
+	if noteCount(m, "defaults: Placidus, Lahiri") != 1 {
 		t.Errorf("the saved default is not in the Log: %v", m.logLines)
 	}
 	if got := store.Frame(); !got.HousesPresent || got.Houses != "Placidus" {

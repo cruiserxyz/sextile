@@ -30,6 +30,13 @@ type bodiesView struct {
 	// each asks for (the view rule, subject.go): the zero value draws the
 	// content bright, as a hand-built view does.
 	bodies, aspects paneState
+	// failed is the line a pane in paneFailed reads: the cast of the chart
+	// under the cursor was refused.
+	failed string
+	// aspectsRefusal is the sentence the Aspects panel shows, on every tab, in
+	// place of its lists: an aspect is renamed to letters no list can be read
+	// with (aspect.AspectRegistry.Refusal). Empty when every list is read.
+	aspectsRefusal string
 }
 
 func (v bodiesView) count() int { return max(v.shown, 1) }
@@ -37,7 +44,11 @@ func (v bodiesView) count() int { return max(v.shown, 1) }
 func (m Model) bodiesView() bodiesView {
 	sc := m.deriveScene()
 	v := bodiesView{shown: len(sc.shown), comparing: sc.mode == sceneComparing, focus: sc.focus, colStart: m.bodiesColStart, top: m.bodyTop,
-		bodies: m.textPaneState(PanelBodies), aspects: m.textPaneState(PanelAspects)}
+		bodies: m.textPaneState(PanelBodies), aspects: m.textPaneState(PanelAspects),
+		aspectsRefusal: m.lens.AspectRegistry.Refusal()}
+	if v.bodies == paneFailed || v.aspects == paneFailed {
+		v.failed = failedCastLine(chartCaption(m.focusedSlot()))
+	}
 	if m.holding() {
 		v.comparing, v.focus = m.shown.comparing, m.shown.focus
 		v.shown = m.shown.count
@@ -58,9 +69,38 @@ func (m Model) shownCount() int {
 	return max(len(m.deriveScene().shown), 1)
 }
 
-// geometry is the layout of the terminal for the scene on screen.
+// layoutInput is the four things that decide where a panel is drawn: the
+// window, the panel in focus (the last left panel that had the keys while the
+// Log, a popup or the console holds them), whether Details is open, and the
+// charts the scene shows.
+func (m Model) layoutInput() layoutInput {
+	focus := m.focused
+	if !isFocusable(focus) {
+		focus = PanelChart
+	}
+	return layoutInput{width: m.width, height: m.height, focus: focus, detailsOpen: m.details.attached, charts: chartContentLines(m.slots), shown: m.shownCount()}
+}
+
+// layout is the screen's layout for the scene on screen; nil below the minimum.
+func (m Model) layout() *screenLayout { return layoutFor(m.layoutInput()) }
+
+// geometry is each panel's rectangle on screen, nil below the minimum.
 func (m Model) geometry() map[PanelID]panelRect {
-	return layoutGeometry(m.width, m.height, chartContentLines(m.slots), m.shownCount())
+	if l := m.layout(); l != nil {
+		return l.rects
+	}
+	return nil
+}
+
+// panelAt is the panel whose rectangle holds the cell (x, y), PanelNone on
+// chrome.
+func (m Model) panelAt(x, y int) PanelID {
+	for id, r := range m.geometry() {
+		if x >= r.x && x < r.x+r.w && y >= r.y && y < r.y+r.h {
+			return id
+		}
+	}
+	return PanelNone
 }
 
 // settleBodiesColStart records the comparing window for the focus's current

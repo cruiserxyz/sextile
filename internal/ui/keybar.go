@@ -4,16 +4,13 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 )
 
-// footerIndicator resolves the footer's right-hand slot for one frame. A
-// pending leader outranks a copy confirmation: the leader is a live state the
-// operator is in the middle of, the confirmation is a receipt for something
-// already finished. They can overlap — copy in the console, Esc out, arm a
-// leader, all inside yankFlashDuration — and arming also drops the receipt, so
-// this ordering is the second of two guards rather than the only one.
+// footerIndicator resolves the footer's right-hand slot for one frame. While
+// a leader waits the bar is the comma menu and shows no indicator: a notice or
+// the error mark due meanwhile shows when the menu closes.
 func (m Model) footerIndicator() string {
 	switch {
 	case m.leader.pending:
-		return keys.LeaderPendingText(m.leaderKey, m.leader.seq, m.cfg)
+		return ""
 	case m.yank.active && m.yank.notice != "":
 		return m.yank.notice
 	case m.yank.active:

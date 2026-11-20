@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cruiserxyz/sextile/internal/astrolog"
-	_ "github.com/cruiserxyz/sextile/internal/env" // init() seeds SEXTILE_WHEEL_HIGHLIGHT from .env
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
@@ -38,12 +37,8 @@ type WheelHighlight struct {
 // highlight state), lookup derives the astrolog primitives (the same way the
 // position/aspect path does), and astrolog compiles the WheelImage projection
 // and runs it.
-func RenderWheelImage(ctx context.Context, when time.Time, place location.PlaceInfo, lens Lens, highlight WheelHighlight) ([]byte, error) {
-	if !place.HasTimezone() {
-		return nil, fmt.Errorf("lookup: RenderWheelImage: place %q has no IANA timezone", place.Display())
-	}
-	jd := astrolog.SlotJD(when)
-	spec, err := lens.specAt(jd, place)
+func RenderWheelImage(ctx context.Context, chart store.AnchorChart, lens Lens, highlight WheelHighlight) ([]byte, error) {
+	spec, err := lens.specAt(AtChart(chart))
 	if err != nil {
 		return nil, fmt.Errorf("lookup: RenderWheelImage: %w", err)
 	}
@@ -92,16 +87,10 @@ func RenderOverlayWheelImage(ctx context.Context, natalChart store.AnchorChart, 
 	if natalChart.IsZero() {
 		return nil, fmt.Errorf("lookup: RenderOverlayWheelImage: natal chart is zero")
 	}
-	if !natalChart.Place.HasTimezone() {
-		return nil, fmt.Errorf("lookup: RenderOverlayWheelImage: natal place %q has no IANA timezone", natalChart.Place.Display())
-	}
 	if !transitPlace.HasTimezone() {
 		return nil, fmt.Errorf("lookup: RenderOverlayWheelImage: transit place %q has no IANA timezone", transitPlace.Display())
 	}
-	spec, err := lens.comparisonSpecAt(
-		astrolog.SlotJD(natalChart.When), natalChart.Place,
-		astrolog.SlotJD(transitWhen), transitPlace,
-	)
+	spec, err := lens.comparisonSpecAt(AtChart(natalChart), AtMoment(astrolog.SlotJD(transitWhen), transitPlace, store.ReportLabel{}))
 	if err != nil {
 		return nil, fmt.Errorf("lookup: RenderOverlayWheelImage: %w", err)
 	}
@@ -116,6 +105,9 @@ func RenderOverlayWheelImage(ctx context.Context, natalChart store.AnchorChart, 
 type WheelRing struct {
 	When  time.Time
 	Place location.PlaceInfo
+	// Record is the chart file's text for a chart cast from its file; empty
+	// for Now.
+	Record string
 }
 
 // RenderMultiWheelImage renders the selected set as concentric rings, in
@@ -139,20 +131,16 @@ func RenderMultiWheelImageCommands(ctx context.Context, rings []WheelRing, lens 
 	if n := len(rings); n < 2 || n > recipe.MaxRings {
 		return nil, nil, fmt.Errorf("lookup: RenderMultiWheelImage: %d rings, want 2 to %d", n, recipe.MaxRings)
 	}
-	jds := make([]float64, len(rings))
-	places := make([]location.PlaceInfo, len(rings))
+	charts := make([]At, len(rings))
 	for i, r := range rings {
-		if !r.Place.HasTimezone() {
-			return nil, nil, fmt.Errorf("lookup: RenderMultiWheelImage: ring %d place %q has no IANA timezone", i+1, r.Place.Display())
-		}
-		jds[i], places[i] = astrolog.SlotJD(r.When), r.Place
+		charts[i] = At{JD: astrolog.SlotJD(r.When), Place: r.Place, Record: r.Record}
 	}
 	var spec recipe.ChartSpec
 	var err error
 	if len(rings) == 2 {
-		spec, err = lens.comparisonSpecAt(jds[0], places[0], jds[1], places[1])
+		spec, err = lens.comparisonSpecAt(charts[0], charts[1])
 	} else {
-		spec, err = lens.multiWheelSpecAt(jds, places)
+		spec, err = lens.multiWheelSpecAt(charts)
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("lookup: RenderMultiWheelImage: %w", err)

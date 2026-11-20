@@ -58,9 +58,10 @@ type Row struct {
 	thresholdS string
 }
 
-// ThresholdText is the threshold as the file wrote it: degrees, arc-minutes
-// or both, as the source states it (17°, 8°30′, 16′).
-func (r Row) ThresholdText() string { return r.thresholdS }
+// ThresholdText is the threshold as the file wrote it, degrees, arc-minutes
+// or both (17°, 8°30′, 16′), with the plain minute mark the screen uses
+// everywhere (8°30').
+func (r Row) ThresholdText() string { return strings.ReplaceAll(r.thresholdS, "′", "'") }
 
 // thresholdRE is a threshold as a source states it: whole degrees with
 // optional arc-minutes, or arc-minutes alone.

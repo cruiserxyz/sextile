@@ -2,6 +2,8 @@
 # Installs scripts/pre-push as this clone's pre-push hook.
 set -Eeuo pipefail
 cd -- "$(git rev-parse --show-toplevel)"
+# Git names the folder (core.hooksPath when set); a clone may not have it.
 hooks=$(git rev-parse --git-path hooks)
-install -m 0755 scripts/pre-push "$hooks/pre-push"
+mkdir -p -- "$hooks"
+install -m 0755 -- scripts/pre-push "$hooks/pre-push"
 printf 'installed %s/pre-push\n' "$hooks"

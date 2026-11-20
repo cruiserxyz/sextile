@@ -112,7 +112,7 @@ func stubFrameLookups(t *testing.T) *frameSpy {
 			spy.record("cross", lens)
 			return lookup.OverlayAspects{Report: "transit cross"}, nil
 		}
-		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
 			spy.record("synastry", lens)
 			return lookup.OverlayAspects{Report: "synastry cross"}, nil
 		}
@@ -445,7 +445,7 @@ func TestZodiacChoiceSavesTheSession(t *testing.T) {
 		if len(savedFrames(t)) != 0 {
 			t.Errorf("a chart with no file got a record: %+v", savedFrames(t))
 		}
-		if logHas(m, "can't be remembered") != 1 {
+		if logHas(m, "the choice holds until quit") != 1 {
 			t.Errorf("the Log does not say it cannot be remembered: %v", m.logLines)
 		}
 	})
@@ -464,7 +464,7 @@ func TestZodiacChoiceSavesTheSession(t *testing.T) {
 		if got := m.ownZodiac(m.slots.All()[0]); got != recipe.Lahiri {
 			t.Errorf("the choice must still apply on screen: %v", got)
 		}
-		if logHas(m, "Couldn't save the zodiac choice") != 1 {
+		if logHas(m, "the zodiac choice was not saved") != 1 {
 			t.Errorf("the failure is not on the error lane: %v", m.logLines)
 		}
 	})
@@ -534,7 +534,7 @@ func TestUnknownZodiacPreservesValidHouseChoice(t *testing.T) {
 	if rec.HasZodiac {
 		t.Errorf("the unknown zodiac was kept: %+v", rec)
 	}
-	if n := logHas(m, "zodiac is not one this build knows"); n != 1 {
+	if n := logHas(m, "saved zodiac is not known"); n != 1 {
 		t.Errorf("the dropped field was named %d times, want once: %v", n, m.logLines)
 	}
 	if len(refusedFilesIn(t)) != 1 {
@@ -542,7 +542,7 @@ func TestUnknownZodiacPreservesValidHouseChoice(t *testing.T) {
 	}
 }
 
-// C10: the EXECUTED -t, -tr and -dm searches carry the zodiac chosen for the
+// C10: the EXECUTED -t, -tr and -dY searches carry the zodiac chosen for the
 // chart the cursor is on.
 func TestSelectedZodiacReachesTimeline(t *testing.T) {
 	sessionSandbox(t)
@@ -577,7 +577,7 @@ func TestSelectedZodiacReachesTimeline(t *testing.T) {
 		hasBand := strings.Contains(argv, " =s 0.883208 _Ys ")
 		for _, f := range fields {
 			switch f {
-			case "-t", "-tr", "-dm":
+			case "-t", "-tr", "-dY":
 				modes[f] = true
 				if !hasBand {
 					t.Errorf("an executed %s search lacks =s 0.883208: %s", f, argv)
@@ -588,8 +588,8 @@ func TestSelectedZodiacReachesTimeline(t *testing.T) {
 			t.Errorf("a search still carries the tropical pin: %s", argv)
 		}
 	}
-	if !modes["-t"] || !modes["-tr"] || !modes["-dm"] {
-		t.Errorf("a zodiac choice re-ran %v, want -t, -tr and -dm; searches: %v", modes, after)
+	if !modes["-t"] || !modes["-tr"] || !modes["-dY"] {
+		t.Errorf("a zodiac choice re-ran %v, want -t, -tr and -dY; searches: %v", modes, after)
 	}
 	if !m.timeline.complete || len(m.timeline.rows) == 0 {
 		t.Errorf("the Timeline did not come back: complete=%v rows=%d", m.timeline.complete, len(m.timeline.rows))
@@ -818,7 +818,7 @@ func TestChangingAyanamsaInvalidatesPositionsAndWheel(t *testing.T) {
 	var mu sync.Mutex
 	var drawn []recipe.Zodiac
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
 			mu.Lock()
 			drawn = append(drawn, lens.Zodiac)
 			mu.Unlock()
@@ -1020,55 +1020,37 @@ func directSunLongitude(t *testing.T, slot *store.Slot, ayanamsa string, houses 
 	return float64(idx*30+deg) + float64(min)/60
 }
 
-// C9: the rendered Help frame at 80x24 says it, whole, once the list is
-// walked to its end (the note closes the list).
-func TestHelpExplainsAyanamsas(t *testing.T) {
+// C9: Keybindings opened over the zodiac chooser, at 80x24, says what the
+// ayanamsas are, whole, once the list is walked to its end (the note closes
+// the list).
+func TestKeybindingsExplainsAyanamsas(t *testing.T) {
 	m := finderModel(t, 1, 0)
 	m.width, m.height = 80, 24
 	m.cfg = Config{Accessible: true, Color: ColorNever}
-	tm, _ := m.Update(keyMsg("?"))
-	m = tm.(Model)
-	if !m.helpOpen {
-		t.Fatal("? did not open Help")
+	m, _ = press(t, m, ",", "z")
+	if m.startup != startupZodiacOpen {
+		t.Fatalf("`, z` did not open the zodiac chooser: startup %q", m.startup)
 	}
-	for i := 0; i < len(m.helpLines()); i++ {
-		tm, _ = m.Update(keyMsg("down"))
-		m = tm.(Model)
+	m, _ = press(t, m, "?", "end")
+	if !m.keybindingsOpen {
+		t.Fatal("? did not open Keybindings over the chooser")
 	}
 	view := ansi.Strip(m.View())
-	helpCol := -1
 	// Every line of the note is on the last page, whole: none is cut.
-	for _, line := range keys.HelpZodiacNote {
+	for _, line := range keys.ZodiacNote {
 		if !strings.Contains(view, line) {
-			t.Errorf("the rendered Help frame lacks the whole line %q:\n%s", line, view)
+			t.Errorf("the Keybindings frame lacks the whole line %q:\n%s", line, view)
 		}
 	}
-	// And what the lines say, read from the frame itself.
-	popup := ansi.Strip(keys.RenderHelp(m.keysContextFor(ownerHelp), popupChrome(m.cfg), 80, 24))
-	var words []string
-	for _, l := range strings.Split(popup, "\n") {
-		l = strings.Trim(strings.TrimSpace(l), "|+-#")
-		words = append(words, strings.TrimSpace(l))
-	}
-	flat := strings.Join(strings.Fields(strings.Join(words, " ")), " ")
-	for _, want := range []string{
-		"ayanamsas are fixed offsets from Fagan-Bradley",
-		"Each chart is precessed to its own date",
-		"a sidereal comparison's pair differs from the tropical pair",
-		"by the precession between the two dates",
-	} {
-		if !strings.Contains(flat, want) {
-			t.Errorf("the rendered Help frame does not say %q:\n%s", want, popup)
-		}
-	}
-	// A clipped line ends in `…` inside the Help box; the panels behind it may
-	// carry their own faint `…` (an empty pane, C5), which is not a clip.
+	// A clipped line ends in `…` inside the box; the panels behind it may carry
+	// their own faint `…` (an empty pane), which is not a clip.
+	col := -1
 	for _, l := range strings.Split(view, "\n") {
-		if at := strings.Index(l, "->Help"); at >= 0 {
-			helpCol = ansi.StringWidth(l[:at])
+		if at := strings.Index(l, "Keybindings"); at >= 0 && col < 0 {
+			col = ansi.StringWidth(l[:at])
 		}
-		if helpCol >= 0 && ansi.StringWidth(l) > helpCol && strings.Contains(ansi.Cut(l, helpCol, ansi.StringWidth(l)), "…") {
-			t.Errorf("the Help frame clips a line:\n%s", view)
+		if col >= 0 && ansi.StringWidth(l) > col && strings.Contains(ansi.Cut(l, col, ansi.StringWidth(l)), "…") {
+			t.Errorf("the Keybindings frame clips a line:\n%s", view)
 			break
 		}
 	}

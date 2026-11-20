@@ -32,7 +32,7 @@ func TestElongationWrapsAtAries(t *testing.T) {
 			t.Errorf("Elongation(%v, %v) = %v %s, want %v %s", tc.sun, tc.body, got, ElongationSide(got), tc.want, tc.side)
 		}
 	}
-	if degMin(16.99972) != "16°59′" || degMin(17) != "17°00′" || degMin(14.87) != "14°52′" {
+	if degMin(16.99972) != "16°59'" || degMin(17) != "17°00'" || degMin(14.87) != "14°52'" {
 		t.Errorf("degMin: %s %s %s", degMin(16.99972), degMin(17), degMin(14.87))
 	}
 }
@@ -51,7 +51,7 @@ func cycleFixture(t *testing.T) []astrolog.CycleEvent {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := astrolog.ParseCycleEvents(string(b), objects)
+	ev, err := astrolog.ParseCycleEvents(string(b), objects, testAspects())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestLastFiveInferior(t *testing.T) {
 }
 
 // The facts for the research catalogue's sky, 2026-10-14 12:00 UT: Venus
-// 6Sco02′08″ R, Sun 21Lib09′41″ — 14°52′ east, the list in the slot's zone.
+// 6Sco02'08″ R, Sun 21Lib09'41″ — 14°52' east, the list in the slot's zone.
 func TestNowFactsForTheResearchSky(t *testing.T) {
 	when := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	pair := SunPairResult{
@@ -96,7 +96,7 @@ func TestNowFactsForTheResearchSky(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := facts["elongation.lon"]; f.Text != "14°52′" || math.Abs(f.Num-(14+52.0/60+27.0/3600)) > 1e-9 {
+	if f := facts["elongation.lon"]; f.Text != "14°52'" || math.Abs(f.Num-(14+52.0/60+27.0/3600)) > 1e-9 {
 		t.Errorf("elongation.lon %+v", f)
 	}
 	if f := facts["elongation.lon.abs"]; math.Abs(f.Num-(14+52.0/60+27.0/3600)) > 1e-9 {
@@ -106,7 +106,7 @@ func TestNowFactsForTheResearchSky(t *testing.T) {
 		t.Errorf("side %+v", facts["elongation.side"])
 	}
 	items := facts["synodic.conjunction.inferior.last5"].Items
-	if len(items) != 5 || items[0] != "Mar 23, 2025   2°39′ Ari" {
+	if len(items) != 5 || items[0] != "Mar 23, 2025   2°39' Ari" {
 		t.Errorf("items %q", items)
 	}
 	// A search that holds fewer inner conjunctions than the list needs is a
@@ -168,7 +168,7 @@ func TestCycleSpanAndListDatesAreTheSlotsZone(t *testing.T) {
 	// 2025-03-23 01:07 UT is 15:07 the same day at UTC+14; 2023-08-13
 	// 11:16 UT is 01:16 on the 14th there.
 	items := facts["synodic.conjunction.inferior.last5"].Items
-	if len(items) < 2 || items[0] != "Mar 23, 2025   2°39′ Ari" || !strings.HasPrefix(items[1], "Aug 14, 2023 ") {
+	if len(items) < 2 || items[0] != "Mar 23, 2025   2°39' Ari" || !strings.HasPrefix(items[1], "Aug 14, 2023 ") {
 		t.Errorf("items at Kiritimati %q", items)
 	}
 }
@@ -187,7 +187,7 @@ func TestTabDatesFollowTheClock(t *testing.T) {
 	for _, tc := range []struct {
 		pref ClockPref
 		want string
-	}{{ClockPref{}, "Mar 23, 2025   2°39′ Ari"}, {ClockPref{DayFirst: true}, "23 Mar 2025   2°39′ Ari"}, {ClockPref{Hours12: true}, "Mar 23, 2025   2°39′ Ari"}} {
+	}{{ClockPref{}, "Mar 23, 2025   2°39' Ari"}, {ClockPref{DayFirst: true}, "23 Mar 2025   2°39' Ari"}, {ClockPref{Hours12: true}, "Mar 23, 2025   2°39' Ari"}} {
 		HoldClock(tc.pref)
 		facts, err := NowFacts(pair, cycle, when, time.UTC)
 		if err != nil {
@@ -218,7 +218,7 @@ func TestDegreesAlignOnTheSign(t *testing.T) {
 			t.Errorf("° at %d in %q, at %d in %q", strings.Index(it, "°"), it, col, items[0])
 		}
 	}
-	if !strings.Contains(items[0], "   2°39′") {
+	if !strings.Contains(items[0], "   2°39'") {
 		t.Errorf("a one-digit degree is not padded: %q", items[0])
 	}
 }

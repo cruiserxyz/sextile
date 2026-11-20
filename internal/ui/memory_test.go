@@ -119,7 +119,7 @@ func TestMemoryKeyedAndBounded(t *testing.T) {
 		m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
 		stub.failBodies = true
 		m = pump(t, m, nil)
-		m, cmd := pressOnly(t, m, runes("2")) // Bodies: the Sun's report, which fails
+		m, cmd := pressOnly(t, m, runes("3")) // Bodies: the Sun's report, which fails
 		m = pump(t, m, cmd)
 		if m.detailsReportState() != paneFailed {
 			t.Fatalf("fixture: the Sun's report is %v, want failed", m.detailsReportState())
@@ -362,7 +362,7 @@ func TestTapStartsAtOnce(t *testing.T) {
 	t.Run("first_key", func(t *testing.T) {
 		m, stub := followFixture(t, Config{Accessible: true}, 132, 40)
 		reports := stub.reports
-		m, cmd := tpress(t, m, runes("2")) // Bodies, on the Sun: a report not seen
+		m, cmd := tpress(t, m, runes("3")) // Bodies, on the Sun: a report not seen
 		if m.refresh[surfaceDetails].cancel == nil || m.details.timerArmed {
 			t.Fatalf("the first key rested before the Sun's report: run started %v, rest timer armed %v", m.refresh[surfaceDetails].cancel != nil, m.details.timerArmed)
 		}
@@ -395,7 +395,7 @@ func TestTapStartsAtOnce(t *testing.T) {
 		m, _ := followFixture(t, Config{Accessible: true}, 132, 40)
 		clock := &fakeClock{t: testFrozenTime()}
 		m.clock = clock
-		m, cmd := tpress(t, m, runes("2"))
+		m, cmd := tpress(t, m, runes("3"))
 		m = pump(t, m, cmd)
 		m, cmd = tpress(t, m, keyDown)
 		m = pump(t, m, cmd)

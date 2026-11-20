@@ -84,7 +84,7 @@ func filterCells(n int) []lookup.OverlayAspect {
 		if i%4 == 3 {
 			transit = objMars
 		}
-		list = append(list, lookup.OverlayAspect{TransitObject: transit, NatalObject: natal[i%len(natal)], Kind: aspect.Square, Orb: aspect.Orb(i % 9), Power: float64(1000 - i)})
+		list = append(list, lookup.OverlayAspect{TransitObject: transit, NatalObject: natal[i%len(natal)], Kind: kindOf("Squ"), Orb: aspect.Orb(i % 9), Power: float64(1000 - i)})
 	}
 	return list
 }
@@ -100,7 +100,7 @@ func aspectsFocused(t *testing.T, list []lookup.OverlayAspect) Model {
 		}
 	})
 	m = enter(t, m, timelineRowWith(t, m.timeline.rows, "Opp natal (Ari) Venus"))
-	m, _ = press(t, m, "3")
+	m, _ = press(t, m, "esc", "4")
 	if m.focused != PanelAspects || m.details.attached {
 		t.Fatalf("fixture: focused=%v attached=%v, want the Aspects panel focused", m.focused, m.details.attached)
 	}

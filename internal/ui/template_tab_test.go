@@ -73,21 +73,21 @@ func researchSkyFacts() map[string]lookup.BodyFact {
 	return map[string]lookup.BodyFact{
 		"brightness.lit":                     {Kind: v, Text: "4%", Num: 4.03},
 		"brightness.magnitude":               {Kind: v, Text: "−4.3", Num: -4.32},
-		"elongation.lon":                     {Kind: v, Text: "14°52′", Num: 14.874166666666667},
-		"elongation.lon.abs":                 {Kind: v, Text: "14°52′", Num: 14.874166666666667},
+		"elongation.lon":                     {Kind: v, Text: "14°52'", Num: 14.874166666666667},
+		"elongation.lon.abs":                 {Kind: v, Text: "14°52'", Num: 14.874166666666667},
 		"elongation.side":                    {Kind: c, Term: "east"},
 		"elongation.trend":                   {Kind: c, Term: "approaching"},
 		"motion.direction":                   {Kind: c, Term: "retrograde"},
 		"sign.same-as-sun":                   {Kind: c, Term: "no"},
-		"station.last":                       {Kind: i, Text: "Oct 3, 2026 9:16 8°29′ Sco", Term: "station-retrograde"},
-		"station.next":                       {Kind: i, Text: "Nov 14, 2026 1:27 22°51′ Lib", Term: "station-direct"},
-		"synodic.conjunction.inferior.drift": {Kind: v, Text: "−2°18′", Num: -2.3},
-		"synodic.conjunction.inferior.last":  {Kind: i, Text: "Mar 23, 2025 2:08 2°39′ Ari"},
-		"synodic.conjunction.inferior.last5": {Kind: l, Items: []string{"Mar 23, 2025   2°39′ Ari", "Aug 13, 2023  20°28′ Leo", "Jan  9, 2022  18°43′ Cap", "Jun  3, 2020  13°35′ Gem", "Oct 26, 2018   3°06′ Sco"}},
-		"synodic.conjunction.inferior.next":  {Kind: i, Text: "Oct 24, 2026 5:44 0°45′ Sco"},
-		"synodic.conjunction.inferior.sixth": {Kind: v, Text: "Mar 25, 2017   4°57′ Ari", Num: 4.95},
-		"synodic.conjunction.superior.last":  {Kind: i, Text: "Jan 6, 2026 17:36 16°22′ Cap"},
-		"synodic.conjunction.superior.next":  {Kind: i, Text: "Aug 12, 2027 2:21 19°06′ Leo"},
+		"station.last":                       {Kind: i, Text: "Oct 3, 2026 9:16 8°29' Sco", Term: "station-retrograde"},
+		"station.next":                       {Kind: i, Text: "Nov 14, 2026 1:27 22°51' Lib", Term: "station-direct"},
+		"synodic.conjunction.inferior.drift": {Kind: v, Text: "−2°18'", Num: -2.3},
+		"synodic.conjunction.inferior.last":  {Kind: i, Text: "Mar 23, 2025 2:08 2°39' Ari"},
+		"synodic.conjunction.inferior.last5": {Kind: l, Items: []string{"Mar 23, 2025   2°39' Ari", "Aug 13, 2023  20°28' Leo", "Jan  9, 2022  18°43' Cap", "Jun  3, 2020  13°35' Gem", "Oct 26, 2018   3°06' Sco"}},
+		"synodic.conjunction.inferior.next":  {Kind: i, Text: "Oct 24, 2026 5:44 0°45' Sco"},
+		"synodic.conjunction.inferior.sixth": {Kind: v, Text: "Mar 25, 2017   4°57' Ari", Num: 4.95},
+		"synodic.conjunction.superior.last":  {Kind: i, Text: "Jan 6, 2026 17:36 16°22' Cap"},
+		"synodic.conjunction.superior.next":  {Kind: i, Text: "Aug 12, 2027 2:21 19°06' Leo"},
 		"synodic.phase":                      {Kind: c, Term: "evening-star"},
 		"synodic.phase.alt":                  {Kind: c, Term: "occidental"},
 	}
@@ -100,8 +100,8 @@ func conjunctionFacts() map[string]lookup.BodyFact {
 	v, c := lookup.FactValue, lookup.FactCategory
 	f["brightness.lit"] = lookup.BodyFact{Kind: v, Text: "1%", Num: 0.61}
 	f["brightness.magnitude"] = lookup.BodyFact{Kind: v, Text: "−4.2", Num: -4.19}
-	f["elongation.lon"] = lookup.BodyFact{Kind: v, Text: "0°00′", Num: 0}
-	f["elongation.lon.abs"] = lookup.BodyFact{Kind: v, Text: "0°00′", Num: 0}
+	f["elongation.lon"] = lookup.BodyFact{Kind: v, Text: "0°00'", Num: 0}
+	f["elongation.lon.abs"] = lookup.BodyFact{Kind: v, Text: "0°00'", Num: 0}
 	f["elongation.side"] = lookup.BodyFact{Kind: c, Term: "at-conjunction"}
 	f["elongation.trend"] = lookup.BodyFact{Kind: c, Absent: true}
 	f["sign.same-as-sun"] = lookup.BodyFact{Kind: c, Term: "yes"}
@@ -202,7 +202,7 @@ func TestTemplateTabLogsArgvAndRuleRows(t *testing.T) {
 			t.Errorf("the Log lacks %q:\n%s", want, all)
 		}
 	}
-	if len(m.tpl.lines) == 0 || m.tpl.lines[0].Label != "elongation" || m.tpl.lines[0].Value != "14°52′ east" {
+	if len(m.tpl.lines) == 0 || m.tpl.lines[0].Label != "elongation" || m.tpl.lines[0].Value != "14°52' east" {
 		t.Errorf("lines %+v", m.tpl.lines)
 	}
 	if body := renderDetailsPanel(80, 12, false, m.cfg, m.detailsFrame()); !strings.Contains(body, "under the beams    yes") {
@@ -244,7 +244,7 @@ func TestTemplateFailureKeepsTheFrame(t *testing.T) {
 	if fmt.Sprint(m.tpl.lines) != before {
 		t.Errorf("a failed run replaced the frame: %+v", m.tpl.lines)
 	}
-	if last := m.logLines[len(m.logLines)-1]; last.lane != laneError || !strings.HasPrefix(last.text, "Couldn't compute the body-inferior-planet tab.") {
+	if last := m.logLines[len(m.logLines)-1]; last.lane != laneError || !strings.HasPrefix(last.text, "details: the body-inferior-planet tab did not fill") {
 		t.Errorf("last Log line %+v", last)
 	}
 	// A different template key (another body) drops the lines at once.
@@ -300,7 +300,7 @@ func TestVenusNowTaste(t *testing.T) {
 			cfg  Config
 		}{{"color", Config{Color: ColorAlways}}, {"never", Config{Color: ColorNever}}} {
 			for _, size := range [][2]int{{80, 24}, {dualColumnMinWidth(len(m.chart.positions)), 40}} {
-				rects := layoutGeometry(size[0], size[1], chartContentLines(m.slots), len(m.chart.positions))
+				rects := rectsAt(size[0], size[1], chartContentLines(m.slots), len(m.chart.positions))
 				d, ok := rects[PanelDetails]
 				if !ok {
 					fmt.Fprintf(&sheet, "== %s, %s %dx%d: no Details panel in this layout ==\n", frame.name, mode.name, size[0], size[1])
@@ -356,7 +356,7 @@ func TestMissingEventKeepsTheFrame(t *testing.T) {
 	if fmt.Sprint(m.tpl.lines) != before {
 		t.Errorf("a missing event replaced the frame: %+v", m.tpl.lines)
 	}
-	if last := m.logLines[len(m.logLines)-1]; last.lane != laneError || last.text != "Couldn't compute the body-inferior-planet tab. Astrolog's event list lacks a station before and after the moment." {
+	if last := m.logLines[len(m.logLines)-1]; last.lane != laneError || last.text != "details: the body-inferior-planet tab did not fill, Astrolog's list of events has no a station before and after the moment" {
 		t.Errorf("last Log line %+v", last)
 	}
 }
@@ -405,10 +405,10 @@ func TestTemplateTabLogsSlotBranch(t *testing.T) {
 	if len(slotLines) != 2 || slotLines[0] != "template: log-fixture:9/1 → evening-star" || slotLines[1] != "template: log-fixture:10/1 → evening-star" {
 		t.Errorf("slot lines %q", slotLines)
 	}
-	if strings.Contains(strings.Join(all, "\n"), "14°52′") {
+	if strings.Contains(strings.Join(all, "\n"), "14°52'") {
 		t.Errorf("the Log carries a fact's value:\n%s", strings.Join(all, "\n"))
 	}
-	if len(m.tpl.lines) != 2 || m.tpl.lines[0].Value != "evening star" || m.tpl.lines[1].Value != "14°52′" {
+	if len(m.tpl.lines) != 2 || m.tpl.lines[0].Value != "evening star" || m.tpl.lines[1].Value != "14°52'" {
 		t.Errorf("lines %+v", m.tpl.lines)
 	}
 }

@@ -51,7 +51,11 @@ func TestGlyphsFollowTheRegistryName(t *testing.T) {
 			continue
 		}
 		row := panel.FormatPositionRowStyled(aspect.Position{Object: o, Longitude: 10}, astrologstyle.BodyRow{}, plainColour, panel.HouseOverlay{})
-		if want := fmt.Sprintf("%s %-9s", tc.glyph, tc.name); !strings.HasPrefix(row, want) {
+		name := tc.name
+		if tc.num == 21 {
+			name = "N.Node m" // the North Node names the form of its call
+		}
+		if want := fmt.Sprintf("%s %-9s", tc.glyph, name); !strings.HasPrefix(row, want) {
 			t.Errorf("object %d (%s): row %q, want it to start with %q", tc.num, o.Name, row, want)
 		}
 	}
@@ -146,10 +150,10 @@ func TestWaterfallSkipsAnUnresolvedSide(t *testing.T) {
 	earth := aspect.Object{Number: 0, Name: "Earth"}
 	mars := objMars
 	style := astrologstyle.AspectStyle{First: "\x1b[1;31m", Kind: "\x1b[1;32m", Second: "\x1b[1;34m"}
-	styles := astrologstyle.Aspects{{First: earth, Second: mars, Kind: aspect.Conjunction}: style}
+	styles := astrologstyle.Aspects{{First: earth, Second: mars, Kind: kindOf("Con")}: style}
 	aspects := []aspect.Aspect{
-		{AObject: earth, BObject: mars, Kind: aspect.Conjunction, Orb: 1, Power: 9},
-		{BObject: mars, Kind: aspect.Conjunction, Orb: 1, Power: 8},
+		{AObject: earth, BObject: mars, Kind: kindOf("Con"), Orb: 1, Power: 9},
+		{BObject: mars, Kind: kindOf("Con"), Orb: 1, Power: 8},
 	}
 	out := panel.RenderAspectWaterfallStyled(aspects, styles, panel.AspectColWidth, 2, Config{Color: ColorAlways})
 	lines := strings.Split(out, "\n")

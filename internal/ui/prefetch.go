@@ -66,6 +66,9 @@ type prefetchCand struct {
 	surface surface
 	key     any
 	at      func(Model) Model
+	// void, when set, makes this a void search to run ahead (moon_void.go):
+	// key is its lookup.VoidKey and surface and at are unused.
+	void *lookup.VoidRequest
 }
 
 // prefetch is the loop's state. All of it is the Model's own value: the slices
@@ -171,7 +174,7 @@ func (m Model) prefetchNext() (Model, tea.Cmd) {
 	for len(m.pre.queue) > 0 {
 		c := m.pre.queue[0]
 		m.pre.queue = m.pre.queue[1:]
-		if m.prefetchHas(c) || slices.Contains(m.pre.failed, c.key) {
+		if m.prefetchHas(c) || slices.Contains(m.pre.failed, c.key) || m.voidInFlight(c) {
 			continue // a draw or a fresh run gave it since the snapshot
 		}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -191,6 +194,18 @@ func (m Model) prefetchNext() (Model, tea.Cmd) {
 // prefetchCall is the compute of c, on the Model one key away, as the surface
 // itself runs it.
 func (m Model) prefetchCall(ctx context.Context, c prefetchCand) tea.Cmd {
+	if c.void != nil {
+		spawn := m.rows[surfaceTimeline].spawn.voidsAhead
+		if spawn == nil {
+			return nil
+		}
+		key, _ := c.key.(lookup.VoidKey)
+		seq := m.pre.seq
+		inner := askVoid(spawn, key, *c.void)
+		return func() tea.Msg {
+			return prefetchDoneMsg{seq: seq, cand: c, result: inner()}
+		}
+	}
 	hyp := c.at(m)
 	var inner tea.Cmd
 	switch c.surface {
@@ -221,6 +236,9 @@ func (m Model) prefetchHas(c prefetchCand) bool {
 		return ok
 	case templateKey:
 		_, ok := m.mem.template.peek(k)
+		return ok
+	case lookup.VoidKey:
+		_, ok := m.mem.voids.peek(k)
 		return ok
 	}
 	return false
@@ -254,6 +272,8 @@ func (m Model) onPrefetchDone(msg prefetchDoneMsg) (Model, tea.Cmd) {
 // nothing.
 func (m Model) fileForLater(msg prefetchDoneMsg) Model {
 	switch r := msg.result.(type) {
+	case voidLandedMsg:
+		m = m.fileVoid(r)
 	case FirstFrameReadyMsg:
 		if errors.Is(r.Err, context.Canceled) {
 			return m
@@ -270,7 +290,7 @@ func (m Model) fileForLater(msg prefetchDoneMsg) Model {
 			m = m.rememberTemplate(p)
 		}
 	}
-	if m.prefetchHas(msg.cand) {
+	if msg.cand.void == nil && m.prefetchHas(msg.cand) {
 		m.mem = m.mem.markPrefetched(msg.cand.key)
 	}
 	return m
@@ -283,14 +303,20 @@ func (m Model) fileForLater(msg prefetchDoneMsg) Model {
 //
 //  1. for every reportable Bodies row of the focused chart, its report and,
 //     where the row offers a template tab, the template's result;
+//
 //  2. for every chart in the Chart list, the text frame with only the Chart
 //     cursor moved there, and that chart's Chart report;
+//
 //  3. when the focused chart is the floating one, its text frame and the active
 //     Details tab's result (the report or the template, never the Timeline) a
 //     day on and a day back;
+//
 //  4. the current Bodies row's report and template result, when Bodies is not
 //     the focused panel. (The current Aspects tab's frame is the text frame the
 //     screen shows, which memory holds from its commit: nothing to add.)
+//
+//  5. last, the Moon's void windows (moon_void.go): Now's, Now's two months on
+//     and back, and each chart's own.
 //
 // The Timeline is never computed ahead.
 func (m Model) prefetchSnapshot() []prefetchCand {
@@ -374,5 +400,8 @@ func (m Model) prefetchSnapshot() []prefetchCand {
 		add(report(current))
 		add(template(current))
 	}
+
+	// (5) the Moon's void windows, last: the lowest priority of the period.
+	out = append(out, m.voidCandidates()...)
 	return out
 }

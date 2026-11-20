@@ -16,10 +16,10 @@ import (
 func TestLayoutGeometry_ChartHeightIsContentDriven(t *testing.T) {
 	const w, h = 132, 40
 
-	one := layoutGeometry(w, h, 1, 1)
-	three := layoutGeometry(w, h, 3, 1)
+	one := rectsAt(w, h, 1, 1)
+	three := rectsAt(w, h, 3, 1)
 	if one == nil || three == nil {
-		t.Fatal("layoutGeometry returned nil at 132x40")
+		t.Fatal("the layout is nil at 132x40")
 	}
 
 	if got := one[PanelChart].h; got != 3 {
@@ -39,34 +39,27 @@ func TestLayoutGeometry_ChartHeightIsContentDriven(t *testing.T) {
 		t.Errorf("aspects height should be stable: one=%d three=%d",
 			one[PanelAspects].h, three[PanelAspects].h)
 	}
-	sum := three[PanelChart].h + three[PanelBodies].h + three[PanelAspects].h
+	sum := three[PanelStatus].h + three[PanelChart].h + three[PanelBodies].h + three[PanelAspects].h
 	if want := h - KeyBarHeight; sum != want {
 		t.Errorf("left column heights sum = %d, want main height %d", sum, want)
 	}
 }
 
-// TestLayoutGeometry_DegradesWhenChartCannotFit asserts the layout
-// refuses (returns nil → tooSmallView) when chart + minimum bodies +
-// aspects cannot fit in the main area. Multi-slot workspaces raise the
-// effective minimum above MinTerminalHeight; without this guard the UI
-// silently overflows at small heights with anchored slots present.
+// TestLayoutGeometry_DegradesWhenChartCannotFit asserts the layout is nil
+// (the too-small screen) only below 66x15, however many charts are open:
+// a taller Chart folds the other panels instead of refusing.
 func TestLayoutGeometry_DegradesWhenChartCannotFit(t *testing.T) {
-	const w = 132
-
-	// At the base minimum height (12) a single-slot layout still fits:
-	// chart(3) + bodies(5 minimum) + aspects(6) = 14 > 10 mainHeight, so
-	// actually this overflows too. Guard at width-only minimum.
-	// Verify the guard fires on a multi-slot workspace at the base height.
-	if got := layoutGeometry(w, MinTerminalHeight, 2, 1); got != nil {
-		t.Errorf("layoutGeometry(w=%d, h=%d, chartLines=2) = non-nil; expected nil because chart+bodies+aspects exceed main area",
-			w, MinTerminalHeight)
+	if got := rectsAt(132, MinTerminalHeight-1, 2, 1); got != nil {
+		t.Errorf("rectsAt(132x%d, 2 charts) = non-nil; the layout is nil below 66x%d", MinTerminalHeight-1, MinTerminalHeight)
 	}
-
-	// A 2-slot layout starts fitting at height 17 (chart=4 + bodies=5
-	// + aspects=6 + status=1 + keybar=1).
-	if got := layoutGeometry(w, 17, 2, 1); got == nil {
-		t.Errorf("layoutGeometry(w=%d, h=17, chartLines=2) = nil; expected fit at exactly the multi-slot minimum",
-			w)
+	if got := rectsAt(65, 40, 2, 1); got != nil {
+		t.Errorf("rectsAt(65x40, 2 charts) = non-nil; the layout is nil below 66 columns")
+	}
+	if got := rectsAt(132, MinTerminalHeight, 2, 1); got == nil {
+		t.Errorf("rectsAt(132x%d, 2 charts) = nil; the layout exists from 66x%d", MinTerminalHeight, MinTerminalHeight)
+	}
+	if got := rectsAt(66, MinTerminalHeight, 2, 1); got == nil {
+		t.Errorf("rectsAt(66x%d, 2 charts) = nil; the layout exists from 66x%d", MinTerminalHeight, MinTerminalHeight)
 	}
 }
 
@@ -77,52 +70,19 @@ func readyFrame(m Model) (Model, tea.Cmd) {
 	})
 }
 
-// Limited view notice: the first ready frame with no Details rect sets the footer notice once
-// per session; a resize does not set it again, and 144x40 never does with two charts.
-func TestLimitedViewNoticeOncePerSession(t *testing.T) {
-	const sentence = "Limited view: 132x30 shows Details and the Log"
-	m := helpFixtureOneChart(t, 80, 24)
-	m.limitedViewShown = false
-	m.startup = startupComputing
-	m, cmd := readyFrame(m)
-	if got := m.footerIndicator(); got != sentence {
-		t.Fatalf("first frame at 80x24: indicator %q, want %q", got, sentence)
-	}
-	if cmd == nil {
-		t.Errorf("the notice armed no clear timer")
-	}
-	tm, _ := m.Update(yankFlashMsg{gen: m.yank.gen})
-	m = tm.(Model)
-	if got := m.footerIndicator(); got != "" {
-		t.Fatalf("after the tick the indicator is %q, want it cleared", got)
-	}
-	m, _ = escSend(t, m, tea.WindowSizeMsg{Width: 90, Height: 24}, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = readyFrame(m)
-	if got := m.footerIndicator(); got != "" {
-		t.Errorf("a later frame and a resize set the notice again: %q", got)
-	}
-
-	wide := helpFixture(t, 144, 40)
-	wide.limitedViewShown = false
-	wide.startup = startupComputing
-	wide, _ = readyFrame(wide)
-	if got := wide.footerIndicator(); got != "" {
-		t.Errorf("at 144x40 the indicator is %q", got)
-	}
-}
-
-// Limited view notice: the width is the layout's own threshold for the charts shown.
-func TestLimitedViewNoticeNamesTheComputedWidth(t *testing.T) {
-	m := helpFixture(t, 80, 24)
-	m.limitedViewShown = false
-	m.startup = startupComputing
-	m, _ = readyFrame(m)
-	want := fmt.Sprintf("Limited view: %dx30 shows Details and the Log", dualColumnMinWidth(m.shownCount()))
-	if want != "Limited view: 144x30 shows Details and the Log" {
-		t.Errorf("two charts: sentence %q, want the 144-column one", want)
-	}
-	if got := m.footerIndicator(); got != want {
-		t.Errorf("indicator %q, want %q", got, want)
+// The Limited view notice is gone: no first ready frame says what size would
+// show Details, at any size, because Enter opens Details at every size.
+func TestNoLimitedViewNoticeAtAnySize(t *testing.T) {
+	for _, size := range [][2]int{{66, 15}, {80, 24}, {132, 30}, {144, 40}} {
+		m := helpFixtureOneChart(t, size[0], size[1])
+		m.startup = startupComputing
+		m, _ = readyFrame(m)
+		if got := m.footerIndicator(); got != "" {
+			t.Errorf("%dx%d: the first ready frame sets the footer notice %q", size[0], size[1], got)
+		}
+		if strings.Contains(m.View(), "Limited view") {
+			t.Errorf("%dx%d: the screen says Limited view", size[0], size[1])
+		}
 	}
 }
 
@@ -130,9 +90,9 @@ func TestLimitedViewNoticeNamesTheComputedWidth(t *testing.T) {
 func chartPanelRows(t *testing.T, m Model) []string {
 	t.Helper()
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
-	h := m.geometry()[PanelChart].h
+	r0 := m.geometry()[PanelChart]
 	var rows []string
-	for _, l := range lines[1 : h-1] {
+	for _, l := range lines[r0.y+1 : r0.y+r0.h-1] {
 		r := []rune(l)
 		rows = append(rows, strings.TrimSpace(string(r[:min(len(r), 66)])))
 	}
@@ -152,7 +112,7 @@ func rowSlot(row string, last int) int {
 
 func TestChartPanelShowsWindowFromChartTop(t *testing.T) {
 	m := listModel(t, 7, 0)
-	m.width, m.height = 80, 24
+	m.width, m.height = 220, 39 // Details beside the panels, under 40 rows: the Chart panel keeps its five-row cap
 	for i := 0; i < 7; i++ {
 		m = send(t, m, keyDown)
 	}
@@ -173,8 +133,10 @@ func TestChartPanelShowsWindowFromChartTop(t *testing.T) {
 	}
 	frame := strings.Split(ansi.Strip(m.View()), "\n")
 	var thumb []int
-	for y := 0; y < m.geometry()[PanelChart].h; y++ {
-		if l := strings.TrimRight(frame[y], " "); strings.HasSuffix(l, pane.ThumbGlyph) || strings.HasSuffix(l, pane.ThumbASCII) {
+	cr := m.geometry()[PanelChart]
+	for y := 0; y < cr.h; y++ {
+		r := []rune(frame[cr.y+y])
+		if l := strings.TrimRight(string(r[:min(len(r), cr.x+cr.w)]), " "); strings.HasSuffix(l, pane.ThumbGlyph) || strings.HasSuffix(l, pane.ThumbASCII) {
 			thumb = append(thumb, y)
 		}
 	}
@@ -186,7 +148,7 @@ func TestChartPanelShowsWindowFromChartTop(t *testing.T) {
 
 func TestChartTopSurvivesResize(t *testing.T) {
 	m := listModel(t, 7, 0)
-	m.width, m.height = 80, 24
+	m.width, m.height = 220, 39 // Details beside the panels, under 40 rows: the Chart panel keeps its five-row cap
 	for i := 0; i < 7; i++ {
 		m = send(t, m, keyDown)
 	}
@@ -205,19 +167,19 @@ func TestChartTopSurvivesResize(t *testing.T) {
 	}
 }
 
-// Details needs 80 columns beside the left column: two charts at 132x40 are one
-// column, one chart keeps Details at exactly 80.
+// Details needs 67 columns beside the left column: two charts at 132x40 are one
+// column, one chart keeps Details at exactly 67.
 func TestTwoChartsAt132x40FallToOneColumn(t *testing.T) {
-	two := layoutGeometry(132, 40, 1, 2)
+	two := rectsAt(132, 40, 1, 2)
 	if _, ok := two[PanelDetails]; ok {
 		t.Errorf("two charts at 132x40 still have a Details rect: %+v", two[PanelDetails])
 	}
 	if w := two[PanelBodies].w; w != 132 {
 		t.Errorf("two charts at 132x40: Bodies is %d wide, want 132", w)
 	}
-	one := layoutGeometry(132, 40, 1, 1)
+	one := rectsAt(132, 40, 1, 1)
 	d, ok := one[PanelDetails]
-	if !ok || d.w != 80 {
-		t.Errorf("one chart at 132x40: Details = %+v (present %v), want 80 wide", d, ok)
+	if !ok || d.w != 67 {
+		t.Errorf("one chart at 132x40: Details = %+v (present %v), want 67 wide", d, ok)
 	}
 }

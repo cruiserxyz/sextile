@@ -279,7 +279,7 @@ func TestFramesBlockEndingEarlyIsSaid(t *testing.T) {
 	if len(frames) != 1 || frames[0].File != "good.as" {
 		t.Fatalf("frames = %+v, want only good.as (the records after the long line cannot be read)", frames)
 	}
-	if dropped != 1 || len(notes) != 1 || !strings.Contains(notes[0], "ended early") || !strings.Contains(notes[0], "not read") {
+	if dropped != 1 || len(notes) != 1 || !strings.Contains(notes[0], "stop at a line") || !strings.Contains(notes[0], "are lost") {
 		t.Errorf("dropped=%d notes=%v, want the early end counted once and said", dropped, notes)
 	}
 	// The same block without the long line reads whole: the end is not said.

@@ -36,10 +36,14 @@ import (
 // The typed field, the refusal (non-empty: the last attempt was refused and the
 // prompt stays open) and the save in flight (Enter is inert until it lands) are
 // popup.Form's.
+//
+// Confirming is the first-write question (originals_ui.go): the folder is
+// Sextile's to ask about, and nothing starts until it is answered.
 type saveModalState struct {
 	popup.Form
 	dest  string // the charts directory this would write into, shown beneath
 	prior startupState
+	Lit   int // the lit button of the first-write question
 }
 
 // newSaveForm is the prompt's one field. Always empty, and with no
@@ -85,12 +89,16 @@ func (m Model) openSavePrompt() (tea.Model, tea.Cmd) {
 
 // saveChartBindings is the Save chart popup's table.
 func saveChartBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{confirm("Save").ShownWhen(func(c keys.Context) bool { return c.Save.HasName }), closeOn("Cancel")})
+	return keys.TitledLocal([]keys.BindingEntry{confirm("Save").ShownWhen(func(c keys.Context) bool { return c.Save.HasName }), closeOn("Cancel")})
 }
 
 // updateSaveModalKey handles one keystroke for the save prompt. The caller in
 // model.go has already gated on m.startup == startupSaveOpen.
 func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.save.Confirming && !m.save.Saving {
+		return answerFirstWrite(m, msg)
+	}
+	shut := m.protectedRefusal(refusalSaving, m.save.dest)
 	switch keys.MatchBinding(msg, saveChartBindings()) {
 	case keys.BindingConfirm:
 		if m.save.Saving || strings.TrimSpace(m.save.typedName()) == "" {
@@ -103,16 +111,7 @@ func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.save.Refusal = err.Error()
 			return m, nil
 		}
-		slot := m.slots.Floating()
-		m.save.Saving = true
-		m.save.Refusal = ""
-		// The directory captured when the prompt opened is the one the
-		// operator was SHOWN, and it is what the save uses -- resolving again
-		// here could pick a different one (store.ChartsDir()'s second tier
-		// turns on when the XDG default appears), which would write the chart
-		// somewhere nobody displayed or checked.
-		m.saveGen++
-		return m, saveChartCmd(m.saveGen, m.save.dest, m.save.typedName(), slot)
+		return confirmSave(m)
 	case keys.BindingClose:
 		// Bumping the generation is what makes Esc actually cancel. The
 		// astrolog spawn is already running and is not interruptible, so a
@@ -134,8 +133,25 @@ func updateSaveModalKey(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.save.Saving {
 		return m, nil
 	}
+	before := formValues(m.save.Form)
 	m.save.Apply(popup.Type, msg)
+	typedClears(&m.save.Form, shut, before)
 	return m, nil
+}
+
+// startSave hands the confirmed name to the save, in the directory the prompt
+// named.
+func startSave(m Model) (tea.Model, tea.Cmd) {
+	slot := m.slots.Floating()
+	m.save.Saving = true
+	m.save.Refusal = ""
+	// The directory captured when the prompt opened is the one the
+	// operator was SHOWN, and it is what the save uses -- resolving again
+	// here could pick a different one (store.ChartsDir()'s second tier
+	// turns on when the XDG default appears), which would write the chart
+	// somewhere nobody displayed or checked.
+	m.saveGen++
+	return m, saveChartCmd(m.saveGen, m.save.dest, m.save.typedName(), slot)
 }
 
 // SaveChartDoneMsg is one completed save attempt.
@@ -144,7 +160,7 @@ type SaveChartDoneMsg struct {
 	// generation is not the model's current one is DROPPED: the save it
 	// reports was abandoned, and applying it would move the operator's view
 	// out from under them. Every other async completion in this package
-	// carries the same kind of token (pickGen, leader gen, the refresh
+	// carries the same kind of token (pickGen, the refresh
 	// coordinator's runID); this one did not, and a save cancelled with Esc
 	// could land afterwards and close a modal the operator had since opened.
 	Gen   int
@@ -187,11 +203,11 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 			var taken *lookup.ErrSlugTaken
 			switch {
 			case errors.As(msg.Err, &taken):
-				return m.logError("Couldn't save %q. That name is taken.", msg.Name), nil
+				return m.logError("save", "%q was not saved, the name is taken", msg.Name), nil
 			case errors.Is(msg.Err, lookup.ErrEmptySlug):
-				return m.logError("Couldn't save %q. That name has no letters or digits.", msg.Name), nil
+				return m.logError("save", "%q was not saved, the name has no letters or digits", msg.Name), nil
 			}
-			return m.noteEphemeris(msg.Err).logError("Couldn't save %q. %s", msg.Name, m.failureReason(msg.Err, firstLine(msg.Err.Error()))), nil
+			return m.noteEphemeris(msg.Err).logError("save", "%q was not saved, %s", msg.Name, m.failureReason(msg.Err, firstLine(msg.Err.Error()))).logUncorrected(msg.Err, slugFile(msg.Name)), nil
 		}
 		return m.logSaved(msg.Saved), nil
 	}
@@ -199,6 +215,8 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		var taken *lookup.ErrSlugTaken
 		switch {
+		case errors.Is(msg.Err, store.ErrOriginalsProtected):
+			m.save.Refusal = m.protectedRefusal(refusalSaving, m.save.dest)
 		case errors.As(msg.Err, &taken):
 			m.save.Refusal = fmt.Sprintf("%q is taken — try another name", taken.Slug)
 		case errors.Is(msg.Err, lookup.ErrEmptySlug):
@@ -207,7 +225,7 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 			// Not a refusal of what was typed: the save failed. The form
 			// keeps the cause under its field, and the Log says it, red.
 			m.save.Refusal = firstLine(msg.Err.Error())
-			return m.noteEphemeris(msg.Err).logError("Couldn't save %q. %s", msg.Name, m.failureReason(msg.Err, firstLine(msg.Err.Error()))), nil
+			return m.noteEphemeris(msg.Err).logError("save", "%q was not saved, %s", msg.Name, m.failureReason(msg.Err, firstLine(msg.Err.Error()))).logUncorrected(msg.Err, slugFile(msg.Name)), nil
 		}
 		return m, nil
 	}
@@ -236,25 +254,14 @@ func applySaveDone(m Model, msg SaveChartDoneMsg) (Model, tea.Cmd) {
 
 // logSaved is the one line a finished save writes, open or late.
 func (m Model) logSaved(saved lookup.SavedChart) Model {
-	caveat := ""
-	if !saved.AtlasPlaced {
-		// The file is correct, but the library rebuilds a chart file's timezone
-		// from the nearest atlas city and DROPS a row it cannot place. This
-		// clause is the only chance the operator gets: the symptom
-		// otherwise is a chart that is simply not in the picker.
-		caveat = " — it will not list until the atlas can place its coordinates"
-	}
-	m = m.logNote("save", "%q saved to %s%s", saved.Name, saved.Path, caveat)
+	m = m.logNote("save", "%q saved as %s", saved.Name, saved.Path)
 	if saved.PlaceCut != "" {
 		// The slot's place was longer than Astrolog can read back; it is the
 		// slot's, not typed here, so it is cut and said (the specification).
-		m = m.logNote("save", "Place shortened to %d bytes for Astrolog: %s", placeBound, saved.PlaceCut)
+		m = m.logNote("save", "the place name was too long, saved as %s", saved.PlaceCut)
 	}
 	return m
 }
-
-// placeBound is the byte bound the Log line names, read from the one rule.
-const placeBound = lookup.MaxLabelBytes
 
 // destLine is the line beneath the input: the charts folder with its path
 // elided, then the file the typed name would become.

@@ -3,6 +3,7 @@ package recipe
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -30,6 +31,10 @@ type ChartSpec struct {
 	// every row Astrolog's own identity. It changes no argv and no result's
 	// shape; the compiler hands it to the call it issues.
 	Registry aspect.Registry
+
+	// AspectRegistry is the binary's aspect list, carried for the same
+	// reason: the parsers read every aspect row's identity from it.
+	AspectRegistry aspect.AspectRegistry
 }
 
 // Source is the chart-entry root: the single way a chart's time and place are
@@ -96,6 +101,27 @@ type LocalMomentAtPlace struct {
 
 func (LocalMomentAtPlace) isSource()     {}
 func (LocalMomentAtPlace) Label() string { return "local-moment-at-place" }
+
+// FileChart is an anchored chart as its file states it. Astrolog reads Record
+// itself, so the moment, the zone, the place and the file's own settings are
+// Astrolog's reading of the file, exact by construction. JD, Lon and Lat are
+// that reading's values, for checks and ordering on Sextile's side; they never
+// reach Astrolog for this source.
+//
+// HousesChosen and ZodiacChosen say whether the operator chose the chart's
+// house system or zodiac (the spec's Houses and Zodiac then win over the
+// file's); otherwise the file's own setting stands, and the spec's are only the
+// defaults for a file that names none.
+type FileChart struct {
+	Record       string
+	JD, Lon, Lat float64
+	Name, Place  string
+	HousesChosen bool
+	ZodiacChosen bool
+}
+
+func (FileChart) isSource()     {}
+func (FileChart) Label() string { return "file-chart" }
 
 // Comparison is a two-chart relationship root (astrolog's -r* family): the
 // computation is the relationship BETWEEN Primary and Secondary, not either
@@ -318,6 +344,11 @@ func validateSource(src Source, allowComparison bool) error {
 	switch v := src.(type) {
 	case MomentAtPlace:
 		return validateMoment(v)
+	case FileChart:
+		if strings.TrimSpace(v.Record) == "" {
+			return fmt.Errorf("recipe: FileChart: no record")
+		}
+		return validateMoment(MomentAtPlace{JD: v.JD, Lon: v.Lon, Lat: v.Lat})
 	case LocalMomentAtPlace:
 		if v.TZ == "" {
 			return fmt.Errorf("recipe: LocalMomentAtPlace: no IANA timezone")

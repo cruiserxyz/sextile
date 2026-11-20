@@ -62,7 +62,6 @@ func designDemoModel(t *testing.T, cfg Config, w, h int) Model {
 	})
 	frame := now.overlayFrame()
 	m := tm.(Model)
-	m.limitedViewShown = true // the first-frame notice is not what this fixture is about
 	tm = m
 	st := m.refresh[surfaceText]
 	frame.RunID, frame.WantID = st.runningRunID, st.wantID

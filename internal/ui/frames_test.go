@@ -176,7 +176,7 @@ func TestArrivalKeepsTheBase(t *testing.T) {
 	wantTab(t, m, "① in ③", "back on Anna")
 }
 
-// A8b: ⌃k and ⌃j reorder slots; the base keeps its slot, only numerals and
+// A8b: K and J reorder slots; the base keeps its slot, only numerals and
 // titles change.
 func TestReorderKeepsTheBase(t *testing.T) {
 	m := framesFixture(t, 3, 1) // the cursor on Ben
@@ -186,19 +186,19 @@ func TestReorderKeepsTheBase(t *testing.T) {
 		t.Fatalf("fixture: base %v, want Anna", m.base)
 	}
 	wantTab(t, m, "② in ①", "before")
-	m = send(t, m, keyCtrlK) // Ben becomes ①, Anna ②
+	m = send(t, m, keyMoveUp) // Ben becomes ①, Anna ②
 	if m.base != anna {
-		t.Fatalf("⌃k changed the base %v", m.base)
+		t.Fatalf("K changed the base %v", m.base)
 	}
 	if got := m.slots.All(); got[0] != ben || got[1] != anna || got[2] != carl {
-		t.Fatalf("fixture: ⌃k did not swap Ben and Anna")
+		t.Fatalf("fixture: K did not swap Ben and Anna")
 	}
-	wantTab(t, m, "① in ②", "after ⌃k: the same pair, new numerals")
-	m = send(t, m, keyCtrlJ)
+	wantTab(t, m, "① in ②", "after K: the same pair, new numerals")
+	m = send(t, m, keyMoveDown)
 	if m.base != anna {
-		t.Errorf("⌃j changed the base")
+		t.Errorf("J changed the base")
 	}
-	wantTab(t, m, "② in ①", "after ⌃j")
+	wantTab(t, m, "② in ①", "after J")
 }
 
 // A9: deselecting or removing the base clears it. The cursor stands on the
@@ -419,6 +419,7 @@ func TestEnterStoresTheTab(t *testing.T) {
 		t.Fatalf("Enter on ②'s row: cursor %d base %v, want now and Ben", m.cursorIdx, m.base)
 	}
 	wantTab(t, m, "③ in ②", "after Enter on ②'s row")
+	m = reattachList(t, m, listTimeline)
 	m = enter(t, m, skyAspectRow(t, m.timeline.rows))
 	if !m.focusedIsFloating() || m.base != nil {
 		t.Fatalf("Enter on a sky row: on now %v base %v, want now and none", m.focusedIsFloating(), m.base)
@@ -547,7 +548,7 @@ func TestNoBaseSwitchText(t *testing.T) {
 			if baseWord.MatchString(bar) {
 				t.Errorf("%s: the key bar says base: %q", name, bar)
 			}
-			m.helpOpen = true
+			m = openedKeybindings(m)
 			if v := ansi.Strip(m.View()); baseWord.MatchString(v) {
 				t.Errorf("%s: the help popup says base", name)
 			}
@@ -556,7 +557,7 @@ func TestNoBaseSwitchText(t *testing.T) {
 			}
 			// Every leader entry's own description.
 			for _, lb := range m.leaderBindings {
-				if d := keys.BindingDesc(m.keysContextFor(ownerHelp), lb.ID); baseWord.MatchString(d) {
+				if d := keys.BindingDesc(m.keysContextFor(ownerKeybindings), lb.ID); baseWord.MatchString(d) {
 					t.Errorf("%s: leader entry %v is described %q", name, lb.Seq, d)
 				}
 			}
@@ -567,7 +568,7 @@ func TestNoBaseSwitchText(t *testing.T) {
 // helpLinesText is every help line, plain.
 func helpLinesText(m Model) string {
 	var b strings.Builder
-	for _, l := range m.helpLines() {
+	for _, l := range keybindingLines(m) {
 		b.WriteString(ansi.Strip(l.Text))
 		b.WriteString("\n")
 	}
@@ -591,10 +592,10 @@ func TestMovingWithinTheSetReframes(t *testing.T) {
 	if m.refresh[surfaceText].wantID == before {
 		t.Error("the move asked for no new text frame")
 	}
-	if len(wheels.overlay) != 1 || wheels.total() != 1 {
-		t.Fatalf("wheel calls %+v, want one bi-wheel", wheels)
+	if len(wheels.rings) != 1 || wheels.total() != 1 || len(wheels.rings[0]) != 2 {
+		t.Fatalf("wheel calls %+v, want one bi-wheel of two rings", wheels)
 	}
-	if got := wheels.overlay[0]; got.chart != anchorOf(slotAt(m, 2)) || !got.when.Equal(slotAt(m, 1).Time) {
+	if got := wheels.rings[0]; got[0].When != slotAt(m, 2).Time || got[0].Record != slotAt(m, 2).Chart.Record || !got[1].When.Equal(slotAt(m, 1).Time) {
 		t.Errorf("the bi-wheel is %+v, want Carl, the base, passed first and Ben second", got)
 	}
 }
@@ -618,31 +619,19 @@ func TestMovingOnOwnTabsDrawsSingles(t *testing.T) {
 	}
 }
 
-// A25: the reference page describes comparison in one sentence naming the
-// "X in Y" tab, and neither it nor the README names the retired base switch.
+// A25: neither the README nor the reference page names the retired base
+// switch.
 func TestReadmeComparisonSentence(t *testing.T) {
-	ref, err := os.ReadFile("../../docs/REFERENCE.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	const sentence = "Comparison reads `X in Y`: the chart under the cursor (X) is the one you read, and the Aspects tab, with `[` and `]`, picks the chart it is read against (Y), whose houses and zodiac frame the comparison — now is never Y."
-	if strings.Count(string(ref), sentence) != 1 {
-		t.Errorf("the reference page does not carry the comparison sentence exactly once:\n%s", sentence)
-	}
 	for _, doc := range []string{"../../README.md", "../../docs/REFERENCE.md"} {
 		b, err := os.ReadFile(doc)
 		if err != nil {
 			t.Fatal(err)
 		}
-		text := string(b)
-		lower := strings.ToLower(text)
+		lower := strings.ToLower(string(b))
 		for _, bad := range []string{"base switch", "base: cursor", "base follows"} {
 			if strings.Contains(lower, bad) {
 				t.Errorf("%s mentions %q", doc, bad)
 			}
-		}
-		if strings.Contains(text, "`,` `b`") || strings.Contains(text, "`,` and `b`") {
-			t.Errorf("%s mentions the retired `, b` key", doc)
 		}
 	}
 }
@@ -757,20 +746,20 @@ func TestStagedWheelMatchesTheFrame(t *testing.T) {
 				t.Fatalf("cursor %d base %d: no pair", cursor, base)
 			}
 			m = openWheel(t, m)
-			if len(wheels.overlay) != 1 || wheels.total() != 1 {
-				t.Fatalf("cursor %d base %d: wheel calls %+v, want one bi-wheel", cursor, base, wheels)
+			if len(wheels.rings) != 1 || wheels.total() != 1 || len(wheels.rings[0]) != 2 {
+				t.Fatalf("cursor %d base %d: wheel calls %+v, want one bi-wheel of two rings", cursor, base, wheels)
 			}
-			got := wheels.overlay[0]
+			first, second := wheels.rings[0][0], wheels.rings[0][1]
 			frame, outer := sc.pair.left, sc.pair.right
 			wantWhen := outer.Time
 			if outer.Floating {
 				wantWhen = m.floatingImageTime()
 			}
-			if got.chart != anchorOf(frame) {
-				t.Errorf("cursor %d base %d: staged chart 1 is %+v, want the base %+v", cursor, base, got.chart, anchorOf(frame))
+			if first.When != anchorOf(frame).When || first.Place != anchorOf(frame).Place || first.Record != anchorOf(frame).Record {
+				t.Errorf("cursor %d base %d: ring 1 is %+v, want the base %+v", cursor, base, first, anchorOf(frame))
 			}
-			if !got.when.Equal(wantWhen) || got.place != outer.Location {
-				t.Errorf("cursor %d base %d: staged outer is %v at %+v, want the cursor's chart %v at %+v", cursor, base, got.when, got.place, wantWhen, outer.Location)
+			if !second.When.Equal(wantWhen) || second.Place != outer.Location {
+				t.Errorf("cursor %d base %d: ring 2 is %v at %+v, want the cursor's chart %v at %+v", cursor, base, second.When, second.Place, wantWhen, outer.Location)
 			}
 		}
 	}

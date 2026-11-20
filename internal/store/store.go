@@ -470,22 +470,32 @@ func writePreferencesOnce(path string, merge func(existing string) (string, erro
 // span is found, and the two verbatim halves are re-joined around the new
 // body. Anything the rest of this package cannot read is therefore carried
 // through untouched, which is the point.
+//
+// A header that holds a value (`version: 1`) is the whole block. Otherwise
+// the span ends at the next top-level key, a YAML document marker or a
+// directive; a
+// column-zero list entry (`- name: Berlin`) is the block's value, so it stays
+// in the span and is replaced with it, as an indented one is. Left behind the
+// new body, it would make the file one YAML cannot read.
 func mergeBlock(existing, name, body string) string {
 	lines := splitAfterNewlines(existing)
 	start, end := -1, len(lines)
 	for i, line := range lines {
 		key, ok := topLevelKey(line)
-		if !ok {
-			continue
-		}
 		if start < 0 {
-			if key == name {
+			if ok && key == name {
 				start = i
+				if headerHoldsValue(line, name) {
+					end = i + 1
+					break
+				}
 			}
 			continue
 		}
-		end = i // the next top-level key closes the block
-		break
+		if isDocumentMarker(line) || isDirective(line) || (ok && !isSequenceEntry(line)) {
+			end = i
+			break
+		}
 	}
 
 	if start < 0 {

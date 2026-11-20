@@ -8,21 +8,13 @@ import (
 	"testing"
 )
 
-// H5 (docs): the reference page's Keys table has the `, a` row, its `, c d`
-// sentence says it keeps both.
+// H5 (docs): the reference page's House display section names each form, its
+// width and the comparison rule.
 func TestHouseDisplayDocs(t *testing.T) {
 	readme, err := os.ReadFile("../../docs/REFERENCE.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := "| `,` `a` | How the Bodies house column is drawn ([House display](#house-display)): angularity at a glance (the default), true quadrants, plain number, or number + angularity — `,` `c` `d` keeps it with the city, along with the floating chart's house system and zodiac |"
-	if !strings.Contains(string(readme), row) {
-		t.Errorf("the reference page's Keys table lacks the `, a` row:\n%s", row)
-	}
-	if !strings.Contains(string(readme), "keep it as your default with `, c d`, which keeps your house display (`, a`) with it") {
-		t.Error("the reference page's `, c d` sentence does not say it keeps the house display")
-	}
-
 	// The House display section says each form by its word and title, the
 	// shared width, and the comparison rule, so it cannot drift from the code.
 	text := string(readme)

@@ -191,15 +191,15 @@ func tabsOwnAspects() []aspect.Aspect {
 		return asp
 	}
 	return []aspect.Aspect{
-		mk(objSun, objMoon, aspect.Square, 0.5, 22),
-		mk(objVenus, objJupiter, aspect.Sextile, 3.0, 8.4),
+		mk(objSun, objMoon, kindOf("Squ"), 0.5, 22),
+		mk(objVenus, objJupiter, kindOf("Sex"), 3.0, 8.4),
 	}
 }
 
 func tabsCrossAspects() []lookup.OverlayAspect {
 	return []lookup.OverlayAspect{
-		{TransitObject: objSaturn, NatalObject: objSun, Kind: aspect.Square, Orb: 0.5, Power: 9, Applying: true},
-		{TransitObject: objJupiter, NatalObject: objMoon, Kind: aspect.Trine, Orb: 1.4, Power: 6},
+		{TransitObject: objSaturn, NatalObject: objSun, Kind: kindOf("Squ"), Orb: 0.5, Power: 9, Applying: true},
+		{TransitObject: objJupiter, NatalObject: objMoon, Kind: kindOf("Tri"), Orb: 1.4, Power: 6},
 	}
 }
 
@@ -253,8 +253,8 @@ func TestAspectsTabFollowsPairSelection(t *testing.T) {
 	// the specification acceptance 1: the timeline
 	// only while the Chart panel is focused.
 	m.focused = PanelChart
-	if got := tabIDs(m.panelTabs(PanelDetails)); !reflect.DeepEqual(got, []TabID{TabDetailsReport, TabDetailsTimeline}) {
-		t.Errorf("details tabs = %v, want [report timeline]", got)
+	if got := tabIDs(m.panelTabs(PanelDetails)); !reflect.DeepEqual(got, []TabID{TabDetailsReport, TabDetailsTimeline, TabDetailsMoon}) {
+		t.Errorf("details tabs = %v, want [report timeline moon]", got)
 	}
 	m.focused = PanelAspects
 	if got := tabIDs(m.panelTabs(PanelDetails)); !reflect.DeepEqual(got, []TabID{TabDetailsReport}) {
@@ -315,7 +315,7 @@ func TestOverlayCommitShowsTransitAspects(t *testing.T) {
 func TestJumpDigitFocusesOnly(t *testing.T) {
 	m := tabsOnPair(t, Config{Accessible: true})
 	m.focused = PanelChart
-	m, _ = pressKey(t, m, '3')
+	m, _ = pressKey(t, m, '4')
 	if m.focused != PanelAspects {
 		t.Fatalf("focus = %q, want aspects", m.focused)
 	}
@@ -325,14 +325,14 @@ func TestJumpDigitFocusesOnly(t *testing.T) {
 	// Amended by selected-charts-compare C1: Aspects now has two tabs while
 	// comparing, so re-pressing its digit steps them (panelDigits) and starts
 	// the pair's recompute; a one-tab panel's digit is still inert.
-	m, cmd := pressKey(t, m, '3')
+	m, cmd := pressKey(t, m, '4')
 	if cmd == nil || m.activeTabID(PanelAspects) != TabAspects {
-		t.Errorf("re-pressing 3 on the pair tab: cmd %v, active %q, want a recompute and Aspects", cmd != nil, m.activeTabID(PanelAspects))
+		t.Errorf("re-pressing 4 on the pair tab: cmd %v, active %q, want a recompute and Aspects", cmd != nil, m.activeTabID(PanelAspects))
 	}
 	one := tabsPairModel(t, Config{Accessible: true})
 	one.slots.SetComparisonSelected(false)
 	before := one
-	m, cmd = pressKey(t, one, '3')
+	m, cmd = pressKey(t, one, '4')
 	if cmd != nil || !sameModel(m, before) {
 		t.Error("re-pressing the digit of a one-tab panel changed something")
 	}
@@ -440,17 +440,17 @@ func TestCrossTabRendersFullHeightNoHeader(t *testing.T) {
 // C15
 func TestCrossTabEmptyLine(t *testing.T) {
 	state := chartViewState{aspects: tabsOwnAspects(), overlay: true, settled: true}
-	if got := renderAspectsBody(state, TabAspectsCross, 64, 4, Config{Accessible: true}); got != "(no cross-aspects in orb)" {
+	if got := renderAspectsBody(state, TabAspectsCross, 64, 4, Config{Accessible: true}); got != "(no aspects between the two charts within orb)" {
 		t.Errorf("empty cross tab = %q", got)
 	}
 }
 
 // C16
 func TestOverlayFrameCarriesFocusedAspects(t *testing.T) {
-	natalRows := []aspect.Aspect{aspect.NewObjectAspect(objSun, objMars, aspect.Trine, 1)}
-	transitRows := []aspect.Aspect{aspect.NewObjectAspect(objMoon, objVenus, aspect.Square, 2)}
-	natalStyles := astrologstyle.Aspects{{First: objSun, Second: objMars, Kind: aspect.Trine}: {Kind: "natal"}}
-	transitStyles := astrologstyle.Aspects{{First: objMoon, Second: objVenus, Kind: aspect.Square}: {Kind: "transit"}}
+	natalRows := []aspect.Aspect{aspect.NewObjectAspect(objSun, objMars, kindOf("Tri"), 1)}
+	transitRows := []aspect.Aspect{aspect.NewObjectAspect(objMoon, objVenus, kindOf("Squ"), 2)}
+	natalStyles := astrologstyle.Aspects{{First: objSun, Second: objMars, Kind: kindOf("Tri")}: {Kind: "natal"}}
+	transitStyles := astrologstyle.Aspects{{First: objMoon, Second: objVenus, Kind: kindOf("Squ")}: {Kind: "transit"}}
 	stubSpawns(t, func(s *rowSpawns) {
 		s.cast.natal = func(context.Context, *lookup.Probers, store.AnchorChart, lookup.Lens) (lookup.Result, error) {
 			return lookup.Result{Positions: []aspect.Position{{Object: objSun, Longitude: 250}}, Aspects: natalRows, AspectStyles: natalStyles}, nil
@@ -586,7 +586,7 @@ func TestOneTabStripCarriesNoMarker(t *testing.T) {
 		view := m.View()
 		// Changed by selected-charts-compare C1: `Aspects` then the pair tab
 		// `2 in 1` (colours off); the active tab carries the marker.
-		if !strings.Contains(view, "[3] Aspects - [2 in 1]") {
+		if !strings.Contains(view, "[4] Aspects - [2 in 1]") {
 			t.Errorf("%s: Aspects title is not the comparison title: %q", name, aspectsTopBorder(t, m))
 		}
 		for _, bad := range []string{"[Aspects]", "[Chart]", "[Bodies]", "Transit→Natal"} {
@@ -595,7 +595,7 @@ func TestOneTabStripCarriesNoMarker(t *testing.T) {
 			}
 		}
 		m.slots.SetComparisonSelected(false)
-		if view := m.View(); !strings.Contains(view, "[3] Aspects") || strings.Contains(view, "2 in 1") {
+		if view := m.View(); !strings.Contains(view, "[4] Aspects") || strings.Contains(view, "2 in 1") {
 			t.Errorf("%s: deselected title = %q", name, aspectsTopBorder(t, m))
 		}
 	}
@@ -604,7 +604,7 @@ func TestOneTabStripCarriesNoMarker(t *testing.T) {
 func aspectsTopBorder(t *testing.T, m Model) string {
 	t.Helper()
 	for _, line := range strings.Split(m.View(), "\n") {
-		if strings.Contains(line, "[3] ") {
+		if strings.Contains(line, "[4] ") {
 			return line
 		}
 	}
@@ -628,6 +628,7 @@ func TestComparisonTitleStyledLikeAnyTitle(t *testing.T) {
 		t.Errorf("focused active tab not bold green beside a plain Aspects tab: %q", line)
 	}
 	m.focused = PanelChart
+	m.width, m.height = max(132, dualColumnMinWidth(m.shownCount())), 40 // Details beside: nothing folds, so the unfocused Aspects title is the full strip
 	line = aspectsTopBorder(t, m)
 	if !strings.Contains(line, "\x1b[92m② in ① \x1b[0m") || !strings.Contains(line, "\x1b[38;5;252mAspects\x1b[0m") {
 		t.Errorf("unfocused active tab not plain green beside a plain Aspects tab: %q", line)
@@ -881,7 +882,7 @@ func TestTabKeysNoopBeforeReady(t *testing.T) {
 	computing := tabsPairModel(t, Config{Accessible: true})
 	computing.startup = startupComputing
 	for name, base := range map[string]Model{"nil slots": noSlots, "computing": computing} {
-		for _, r := range []rune{'[', ']', '0', '3'} {
+		for _, r := range []rune{'[', ']', '0', '4'} {
 			m, cmd := pressKey(t, base, r)
 			if cmd != nil {
 				t.Errorf("%s: %q returned a Cmd", name, r)
@@ -896,7 +897,7 @@ func TestTabKeysNoopBeforeReady(t *testing.T) {
 // C31
 func TestTabKeysIgnoredInModal(t *testing.T) {
 	help := tabsPairModel(t, Config{Accessible: true})
-	help.helpOpen = true
+	help = openedKeybindings(help)
 	atlas := tabsPairModel(t, Config{Accessible: true})
 	atlas.startup = startupAtlasOpen
 	charts := tabsPairModel(t, Config{Accessible: true})
@@ -931,14 +932,14 @@ func TestPairDeselectFallsBackWithoutBlank(t *testing.T) {
 	}
 	m, _ = applyTextCommit(m, tabsOverlayFrame())
 	view := m.View()
-	if !strings.Contains(view, "[3] Aspects----") {
+	if !strings.Contains(view, "[4] Aspects----") {
 		t.Errorf("Aspects did not fall back to its one-tab title: %q", aspectsTopBorder(t, m))
 	}
 	body := renderAspectsBody(m.chart, m.activeTabID(PanelAspects), 78, 4, m.cfg)
 	if strings.TrimSpace(body) == "" {
 		t.Error("Aspects body went blank after the pair was deselected")
 	}
-	if !strings.Contains(view, panel.BodyGlyph(objVenus)+" "+panel.AspectGlyph(aspect.Sextile)) {
+	if !strings.Contains(view, panel.BodyGlyph(objVenus)+" "+panel.AspectGlyph(kindOf("Sex"))) {
 		t.Errorf("last frame's own aspects not rendered after deselect")
 	}
 }
@@ -957,7 +958,7 @@ func TestCrossTabOnErrorFrame(t *testing.T) {
 	}
 	logged := false
 	for _, line := range m.logLines {
-		if strings.HasPrefix(line.text, "Couldn't cast the chart.") {
+		if strings.Contains(line.text, " not cast,") {
 			logged = true
 		}
 	}
@@ -968,12 +969,12 @@ func TestCrossTabOnErrorFrame(t *testing.T) {
 
 // C34
 func TestTooSmallUnchangedWithTabs(t *testing.T) {
-	const wantAccessible = "    +------------------------------+    \n    |                              |    \n    |  Terminal too small          |    \n    |                              |    \n    |  current:   40x10            |    \n    |  required:  66x16 (minimum)  |    \n    |                              |    \n    |  resize and we'll pick up.   |    \n    |                              |    \n    +------------------------------+    "
+	const wantAccessible = "+----------------------------------------+\n|                                        |\n|  The window is too small               |\n|                                        |\n|  now:      40x10                       |\n|  needed:   66x15 or more               |\n|                                        |\n|  Make it larger, and Sextile goes on.  |\n|                                        |\n+----------------------------------------+"
 	m := tabsPairModel(t, Config{Accessible: true})
 	m.width, m.height = 40, 10
 	m, _ = applyTextCommit(m, tabsOverlayFrame())
 	got := m.View()
-	if got != tooSmallView(40, 10, chartContentLines(m.slots), m.cfg) {
+	if got != tooSmallView(40, 10, m.cfg) {
 		t.Error("too-small View differs from tooSmallView")
 	}
 	if got != wantAccessible {
@@ -1010,12 +1011,12 @@ func TestOneTabTitleAccessibleFocusBold(t *testing.T) {
 		m.focused = PanelChart
 		var chart string
 		for _, l := range strings.Split(m.View(), "\n") {
-			if strings.Contains(l, "[1] ") {
+			if strings.Contains(l, "[2] ") {
 				chart = l
 				break
 			}
 		}
-		if !strings.Contains(chart, "\x1b[1m"+mark+"[1] Chart\x1b[0m") {
+		if !strings.Contains(chart, "\x1b[1m"+mark+"[2] Chart\x1b[0m") {
 			t.Errorf("%s: one-tab focused title not bold: %q", name, chart)
 		}
 		if line := aspectsTopBorder(t, m); strings.Contains(line, "\x1b[") {

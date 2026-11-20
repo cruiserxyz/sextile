@@ -8,8 +8,9 @@ ok    port: 5307 is free
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam
 ok    charts folder: $TMP/charts (remembered in the config)
+ok    charts folder position: ask (not set)
 ok    config: $XDG/sextile/launcher.conf
-ok    state: session in ~/.local/state/sextile, preferences in $XDG/sextile, backups in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
+ok    state: session in ~/.local/state/sextile, settings in $XDG/sextile, dated copies in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
 note  other images: 1 other images. Removed at the next launch
 for --no-docker (optional):
 note  go: missing — --no-docker needs Go 1.25 or newer on PATH
@@ -27,8 +28,9 @@ FAIL  port: 5307 in use — sextile --port 5308
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam
 ok    charts folder: $TMP/charts (remembered in the config)
+ok    charts folder position: ask (not set)
 ok    config: $XDG/sextile/launcher.conf
-ok    state: session in ~/.local/state/sextile, preferences in $XDG/sextile, backups in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
+ok    state: session in ~/.local/state/sextile, settings in $XDG/sextile, dated copies in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
 note  other images: 1 other images. Removed at the next launch
 for --no-docker (optional):
 note  go: missing — --no-docker needs Go 1.25 or newer on PATH
@@ -46,8 +48,9 @@ ok    port: 5307 is free
 note  wheel: http://localhost:5307. No wslview or xdg-open found, so open it yourself after the first Ctrl+X
 ok    time zone: Europe/Amsterdam
 ok    charts folder: $TMP/charts (remembered in the config)
+ok    charts folder position: ask (not set)
 ok    config: $XDG/sextile/launcher.conf
-ok    state: session in ~/.local/state/sextile, preferences in $XDG/sextile, backups in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
+ok    state: session in ~/.local/state/sextile, settings in $XDG/sextile, dated copies in ~/.local/share/sextile/backup, named sessions in ~/.local/share/sextile/sessions
 note  other images: not checked (no working docker)
 for --no-docker (optional):
 note  go: missing — --no-docker needs Go 1.25 or newer on PATH

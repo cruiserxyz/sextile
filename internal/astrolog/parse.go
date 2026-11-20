@@ -45,21 +45,16 @@ var signAbbrev = map[string]aspect.Sign{
 	"Pis": aspect.Pisces,
 }
 
-// aspectAbbrev maps astrolog's 3-letter aspect abbreviation to the
-// pkg/aspect AspectKind. Astrolog calls the 150° aspect "Inconjunct" (Inc);
-// the system uses the traditional name Quincunx for the same angle.
-var aspectAbbrev = map[string]aspect.AspectKind{
-	"Con": aspect.Conjunction,
-	"Opp": aspect.Opposition,
-	"Squ": aspect.Square,
-	"Tri": aspect.Trine,
-	"Sex": aspect.Sextile,
-	"Inc": aspect.Quincunx,
-	"SSx": aspect.Semisextile,
-	"SSq": aspect.Semisquare,
-	"Ses": aspect.Sesquisquare,
-	"Qui": aspect.Quintile,
-	"BQn": aspect.Biquintile,
+// readAspectKind reads the aspect an Astrolog list names by its three letters,
+// through the aspect registry of the binary in use. Letters the registry does
+// not hold are an error naming them: a list with such a row is refused whole,
+// never read with the row left out.
+func readAspectKind(reg aspect.AspectRegistry, abbrev string) (aspect.AspectKind, error) {
+	row, ok := reg.ByAbbrev(abbrev)
+	if !ok {
+		return aspect.AspectKind{}, fmt.Errorf("astrolog: aspect %q is not in the aspect registry of this Astrolog", abbrev)
+	}
+	return row.Kind, nil
 }
 
 // bodyPositionPat matches one body-position line from astrolog's default
@@ -113,7 +108,7 @@ var bodyPositionPat = regexp.MustCompile(
 //
 //	1:   Venus (Tau) Squ (Leo) Midheaven  - orb: a0:20' - power:  9.51
 var aspectLinePat = regexp.MustCompile(
-	`^\s*\d+:\s+(\S(?:.{0,5}\S)?)\s+[\(\[]([A-Z][a-z]{2})[\)\]]\s+([A-Z][A-Za-z]{2})\s+[\(\[]([A-Z][a-z]{2})[\)\]]\s+(\S+?(?:\s+\S+?)?)\s*-\s+orb:\s+([+-as])\s*(\d+)[^0-9](\d+)'\s+-\s+power:\s+([0-9.]+)`,
+	`^\s*\d+:\s+(\S(?:.{0,5}\S)?)\s+[\(\[]([A-Z][a-z]{2})[\)\]]\s+(` + astrologstyle.AspectLetters + `)\s+[\(\[]([A-Z][a-z]{2})[\)\]]\s+(\S+?(?:\s+\S+?)?)\s*-\s+orb:\s+([+-as])\s*(\d+)[^0-9](\d+)'\s+-\s+power:\s+([0-9.]+)`,
 )
 
 // applyingMarker is the -aa orb marker for an applying aspect; `s` marks a
@@ -137,17 +132,20 @@ const applyingMarker = "a"
 // (?m) so ^ anchors each line: parseCrossAspects matches per split line (where
 // it is a no-op), while checkCrossAspectSanity matches against the whole stdout.
 var crossAspectLinePat = regexp.MustCompile(
-	`(?m)^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+([A-Z][A-Za-z]{2})\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:\s+([+-as])\s*(\d+)[^0-9](\d+)'\s+-\s+power:\s+([0-9.]+)`,
+	`(?m)^\s*\d+:\s+(.+?)\s+[\(\[][A-Z][a-z]{2}[\)\]]\s+(` + astrologstyle.AspectLetters + `)\s+with\s+[\(\[][A-Z][a-z]{2}[\)\]]\s*(.+?)\s*-\s+orb:\s+([+-as])\s*(\d+)[^0-9](\d+)'\s+-\s+power:\s+([0-9.]+)`,
 )
 
 // parseCrossAspects extracts cross-aspects from astrolog's -r0/-rt -aa output.
 // Roles are preserved (Primary = left/first chart, Secondary = right/second
-// chart) — NOT canonicalized like parseAspects. Lines that don't match, or
-// whose aspect kind isn't in the system enum, are silently skipped. Every
-// side is KEPT, told apart by its Object in PrimaryObject/SecondaryObject.
+// chart) — NOT canonicalized like parseAspects. Lines that don't match are
+// skipped; a line whose aspect the registry does not hold refuses the whole
+// list. Every side is KEPT, told apart by its Object in PrimaryObject/SecondaryObject.
 // Applying is Astrolog's own `a`/`s` marker; its semantics follow the
 // relation switch the list ran under (see aspect.CrossAspect).
-func parseCrossAspects(stdout string, reg aspect.Registry) []aspect.CrossAspect {
+func parseCrossAspects(stdout string, reg aspect.Registry, aspects aspect.AspectRegistry) ([]aspect.CrossAspect, error) {
+	if text := aspects.Refusal(); text != "" {
+		return nil, &AspectsRefusedError{Text: text}
+	}
 	var out []aspect.CrossAspect
 	stdout = astrologstyle.StripSGR(stdout)
 	for _, line := range strings.Split(stdout, "\n") {
@@ -156,11 +154,11 @@ func parseCrossAspects(stdout string, reg aspect.Registry) []aspect.CrossAspect 
 			continue
 		}
 		primaryObj := resolveSide(reg, m[1], leftNameWidth)
-		kind, okK := aspectAbbrev[m[2]]
-		secondaryObj := resolveSide(reg, m[3], rightNameWidth)
-		if !okK {
-			continue
+		kind, err := readAspectKind(aspects, m[2])
+		if err != nil {
+			return nil, err
 		}
+		secondaryObj := resolveSide(reg, m[3], rightNameWidth)
 		orbDeg, _ := strconv.Atoi(m[5])
 		orbMin, _ := strconv.Atoi(m[6])
 		power, _ := strconv.ParseFloat(m[7], 64)
@@ -173,7 +171,7 @@ func parseCrossAspects(stdout string, reg aspect.Registry) []aspect.CrossAspect 
 			Applying:        m[4] == applyingMarker,
 		})
 	}
-	return out
+	return out, nil
 }
 
 // isNoDataRow reports whether a matched body row is Astrolog's no-data
@@ -282,9 +280,8 @@ func parsePositions(stdout string, asked []int, reg aspect.Registry) ([]aspect.P
 		//
 		// It is DROPPED rather than shown. A row reading `Eris  Ari 0°00'` is
 		// not a body Sextile could not name — it is a body with no position,
-		// and an astrologer reads it as Eris at 0° Aries. Operator decision,
-		// 2026-09-17: drop the row, and say so once. unavailableObjects
-		// collects the names so the perimeter can.
+		// and an astrologer reads it as Eris at 0° Aries. The row is dropped;
+		// unavailableObjects collects the names so the perimeter can note it.
 		if isNoDataRow(m) {
 			continue
 		}
@@ -380,13 +377,16 @@ func parseCusps(stdout string) aspect.Cusps {
 }
 
 // parseAspects extracts aspects from astrolog's -aa output. Lines that do
-// not match, or whose aspect kind is not in the system enum, are silently
-// skipped. Each side is kept with its Object. Each aspect is canonicalised through
+// not match are skipped; a line whose aspect the registry does not hold
+// refuses the whole list. Each side is kept with its Object. Each aspect is canonicalised through
 // aspect.NewObjectAspect so that (Mars, Venus, Con) and (Venus, Mars, Con)
 // collapse to a single record. Applying is Astrolog's `a` marker;
 // a plain -a list (+/- orbs) parses with Applying false throughout.
-func parseAspects(stdout string, reg aspect.Registry) []aspect.Aspect {
-	var aspects []aspect.Aspect
+func parseAspects(stdout string, reg aspect.Registry, aspects aspect.AspectRegistry) ([]aspect.Aspect, error) {
+	if text := aspects.Refusal(); text != "" {
+		return nil, &AspectsRefusedError{Text: text}
+	}
+	var out []aspect.Aspect
 	stdout = astrologstyle.StripSGR(stdout)
 	for _, line := range strings.Split(stdout, "\n") {
 		m := aspectLinePat.FindStringSubmatch(line)
@@ -395,9 +395,9 @@ func parseAspects(stdout string, reg aspect.Registry) []aspect.Aspect {
 		}
 		objA := resolveSide(reg, m[1], leftNameWidth)
 		objB := resolveSide(reg, m[5], rightNameWidth)
-		kind, okK := aspectAbbrev[m[3]]
-		if !okK {
-			continue
+		kind, err := readAspectKind(aspects, m[3])
+		if err != nil {
+			return nil, err
 		}
 		orbDeg, _ := strconv.Atoi(m[7])
 		orbMin, _ := strconv.Atoi(m[8])
@@ -406,7 +406,7 @@ func parseAspects(stdout string, reg aspect.Registry) []aspect.Aspect {
 		a := aspect.NewObjectAspect(objA, objB, kind, orb)
 		a.Power = power
 		a.Applying = m[6] == applyingMarker
-		aspects = append(aspects, a)
+		out = append(out, a)
 	}
-	return aspects
+	return out, nil
 }

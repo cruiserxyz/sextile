@@ -264,7 +264,7 @@ func TestSetExperimentalAppendsAtTheBlocksIndent(t *testing.T) {
 func TestSetExperimentalRefusesAScalar(t *testing.T) {
 	path := prefPath(t)
 	body := "experimental: on\nclock:\n  hours: 24\n"
-	const want = "store: preferences.yaml has 'experimental: on', not a block. The switch was not saved"
+	const want = "store: The settings file has a line 'experimental: on' where Sextile expects a list. Nothing was saved"
 	for _, on := range []bool{true, false} {
 		mtime := seedAged(t, path, body)
 		renames := countRenames(t)

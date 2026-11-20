@@ -33,7 +33,7 @@ var listModalRoots = map[string][]string{
 	"renderChartModal":     {"chartRows"},
 	"popup.Aspects.Render": {"AspectFamilyRows", "AspectListRows"},
 	"popup.Render":         {"ListRows"},
-	"keys.RenderHelp":      {"helpListRows"},
+	"renderKeybindings":    {"kbBody"},
 }
 
 // listNonRowHelpers draw lines that are NOT pickable rows — a placeholder, the
@@ -59,6 +59,11 @@ var listNonRowHelpers = map[string]bool{
 	// The dashed rule under a pinned block (the specification 6):
 	// built from a glyph and a width, never from a rendered row.
 	"menu.Rule": true,
+	// The Keybindings popup's text for a row and for a header: built from the
+	// row's own key and description, never from a rendered row.
+	"kbRowLeft": true,
+	"kbHeader":  true,
+	"kbFoot":    true,
 }
 
 // forbiddenRowCalls are the ways a line gets padded, truncated or restyled.

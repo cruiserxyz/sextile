@@ -100,7 +100,7 @@ func LoadSessionKeepingRefused() (Session, bool, SessionKeep, error) {
 func keepRefused(path string, before os.FileInfo, judged []byte, haveBytes bool) SessionKeep {
 	keepHook()
 	if !stillThere(path, before, judged, haveBytes) {
-		return SessionKeep{Problem: "it changed at launch"}
+		return SessionKeep{Problem: "it changed while Sextile started"}
 	}
 	stamp := keepClock().UTC().Format(refusedStamp)
 	dir := filepath.Dir(path)
@@ -121,7 +121,7 @@ func keepRefused(path string, before os.FileInfo, judged []byte, haveBytes bool)
 		// (swapped in since the check), drop the name and leave the path alone.
 		if got, err := os.Lstat(kept); err != nil || !os.SameFile(before, got) {
 			os.Remove(kept)
-			return SessionKeep{Problem: "it changed at launch"}
+			return SessionKeep{Problem: "it changed while Sextile started"}
 		}
 		return moveOff(path, dir, name, before)
 	}
@@ -154,18 +154,18 @@ func moveOff(path, dir, kept string, before os.FileInfo) SessionKeep {
 	// Not the file that was judged: give it back, never over anything.
 	if err := os.Link(aside, path); err == nil {
 		os.Remove(aside)
-		return SessionKeep{Kept: kept, Problem: "it changed at launch"}
+		return SessionKeep{Kept: kept, Problem: "it changed while Sextile started"}
 	}
-	return SessionKeep{Kept: kept, Problem: "it changed at launch. It is kept as " + filepath.Base(aside)}
+	return SessionKeep{Kept: kept, Problem: "it changed while Sextile started. It is kept as " + filepath.Base(aside)}
 }
 
 // notRegular names why a path cannot be moved aside, or "" for a plain file.
 func notRegular(m os.FileMode) string {
 	switch {
 	case m&os.ModeSymlink != 0:
-		return "it is a symlink"
+		return "it is a link"
 	case m.IsDir():
-		return "it is a directory"
+		return "it is a folder"
 	case !m.IsRegular():
 		return "it is not a plain file"
 	}

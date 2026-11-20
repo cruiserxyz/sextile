@@ -120,6 +120,7 @@ type templateKey struct {
 	tz       string
 	houses   recipe.HouseSystem
 	zodiac   recipe.Zodiac
+	nodes    recipe.NodeForm
 }
 
 // templateState is the tab's lines (the last complete frame), the key they
@@ -169,9 +170,9 @@ func (m Model) templateInputs() (templates.Template, lookup.BodyFactsRequest, te
 	}
 	lens := m.committedLens()
 	view := m.viewLens()
-	lens.Houses, lens.Zodiac = view.Houses, view.Zodiac
+	lens.Houses, lens.Zodiac, lens.Objects.Nodes = view.Houses, view.Zodiac, view.Objects.Nodes
 	key := templateKey{template: t.ID, object: obj.Number, listsBy: subject, when: floating.Time.UnixNano(), lon: floating.Location.Lon, lat: floating.Location.Lat,
-		tz: floating.Location.TZ, houses: lens.Houses, zodiac: lens.Zodiac}
+		tz: floating.Location.TZ, houses: lens.Houses, zodiac: lens.Zodiac, nodes: lens.Objects.Nodes}
 	return t, lookup.BodyFactsRequest{Object: obj, When: floating.Time, Place: floating.Location, Lens: lens}, key, true
 }
 
@@ -280,7 +281,7 @@ func templateCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
 	// The kept cycle search is handed on only for the same object and frame
 	// and a moment inside its span: a step into another span searches again.
 	if cf := cycleKeyOf(key); m.tpl.cycle != nil && m.tpl.cycleFor == cf {
-		if zone, err := time.LoadLocation(req.Place.TZ); err == nil && m.tpl.cycle.Span == lookup.CycleSpanFor(req.When, zone) {
+		if zone, err := lookup.PlaceZone(req.When, req.Place); err == nil && m.tpl.cycle.Span == lookup.CycleSpanFor(req.When, zone) {
 			req.Cycle = m.tpl.cycle
 		}
 	}
@@ -339,9 +340,9 @@ func (m Model) commitTemplate(msg refreshResultMsg) (Model, tea.Cmd) {
 		reason := m.failureReason(msg.err, m.consolePointer(len(p.commands) > 0))
 		var missing *lookup.MissingEventError
 		if errors.As(msg.err, &missing) {
-			reason = "Astrolog's event list lacks " + missing.Event + "."
+			reason = "Astrolog's list of events has no " + missing.Event
 		}
-		return m.logError("Couldn't compute the %s tab. %s", p.key.template, reason), nil
+		return m.logError("details", "the %s tab did not fill, %s", p.key.template, reason), nil
 	}
 	return m.landTemplate(p, msg.wantID, !quiet).rememberTemplate(p), nil
 }

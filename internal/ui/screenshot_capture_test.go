@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -38,9 +39,13 @@ const (
 	screenshotCols = 144
 	screenshotRows = 40
 
+	// screenshotSession is the name the scene's session is saved under, shown
+	// in Status.
+	screenshotSession = "Solar eclipse 2026"
+
 	// The alt text is the SVG's <title> and, word for word, the README's
 	// image description.
-	screenshotAlt = "Sextile showing the solar eclipse of 12 August 2026 beside the sky as Venus moves back into Libra: bodies, aspects and the month's timeline"
+	screenshotAlt = "Sextile with the solar eclipse of 12 August 2026 as the first chart. Beside it are the planets, the aspects and the events of that month."
 )
 
 // screenshotAnchor is Sun Oct 25, 2026 09:00 in Hamburg (CET), the frozen
@@ -54,7 +59,7 @@ var screenshotHamburg = location.PlaceInfo{Name: "Hamburg", Country: "DE", Lat: 
 // floating chart, Details on its Timeline tab and Enter on the row where Venus
 // moves back into Libra. It returns the coloured frame.
 //
-// The 144-column layout is the narrowest that shows Details beside the three
+// The 144-column layout is the narrowest that shows Details beside the four
 // panels (132 stacks them and hides Details), and docs/REFERENCE.md names it
 // as the size of the screen the README describes.
 func screenshotScene(t *testing.T) string {
@@ -62,7 +67,34 @@ func screenshotScene(t *testing.T) string {
 	needLiveAstrolog(t)
 	forceColor(t)
 	const file = "Eclipse-2026-08-12.as"
-	titleLibrary(t, []string{file}, nil)
+	lib := titleLibrary(t, []string{file}, nil)
+	// The Session panel names the charts folder, home as `~`: put the library
+	// under a home of its own so the frame carries nothing of this machine.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	shown := filepath.Join(home, "charts")
+	if err := os.MkdirAll(shown, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(lib, file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The picture shows the eclipse at its conjunction second, 17:36:45 UTC per
+	// Astrolog 8.00 (`-d` names the minute, `-v -b0` the second), where Sun and
+	// Moon read the same degree and minute. The fixture keeps its 19:37 for the
+	// tests that read it.
+	if !bytes.Contains(b, []byte("19:37 DT")) {
+		t.Fatalf("%s no longer holds 19:37 DT", file)
+	}
+	b = bytes.Replace(b, []byte("19:37 DT"), []byte("19:36:45 DT"), 1)
+	if err := os.WriteFile(filepath.Join(shown, file), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SEXTILE_CHARTS_DIR", shown)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 
 	m := newTestModel(t, Config{Color: ColorAlways}, FrozenClock(screenshotAnchor))
 	m.startup = startupReady
@@ -76,6 +108,12 @@ func screenshotScene(t *testing.T) string {
 	m.width, m.height = screenshotCols, screenshotRows
 
 	m = pickLive(t, m, file)
+	lock, err := store.SaveNamedSessionAs(screenshotSession, m.sessionSnapshot())
+	if err != nil {
+		t.Fatalf("the session %q was refused: %v", screenshotSession, err)
+	}
+	t.Cleanup(lock.Release)
+	m.named = namedRun{file: lock.File(), name: screenshotSession, lock: lock}
 	// Opening selects nothing: select the opened chart and the floating chart
 	// with Space, then return the cursor to the opened chart.
 	for _, k := range []tea.KeyMsg{
@@ -103,6 +141,19 @@ func screenshotScene(t *testing.T) string {
 	return m.View()
 }
 
+var screenshotPositionRE = regexp.MustCompile(`[A-Z][a-z]{2} +\d+°\d\d'`)
+
+// screenshotPosition is the first position on the Bodies row that starts with
+// glyph and name, or "" when no such row is in the frame.
+func screenshotPosition(plain, row string) string {
+	for _, l := range strings.Split(plain, "\n") {
+		if _, after, ok := strings.Cut(l, row+" "); ok {
+			return screenshotPositionRE.FindString(after)
+		}
+	}
+	return ""
+}
+
 // TestReadmeScreenshotScene checks the scene says what the README says it does
 // on every run, so the capture cannot rot between regenerations, and writes
 // docs/screenshot.svg only under -demo.
@@ -111,14 +162,19 @@ func TestReadmeScreenshotScene(t *testing.T) {
 	assertFrameGeometry(t, frame, screenshotCols, screenshotRows)
 	plain := ansi.Strip(frame)
 	for _, want := range []string{
-		"① Eclipse-2026-08-12  Wed Aug 12, 2026 19:37 CEST",
-		"② ~                   Sun Oct 25, 2026 10:09 CET",
+		screenshotSession + " → ~/charts",
+		"① Eclipse-2026-08-12  Wed Aug 12, 2026 19:36:45 +2 DT",
+		"② ~                   Sun Oct 25, 2026 10:09:",
 		"[0] Now - Timeline",
 		"Sun 10/25/2026   10:09         Venus [Sco] <-- Libra",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("the frame lacks %q:\n%s", want, plain)
 		}
+	}
+	// An eclipse: the Bodies rows of Sun and Moon give the same position.
+	if sun, moon := screenshotPosition(plain, "☉ Sun"), screenshotPosition(plain, "☽ Moon"); sun == "" || sun != moon {
+		t.Errorf("Sun at %q and Moon at %q, want one position:\n%s", sun, moon, plain)
 	}
 	// Crawl safety: nothing of the machine that made the frame (the release
 	// crawl checks the committed picture for every other banned word).
@@ -168,6 +224,13 @@ func TestReadmeScreenshotIsCommitted(t *testing.T) {
 	if title != screenshotAlt {
 		t.Errorf("<title> = %q, want the alt text %q", title, screenshotAlt)
 	}
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img := "![" + screenshotAlt + "](docs/screenshot.svg)"; strings.Count(string(readme), img) != 1 {
+		t.Errorf("the README does not show the picture once with the alt text %q", screenshotAlt)
+	}
 	if !strings.Contains(string(b), "Eclipse-2026-08-12") {
 		t.Error("docs/screenshot.svg does not show the eclipse chart")
 	}
@@ -175,6 +238,26 @@ func TestReadmeScreenshotIsCommitted(t *testing.T) {
 		if strings.Contains(string(b), banned) {
 			t.Errorf("docs/screenshot.svg carries %q", banned)
 		}
+	}
+}
+
+// The README shows the moving picture docs/tour.svg once, after the screenshot,
+// with the description the picture carries as its title.
+func TestReadmeShowsTheTour(t *testing.T) {
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(readme)
+	img := "![" + tourAlt + "](docs/tour.svg)"
+	if strings.Count(text, img) != 1 {
+		t.Fatalf("the README does not show the tour once with the alt text %q", tourAlt)
+	}
+	if strings.Index(text, img) < strings.Index(text, "(docs/screenshot.svg)") {
+		t.Error("the README shows the tour before the screenshot")
+	}
+	if _, err := os.Stat(tourPath); err != nil {
+		t.Errorf("the README's moving picture is missing: %v", err)
 	}
 }
 
@@ -411,14 +494,31 @@ func ansiToSVG(frame, alt string) []byte {
 	fmt.Fprintf(&b, "<title>%s</title>\n", esc(alt))
 	fmt.Fprintf(&b, `<rect width="100%%" height="100%%" fill="%s"/>`+"\n", svgDefaultB)
 	fmt.Fprintf(&b, `<g shape-rendering="crispEdges">`+"\n")
+	svgBackgrounds(&b, spans)
+	fmt.Fprintf(&b, "</g>\n")
+	fmt.Fprintf(&b, `<g font-family="%s" font-size="%d">`+"\n", svgFontFam, svgFontSize)
+	svgForeground(&b, spans)
+	fmt.Fprintf(&b, "</g>\n</svg>\n")
+	return b.Bytes()
+}
+
+// svgBackgrounds writes a rectangle for each span that has a background of its own.
+func svgBackgrounds(b *bytes.Buffer, spans []svgSpan) {
 	for _, sp := range spans {
 		if _, bg := sp.st.colours(); bg != svgDefaultB {
-			fmt.Fprintf(&b, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+"\n",
+			fmt.Fprintf(b, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+"\n",
 				float64(sp.col)*svgCellW, float64(sp.row)*svgCellH, float64(sp.cells)*svgCellW, svgCellH, bg)
 		}
 	}
-	fmt.Fprintf(&b, "</g>\n")
-	fmt.Fprintf(&b, `<g font-family="%s" font-size="%d">`+"\n", svgFontFam, svgFontSize)
+}
+
+// svgForeground writes each span's text, box-drawing lines and blocks.
+func svgForeground(b *bytes.Buffer, spans []svgSpan) {
+	esc := func(s string) string {
+		var e bytes.Buffer
+		_ = xml.EscapeText(&e, []byte(s))
+		return e.String()
+	}
 	for _, sp := range spans {
 		// Spaces draw nothing; dropping them keeps the file small, and the
 		// x list skips their cells.
@@ -446,8 +546,8 @@ func ansiToSVG(frame, alt string) []byte {
 		if sp.st.faint {
 			opacity = ` opacity="0.6"`
 		}
-		blocks.write(&b, fg, sp.st.faint)
-		box.write(&b, fg, opacity)
+		blocks.write(b, fg, sp.st.faint)
+		box.write(b, fg, opacity)
 		if text.Len() == 0 {
 			continue
 		}
@@ -463,11 +563,9 @@ func ansiToSVG(frame, alt string) []byte {
 		if sp.st.underline {
 			attrs.WriteString(` text-decoration="underline"`)
 		}
-		fmt.Fprintf(&b, `<text x="%s" y="%.1f" %s>%s</text>`+"\n",
+		fmt.Fprintf(b, `<text x="%s" y="%.1f" %s>%s</text>`+"\n",
 			strings.Join(xs, " "), float64(sp.row)*svgCellH+svgBaseline, attrs.String(), esc(text.String()))
 	}
-	fmt.Fprintf(&b, "</g>\n</svg>\n")
-	return b.Bytes()
 }
 
 // svgBoxGlyph names the arms a box-drawing rune draws from its cell centre to

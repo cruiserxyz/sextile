@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,11 +37,8 @@ func notInstalled() error {
 	return fmt.Errorf("lookup: FirstCallTransits: %w", lookup.ErrAstrologNotInstalled)
 }
 
-// probeLine and atlasLine are the two whole-line errors with one cause each.
-const (
-	probeLine = "Couldn't find the Astrolog program. Install it and restart."
-	atlasLine = "Couldn't find atlas.as. Put it beside Astrolog and restart."
-)
+// probeLine is the whole-line error with one cause.
+const probeLine = "astrolog: the Astrolog program was not found"
 
 // The regression item 4 names: the six-row Log cut the reason off. Every line
 // the error lane can produce has to survive the render intact, so the test
@@ -49,24 +47,25 @@ const (
 func TestFailureLinesFitTheLog(t *testing.T) {
 	m := errLaneModel(t)
 	lines := []string{
-		probeLine,
-		atlasLine,
-		"Couldn't cast the chart. " + m.failureReason(notInstalled(), m.consolePointer(true)),
-		"Couldn't cast the chart. " + m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)),
-		"Couldn't open that chart. " + m.failureReason(notInstalled(), pickFallback),
-		"Couldn't open that chart. " + m.failureReason(errors.New("astrolog: exit status 1"), pickFallback),
-		"Couldn't draw the wheel. " + m.failureReason(errors.New("astrolog: exit status 1"), wheelRenderFallback),
-		"Couldn't show the wheel. " + m.failureReason(errors.New("write failed"), wheelPublishFallback),
-		"Couldn't read the full report. " + m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)),
-		"Couldn't cast the chart. " + m.failureReason(errors.New("fork/exec: no such file"), m.consolePointer(false)),
-		"Couldn't copy that line to the clipboard.",
+		"the Astrolog program was not found",
+		"Now not cast, " + m.failureReason(notInstalled(), m.consolePointer(true)),
+		"Now not cast, " + m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)),
+		"chart not opened, " + m.failureReason(notInstalled(), pickFallback),
+		"chart not opened, " + m.failureReason(&lookup.ChartRefused{Switch: "-h", Asks: "a heliocentric chart"}, pickFallback),
+		"chart not opened, " + m.failureReason(&lookup.ChartRefused{Switch: "-Ys", Asks: "the solar system's plane"}, pickFallback),
+		"chart not opened, " + m.failureReason(errors.New("astrolog: exit status 1"), pickFallback),
+		"wheel not drawn, " + m.failureReason(errors.New("astrolog: exit status 1"), wheelRenderFallback),
+		m.failureReason(errors.New("write failed"), wheelPublishFallback),
+		"report not read, " + m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)),
+		"Now not cast, " + m.failureReason(errors.New("fork/exec: no such file"), m.consolePointer(false)),
+		"the line did not reach the clipboard",
 	}
 	// the refusals, read out of the predicate's own source so this list
 	// cannot fall behind it. A hand-kept table here would pass while a sixth
 	// clause shipped unmeasured, which is the exact failure the width contract
 	// exists to prevent.
 	for _, clause := range refusalClauses(t) {
-		lines = append(lines, "Couldn't anchor that chart. It has "+clause+".")
+		lines = append(lines, "chart not opened, it has "+clause)
 	}
 	for _, line := range lines {
 		t.Run(line, func(t *testing.T) {
@@ -83,7 +82,7 @@ func TestFailureLinesFitTheLog(t *testing.T) {
 func logRegion(view string) string {
 	var out []string
 	for _, row := range strings.Split(view, "\n") {
-		if strings.Contains(row, "Log") || strings.Contains(row, "Couldn't") || strings.Contains(row, "Astrolog") {
+		if strings.Contains(row, "Log") || strings.Contains(row, "Session") || strings.Contains(row, "Astrolog") {
 			out = append(out, row)
 		}
 	}
@@ -99,8 +98,8 @@ func TestAstrologProbeNamesAMissingInstall(t *testing.T) {
 	if got := errorLines(m); len(got) != 1 || got[0] != probeLine {
 		t.Errorf("probe wrote %v, want exactly [%q]", got, probeLine)
 	}
-	if !strings.Contains(got0(t, m), "Install it") {
-		t.Error("the line does not say what to do about it")
+	if strings.Contains(got0(t, m), "Install it") {
+		t.Error("the line gives advice: a fact has none")
 	}
 
 	quiet, _ := applyAstrologProbe(errLaneModel(t), AstrologProbedMsg{})
@@ -133,7 +132,7 @@ func errorLines(m Model) []string {
 // command that never ran.
 func TestMissingAstrologIsNamedAtEveryOperation(t *testing.T) {
 	m := errLaneModel(t)
-	if got, want := m.failureReason(notInstalled(), m.consolePointer(true)), "Astrolog is not installed."; got != want {
+	if got, want := m.failureReason(notInstalled(), m.consolePointer(true)), "Astrolog is not installed"; got != want {
 		t.Errorf("failureReason = %q, want %q", got, want)
 	}
 	if strings.Contains(m.failureReason(notInstalled(), m.consolePointer(true)), "Press") {
@@ -153,25 +152,22 @@ func TestChartPickFailureIsASentence(t *testing.T) {
 		Err:   fmt.Errorf("astrolog: ResolveChartFile: astrolog exec: %w", lookup.ErrAstrologNotInstalled),
 		Gen:   1,
 	})
-	want := "Couldn't open that chart. Astrolog is not installed."
+	want := "chart: chart not opened, Astrolog is not installed"
 	if lines := errorLines(got); len(lines) != 1 || lines[0] != want {
 		t.Errorf("pick failure wrote %v, want [%q]", errorLines(got), want)
 	}
 }
 
-// The fallback names the leader the operator actually configured. A line that
-// names the wrong key is worse than one that names none, so a workspace with
-// no leader at all says nothing about keys.
-func TestFailureFallbackNamesTheConfiguredLeader(t *testing.T) {
+// The fallback names no key: a line states a fact, and a key to press is a
+// start popup's work, never the Log's.
+func TestFailureFallbackNamesNoKey(t *testing.T) {
 	m := errLaneModel(t)
 	m = m.applyKeyConfig(store.KeysConfig{Leader: ";", LeaderPresent: true})
-	if got := m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)); !strings.Contains(got, ";l") {
-		t.Errorf("failureReason = %q, want it to name the configured leader", got)
-	}
-
-	m.leaderKey = ""
-	if got := m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(true)); strings.Contains(got, "Press") {
-		t.Errorf("failureReason = %q, want no key named when there is no leader", got)
+	for _, recorded := range []bool{true, false} {
+		got := m.failureReason(errors.New("astrolog: exit status 1"), m.consolePointer(recorded))
+		if strings.Contains(got, ";") || strings.Contains(got, "Press") {
+			t.Errorf("failureReason = %q, want no key named", got)
+		}
 	}
 }
 
@@ -211,7 +207,7 @@ func TestComputeWithNoRecordedCommandDoesNotPointAtTheConsole(t *testing.T) {
 		RunID:  m.refresh[surfaceText].runningRunID,
 		WantID: m.refresh[surfaceText].wantID,
 	})
-	want := "Couldn't cast the chart. Astrolog could not be started."
+	want := "astrolog: Now not cast, Astrolog could not be started"
 	if lines := errorLines(got); len(lines) != 1 || lines[0] != want {
 		t.Errorf("compute failure wrote %v, want [%q]", errorLines(got), want)
 	}
@@ -374,4 +370,60 @@ func hasReceiver(fn *ast.FuncDecl, typeName string) bool {
 	}
 	ident, ok := expr.(*ast.Ident)
 	return ok && ident.Name == typeName
+}
+
+// A chart read that found no private temp folder says so in the Log, naming
+// the folder; the system's words go to the large log only.
+func TestNoTempFolderNamesTheFolder(t *testing.T) {
+	m := readyModelWithSlots(t, berlinP)
+	m.startup = startupChartOpen
+	m.picker = chartPickerState{loaded: true, prior: startupReady}
+	picked, _ := applyChartPicked(m, ChartPickedMsg{Chart: testNamedChart("Client", fixtureOneP)})
+	err := fmt.Errorf("astrolog: ResolveChartFile: %w", &lookup.PrivateTempError{Dir: "/.cache", Err: syscall.EACCES})
+	m, _ = applyChartResolved(picked, ChartResolvedMsg{Gen: picked.pickGen, Err: err})
+	want := "chart: chart not opened, Sextile could not make its temp folder in /.cache"
+	var said []string
+	for _, l := range m.logLines {
+		if l.lane == laneError {
+			said = append(said, strings.TrimSpace(l.text))
+		}
+	}
+	if got := strings.Join(said, " "); got != want {
+		t.Errorf("the Log says %q, want %q", got, want)
+	}
+	for _, l := range m.logLines {
+		if l.lane == laneNote || l.lane == laneError {
+			if strings.Contains(l.text, "permission denied") {
+				t.Errorf("the system's words reached the Log panel: %q", l.text)
+			}
+		}
+	}
+	if logHas(m, "permission denied") != 1 {
+		t.Errorf("the large log does not carry the system's words: %v", m.logLines)
+	}
+	homeErr := &lookup.PrivateTempError{Err: lookup.ErrHomeNotAbsolute}
+	if got := m.failureReason(homeErr, pickFallback); got != "Sextile has no folder for its working files, HOME must be a full path" {
+		t.Errorf("no HOME: %q", got)
+	}
+}
+
+// A long cache folder is kept whole in the stored line, which the large Log
+// shows and copies; the Log panel cuts its row with … at the edge.
+func TestNoTempFolderLongPathIsKeptWhole(t *testing.T) {
+	m := readyModelWithSlots(t, berlinP)
+	m.startup = startupChartOpen
+	m.picker = chartPickerState{loaded: true, prior: startupReady}
+	picked, _ := applyChartPicked(m, ChartPickedMsg{Chart: testNamedChart("Client", fixtureOneP)})
+	dir := "/data/op/a-rather-long-folder-name/that-goes-on/and-on/.cache"
+	err := &lookup.PrivateTempError{Dir: dir, Err: syscall.EACCES}
+	m, _ = applyChartResolved(picked, ChartResolvedMsg{Gen: picked.pickGen, Err: err})
+	var joined string
+	for _, l := range m.logLines {
+		if l.lane == laneError {
+			joined += strings.TrimSpace(l.text) + " "
+		}
+	}
+	if !strings.Contains(joined, dir) {
+		t.Errorf("the folder is not all in the stored line: %q", joined)
+	}
 }

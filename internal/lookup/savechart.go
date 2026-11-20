@@ -18,12 +18,11 @@ import (
 // astrolog rewrites a double quote to a single one inside -zi, so the two can
 // differ and the operator should be shown the one that is on disk.
 type SavedChart struct {
-	ID          string // the slug, and the id the library will resolve
-	Name        string // the label astrolog recorded
-	File        string // base name within the charts directory
-	Path        string // the full path it was written to
-	AtlasPlaced bool   // whether the atlas can place it, and so whether it will list
-	PlaceCut    string // non-empty: the place label was cut to this to fit Astrolog's bound
+	ID       string // the slug, and the id the library will resolve
+	Name     string // the label astrolog recorded
+	File     string // base name within the charts directory
+	Path     string // the full path it was written to
+	PlaceCut string // non-empty: the place label was cut to this to fit Astrolog's bound
 }
 
 // MaxLabelBytes is the longest name or place Astrolog can read back.
@@ -68,11 +67,11 @@ var beforePlace = func() {}
 // error and nothing is written; that limit is what the 2026-09-20 reversal of
 // an earlier change was granted under, and it is enforced twice on purpose: here, where
 // the refusal can name the file it collided with, and again in
-// store.PlaceChartFile as an exclusive create, which is the half that cannot
+// the store door's Place as an exclusive create, which is the half that cannot
 // be raced.
 func SaveFloatingChart(ctx context.Context, dir, name string, when time.Time, place location.PlaceInfo) (SavedChart, error) {
 	// The charts directory is resolved ONCE, by the caller, and the same value
-	// reaches the collision scan and the write. See store.PlaceChartFile for
+	// reaches the collision scan and the write. See store.Door.Place for
 	// why that matters; the short version is that store.ChartsDir() can answer
 	// differently two calls apart, and the operator was shown one answer.
 	if dir == "" {
@@ -92,10 +91,16 @@ func SaveFloatingChart(ctx context.Context, dir, name string, when time.Time, pl
 	// is cut where reports cut theirs and the caller says so; a name is the
 	// operator's and is refused by ChartRecord instead.
 	placeLabel, placeCut := savedPlaceLabel(place)
+	// The file states the moment in the place's own clock, whatever zone the
+	// instant arrived in: a search hands it over in UT.
+	zone, err := time.LoadLocation(place.TZ)
+	if err != nil || place.TZ == "" {
+		return SavedChart{}, fmt.Errorf("lookup: SaveFloatingChart: the place %q has no zone that loads", place.Display())
+	}
 	record, err := astrolog.ChartRecord(ctx, astrolog.ChartToSave{
 		Name:  name,
 		Place: placeLabel,
-		When:  when,
+		When:  when.In(zone),
 		Lon:   place.Lon,
 		Lat:   place.Lat,
 	})
@@ -103,7 +108,7 @@ func SaveFloatingChart(ctx context.Context, dir, name string, when time.Time, pl
 		return SavedChart{}, err
 	}
 	beforePlace()
-	path, err := store.PlaceChartFile(dir, record, slug)
+	path, err := store.OriginalsDoor(dir).Place(slug, record)
 	if err != nil {
 		return SavedChart{}, err
 	}
@@ -114,7 +119,6 @@ func SaveFloatingChart(ctx context.Context, dir, name string, when time.Time, pl
 	if h, err := astrolog.ReadChartFileHeader(path); err == nil && h.Name != "" {
 		saved.Name = h.Name
 	}
-	saved.AtlasPlaced = atlasCanPlace(place.Lon, place.Lat)
 	return saved, nil
 }
 
@@ -158,21 +162,6 @@ func chartOwning(dir, slug string) (string, error) {
 		return name, nil
 	}
 	return "", nil
-}
-
-// atlasCanPlace reports whether the library will be able to turn these
-// coordinates back into a city. A chart file carries no timezone, so the library
-// reconstructs one from the nearest atlas city and DROPS a row it cannot
-// place; a chart saved for a spot more than location.NearestMaxDeg from any
-// city is written correctly and then never listed. The operator is told at
-// save time rather than left to notice the absence.
-func atlasCanPlace(lon, lat float64) bool {
-	atlas, err := loadAtlas()
-	if err != nil {
-		return false
-	}
-	_, ok := location.Nearest(atlas, lon, lat)
-	return ok
 }
 
 // savedPlaceLabel is the -zi place label a save writes for place: its Display,

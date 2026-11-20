@@ -23,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/cruiserxyz/sextile/internal/astrolog"
 	_ "github.com/cruiserxyz/sextile/internal/env"
 )
 
@@ -283,7 +284,11 @@ func showHTTPLocked(img []byte, serveOnly bool) (string, error) {
 
 func showXDGLocked(img []byte, mode string) (string, error) {
 	if legacyPath == "" {
-		dir, err := os.MkdirTemp("", "sextile-preview-")
+		base, err := astrolog.PrivateTempBase()
+		if err != nil {
+			return "", fmt.Errorf("preview: image directory: %w", err)
+		}
+		dir, err := os.MkdirTemp(base, "sextile-preview-")
 		if err != nil {
 			return "", fmt.Errorf("preview: image directory: %w", err)
 		}

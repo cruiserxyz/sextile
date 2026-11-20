@@ -9,6 +9,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/pane"
 	"github.com/cruiserxyz/sextile/internal/ui/term"
@@ -125,9 +126,12 @@ func ColumnRoom(innerWidth int, panelFocused, hasSelections bool, cfg term.Style
 // resolves it; RenderBodies turns it into the panel body.
 type BodiesBag struct {
 	Positions []aspect.Position
-	Cusps     aspect.Cusps
-	Stations  map[int]lookup.Station
-	Forced    map[int]lookup.Station
+	// Nodes is the form of the Nodes and Lilith the call that cast Positions
+	// carried; the three rows of those objects name it by a letter.
+	Nodes    recipe.NodeForm
+	Cusps    aspect.Cusps
+	Stations map[int]lookup.Station
+	Forced   map[int]lookup.Station
 	// Lit and LitSGR light one row's name and position (HouseOverlay).
 	Lit        aspect.Object
 	LitSGR     astrologstyle.SGR
@@ -137,6 +141,8 @@ type BodiesBag struct {
 	NatalCusps     aspect.Cusps
 	Framed         []aspect.Position
 	HouseForm      HouseForm
+	// MoonLane is the Moon's speed lane by object number (HouseOverlay.MoonLane).
+	MoonLane map[int]string
 	// Columns are the comparing frame's columns; ColumnsOK says they were
 	// computed for the scene on screen.
 	Columns   []BodyColumn
@@ -159,7 +165,7 @@ type BodiesBag struct {
 }
 
 func (b BodiesBag) overlay() HouseOverlay {
-	return HouseOverlay{Cusps: b.NatalCusps, Positions: b.NatalPositions, Framed: b.Framed, Stations: b.Stations, Forced: b.Forced, Lit: b.Lit, LitSGR: b.LitSGR, Form: b.HouseForm}
+	return HouseOverlay{Cusps: b.NatalCusps, Positions: b.NatalPositions, Framed: b.Framed, Stations: b.Stations, Forced: b.Forced, Lit: b.Lit, LitSGR: b.LitSGR, Form: b.HouseForm, MoonLane: b.MoonLane, Nodes: b.Nodes}
 }
 
 // RenderBodies draws the Bodies body: today's rows alone, one column per shown
@@ -202,7 +208,7 @@ func RenderBodies(b BodiesBag) (string, int, pane.Viewport) {
 // Columns are matched to the row's body by identity, never by index.
 func FormatColumnRow(p aspect.Position, styles astrologstyle.BodyRow, cols []BodyColumn, focus int, win colWindow, cfg term.Style, ov HouseOverlay) string {
 	useColor := cfg.UseColor()
-	bodyPart := PositionGlyph(p) + " " + bodyNameCell(p, cfg)
+	bodyPart := PositionGlyph(p) + " " + bodyNameCell(p, cfg, ov)
 	// The led row of the enter-colour experiment: the name cell and the focused
 	// chart's position take the aspect's colour, the glyph and the rest as ever.
 	lit := useColor && ov.LitSGR != "" && p.Object == ov.Lit
@@ -210,7 +216,7 @@ func FormatColumnRow(p aspect.Position, styles astrologstyle.BodyRow, cols []Bod
 	var b strings.Builder
 	switch {
 	case lit:
-		b.WriteString(RenderSGR(styles.Body, PositionGlyph(p)+" ") + RenderSGR(ov.LitSGR, bodyNameCell(p, cfg)))
+		b.WriteString(RenderSGR(styles.Body, PositionGlyph(p)+" ") + RenderSGR(ov.LitSGR, bodyNameCell(p, cfg, ov)))
 		position = ov.LitSGR
 	case useColor:
 		b.WriteString(RenderSGR(styles.Body, bodyPart))

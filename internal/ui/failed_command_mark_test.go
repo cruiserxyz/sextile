@@ -27,7 +27,7 @@ func failedArgvLines(m Model) []logLine {
 func openLargeLog(t *testing.T, m Model) Model {
 	t.Helper()
 	m.cfg = Config{Accessible: true}
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}

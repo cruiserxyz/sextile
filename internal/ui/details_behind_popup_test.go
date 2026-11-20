@@ -18,7 +18,7 @@ func TestDetailsKeepsItsReportBehindAPopup(t *testing.T) {
 		key  tea.KeyMsg
 	}{
 		{"the chart picker", tea.KeyMsg{Type: tea.KeyCtrlO}},
-		{"the house chooser", tea.KeyMsg{Type: tea.KeyCtrlH}},
+		{"the zodiac chooser", tea.KeyMsg{Type: tea.KeyCtrlZ}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, _ := followFixture(t, Config{Accessible: true}, 132, 40)

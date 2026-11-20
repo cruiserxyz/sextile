@@ -56,7 +56,7 @@ func TestTimelineRunLogTranscript(t *testing.T) {
 		want []string
 	}{
 		{"ok", []string{"astrolog -timeline October"}},
-		{"fail", []string{"astrolog -timeline October", "Couldn't read the timeline. Press ,l l for what Astrolog ran."}},
+		{"fail", []string{"astrolog -timeline October", "timeline: the timeline not read, Astrolog returned nothing usable"}},
 		{"left", []string{"astrolog -timeline May 2020"}},
 	}
 	for _, c := range cases {

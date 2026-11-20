@@ -72,7 +72,7 @@ func TestLibraryMarksUntitled(t *testing.T) {
 			t.Error("a YAML chart listed as a row")
 		}
 	}
-	if len(lib.Drops) != 1 || lib.Drops[0].File != "constructed.yaml" || lib.Drops[0].Reason != "YAML charts are no longer read" {
+	if len(lib.Drops) != 1 || lib.Drops[0].File != "constructed.yaml" || lib.Drops[0].Reason != "Sextile no longer reads charts in the old .yaml form" {
 		t.Errorf("drops = %+v, want constructed.yaml named as no longer read", lib.Drops)
 	}
 }

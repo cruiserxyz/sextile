@@ -90,7 +90,7 @@ func Resolve(candidates []Candidate, atlas []Indexed) (Resolution, error) {
 		if len(narrowed) > 1 {
 			warnings = append(warnings, fmt.Sprintf(
 				"candidate %q: %q is ambiguous — %d atlas entries match%s (e.g. %s and %s) — "+
-					"refusing to guess, falling through",
+					"refusing to pick one, falling through",
 				c.Source, c.Place.Name, len(narrowed), how,
 				narrowed[0].Display(), narrowed[1].Display()))
 			continue

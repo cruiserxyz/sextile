@@ -51,15 +51,25 @@ type Chrome struct {
 }
 
 // Box is one centred modal's chrome: a titled frame, a search line, a
-// rule, a caller's list, and a footer, inside a padded border.
+// rule, a caller's list, and a footer, inside a border with no empty row
+// at its top or its bottom.
 type Box struct {
 	// Title names the popup in its frame's top edge, drawn by the function
 	// that draws a panel's title (the specification C1, C2).
 	// Required: a popup with no name cannot say which popup it is.
 	Title string
 
+	// Tight puts no padding between the frame and the content: a popup whose
+	// rows are full-width bars (the Keybindings cursor row) draws its own
+	// margin inside them.
+	Tight bool
+
+	// TopRight is words at the right end of the top edge, in the frame's
+	// style: `(Type to filter)`.
+	TopRight string
+
 	// NoInput drops the search line and the rule under it, and gives both
-	// rows to the list: help has nothing to type into.
+	// rows to the list: a popup that draws its own filter line has none.
 	NoInput bool
 
 	// Position is the list's `N of M`, drawn into the bottom edge. Nil for a
@@ -79,6 +89,11 @@ type Box struct {
 	// list holds one kind of thing names it.
 	Prompt string
 
+	// Hint is one dim line under the search line, for a popup that says a rule
+	// once. It takes a row from the list, as a second input line does, and the
+	// popup's navigation takes the same row from ListHeight.
+	Hint string
+
 	// Fit is what the content needs. The box is as wide as the widest line
 	// it draws and as tall as its rows, and no wider or taller, up to what
 	// the terminal gives (operator, 2026-10-27: "make the popup windows
@@ -94,16 +109,17 @@ type Box struct {
 	// Nil means the pickers' "Search: " line, echoing FilterText.
 	Inputs []input
 
-	// Zone reserves the message zone: a blank row and the row for a message,
-	// at the foot of the box, from the moment it opens. Every popup that can
-	// refuse or note something has it, and it is the same in all of them, so a
-	// message never sits against the content (operator, 2026-10-27).
+	// Zone lets the popup say a message below its content: a blank row, then
+	// the message's rows. With no Foot the box has no row for it until there
+	// is one: it grows by the message's rows and shrinks back when the message
+	// goes (operator, 2026-11-14: no popup keeps an empty row). With a Foot the
+	// zone keeps its two rows from the moment the box opens.
 	Zone bool
 
-	// Message is what the zone says now. A message that needs more than its
-	// row wraps and takes rows from the foot of the content above, which shows
-	// fewer rows meanwhile; the box does not change size, and the content has
-	// its rows back when the message clears.
+	// Message is what the zone says now. Without a Foot it takes the rows it
+	// needs and the box grows by them. With a Foot it takes the zone's rows,
+	// and any it needs beyond them from the foot of the content, which shows
+	// fewer rows meanwhile.
 	Message string
 
 	// MessageLines caps the rows a message may take: the rest is cut with the
@@ -111,8 +127,8 @@ type Box struct {
 	MessageLines int
 
 	// Foot is the zone's row while no message is shown: plain text, cut to
-	// the content width, under the zone's blank row. A message replaces it
-	// (the zone then reads as before). Empty leaves the quiet zone blank.
+	// the content width, under the zone's blank row. A message replaces it.
+	// A popup with a Foot keeps the zone's two rows; empty keeps none.
 	Foot string
 
 	// KeepRows is the rows of the content a message may not take: what stays
@@ -127,7 +143,7 @@ type Box struct {
 	Taller int
 }
 
-// ZoneRows is the rows the message zone keeps: the blank row above the
+// ZoneRows is the rows a message zone with a Foot keeps: the blank row above the
 // message and the message's own row.
 const ZoneRows = 2
 
@@ -208,11 +224,23 @@ func modalWidthFloor(b Box, cfg term.Style) int {
 	if !cfg.UseColor() {
 		mark = 1
 	}
-	floor := min(ansi.StringWidth(b.Title), ProseWidth) + mark + 4 - ChromeWidth
+	chrome := b.chromeWidth()
+	floor := min(ansi.StringWidth(b.Title), ProseWidth) + mark + 4 - chrome
 	if b.Position != nil {
-		floor = max(floor, ansi.StringWidth(b.Position.Widest())+4-ChromeWidth)
+		floor = max(floor, ansi.StringWidth(b.Position.Widest())+4-chrome)
+	}
+	if b.TopRight != "" {
+		floor = max(floor, min(ansi.StringWidth(b.Title), ProseWidth)+mark+ansi.StringWidth(b.TopRight)+6-chrome)
 	}
 	return floor
+}
+
+// chromeWidth is what the border and the padding add to this box's content.
+func (b Box) chromeWidth() int {
+	if b.Tight {
+		return 2
+	}
+	return ChromeWidth
 }
 
 // SearchLineWidth is the floor the search line puts under the box.
@@ -236,7 +264,7 @@ func ContentWidth(b Box, cfg term.Style, termW int) int {
 			need = max(need, in.Width)
 		}
 	default:
-		need = max(need, SearchLineWidth(prompt))
+		need = max(need, SearchLineWidth(prompt), ansi.StringWidth(b.Hint))
 	}
 	return min(need, modalContentCap(termW))
 }
@@ -247,10 +275,10 @@ func Render(b Box, cfg term.Style, termW, termH int, chrome Chrome, list func(wi
 	if b.Title == "" {
 		panic("renderModalBox: a popup must have a title")
 	}
-	const (
-		hPadding = modalHPadding
-		vPadding = 1
-	)
+	hPadding := modalHPadding
+	if b.Tight {
+		hPadding = 0
+	}
 	if b.Fit.Width < 1 {
 		panic("renderModalBox: a popup must say how wide its content is (modalBox.Fit)")
 	}
@@ -283,28 +311,42 @@ func Render(b Box, cfg term.Style, termW, termH int, chrome Chrome, list func(wi
 		// A filter longer than the line keeps its tail, where the cursor is.
 		room := max(contentWidth-ansi.StringWidth(prompt)-1, 0)
 		inputLines = []string{lipgloss.NewStyle().Width(contentWidth).Render(prompt + term.CutLeft(b.FilterText, room, cfg) + "█")}
+		if b.Hint != "" {
+			inputLines = append(inputLines, lipgloss.NewStyle().Width(contentWidth).Render(chrome.Dim(term.FitLine(b.Hint, contentWidth, cfg))))
+			listHeight = max(listHeight-1, 1)
+		}
+	}
+	// The message zone. With a Foot it keeps a blank row and the foot's row from
+	// the moment the box opens (the Bodies box). Without one it keeps nothing:
+	// the box ends on its last real row, and a message takes the rows it needs
+	// below the content, so the box grows by them and shrinks back when the
+	// message goes.
+	var msgLines []string
+	if b.Zone && b.Message != "" {
+		msgLines = messageRows(b, contentWidth, cfg)
 	}
 	zone := 0
-	if b.Zone {
+	switch {
+	case b.Zone && b.Foot != "":
 		zone = ZoneRows
+	case len(msgLines) > 0:
+		zone = 1 + len(msgLines)
 	}
 	// The content has what the terminal gives it, up to its rows; the zone is
-	// the box's own rows below it, on top of that: a popup that can say
-	// something has the room for it.
+	// the box's own rows below it.
 	wanted := min(listHeight, max(b.Fit.Rows, 1))
 	total := wanted + zone
 	if !FitProbe.Uncapped {
-		// Never taller than the terminal: the top edge, the padding, the input
+		// Never taller than the terminal: the top edge, the input
 		// lines, their rule and the bottom edge are outside the list.
-		chrome := 1 + 2*vPadding + len(inputLines) + 1
+		chrome := 1 + len(inputLines) + 1
 		if !b.NoInput {
 			chrome++
 		}
 		total = min(total, max(termH-chrome, 1))
 	}
 	// On a terminal too short for both, the content keeps its rows and the zone
-	// gives way (a quiet zone is empty rows, so nothing is lost until something
-	// is said).
+	// gives way.
 	reserved := min(max(total-wanted, 0), zone)
 	contentHeight := total - reserved
 	var zoneLines []string
@@ -317,14 +359,10 @@ func Render(b Box, cfg term.Style, termW, termH int, chrome Chrome, list func(wi
 			}
 			zoneLines = append(zoneLines, quiet[len(quiet)-reserved:]...)
 		} else {
-			lines := wrapAtSpace(strings.Join(strings.Fields(b.Message), " "), contentWidth)
+			lines := msgLines
 			// A blank row above the message, then the message; what it needs
 			// beyond the zone's rows it takes from the foot of the content,
 			// which keeps the rows it may not lose.
-			if b.MessageLines > 0 && len(lines) > b.MessageLines {
-				lines[b.MessageLines-1] = term.CutRight(strings.Join(lines[b.MessageLines-1:], " "), contentWidth, cfg)
-				lines = lines[:b.MessageLines]
-			}
 			takeable := max(contentHeight-max(b.KeepRows, 1), 0)
 			rows := max(min(1+len(lines), reserved+takeable), 1)
 			if rows < 1+len(lines) {
@@ -372,20 +410,26 @@ func Render(b Box, cfg term.Style, termW, termH int, chrome Chrome, list func(wi
 	frame := pane.BorderColour(true, cfg)
 	style := lipgloss.NewStyle().
 		Border(border, false, true, true, true).
-		Padding(vPadding, hPadding)
+		Padding(0, hPadding)
 	if cfg.UseColor() {
 		style = style.BorderForeground(frame)
 	}
 	rest := style.Render(body)
+	if cfg.UseColor() {
+		rest = boldFrame(rest, frame)
+	}
 	width := lipgloss.Width(rest)
 	top := chrome.TopEdge(width, b.Title, frame, leftCorner, rightCorner, dash)
+	if b.TopRight != "" {
+		top = withTopRight(top, b.TopRight, frame, dash, rightCorner, cfg)
+	}
 	box := top + "\n" + rest
 
 	if b.Scroll != nil {
 		v, firstRow := b.Scroll(contentHeight)
 		// The track starts on the list's first row: below the top edge, the
-		// padding, the search line and its rule.
-		above := 1 + vPadding + len(inputLines)
+		// search line and its rule.
+		above := 1 + len(inputLines)
 		if !b.NoInput {
 			above++
 		}
@@ -394,7 +438,65 @@ func Render(b Box, cfg term.Style, termW, termH int, chrome Chrome, list func(wi
 	if b.Position != nil {
 		box = b.Position.Draw(box)
 	}
+	if cfg.UseColor() {
+		box = boldBottomEdge(box, frame)
+	}
 	return term.PaintGlyphRoom(box)
+}
+
+// withTopRight writes words at the right end of a top edge, ending in a dash
+// and the corner, in the frame's style, and leaves the title as it was.
+func withTopRight(top, words string, frame lipgloss.Color, dash, corner string, cfg term.Style) string {
+	tail := words + dash + corner
+	w := ansi.StringWidth(top)
+	tw := ansi.StringWidth(tail)
+	if tw+2 >= w {
+		return top
+	}
+	style := lipgloss.NewStyle()
+	if cfg.UseColor() {
+		style = style.Foreground(frame).Bold(true)
+	}
+	return ansi.Cut(top, 0, w-tw) + style.Render(tail)
+}
+
+// boldFrame draws the frame of a rendered box bold in the frame colour: the
+// first and last cell of each row above the bottom edge. The open popup
+// has the keyboard, and a bold green frame says so.
+func boldFrame(box string, frame lipgloss.Color) string {
+	edge := lipgloss.NewStyle().Foreground(frame).Bold(true)
+	rows := strings.Split(box, "\n")
+	for i, row := range rows {
+		w := ansi.StringWidth(row)
+		if w < 2 {
+			continue
+		}
+		if i == len(rows)-1 {
+			continue
+		}
+		rows[i] = edge.Render(ansi.Strip(ansi.Cut(row, 0, 1))) + ansi.Cut(row, 1, w-1) + edge.Render(ansi.Strip(ansi.Cut(row, w-1, w)))
+	}
+	return strings.Join(rows, "\n")
+}
+
+// boldBottomEdge draws the bottom edge bold in the frame colour once the
+// counter is written into it.
+func boldBottomEdge(box string, frame lipgloss.Color) string {
+	rows := strings.Split(box, "\n")
+	last := len(rows) - 1
+	rows[last] = lipgloss.NewStyle().Foreground(frame).Bold(true).Render(ansi.Strip(rows[last]))
+	return strings.Join(rows, "\n")
+}
+
+// messageRows is the message as the zone lays it out: wrapped at the content
+// width, and cut to MessageLines rows when the box caps them.
+func messageRows(b Box, contentWidth int, cfg term.Style) []string {
+	lines := MessageLines(b.Message, contentWidth)
+	if b.MessageLines > 0 && len(lines) > b.MessageLines {
+		lines[b.MessageLines-1] = term.CutRight(strings.Join(lines[b.MessageLines-1:], " "), contentWidth, cfg)
+		lines = lines[:b.MessageLines]
+	}
+	return lines
 }
 
 // ListHeight is how many rows the box gives a caller's list at this
@@ -408,10 +510,11 @@ func ListHeight(termH int) int {
 	const (
 		minModalHeight = 14
 		maxModalHeight = 30
-		vPadding       = 1
 	)
 	modalHeight := max(min(termH-10, maxModalHeight), minModalHeight)
-	contentHeight := modalHeight - 2 - (vPadding * 2)
+	// The list has the rows it always had; the box is two rows shorter now it
+	// has no empty row inside its top and bottom edges.
+	contentHeight := modalHeight - 4
 	if contentHeight < 4 {
 		contentHeight = 4
 	}
@@ -427,23 +530,21 @@ func ListHeight(termH int) int {
 // The popups' names, in their frames' top edges
 // (the specification V1). Sentence case, like every title.
 const (
-	TitleCity       = "City"
-	TitleOpenChart  = "Open chart"
-	TitleChartTitle = "Chart title"
-	TitleSaveChart  = "Save chart"
-	TitleBodies     = "Bodies"
-	TitleAspects    = "Aspects"
-	TitleKeys       = "Help"
+	TitleCity        = "City"
+	TitleOpenChart   = "Open chart"
+	TitleNameChart   = "Name this chart"
+	TitleSaveChart   = "Save chart"
+	TitleBodies      = "Bodies"
+	TitleAspects     = "Aspects"
+	TitleKeybindings = "Keybindings"
 	// The popups reached by a leader sequence or the finders: their frames'
-	// words, named once so Help's section for each reads the same string.
-	TitleHouses       = "Houses"
-	TitleZodiac       = "Zodiac"
-	TitleSessions     = "Sessions"
-	TitleHouseDisplay = "House display"
+	// words, named once so the popup's title over each reads the same string.
+	TitleHouses   = "Houses"
+	TitleZodiac   = "Zodiac"
+	TitleNodes    = "Nodes and Lilith"
+	TitleSessions = "Sessions"
 	// TitleExperiments is the hidden popup behind the focused Log (`p`).
 	TitleExperiments = "Experiments"
 	TitleLog         = "Log"
 	TitleLogConsole  = "Log console"
-	// TitleActions is the palette ⌃p opens: every command with its key.
-	TitleActions = "Actions"
 )

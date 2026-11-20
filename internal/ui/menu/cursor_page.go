@@ -88,7 +88,7 @@ func PageCursor(cursor, offset, total, visible int, op PageOp) (int, int) {
 // not scroll the window, one that would come within the margin of an edge
 // scrolls it. A window too short to hold both margins plus a row centres on
 // the line instead, because it would otherwise scroll on every step. The
-// popups' fuzzy lists, the Log console, help and the timeline all use this.
+// popups' fuzzy lists, the Log console, Keybindings and the timeline all use this.
 func ScrollToShow(offset, line, total, visible int) int {
 	if visible <= 0 {
 		return offset

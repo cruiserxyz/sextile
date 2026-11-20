@@ -2,14 +2,6 @@ package astrolog
 
 import "testing"
 
-// (TestBuildChartArgv_Order removed in the v0b cutover — buildChartArgv is gone;
-// the compiler's argv ordering is now pinned by internal/invariants
-// astrolog_compiler_test.go I1-I11 + the golden-argv, and by the hardcoded-argv
-// guards in compiler_test.go. TestSpecFromPrimitives_Bridge removed in the v1
-// cutover — the primitive bridge is gone; lookup now builds the
-// recipe.ChartSpec directly and recipe's own tests pin spec validation. The
-// canonical hellenisticSpec / hellenisticSpecAt helpers live in compiler_test.go.)
-
 func TestFormatLon(t *testing.T) {
 	cases := []struct {
 		in   float64

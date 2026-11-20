@@ -362,3 +362,33 @@ func refuseBeforeJD0(sec int64) error {
 	}
 	return nil
 }
+
+// Step is the instant t moved by years, months and days in zone, in Astrolog's
+// calendar (Julian before 15 October 1582), with the wall clock kept: the local
+// date's year and month are stepped as Astrolog names them, a day past the
+// month's end carries into the next month (AdjustTime, DayInMonth), the days
+// are added to that date, and the fields are read back in zone as Astrolog's
+// reader reads them. A day step across 4 October 1582 lands on 15 October, as
+// Astrolog's own searches step.
+func (c AstrologCalendar) Step(t time.Time, zone *time.Location, years, months, days int) (time.Time, error) {
+	local := t.In(zone)
+	y, mon, d := c.DateOf(t, zoneOffset(local))
+	m := int(mon) + months
+	y += years + floorDivInt(m-1, 12)
+	m = (m-1)%12 + 1
+	if m < 1 {
+		m += 12
+	}
+	y, m, d, _ = adjustTime(y, m, d, 0)
+	// Days are counted on Astrolog's day numbers, so a step through the
+	// reform is a step of days, not of field values.
+	n := mdyToJulian(m, d, y) + int64(days)
+	y, m, d = civilFromJDN(n, n >= jdnReform)
+	p, err := c.ParseIn(Fields{Year: y, Month: m, Day: d, Hour: local.Hour(), Minute: local.Minute()}, zone)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return p.Instant.Add(time.Duration(local.Second())*time.Second + time.Duration(local.Nanosecond())), nil
+}
+
+func floorDivInt(a, b int) int { return int(floorDiv(int64(a), int64(b))) }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 )
@@ -164,4 +165,43 @@ func WithPanelRule(box string, row int, cfg term.Style, focused bool) string {
 		rule = lipgloss.NewStyle().Foreground(BorderColour(focused, cfg)).Render(rule)
 	}
 	return term.Composite(box, rule, 0, 1+row)
+}
+
+// OriginMark is the glyph that marks the panel Details was entered from, and
+// OriginMarkASCII its plain form for ASCII-only frames. Both are one cell wide.
+const (
+	OriginMark      = "\u273b"
+	OriginMarkASCII = "*"
+)
+
+// originMarkBack is how many cells the mark stands from the right edge: the
+// corner, one dash, then the mark.
+const originMarkBack = 3
+
+// WithOriginMark overlays the origin mark on the top border of an already
+// rendered panel box, on the dash two cells left of the top-right corner, in
+// the focus colour (the mark alone is coloured, the border stays as it was).
+// When that cell is not a dash the box is returned untouched, so it never
+// covers a title or another mark.
+func WithOriginMark(box string, cfg term.Style) string {
+	if box == "" {
+		return box
+	}
+	first, _, _ := strings.Cut(box, "\n")
+	cells := []rune(ansi.Strip(first))
+	x := len(cells) - originMarkBack
+	if x < 1 {
+		return box
+	}
+	if c := string(cells[x]); c != "─" && c != "-" {
+		return box
+	}
+	mark := OriginMark
+	if cfg.UseASCII() {
+		mark = OriginMarkASCII
+	}
+	if cfg.UseColor() {
+		mark = lipgloss.NewStyle().Foreground(cfg.FocusColour()).Bold(true).Render(mark)
+	}
+	return term.Composite(box, mark, x, 0)
 }

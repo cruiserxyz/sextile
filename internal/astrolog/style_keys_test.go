@@ -102,13 +102,13 @@ func TestEarthIsAStyleKeyTheZeroObjectIsNot(t *testing.T) {
 		{FirstName: "Mars", KindName: "Squ", SecondName: "Nowhere", Style: astrologstyle.AspectStyle{First: "mars", Kind: "squ", Second: "nowhere"}},
 	}
 	for name, got := range map[string]astrologstyle.Aspects{
-		"single": mapAspectStyles(rows, reg),
-		"cross":  mapCrossAspectStyles(rows, reg),
+		"single": mapAspectStyles(rows, reg, testAspects(t)),
+		"cross":  mapCrossAspectStyles(rows, reg, testAspects(t)),
 	} {
 		if len(got) != 1 {
 			t.Errorf("%s: %d aspect styles, want Earth-Mars alone: %+v", name, len(got), got)
 		}
-		if style := got[astrologstyle.AspectIdentity{First: earth, Second: mars, Kind: aspect.Conjunction}]; style.First != "earth" {
+		if style := got[astrologstyle.AspectIdentity{First: earth, Second: mars, Kind: kindOf("Con")}]; style.First != "earth" {
 			t.Errorf("%s: Earth-Mars style = %+v, want its own row's", name, style)
 		}
 		for id := range got {

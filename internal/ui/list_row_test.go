@@ -239,7 +239,7 @@ func TestListRowCursor(t *testing.T) {
 func TestChartPickerRowColumns(t *testing.T) {
 	c := testNamedChart("Constructed One", fixtureOneP)
 	c.Year, c.Month, c.Day = 1995, 3, 20
-	got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60)
+	got := menu.Row(chartRow(c, false, false, time.Time{}), plainCfg, 60)
 	if !strings.HasPrefix(got, "  Constructed One ") || !strings.HasSuffix(got, "Test Bay, TS   Mar 20, 1995") {
 		t.Errorf("chart row = %q, want the name left and `Test Bay, TS   Mar 20, 1995` at the right edge", got)
 	}
@@ -247,7 +247,7 @@ func TestChartPickerRowColumns(t *testing.T) {
 	t.Run("no date", func(t *testing.T) {
 		c := c
 		c.Month, c.Day = 0, 0
-		got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 60)
+		got := menu.Row(chartRow(c, false, false, time.Time{}), plainCfg, 60)
 		if !strings.HasSuffix(got, "Test Bay, TS") || strings.Contains(got, "1995") {
 			t.Errorf("a chart with no date must end on its place, with no date and no year: %q", got)
 		}
@@ -291,14 +291,14 @@ func TestChartPickerRowColumns(t *testing.T) {
 				t.Errorf("%s's row = %q, want it to show %q", name, r, want)
 			}
 		}
-		if r := rowOf("Bad Date"); r == "" || strings.Contains(r, "1995") || !strings.HasSuffix(strings.TrimRight(r, " |│"), "Bremen, DE") {
+		if r := rowOf("Bad Date"); r == "" || strings.Contains(r, "1995") || !strings.HasSuffix(strings.TrimRight(r, " |│"), "Bremen") {
 			t.Errorf("Bad Date's row = %q, want it listed, ending on its place with no date", r)
 		}
 		row := rowOf("Equinox-2026-09")
 		if row == "" {
 			t.Fatalf("Equinox-2026-09 is not in the picker:\n%s", out)
 		}
-		if !strings.Contains(row, "Bremen, DE   Sep 23, 2026") {
+		if !strings.Contains(row, "Bremen, Germany   Sep 23, 2026") {
 			t.Errorf("Equinox-2026-09's row = %q, want its place and the date its file states, `Sep 23, 2026`", row)
 		}
 	})
@@ -333,11 +333,11 @@ func TestAspectRowColumns(t *testing.T) {
 	sq := testRegistry()[3]
 	for _, width := range []int{54, 70, 86} {
 		got := menu.Row(popup.AspectRow(st, plainCfg, sq, false, width), plainCfg, width)
-		want := fmt.Sprintf("%-3s   %6.2f°   orb %4.1f", sq.Abbrev, sq.Angle, sq.Orb)
+		want := fmt.Sprintf("%-3s   %6.2f°   orb %4.1f", sq.Kind.Abbrev, sq.Angle, sq.Orb)
 		if !strings.HasSuffix(got, want) {
 			t.Errorf("width %d: aspect row = %q, want it to end %q — abbreviation, angle, orb, in that order", width, got, want)
 		}
-		if !strings.HasPrefix(got, "  [✓] "+sq.Name+" ") {
+		if !strings.HasPrefix(got, "  [✓] "+sq.Kind.Name+" ") {
 			t.Errorf("width %d: aspect row = %q, want the tick box and the name on the left", width, got)
 		}
 	}
@@ -345,7 +345,7 @@ func TestAspectRowColumns(t *testing.T) {
 	// C4b: below the modal's minimum the orb drops first, and only the name
 	// ever shortens. The marker, abbreviation and angle stay whole.
 	long := sq
-	long.Name = "Sesquiquadrate-ish long"
+	long.Kind.Name = "Sesquiquadrate-ish long"
 	// The orb leaves every row of a list together, at the width its widest
 	// row (here this one, in the registry) no longer fits whole.
 	st = popup.OpenAspects(append(testRegistry(), long), recipe.AspectPolicy{})
@@ -354,7 +354,7 @@ func TestAspectRowColumns(t *testing.T) {
 		if strings.Contains(got, "orb") {
 			t.Errorf("width %d: the orb must drop first: %q", width, got)
 		}
-		if !strings.HasPrefix(got, "> [") || !strings.HasSuffix(got, fmt.Sprintf("%-3s   %6.2f°", long.Abbrev, long.Angle)) {
+		if !strings.HasPrefix(got, "> [") || !strings.HasSuffix(got, fmt.Sprintf("%-3s   %6.2f°", long.Kind.Abbrev, long.Angle)) {
 			t.Errorf("width %d: the marker, abbreviation and angle must stay whole: %q", width, got)
 		}
 		if ansi.StringWidth(got) != width {
@@ -378,7 +378,7 @@ func TestBodyRowColumns(t *testing.T) {
 
 // the specification C9 and its failure mode: the two display
 // colours come from preferences.yaml. A usable value is taken silently;
-// anything else is refused in one Log note naming the key and the value, and
+// anything else is refused in one Log note naming the value, and
 // the default stands.
 func TestDisplayColoursPreference(t *testing.T) {
 	cases := []struct {
@@ -390,9 +390,9 @@ func TestDisplayColoursPreference(t *testing.T) {
 		{"absent", store.DisplayConfig{}, "", "", ""},
 		{"a palette number", store.DisplayConfig{FocusColour: "2", CursorRowColour: "30"}, "2", "30", ""},
 		{"a hex colour", store.DisplayConfig{CursorRowColour: "#1f6f6f"}, "", "#1f6f6f", ""},
-		{"out of the palette", store.DisplayConfig{FocusColour: "256"}, "", "", "display.focus_color \"256\""},
-		{"a colour name", store.DisplayConfig{FocusColour: "grean"}, "", "", "display.focus_color \"grean\""},
-		{"short hex", store.DisplayConfig{CursorRowColour: "#fff"}, "", "", "display.cursor_row_color \"#fff\""},
+		{"out of the palette", store.DisplayConfig{FocusColour: "256"}, "", "", "colour \"256\" not valid, ignored"},
+		{"a colour name", store.DisplayConfig{FocusColour: "grean"}, "", "", "colour \"grean\" not valid, ignored"},
+		{"short hex", store.DisplayConfig{CursorRowColour: "#fff"}, "", "", "colour \"#fff\" not valid, ignored"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -432,7 +432,25 @@ func TestRowStripeRetiredNotedOnce(t *testing.T) {
 			notes = append(notes, l)
 		}
 	}
-	if len(notes) != 1 || !strings.Contains(notes[0], "no longer used") || !strings.Contains(notes[0], "display.cursor_row_color") {
-		t.Errorf("want one note that row_stripe is no longer used and naming display.cursor_row_color, got %q", notes)
+	if len(notes) != 1 || !strings.Contains(notes[0], "no longer does anything") {
+		t.Errorf("want one note that row_stripe no longer does anything, got %q", notes)
+	}
+}
+
+// A chart's age counts the years elapsed since its date as Astrolog reads it:
+// Kepler's Julian 27 December 1571 is Gregorian 6 January 1572, so on 1
+// January 2026 he is 453, not 454 (the Julian fields would say 454).
+func TestChartAgeReadsAJulianDateAsAstrologDoes(t *testing.T) {
+	kepler := store.NamedChart{Year: 1571, Month: 12, Day: 27}
+	for _, tc := range []struct {
+		now  time.Time
+		want int
+	}{
+		{time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC), 453},
+		{time.Date(2026, 1, 6, 12, 0, 0, 0, time.UTC), 454},
+	} {
+		if got, ok := chartAge(kepler, tc.now); !ok || got != tc.want {
+			t.Errorf("on %s the age is %d (%v), want %d", tc.now.Format("2 Jan 2006"), got, ok, tc.want)
+		}
 	}
 }

@@ -4,6 +4,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"github.com/cruiserxyz/sextile/internal/ui/popup"
 	"os"
@@ -102,16 +103,50 @@ func fileText(t *testing.T, path string) string {
 	return string(b)
 }
 
-// backupFile is where the backup of the chart at path is kept.
+// datedCopies are the dated copies kept of the chart at path: the files of its
+// backup folder named <stem>.<stamp>.as.
+func datedCopies(path string) []string {
+	stem := strings.TrimSuffix(filepath.Base(path), store.ChartFileExt)
+	hits, _ := filepath.Glob(filepath.Join(store.BackupDir(filepath.Dir(path)), stem+".????????T??????Z"+store.ChartFileExt))
+	return hits
+}
+
+// backupFile is where the one dated copy of the chart at path is kept; with
+// none, or several, it names a path that is not there.
 func backupFile(path string) string {
-	return filepath.Join(store.BackupDir(filepath.Dir(path)), filepath.Base(path))
+	if c := datedCopies(path); len(c) == 1 {
+		return c[0]
+	}
+	return filepath.Join(store.BackupDir(filepath.Dir(path)), "no-single-dated-copy-of-"+filepath.Base(path))
+}
+
+// keptCopy is the dated copy as the Log names it.
+func keptCopy(dir, file string) string {
+	return store.ChartBackupDisplay(dir, filepath.Base(backupFile(filepath.Join(dir, file))))
 }
 
 func noBackup(t *testing.T, path string) {
 	t.Helper()
-	if _, err := os.Stat(backupFile(path)); !os.IsNotExist(err) {
-		t.Errorf("%s has a backup; nothing should have been written", filepath.Base(path))
+	if c := datedCopies(path); len(c) != 0 {
+		t.Errorf("%s has a backup %v; nothing should have been written", filepath.Base(path), c)
 	}
+}
+
+// submit presses Enter in a title form and answers the change question with y
+// when it comes.
+func submit(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.title.Confirming {
+		return yes(t, m)
+	}
+	return m, cmd
+}
+
+// yes answers a question of the door with y.
+func yes(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	return sendKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 }
 
 // runToAnchor runs a pick's resolve and returns the model after it lands.
@@ -135,8 +170,8 @@ func TestPickUntitledOpensTitleForm(t *testing.T) {
 		file, titleHint, placeValue, placeHint, plainInfo, colorInfo string
 	}{
 		{"Equinox-2026-09.as", "Equinox-2026-09", "Bremen, Germany", "", "Please enter a chart title for Equinox-2026-09.as.", "Please enter a chart title."},
-		{"NoPlace.as", "NoPlace", "", "Munich, DE", "Please enter a chart title for NoPlace.as.", "Please enter a chart title."},
-		{"TitledNoPlace.as", "Constructed Titled", "", "Munich, DE", "Please enter a place for TitledNoPlace.as.", "Please enter a place."},
+		{"NoPlace.as", "NoPlace", "", "", "Please enter a chart title for NoPlace.as.", "Please enter a chart title."},
+		{"TitledNoPlace.as", "Constructed Titled", "", "", "Please enter a place for TitledNoPlace.as.", "Please enter a place."},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			m := openedPicker(t)
@@ -160,7 +195,9 @@ func TestPickUntitledOpensTitleForm(t *testing.T) {
 			}
 			// The info line: general with colour, where the placeholder shows
 			// the name; naming the file without, where no placeholder is drawn.
-			// Nothing else about files is shown (operator, 2026-10-02).
+			// A place name no near city carries (no atlas is loaded here)
+			// replaces the request with the note about it. Nothing else about
+			// files is shown (operator, 2026-10-02).
 			plain := titleFrame(m)
 			if !strings.Contains(plain, tc.plainInfo) || strings.Contains(plain, "backup") {
 				t.Errorf("colourless form lacks %q, or mentions a backup:\n%s", tc.plainInfo, plain)
@@ -245,10 +282,10 @@ func TestTitleFormRefusesAnEmptyPlace(t *testing.T) {
 	if !strings.Contains(frame, "Add a place to save this title.") {
 		t.Errorf("the required-field line is not drawn:\n%s", frame)
 	}
-	if !strings.Contains(frame, "Place: █") {
+	if !strings.Contains(frame, "Place name:  █") {
 		t.Errorf("the cursor is not on Place:\n%s", frame)
 	}
-	if strings.Contains(frame, "Title: Constructed One█") {
+	if strings.Contains(frame, "Title:       Constructed One█") {
 		t.Errorf("the cursor stayed on Title:\n%s", frame)
 	}
 	if fileText(t, path) != noPlaceChart {
@@ -264,8 +301,8 @@ func titleEquinox(t *testing.T, title string) Model {
 	m := openedPicker(t)
 	m, _ = pickRow(t, m, "Equinox-2026-09.as")
 	m = typeText(t, m, title)
-	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the change question
+	m, cmd := yes(t, m)
 	if cmd == nil || !m.title.Saving {
 		t.Fatal("the submit dispatched no write")
 	}
@@ -308,12 +345,15 @@ func TestTitleWriteLogLine(t *testing.T) {
 	t.Run("first write", func(t *testing.T) {
 		dir := titleLibrary(t, []string{"Equinox-2026-09.as"}, nil)
 		m := titleEquinox(t, "Constructed One")
-		assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(dir, "Equinox-2026-09.as")+`)`)
+		assertOneChartLine(t, m, `chart: Equinox-2026-09.as titled as "Constructed One" (original kept as `+keptCopy(dir, "Equinox-2026-09.as")+`)`)
 	})
-	t.Run("backup already there", func(t *testing.T) {
-		titleLibrary(t, []string{"Equinox-2026-09.as"}, map[string]string{".sextile/backup/Equinox-2026-09.as": "an older original\n"})
+	t.Run("an older undated backup is left as it is", func(t *testing.T) {
+		dir := titleLibrary(t, []string{"Equinox-2026-09.as"}, map[string]string{".sextile/backup/Equinox-2026-09.as": "an older original\n"})
 		m := titleEquinox(t, "Constructed One")
-		assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One"`)
+		assertOneChartLine(t, m, `chart: Equinox-2026-09.as titled as "Constructed One" (original kept as `+keptCopy(dir, "Equinox-2026-09.as")+`)`)
+		if got := fileText(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); got != "an older original\n" {
+			t.Errorf("the older backup changed: %q", got)
+		}
 	})
 }
 
@@ -321,7 +361,7 @@ func assertOneChartLine(t *testing.T, m Model, want string) {
 	t.Helper()
 	var got []string
 	for _, l := range m.logLines {
-		if strings.HasPrefix(l.text, "chart: titled") {
+		if strings.HasPrefix(l.text, "chart: ") && strings.Contains(l.text, " titled as ") {
 			got = append(got, l.text)
 			if l.lane != laneNote {
 				t.Errorf("%q is on lane %d, want the note lane", l.text, l.lane)
@@ -382,6 +422,9 @@ func TestRestoreNeverTitles(t *testing.T) {
 // titleFrame is the form as drawn at 132x40. These models have no terminal
 // size, so View() would draw nothing at all.
 func titleFrame(m Model) string {
+	if m.title.Confirming {
+		return dialog.RenderChoice(changeChoice(m.title, m.cfg), m.cfg, 132, 40, popupChrome(m.cfg))
+	}
 	return renderTitleForm(m.title, m.cfg, 132, 40)
 }
 
@@ -392,9 +435,6 @@ func titleFrame(m Model) string {
 // without.
 func TestTitleFormTasteFrames(t *testing.T) {
 	forceColor(t)
-	// The backup folder the confirm step names is an absolute path: pin it, so
-	// the frame is the same on every machine.
-	t.Setenv("XDG_DATA_HOME", "/data/op/.local/share")
 	equinox := store.NamedChart{ID: "equinox-2026-09", Name: "Equinox-2026-09", Untitled: true, PlaceLabel: "Bremen, Germany",
 		Place:  location.PlaceInfo{Name: "Bremen", Country: "DE", Lat: 53.07, Lon: 8.8, TZ: "Europe/Berlin"},
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Equinox-2026-09.as"}}
@@ -405,10 +445,9 @@ func TestTitleFormTasteFrames(t *testing.T) {
 	typed.Fields.Fields[0].Value = "Constructed One"
 	refused := titleFormState{Form: popup.Form{Fields: newTitleForm(noplace), Refusal: emptyPlaceRefusal}, chart: noplace}
 	refused.Fields.Fields[0].Value = "Constructed One"
-	confirming := titleFormState{Form: popup.Form{Fields: newTitleForm(equinox), Confirming: true}, chart: equinox, dir: "/data/op/Clients"}
+	confirming := titleFormState{Form: popup.Form{Fields: newTitleForm(equinox), Confirming: true}, chart: equinox, dir: "/data/op/Clients",
+		stamp: time.Date(2026, 11, 13, 9, 18, 0, 0, time.UTC)}
 	confirming.Fields.Fields[0].Value = "Constructed One"
-	held := confirming
-	held.backupHeld = true
 
 	for _, st := range []struct {
 		name string
@@ -419,7 +458,6 @@ func TestTitleFormTasteFrames(t *testing.T) {
 		{"typed", typed},
 		{"refused", refused},
 		{"confirm", confirming},
-		{"confirm-held", held},
 	} {
 		for _, size := range [][2]int{{132, 40}, {80, 24}} {
 			for _, mode := range []struct {
@@ -442,13 +480,16 @@ func TestTitleFormRefusesAChangedFile(t *testing.T) {
 	path := filepath.Join(dir, "Equinox-2026-09.as")
 	m := openedPicker(t)
 	m, _ = pickRow(t, m, "Equinox-2026-09.as")
-	edited := strings.Replace(fileText(t, path), "2026 2:06 DT", "2026 2:36 DT", 1)
+	edited := strings.Replace(fileText(t, path), "2026  2:06 DT", "2026  2:36 DT", 1)
+	if edited == fileText(t, path) {
+		t.Fatal("the edit no longer applies to the fixture")
+	}
 	if err := os.WriteFile(path, []byte(edited), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	m = typeText(t, m, "Constructed One")
-	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the change question
+	m, cmd := yes(t, m)
 	m, _ = runCmd(t, m, cmd)
 	if want := "Equinox-2026-09.as changed since the list was read — reopen the picker"; m.title.Refusal != want {
 		t.Errorf("refusal = %q, want %q", m.title.Refusal, want)
@@ -477,8 +518,9 @@ func TestTitleInfoWrapsALongFileName(t *testing.T) {
 }
 
 // After a write the chart anchors only from the row the library lists NOW.
-// When the library cannot list it -- here, the atlas went missing -- nothing
-// is anchored from the old pick: the write is logged and the picker reloads.
+// When the library does not list it (the folder changed under the write),
+// nothing is anchored from the old pick: the write is logged and the picker
+// reloads.
 func TestTitleWriteWithoutAFreshRowAnchorsNothing(t *testing.T) {
 	titleLibrary(t, []string{"Equinox-2026-09.as", "GreatConjunction-2020-12-21.as"}, nil)
 	// An anchor already in place must survive the path untouched.
@@ -494,17 +536,21 @@ func TestTitleWriteWithoutAFreshRowAnchorsNothing(t *testing.T) {
 	before := anchorRecord(m)
 	m, _ = pickRow(t, m, "Equinox-2026-09.as")
 	m = typeText(t, m, "Constructed One")
-	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
-	m, cmd = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	t.Setenv("SEXTILE_ATLAS_PATH", filepath.Join(t.TempDir(), "no-atlas"))
-	m, next := runCmd(t, m, cmd)
+	m, cmd = submit(t, m)
+	written, ok := cmd().(TitleWrittenMsg)
+	if !ok || written.Err != nil {
+		t.Fatalf("the write did not answer with its message: %#v", written)
+	}
+	written.Result.Row = store.NamedChart{}
+	u, next := m.Update(written)
+	m = u.(Model)
 	if anchorRecord(m) != before || m.picker.resolving || !firstAnchor(m.slots).Time.Equal(anchoredAt) {
 		t.Errorf("the anchor changed, or a pick is resolving, without a fresh row: %+v", anchorRecord(m))
 	}
 	if m.startup != startupChartOpen || m.picker.loaded || next == nil {
 		t.Errorf("want the picker reloading: startup %s, loaded %v, cmd %v", m.startup, m.picker.loaded, next != nil)
 	}
-	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
+	assertOneChartLine(t, m, `chart: Equinox-2026-09.as titled as "Constructed One" (original kept as `+keptCopy(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
 }
 
 // ---- S2: the title is confirmed before any file is touched ----
@@ -577,15 +623,15 @@ func toConfirm(t *testing.T, title string) (Model, tea.Cmd) {
 }
 
 func TestConfirmNamesTheFileAndBackup(t *testing.T) {
-	dir, _ := confirmWorld(t, nil)
+	confirmWorld(t, nil)
 	m, _ := toConfirm(t, "Constructed One")
 	if m.startup != startupTitleOpen || !m.title.Confirming {
-		t.Fatalf("startup %s, confirming %v; want the title popup in its second step", m.startup, m.title.Confirming)
+		t.Fatalf("startup %s, confirming %v; want the title popup in its change question", m.startup, m.title.Confirming)
 	}
 	frame := flat(titleFrame(m))
-	for _, want := range []string{"Equinox-2026-09.as", "keep the previous file in " + store.ChartBackupFolderDisplay(dir) + ".", "Press Enter to save the title, or Esc to go back."} {
+	for _, want := range []string{"Change Equinox-2026-09.as?", "Constructed One", "Bremen, Germany (unchanged)", store.BackupName("Equinox-2026-09.as", m.title.stamp)} {
 		if !strings.Contains(unspaced(frame), unspaced(want)) {
-			t.Errorf("the second step does not say %q:\n%s", want, titleFrame(m))
+			t.Errorf("the change question does not say %q:\n%s", want, titleFrame(m))
 		}
 	}
 }
@@ -601,7 +647,7 @@ func TestNothingIsWrittenBeforeConfirm(t *testing.T) {
 		t.Error("Enter on the form returned a command; nothing may be started before the confirm")
 	}
 	if !m.title.Confirming || m.title.Saving {
-		t.Errorf("confirming %v, saving %v; want the second step and no write in flight", m.title.Confirming, m.title.Saving)
+		t.Errorf("confirming %v, saving %v; want the change question and no write in flight", m.title.Confirming, m.title.Saving)
 	}
 	if after := diskSnapshot(t, roots...); after != before {
 		t.Errorf("disk changed before the confirm:\n--- before\n%s\n--- after\n%s", before, after)
@@ -616,7 +662,7 @@ func TestConfirmCancelLeavesEverything(t *testing.T) {
 	before := diskSnapshot(t, roots...)
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if !m.title.Confirming {
-		t.Fatal("precondition: the second step is not open")
+		t.Fatal("precondition: the change question is not open")
 	}
 	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd != nil || m.title.Confirming || m.title.Saving || m.startup != startupTitleOpen {
@@ -651,67 +697,45 @@ func TestConfirmSaveKeepsTheOriginal(t *testing.T) {
 	if got := fileText(t, backupFile(path)); got != original {
 		t.Errorf("the backup of Equinox-2026-09.as is not the original:\n%s", got)
 	}
-	assertOneChartLine(t, m, `chart: titled Equinox-2026-09.as as "Constructed One" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
+	assertOneChartLine(t, m, `chart: Equinox-2026-09.as titled as "Constructed One" (original kept as `+keptCopy(store.ChartsDir(), "Equinox-2026-09.as")+`)`)
 }
 
-func TestConfirmWhenBackupHeld(t *testing.T) {
+func TestConfirmLeavesAnOlderBackupAlone(t *testing.T) {
 	dir, _ := confirmWorld(t, map[string]string{".sextile/backup/Equinox-2026-09.as": "an older original\n"})
 	path := filepath.Join(dir, "Equinox-2026-09.as")
 	original := fileText(t, path)
-	bakBefore, err := os.Stat(backupFile(path))
+	bakBefore, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m, _ := toConfirm(t, "Constructed One")
 	if !m.title.Confirming {
-		t.Fatal("the second step is not open")
+		t.Fatal("the change question is not open")
 	}
-	if frame := flat(titleFrame(m)); !strings.Contains(unspaced(frame), unspaced("Its first original is already in "+store.ChartBackupFolderDisplay(dir)+" and stays there.")) {
-		t.Errorf("the popup does not say the backup stays:\n%s", titleFrame(m))
-	}
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := yes(t, m)
 	m, next := runCmd(t, m, cmd)
 	runToAnchor(t, m, next)
-	if got := fileText(t, backupFile(path)); got != "an older original\n" {
-		t.Errorf("the held backup changed: %q", got)
+	old := filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")
+	if got := fileText(t, old); got != "an older original\n" {
+		t.Errorf("the older backup changed: %q", got)
 	}
-	bakAfter, err := os.Stat(backupFile(path))
+	bakAfter, err := os.Stat(old)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !os.SameFile(bakBefore, bakAfter) || bakBefore.Mode() != bakAfter.Mode() || !bakBefore.ModTime().Equal(bakAfter.ModTime()) {
-		t.Errorf("the held backup was replaced or touched: before %v %v, after %v %v",
+		t.Errorf("the older backup was replaced or touched: before %v %v, after %v %v",
 			bakBefore.Mode(), bakBefore.ModTime(), bakAfter.Mode(), bakAfter.ModTime())
+	}
+	if got := fileText(t, backupFile(path)); got != original {
+		t.Errorf("the dated copy is not the file as it was:\n%s", got)
 	}
 	if got := fileText(t, path); got == original || !strings.Contains(got, "Constructed One") {
 		t.Errorf("Equinox-2026-09.as was not retitled:\n%s", got)
 	}
 }
 
-func TestConfirmRefusesAnUnusableBackup(t *testing.T) {
-	// This folder's own backup folder (another chart's backup put it there),
-	// whose entry for the chart is a directory.
-	dir, roots := confirmWorld(t, map[string]string{".sextile/backup/Other.as": "another original\n"})
-	if err := os.Mkdir(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	m := openedPicker(t)
-	m, _ = pickRow(t, m, "Equinox-2026-09.as")
-	m = typeText(t, m, "Constructed One")
-	before := diskSnapshot(t, roots...)
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil || m.title.Confirming || m.title.Saving {
-		t.Fatalf("cmd %v, confirming %v, saving %v; want a refusal in the form", cmd != nil, m.title.Confirming, m.title.Saving)
-	}
-	if want := backupRefusal; m.title.Refusal != want || !strings.Contains(unspaced(flat(titleFrame(m))), unspaced(want)) {
-		t.Errorf("refusal = %q, want %q drawn in the form", m.title.Refusal, want)
-	}
-	if after := diskSnapshot(t, roots...); after != before {
-		t.Error("the refusal changed the disk")
-	}
-}
-
-// The directory shown at the confirm step is the directory written: a charts
+// The directory shown at the change question is the directory written: a charts
 // location that resolves differently by Save time must not redirect the write.
 func TestConfirmWritesWhereItShowed(t *testing.T) {
 	dir, _ := confirmWorld(t, nil)
@@ -727,23 +751,23 @@ func TestConfirmWritesWhereItShowed(t *testing.T) {
 	}
 	m, _ := toConfirm(t, "Constructed One")
 	if !m.title.Confirming {
-		t.Fatal("the second step is not open")
+		t.Fatal("the change question is not open")
 	}
 	t.Setenv("SEXTILE_CHARTS_DIR", other)
 	otherBefore := diskSnapshot(t, other)
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := yes(t, m)
 	if cmd == nil {
-		t.Fatal("Save title dispatched no write")
+		t.Fatal("the answer dispatched no write")
 	}
 	msg, ok := cmd().(TitleWrittenMsg)
 	if !ok || msg.Err != nil {
 		t.Fatalf("the write: %#v", msg)
 	}
 	if got := fileText(t, filepath.Join(dir, "Equinox-2026-09.as")); !strings.Contains(got, "Constructed One") {
-		t.Error("the directory shown at the confirm step was not written")
+		t.Error("the directory shown at the change question was not written")
 	}
-	if _, err := os.Stat(filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); err != nil {
-		t.Errorf("no backup where the popup said: %v", err)
+	if got := datedCopies(filepath.Join(dir, "Equinox-2026-09.as")); len(got) != 1 {
+		t.Errorf("dated copies where the popup said: %v, want one", got)
 	}
 	if after := diskSnapshot(t, other); after != otherBefore {
 		t.Error("the write followed the resolver into another directory")
@@ -753,42 +777,41 @@ func TestConfirmWritesWhereItShowed(t *testing.T) {
 func TestConfirmFramesAndBar(t *testing.T) {
 	long := store.NamedChart{ID: "x", Name: "x", Untitled: true, PlaceLabel: "Munich",
 		Source: store.ChartSource{Kind: store.ChartKindFile, File: "Constructed Client With A Long Name.as"}}
-	for _, held := range []bool{false, true} {
-		for _, size := range [][2]int{{80, 24}, {66, 15}} {
-			st := titleFormState{Form: popup.Form{Fields: newTitleForm(long), Confirming: true}, chart: long, backupHeld: held}
-			st.Fields.Fields[0].Value = "Constructed One"
-			cfg := Config{Accessible: true, Color: ColorNever}
-			frame := renderTitleForm(st, cfg, size[0], size[1])
-			lines := strings.Split(frame, "\n")
-			if len(lines) > size[1] {
-				t.Errorf("held %v %dx%d: %d lines", held, size[0], size[1], len(lines))
+	for _, size := range [][2]int{{80, 24}, {66, 15}} {
+		st := titleFormState{Form: popup.Form{Fields: newTitleForm(long), Confirming: true}, chart: long, stamp: time.Date(2026, 11, 13, 9, 18, 0, 0, time.UTC)}
+		st.Fields.Fields[0].Value = "Constructed One"
+		cfg := Config{Accessible: true, Color: ColorNever}
+		frame := dialog.RenderChoice(changeChoice(st, cfg), cfg, size[0], size[1], popupChrome(cfg))
+		lines := strings.Split(frame, "\n")
+		if len(lines) > size[1] {
+			t.Errorf("%dx%d: %d lines", size[0], size[1], len(lines))
+		}
+		for _, l := range lines {
+			if w := ansi.StringWidth(l); w > size[0] {
+				t.Errorf("%dx%d: a line is %d wide: %q", size[0], size[1], w, l)
 			}
-			for _, l := range lines {
-				if w := ansi.StringWidth(l); w > size[0] {
-					t.Errorf("held %v %dx%d: a line is %d wide: %q", held, size[0], size[1], w, l)
-				}
+		}
+		// The smallest terminal shows what its rows hold: the key bar carries the
+		// answers there. From 80x24 up the whole question is on screen.
+		words := flat(frame)
+		for _, want := range []string{"Constructed Client With A Long Name.as", "A copy of the file as it is now is kept", "Constructed Client With A Long Name.20261113T091800Z.as"} {
+			if size[1] < 24 && want != "Constructed Client With A Long Name.as" {
+				continue
 			}
-			words := flat(frame)
-			backupWords := "keep the previous file in " + store.ChartBackupFolderDisplay("") + "."
-			if held {
-				backupWords = "is already in " + store.ChartBackupFolderDisplay("") + " and stays there."
+			if !strings.Contains(unspaced(words), unspaced(want)) {
+				t.Errorf("%dx%d: %q is cut:\n%s", size[0], size[1], want, frame)
 			}
-			for _, want := range []string{"Constructed Client With A Long Name.as", backupWords, "Press Enter to save the title, or Esc to go back."} {
-				if !strings.Contains(unspaced(words), unspaced(want)) {
-					t.Errorf("held %v %dx%d: %q is cut:\n%s", held, size[0], size[1], want, frame)
-				}
-			}
-			m := newTestModel(t, cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
-			m.startup, m.title = startupTitleOpen, st
-			if got, want := keys.BarLine(m.keysContext(), size[0]), "Save title: enter | Cancel: esc"; got != want {
-				t.Errorf("%dx%d bar = %q, want %q", size[0], size[1], got, want)
-			}
+		}
+		m := newTestModel(t, cfg, FrozenClock(time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)))
+		m.startup, m.title = startupTitleOpen, st
+		if got, want := keys.BarLine(m.keysContext(), size[0]), "Choose: <left>/<right> | Take: <enter> | Yes: y | No: n/<esc>"; got != want {
+			t.Errorf("%dx%d bar = %q, want %q", size[0], size[1], got, want)
 		}
 	}
 }
 
-// A confirmed write never asks the charts-directory resolver again: the house
-// record, the rewrite, the row it anchors and the moment it opens all come from
+// A confirmed write never asks the charts-directory resolver again: the
+// rewrite, the row it anchors and the moment it opens all come from
 // the directory the popup named, even when the resolver answers with a library
 // holding a different file of the same name.
 func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
@@ -811,11 +834,11 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 	m = typeText(t, m, "Constructed One")
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if !m.title.Confirming {
-		t.Fatal("the confirm step is not open")
+		t.Fatal("the change question is not open")
 	}
 	t.Setenv("SEXTILE_CHARTS_DIR", b)
 	bBefore := diskSnapshot(t, b)
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := yes(t, m)
 	var written TitleWrittenMsg
 	for i := 0; i < 6 && cmd != nil && m.slots.AnchoredCount() == 0; i++ {
 		msg := cmd()
@@ -829,15 +852,14 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 		}
 	}
 
-	rec, ok := m.frames.find("Equinox-2026-09.as", false)
-	if !ok || rec.Houses != recipe.Koch || !rec.When.Equal(aRead.When) {
-		t.Errorf("session house record = %+v (found %v), want library A's moment %v and Koch", rec, ok, aRead.When)
+	if after, err := lookup.ReadChartFileIn(context.Background(), a, "Equinox-2026-09.as"); err != nil || !after.HasHouses || after.Houses != recipe.Koch {
+		t.Errorf("library A's file after the write reads as %+v (%v), want Koch kept", after, err)
 	}
 	if m.slots.AnchoredCount() != 1 {
 		t.Fatalf("anchored slots = %d, want the written chart anchored", m.slots.AnchoredCount())
 	}
 	// The row the write hands back is library A's, listed after the rewrite.
-	if written.Err != nil || written.Result.Row.Name != "Constructed One" || written.Result.Row.Place.Name != "Bremen" {
+	if written.Err != nil || written.Result.Row.Name != "Constructed One" || written.Result.Row.Place.Name != "Bremen, Germany" {
 		t.Errorf("the write's row = %q at %q (err %v), want library A's \"Constructed One\" at Bremen",
 			written.Result.Row.Name, written.Result.Row.Place.Name, written.Err)
 	}
@@ -865,10 +887,10 @@ func TestConfirmedWriteNeverReResolvesTheDir(t *testing.T) {
 	}
 }
 
-// D4. A retitle keeps the previous file in its backup folder outside the
-// charts folder (store.BackupDir), so the listing shows no ghost chart and
-// the charts folder gains nothing; the confirm step names the backup folder
-// rather than a sibling file.
+// D4. A retitle keeps a dated copy of the previous file in its backup folder
+// outside the charts folder (store.BackupDir), so the listing shows no ghost
+// chart and the charts folder gains nothing; the change question names the
+// copy rather than a sibling file.
 func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	dir, _ := confirmWorld(t, nil)
 	path := filepath.Join(dir, "Equinox-2026-09.as")
@@ -876,19 +898,23 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 
 	m, _ := toConfirm(t, "Constructed One")
 	if !m.title.Confirming {
-		t.Fatal("the second step is not open")
+		t.Fatal("the change question is not open")
 	}
+	stamp := m.title.stamp
 	frame := flat(titleFrame(m))
-	if !strings.Contains(unspaced(frame), unspaced("keep the previous file in "+store.ChartBackupFolderDisplay(dir)+".")) || strings.Contains(frame, ".bak") {
-		t.Errorf("the confirm step must name the backup folder and no .bak file:\n%s", titleFrame(m))
+	if !strings.Contains(unspaced(frame), unspaced(store.BackupName("Equinox-2026-09.as", stamp))) || strings.Contains(frame, ".bak") {
+		t.Errorf("the change question must name the dated copy and no .bak file:\n%s", titleFrame(m))
 	}
 
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := yes(t, m)
 	m, next := runCmd(t, m, cmd)
 	runToAnchor(t, m, next)
 
-	if got := fileText(t, filepath.Join(store.BackupDir(dir), "Equinox-2026-09.as")); got != original {
-		t.Errorf("the backup does not hold the old bytes:\n%s", got)
+	if got := fileText(t, backupFile(path)); got != original {
+		t.Errorf("the dated copy does not hold the old bytes:\n%s", got)
+	}
+	if got := filepath.Base(backupFile(path)); got != store.BackupName("Equinox-2026-09.as", stamp) {
+		t.Errorf("the dated copy is %s, the question named %s", got, store.BackupName("Equinox-2026-09.as", stamp))
 	}
 	if got := fileText(t, path); got == original || !strings.Contains(got, "Constructed One") {
 		t.Errorf("Equinox-2026-09.as was not retitled:\n%s", got)
@@ -910,5 +936,79 @@ func TestRetitleBackupLivesUnderSextileBackup(t *testing.T) {
 	}
 	if len(lib.Charts) != 1 || lib.Charts[0].Source.File != "Equinox-2026-09.as" || len(lib.Drops) != 0 {
 		t.Errorf("the listing after a retitle: charts %v, drops %v; want Equinox-2026-09.as alone, no ghost", lib.Charts, lib.Drops)
+	}
+}
+
+// The rename asks about, and writes into, the folder the picker listed the
+// chart from, even when the resolver names another folder before Enter and
+// that folder holds a file with the same name and the same bytes.
+func TestRenameActsOnThePickersFolder(t *testing.T) {
+	sessionSandbox(t)
+	a := titleLibrary(t, nil, map[string]string{"Equinox-2026-09.as": kochChart("", true)})
+	b := t.TempDir()
+	if err := os.WriteFile(filepath.Join(b, "Equinox-2026-09.as"), []byte(kochChart("", true)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stubHouseLookups(t)
+	m := openedPicker(t)
+	m, _ = pickRow(t, m, "Equinox-2026-09.as")
+	t.Setenv("SEXTILE_CHARTS_DIR", b)
+	bBefore := diskSnapshot(t, b)
+	m = typeText(t, m, "Constructed One")
+	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.title.Confirming {
+		t.Fatal("the change question is not open")
+	}
+	m, cmd := yes(t, m)
+	for i := 0; i < 6 && cmd != nil && m.slots.AnchoredCount() == 0; i++ {
+		u, next := m.Update(cmd())
+		m, cmd = u.(Model), next
+	}
+	if got := fileText(t, filepath.Join(a, "Equinox-2026-09.as")); !strings.Contains(got, "Constructed One") {
+		t.Errorf("the picker's folder was not renamed:\n%s", got)
+	}
+	if after := diskSnapshot(t, b); after != bBefore {
+		t.Errorf("the other folder changed:\n--- before\n%s\n--- after\n%s", bBefore, after)
+	}
+}
+
+// Acceptance 8: the name form shows the coordinates as fixed, fills a file
+// with no place words with the nearest atlas city, takes any typed name
+// without a check, and keeps a typed place when the title is empty.
+func TestNameFormProposesTheNearestCityAndKeepsATypedPlace(t *testing.T) {
+	m := newTestModel(t, Config{Accessible: true, Color: ColorNever}, RealClock{})
+	m.atlas.Index = location.NewIndex([]location.PlaceInfo{
+		{Name: "Edinburgh", Country: "GB", Lon: -3.1965, Lat: 55.9521, TZ: "Europe/London"},
+		{Name: "Amsterdam", Country: "NL", Lon: 4.8897, Lat: 52.374, TZ: "Europe/Amsterdam"},
+	})
+	noplace := store.NamedChart{ID: "noplace", Name: "No place", Place: location.PlaceInfo{Name: "3°12'W 55°57'N", Lon: -3.2, Lat: 55.95},
+		Source: store.ChartSource{Kind: store.ChartKindFile, File: "NoPlace.as"}}
+	m = openTitleForm(m, noplace)
+	if got := m.title.Fields.Value(titlePlaceField); got != "Edinburgh, GB" {
+		t.Fatalf("the place name holds %q, want the nearest city %q", got, "Edinburgh, GB")
+	}
+	frame := ansi.Strip(renderTitleForm(m.title, m.cfg, 132, 40))
+	for _, want := range []string{"Name this chart", "Coordinates: 3°12'W 55°57'N", "from the file, not changed here", "The nearest city is proposed as the place name."} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("the form lacks %q:\n%s", want, frame)
+		}
+	}
+
+	m.title.Fields.Focus = titlePlaceField
+	m.title.Fields.Fields[titlePlaceField].Value = "Amsterda"
+	tm, _ := updateTitleFormKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	m = tm.(Model)
+	frame = ansi.Strip(renderTitleForm(m.title, m.cfg, 132, 40))
+	if strings.Contains(frame, "near these coordinates") || strings.Contains(frame, "proposed") {
+		t.Errorf("a typed name is checked or still called proposed:\n%s", frame)
+	}
+
+	tm, _ = updateTitleFormKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = tm.(Model)
+	if m.startup != startupTitleOpen || m.title.Refusal != noTitleRefusal {
+		t.Errorf("Enter with no title and a typed place: form open %v, refusal %q; want open with %q", m.startup == startupTitleOpen, m.title.Refusal, noTitleRefusal)
+	}
+	if got := m.title.Fields.Value(titlePlaceField); got != "Amsterdam" {
+		t.Errorf("the typed place became %q", got)
 	}
 }

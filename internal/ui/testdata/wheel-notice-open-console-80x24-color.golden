@@ -1,6 +1,6 @@
 [92m╭─[0m[1;92mLog[0m[92m──────────────────────────────────────────────────────────────────────────╮[0m
-[92m│[0msession: natal not restored                                                   [92m│[0m
-[92m│[0m[1;44m[36m[1;44mWheel at http://localhost:5307 (Ctrl+X again closes it)[0m[1;44m                       [0m[92m│[0m
+[92m│[0msession: the chart of the last session did not open                           [92m│[0m
+[92m│[0m[1;44mwheel: served at http://localhost:5307                                        [0m[92m│[0m
 [92m│[0m                                                                              [92m│[0m
 [92m│[0m                                                                              [92m│[0m
 [92m│[0m                                                                              [92m│[0m

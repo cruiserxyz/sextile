@@ -162,7 +162,7 @@ func TestSlotInstantIsOneWholeSecond(t *testing.T) {
 					return err
 				}, ps, ss, false},
 				{"SynastryCrossBodyRawReport", func() error {
-					_, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, c.s, place, store.ReportLabel{}, objSun)
+					_, _, err := SynastryCrossBodyRawReport(ctx, Hellenistic, natal, store.AnchorChart{When: c.s, Place: place}, objSun)
 					return err
 				}, ps, ss, false},
 				{"OverlayCrossAspects", func() error {
@@ -170,7 +170,7 @@ func TestSlotInstantIsOneWholeSecond(t *testing.T) {
 					return err
 				}, ps, ss, true},
 				{"SynastryCrossAspects", func() error {
-					_, err := SynastryCrossAspects(ctx, Hellenistic, natal, c.s, place, store.ReportLabel{})
+					_, err := SynastryCrossAspects(ctx, Hellenistic, natal, store.AnchorChart{When: c.s, Place: place})
 					return err
 				}, ps, ss, true},
 				{"RenderOverlayWheelImage", func() error {
@@ -242,7 +242,7 @@ func TestSlotInstantIsOneWholeSecond(t *testing.T) {
 			})
 			t.Run("RenderWheelImage", func(t *testing.T) {
 				delta()
-				if _, err := RenderWheelImage(ctx, c.p, place, Hellenistic, WheelHighlight{}); err != nil {
+				if _, err := RenderWheelImage(ctx, store.AnchorChart{When: c.p, Place: place}, Hellenistic, WheelHighlight{}); err != nil {
 					t.Fatal(err)
 				}
 				sp := delta()

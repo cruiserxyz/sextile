@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"strings"
 	"testing"
 	"time"
@@ -11,111 +10,12 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/lookup"
-	"github.com/cruiserxyz/sextile/internal/store"
 )
 
 // the specification. Every chart value here is a constructed
 // synthetic input (specs/frames/residue.md).
 
-// oneChartRows renders the Chart body in the one-chart layout, unstyled.
-func oneChartRows(slots *store.Slots, name string, width int, oneChart bool) []string {
-	firstAnchor(slots).Chart.Name = name
-	body := chartSlotsBodyLayout(slots, 1, false, testFrozenTime(), testPlaceBerlin(), lookup.Hellenistic, width, Config{Accessible: true}, nil, "", oneChart)
-	return strings.Split(ansi.Strip(body), "\n")
-}
-
-// Acceptance 1-3: in the one-chart layout the moment is never cut, the name
-// column is as wide as the longest name up to min(20, what remains), and the
-// zone and place follow only while they fit whole.
-func TestOneChartRowKeepsItsTime(t *testing.T) {
-	defaultClock(t)
-	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
-	birth := time.Date(2001, 7, 3, 4, 5, 0, 0, time.UTC)
-	slots := twoSlots(t, birth, nameColLongPlace)
-	const tagW = len("WhTr")
-	for _, width := range []int{50, 64, 78} {
-		for _, cells := range []int{15, 17, 20, 24} {
-			name := strings.Repeat("N", cells)
-			rows := oneChartRows(slots, name, width, true)
-			if len(rows) != 2 {
-				t.Fatalf("w%d n%d: %d rows, want 2", width, cells, len(rows))
-			}
-			momentW := ansi.StringWidth(clockMoment(zonedIn(slots.All()[0].Time, nameColLongPlace)))
-			capW := min(nameColumnMax, width-prefixW-2-momentW-1-tagW)
-			wantN := min(cells, capW)
-			for i, row := range rows {
-				s := slots.All()[i]
-				moment := clockMoment(zonedIn(s.Time, s.Location))
-				if w := ansi.StringWidth(row); w != width {
-					t.Errorf("w%d n%d row %d: width %d: %q", width, cells, i, w, row)
-				}
-				if got := cellOf(row, moment); got != prefixW+wantN+2 {
-					t.Errorf("w%d n%d row %d: moment %q at cell %d, want %d (name column %d): %q", width, cells, i, moment, got, prefixW+wantN+2, wantN, row)
-				}
-				if !strings.HasSuffix(row, "WhTr") {
-					t.Errorf("w%d n%d row %d: tag not pinned right: %q", width, cells, i, row)
-				}
-				// Past the name column nothing is cut: no mark anywhere.
-				at := strings.Index(row, moment)
-				if at < 0 {
-					continue // already reported: the moment was cut
-				}
-				rest := row[at:]
-				if strings.Contains(rest, "…") || strings.Contains(rest, "...") {
-					t.Errorf("w%d n%d row %d: a cut mark after the name: %q", width, cells, i, row)
-				}
-				// Zone and place: whole or absent, in that order.
-				tail := strings.Join(strings.Fields(strings.TrimSuffix(rest[len(moment):], "WhTr")), " ")
-				zone := slotZone(s.Time, s.Location)
-				okTails := []string{"", zone, zone + " " + strings.Join(strings.Fields(s.Location.Display()), " ")}
-				if tail != okTails[0] && tail != okTails[1] && tail != okTails[2] {
-					t.Errorf("w%d n%d row %d: zone/place tail %q is none of %q", width, cells, i, tail, okTails)
-				}
-			}
-		}
-	}
-	// The widths the spec names: at 50 with a prefix of 4 the name column is 17.
-	if got := min(nameColumnMax, 50-4-2-22-1-tagW); got != 17 {
-		t.Fatalf("spec arithmetic: %d, want 17", got)
-	}
-	// 80x24 shows the zone and the place whole when they fit.
-	rows := oneChartRows(slots, "Constructed One", 78, true)
-	if !strings.Contains(rows[1], "CEST Berlin, DE") {
-		t.Errorf("a wide row dropped its zone or place: %q", rows[1])
-	}
-}
-
-// Acceptance 4: the comparing layout is unchanged — zone kept, only the place
-// cut with the existing mark.
-func TestComparingRowUnchanged(t *testing.T) {
-	defaultClock(t)
-	prefixW := ansi.StringWidth(menu.RowPrefix(false, false, true, true, Config{Accessible: true}))
-	slots := twoSlots(t, time.Date(2001, 7, 3, 4, 5, 0, 0, time.UTC), nameColLongPlace)
-	rows := oneChartRows(slots, "Fixture-Constructed-Longname", 64, false) // N = 20
-	for _, row := range rows {
-		if w := ansi.StringWidth(row); w != 64 {
-			t.Errorf("row width %d, want 64: %q", w, row)
-		}
-	}
-	if got := cellOf(rows[0], "Tue Jul  3, 2001  6:05 CEST "); got != prefixW+nameColumnMax+2 {
-		t.Fatalf("moment at cell %d in %q, want the 20-cell name column kept", got, rows[0])
-	}
-	if !strings.Contains(rows[0], "CEST ") || !strings.Contains(strings.TrimSuffix(rows[0], "WhTr"), "... ") {
-		t.Errorf("comparing row lost its zone or the place's cut mark: %q", rows[0])
-	}
-	// The view passes the layout it is in: two selected charts keep the cut.
-	m := timelineModel(t, Config{Color: ColorNever})
-	firstAnchor(m.slots).Chart.Name = "Constructed One"
-	if m.bodiesView().count() < 2 {
-		t.Fatal("fixture: the view is not comparing")
-	}
-	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "Constructed One  Tue May 15, 1979 11:30 CEST A") {
-		t.Fatalf("the comparing view's chart row lost its zone or its cut place:\n%s", view)
-	}
-}
-
-// Acceptance 1 through the whole screen: one selected chart, 132x40.
+// The whole screen, one selected chart, 132x40: the anchored moment whole.
 func TestOneChartViewKeepsTheMoment(t *testing.T) {
 	defaultClock(t)
 	m := timelineModel(t, Config{Color: ColorNever})
@@ -126,7 +26,8 @@ func TestOneChartViewKeepsTheMoment(t *testing.T) {
 		t.Fatalf("fixture: %d Bodies columns, want 1", m.bodiesView().count())
 	}
 	view := ansi.Strip(m.View())
-	moment := clockMoment(zonedIn(m.slots.All()[0].Time, testPlaceAmsterdam()))
+	c := slotCells(m.slots.All()[0], nil)
+	moment := c.date + " " + c.clock + " " + c.zone
 	if !strings.Contains(view, moment) {
 		t.Errorf("the one-chart view cut the anchored moment %q:\n%s", moment, view)
 	}
@@ -318,8 +219,9 @@ func TestEnterMovesCursorToFloating(t *testing.T) {
 		if got := m.slots.Floating().Time; !got.Equal(landedAt(row.Instant)) {
 			t.Errorf("paired=%v: committed floating Time %v, want %v", paired, got, landedAt(row.Instant))
 		}
-		if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline || m.details.cursor != 2 {
-			t.Errorf("paired=%v: the jump left the list: attached=%v cursor=%d", paired, m.details.attached, m.details.cursor)
+		// The jump is what Enter was for: Details closes, as Esc closes it.
+		if m.details.attached {
+			t.Errorf("paired=%v: Details stayed open after the jump", paired)
 		}
 		if got := m.refresh[surfaceText].runningRunID - runs; got != 1 {
 			t.Errorf("paired=%v: %d text recomputes, want exactly 1", paired, got)
@@ -455,3 +357,33 @@ func TestEnterPressedRowFrame(t *testing.T) {
 }
 
 var _ = location.PlaceInfo{}
+
+// The enter-stays experiment keeps Details open after Enter on a timeline row;
+// off, as by default, the jump closes it.
+func TestEnterStaysExperimentKeepsDetailsOpen(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		t.Run(map[bool]string{false: "off", true: "on"}[on], func(t *testing.T) { enterStaysCase(t, on) })
+	}
+}
+
+func enterStaysCase(t *testing.T, on bool) {
+	stubTextCompute(t)
+	m := loadedTimeline(t, Config{Accessible: true})
+	m.slots.SetComparisonSelected(true)
+	if on {
+		m.experimentsOn = map[string]bool{expEnterStays: true}
+	}
+	for _, k := range append(append([]tea.KeyMsg{keyUp, runes("0"), keyEnter}, homeKeys()...), runes("j"), runes("j")) {
+		var c tea.Cmd
+		m, c = tpress(t, m, k)
+		m = pump(t, m, c)
+	}
+	m, cmd := tpress(t, m, keyEnter)
+	m = pump(t, m, cmd)
+	if m.details.attached != on {
+		t.Errorf("experiment on=%v: Details attached=%v after Enter", on, m.details.attached)
+	}
+	if !m.focusedIsFloating() {
+		t.Errorf("experiment on=%v: the jump did not move the cursor", on)
+	}
+}

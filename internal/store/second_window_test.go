@@ -18,11 +18,11 @@ func TestTwoWindowsSavingOneNameKeepTheFirst(t *testing.T) {
 	dir := t.TempDir()
 	const first = "@AI800  ; the first window's chart\n"
 	const second = "@AI800  ; the second window's chart\n"
-	path, err := PlaceChartFile(dir, []byte(first), "client")
+	path, err := OriginalsDoor(dir).Place("client", []byte(first))
 	if err != nil {
 		t.Fatalf("first save: %v", err)
 	}
-	if _, err := PlaceChartFile(dir, []byte(second), "client"); !errors.Is(err, ErrChartExists) {
+	if _, err := OriginalsDoor(dir).Place("client", []byte(second)); !errors.Is(err, ErrChartExists) {
 		t.Fatalf("second save: err = %v, want ErrChartExists", err)
 	}
 	got, err := os.ReadFile(path)

@@ -29,7 +29,12 @@ func clockMomentIn(t time.Time, p lookup.ClockPref) string {
 	// The date is the one Astrolog prints for the moment (the specification):
 	// Julian before 15 Oct 1582, marked ` Jul` after the date, and in UT inside
 	// the 1582 window. Go's calendar is never asked to name it.
-	s := lookup.StampMoment(t, t.Location())
+	return stampText(lookup.StampMoment(t, t.Location()), p)
+}
+
+// stampText is a moment's stamp in the clock form p: weekday, date, the ` Jul`
+// mark before the reform, and the clock, with seconds when the stamp shows them.
+func stampText(s lookup.MomentStamp, p lookup.ClockPref) string {
 	hour, mark := s.Hour, ""
 	if p.Hours12 {
 		mark = "am"
@@ -43,6 +48,9 @@ func clockMomentIn(t time.Time, p lookup.ClockPref) string {
 	}
 	wd, mon := s.Weekday.String()[:3], time.Month(s.Month).String()[:3]
 	clock := fmt.Sprintf("%2d:%02d%s", hour, s.Minute, mark)
+	if s.ShowSeconds {
+		clock = fmt.Sprintf("%2d:%02d:%02d%s", hour, s.Minute, s.Second, mark)
+	}
 	jul := ""
 	if s.Julian {
 		jul = " Jul"

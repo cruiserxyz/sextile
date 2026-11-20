@@ -13,7 +13,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 )
 
-// sessions.go is the Sessions list (`, o`) and its name field as popups: the
+// sessions.go is the Sessions list (`, O`) and its name field as popups: the
 // rows, the cursor, the draw. The store calls (save, open, rename, trash) and
 // the run the window holds stay in ui; the popup reports what a key chose and
 // ui acts on it.
@@ -25,15 +25,37 @@ const (
 	titleRenameSession = "Rename session"
 )
 
+// Exit is a way out of the session this window runs.
+type Exit int
+
+// The ways out: a new session, another named session, quit.
+const (
+	ExitNew Exit = iota
+	ExitOpen
+	ExitQuit
+)
+
 // Sessions is the list and its name field.
 type Sessions struct {
 	Rows    []store.NamedSession
 	ListErr error
-	Cursor  int // 0 is the Save row; i+1 is Rows[i]
+	Cursor  int // 0 is the Save row, 1 the New row; i+2 is Rows[i]
 	Offset  int
 
 	Form     dialog.Form
 	Renaming string // the file the name field renames; "" for Save as
+	// Asking is a question over the list ("Save this session first?" or the
+	// delete question), and Lit its lit button. Deleting is the file the delete
+	// question asks about, "" for the leave question. Exit is the way out the
+	// leave question stands in front of, and Target the session an Open exit
+	// opens. ThenExit says the name field in view was opened by that
+	// question's Yes: once it saves, the way out goes on.
+	Asking   bool
+	Deleting string
+	Exit     Exit
+	Target   string
+	Lit      int
+	ThenExit bool
 	Refusal  string // the last submit was refused; the field stays open
 
 	// Fit is the list's size, decided when it opens for the sessions it holds
@@ -53,7 +75,7 @@ const (
 
 // SessionsOutcome is what one key decided. Action is Confirm, Rename, Trash or
 // Dismiss when the key asks ui to act, else Type; Row and OnRow name the saved
-// session under the cursor (OnRow is false on the Save row).
+// session under the cursor (OnRow is false on the two action rows).
 type SessionsOutcome struct {
 	Action Action
 	Row    store.NamedSession
@@ -68,9 +90,18 @@ func SaveRow(cfg term.Style) string {
 	return "+ Save this session as…"
 }
 
-// RowUnder is the saved session under the cursor, or false on the Save row.
+// NewRow is the second row's text.
+const NewRow = "+ New, unnamed session"
+
+// actionRows is how many rows above the saved sessions act: Save as, and New.
+const actionRows = 2
+
+// OnNewRow reports whether the cursor is on the New row.
+func (s Sessions) OnNewRow() bool { return s.Cursor == 1 }
+
+// RowUnder is the saved session under the cursor, or false on an action row.
 func (s Sessions) RowUnder() (store.NamedSession, bool) {
-	i := s.Cursor - 1
+	i := s.Cursor - actionRows
 	if i < 0 || i >= len(s.Rows) {
 		return store.NamedSession{}, false
 	}
@@ -80,7 +111,7 @@ func (s Sessions) RowUnder() (store.NamedSession, bool) {
 // Apply runs one action. visible is how many rows one page holds. Moving keys
 // are handled here; Confirm, Rename, Trash and Dismiss come back as an outcome.
 func (s *Sessions) Apply(a Action, visible int) SessionsOutcome {
-	total := len(s.Rows) + 1
+	total := len(s.Rows) + actionRows
 	page := func(op menu.PageOp) {
 		s.Cursor, s.Offset = menu.PageCursor(s.Cursor, s.Offset, total, visible, op)
 	}
@@ -108,11 +139,11 @@ func (s *Sessions) Apply(a Action, visible int) SessionsOutcome {
 	return SessionsOutcome{}
 }
 
-// RowSpecs are the list's rows: the Save row, then a row per session. running
+// RowSpecs are the list's rows: the Save row, the New row, then a row per session. running
 // is the file this window runs ("" for the general session); when is a
 // session's last-updated text.
 func (s Sessions) RowSpecs(cfg term.Style, running string, when func(store.NamedSession) string) []menu.RowSpec {
-	rows := []menu.RowSpec{{Left: SaveRow(cfg), Cursor: s.Cursor == 0}}
+	rows := []menu.RowSpec{{Left: SaveRow(cfg), Cursor: s.Cursor == 0}, {Left: NewRow, Cursor: s.Cursor == 1}}
 	for i, r := range s.Rows {
 		state := ""
 		switch {
@@ -121,7 +152,7 @@ func (s Sessions) RowSpecs(cfg term.Style, running string, when func(store.Named
 		case r.OpenElsewhere:
 			state = "in another window"
 		}
-		rows = append(rows, menu.RowSpec{Left: r.Name, Right: []string{state, when(r)}, Cursor: s.Cursor == i+1})
+		rows = append(rows, menu.RowSpec{Left: r.Name, Right: []string{state, when(r)}, Cursor: s.Cursor == i+actionRows})
 	}
 	return rows
 }
@@ -152,7 +183,7 @@ func (s Sessions) FitFor(cfg term.Style, running string, when func(store.NamedSe
 
 // Render draws the list.
 func (s Sessions) Render(cfg term.Style, termW, termH int, chrome dialog.Chrome, counter func(cursor, total int) *dialog.Counter, running string, when func(store.NamedSession) string) string {
-	total := len(s.Rows) + 1
+	total := len(s.Rows) + actionRows
 	offsetFor := func(height int) int {
 		off := s.Offset
 		if s.Cursor < off {

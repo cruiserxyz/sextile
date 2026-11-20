@@ -6,6 +6,7 @@ type PanelID string
 
 const (
 	PanelNone    PanelID = ""
+	PanelStatus  PanelID = "status"
 	PanelChart   PanelID = "chart"
 	PanelBodies  PanelID = "bodies"
 	PanelAspects PanelID = "aspects"

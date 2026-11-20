@@ -34,6 +34,11 @@ func (m Model) probeTarget() (in popup.ProbeInputs, when time.Time, place locati
 	}
 	if chart := m.focusedChart(); !chart.IsZero() {
 		when, place = chart.When, chart.Place
+		if place.TZ == "" {
+			// A chart file's place carries no zone, and the probe asks only
+			// whether a body is drawable at its instant: any zone names it.
+			place.TZ = "UTC"
+		}
 	} else {
 		when, place = transitTimeFromWorkspace(m), m.place
 	}
@@ -48,7 +53,7 @@ func (m Model) probeTarget() (in popup.ProbeInputs, when time.Time, place locati
 	lens := m.viewLens()
 	in = popup.ProbeInputs{
 		When: when.UnixNano(), Lat: place.Lat, Lon: place.Lon, TZ: place.TZ,
-		Houses: lens.Houses, Zodiac: lens.Zodiac, TrueNode: lens.Objects.TrueNodeMode,
+		Houses: lens.Houses, Zodiac: lens.Zodiac, Nodes: lens.Objects.Nodes,
 	}
 	return in, when, place, true
 }
@@ -266,7 +271,7 @@ func openBodySelector(m Model) (tea.Model, tea.Cmd) {
 	case "":
 	case whyDrawnUnread:
 		_, err := m.lens.VisibleObjectNumbers()
-		return m.logNote("bodies", "the body list cannot open: %v", err), nil
+		return m.logTrace("bodies", "the list of bodies: %v", err).logNote("bodies", "the list of bodies did not open"), nil
 	default:
 		return m, nil
 	}
@@ -293,7 +298,7 @@ func openBodySelector(m Model) (tea.Model, tea.Cmd) {
 
 // openedBodyModal is the chooser as it opens. The ticks are what the chart
 // draws (blocked has answered that they can be read), the rows with no
-// ephemeris file are the startup probe's answer, and Ctrl+D ticks what the lens
+// ephemeris file are the startup probe's answer, and the Restore row ticks what the lens
 // draws when nothing is chosen (defaultObjects, as this host draws it).
 func (m Model) openedBodyModal() popup.Body {
 	drawn, _ := m.lens.VisibleObjectNumbers()
@@ -352,7 +357,7 @@ func applyObjectRegistryLoaded(m Model, msg ObjectRegistryLoadedMsg) (Model, tea
 			return m, tea.Batch(resolveCmd, probe)
 		case whyDrawnUnread:
 			_, err := m.lens.VisibleObjectNumbers()
-			return m.logNote("bodies", "the body list cannot open: %v", err), resolveCmd
+			return m.logTrace("bodies", "the list of bodies: %v", err).logNote("bodies", "the list of bodies did not open"), resolveCmd
 		}
 	}
 	return m, resolveCmd
@@ -429,7 +434,7 @@ type bodyProbeResultMsg struct {
 // call two policies different over selection ORDER, which the compiler sorts
 // away — and would compare the Add/Remove maps, which are nil under Explicit.
 func sameObjectSelection(a, b recipe.ObjectPolicy) bool {
-	if a.Baseline != b.Baseline || a.TrueNodeMode != b.TrueNodeMode {
+	if a.Baseline != b.Baseline || a.Nodes != b.Nodes {
 		return false
 	}
 	x, y := a.Selected(), b.Selected()
@@ -465,10 +470,8 @@ func chooserCloseBindings() []keys.BindingEntry {
 
 // bodiesBindings is the Bodies popup's table.
 func bodiesBindings() []keys.BindingEntry {
-	return keys.Titled(append(append([]keys.BindingEntry{
+	return keys.TitledLocal(append(append([]keys.BindingEntry{
 		listUp().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 1 }), listDown(), toggle().ShownWhen(func(c keys.Context) bool { return c.Popup.Rows > 0 }),
-		// Ctrl+D, not d: the search line takes every typed letter.
-		{ID: keys.BindingDefaults, Binding: key.NewBinding(key.WithKeys("ctrl+d")), Title: "Defaults", BarKey: "⌃d", Bar: true},
 	}, chooserCloseBindings()...), pageEntries()...))
 }
 
@@ -502,8 +505,6 @@ func updateBodyModalKey(state popup.Body, msg tea.KeyMsg, listHeight int) (popup
 		a = popup.PageEnd
 	case keys.BindingToggle:
 		a = popup.Toggle
-	case keys.BindingDefaults:
-		a = popup.Defaults
 	}
 	out := state.Apply(a, msg, listHeight)
 	return state, out

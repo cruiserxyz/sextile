@@ -16,9 +16,11 @@ import (
 
 // chooseInFinder opens the finder with open, types q, presses Enter and lets the
 // recast finish.
-func chooseInFinder(t *testing.T, m Model, ctrl tea.KeyMsg, q string) Model {
+func chooseInFinder(t *testing.T, m Model, open []tea.KeyMsg, q string) Model {
 	t.Helper()
-	m, _ = tpress(t, m, ctrl)
+	for _, k := range open {
+		m, _ = tpress(t, m, k)
+	}
 	m = typeInFinder(t, m, q)
 	var cmd tea.Cmd
 	m, cmd = tpress(t, m, keyEnter)
@@ -45,7 +47,7 @@ func TestHouseChoiceChangesTheHousesOnScreen(t *testing.T) {
 	}
 	t.Run("on the second chart", func(t *testing.T) {
 		m := setup(t, 1)
-		m = chooseInFinder(t, m, keyCtrlHMain, "placidus")
+		m = chooseInFinder(t, m, keysOpenHouses, "placidus")
 		if got := m.ownHouses(slotAt(m, 1)).hs; got != recipe.Placidus {
 			t.Errorf("② is shown in %v, want Placidus", got)
 		}
@@ -55,7 +57,7 @@ func TestHouseChoiceChangesTheHousesOnScreen(t *testing.T) {
 	})
 	t.Run("on now's own tab now alone changes", func(t *testing.T) {
 		m := setup(t, 2)
-		m = chooseInFinder(t, m, keyCtrlHMain, "placidus")
+		m = chooseInFinder(t, m, keysOpenHouses, "placidus")
 		if got := m.lensFor(slotAt(m, 2)).Houses; got != recipe.Placidus {
 			t.Errorf("now is cast in %v, want Placidus", got)
 		}
@@ -73,7 +75,7 @@ func TestHouseChoiceChangesTheHousesOnScreen(t *testing.T) {
 	t.Run("on now visiting a chart now alone changes", func(t *testing.T) {
 		m := setup(t, 2)
 		m = choosePair(m, scenePair{left: slotAt(m, 1), right: slotAt(m, 2)})
-		m = chooseInFinder(t, m, keyCtrlHMain, "placidus")
+		m = chooseInFinder(t, m, keysOpenHouses, "placidus")
 		if got := m.ownHouses(slotAt(m, 2)).hs; got != recipe.Placidus {
 			t.Errorf("now is shown in %v, want Placidus", got)
 		}
@@ -96,7 +98,7 @@ func TestZodiacChoiceChangesTheZodiacOnScreen(t *testing.T) {
 	}
 	t.Run("on the second chart", func(t *testing.T) {
 		m := setup(t, 1)
-		m = chooseInFinder(t, m, keyCtrlZ, "lahiri")
+		m = chooseInFinder(t, m, []tea.KeyMsg{keyCtrlZ}, "lahiri")
 		if got := m.ownZodiac(slotAt(m, 1)); got != recipe.Lahiri {
 			t.Errorf("② is shown in %v, want Lahiri", got)
 		}
@@ -112,7 +114,7 @@ func TestZodiacChoiceChangesTheZodiacOnScreen(t *testing.T) {
 	})
 	t.Run("on now", func(t *testing.T) {
 		m := setup(t, 2)
-		m = chooseInFinder(t, m, keyCtrlZ, "lahiri")
+		m = chooseInFinder(t, m, []tea.KeyMsg{keyCtrlZ}, "lahiri")
 		if got := m.ownZodiac(slotAt(m, 2)); got != recipe.Lahiri {
 			t.Errorf("now is shown in %v, want Lahiri", got)
 		}
@@ -122,7 +124,7 @@ func TestZodiacChoiceChangesTheZodiacOnScreen(t *testing.T) {
 func TestUnselectedChartFinderEditsItself(t *testing.T) {
 	t.Run("houses", func(t *testing.T) {
 		m := finderModel(t, 2, 1)
-		m = chooseInFinder(t, m, keyCtrlHMain, "placidus")
+		m = chooseInFinder(t, m, keysOpenHouses, "placidus")
 		if got := m.ownHouses(slotAt(m, 1)).hs; got != recipe.Placidus {
 			t.Errorf("② own system = %v, want Placidus", got)
 		}
@@ -136,7 +138,7 @@ func TestUnselectedChartFinderEditsItself(t *testing.T) {
 	t.Run("zodiac", func(t *testing.T) {
 		stubFrameLookups(t)
 		m := finderModel(t, 2, 1)
-		m = chooseInFinder(t, m, keyCtrlZ, "lahiri")
+		m = chooseInFinder(t, m, []tea.KeyMsg{keyCtrlZ}, "lahiri")
 		if got := m.ownZodiac(slotAt(m, 1)); got != recipe.Lahiri {
 			t.Errorf("② own zodiac = %v, want Lahiri", got)
 		}

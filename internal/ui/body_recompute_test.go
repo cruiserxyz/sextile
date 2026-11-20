@@ -9,7 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/store"
 )
 
 // body_recompute_test.go asserts against what the COMPUTE receives, never
@@ -311,7 +313,7 @@ func TestEmptyBodySelectionComputesDefaults(t *testing.T) {
 func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
 	m := readyModelWithObjects(t, testObjectRegistry())
 
-	m = m.reportUnavailable([]string{"Eris", "Io"}, tUnavailable)
+	m = m.reportUnavailable([]string{"Eris", "Io"}, dUnavailable)
 	if !logMentions(m, "Eris, Io can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) {
 		t.Fatal("the dropped objects must be named on the Log")
 	}
@@ -320,12 +322,12 @@ func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
 	// ONCE means once per change. The text surface recomputes on every
 	// time-step; the same names arriving again must not push the Log out of
 	// its six rows.
-	m = m.reportUnavailable([]string{"Eris", "Io"}, tUnavailable)
+	m = m.reportUnavailable([]string{"Eris", "Io"}, dUnavailable)
 	if len(m.logLines) != before {
 		t.Error("the same set was reported twice; a held-key sweep would flood the Log")
 	}
 	// Order is Astrolog's, and a reordering is not a change.
-	m = m.reportUnavailable([]string{"Io", "Eris"}, tUnavailable)
+	m = m.reportUnavailable([]string{"Io", "Eris"}, dUnavailable)
 	if len(m.logLines) != before {
 		t.Error("a reordered set was reported as a change")
 	}
@@ -336,13 +338,13 @@ func TestUnavailableObjectsAreReportedOnce(t *testing.T) {
 // still reported, because the set was reset.
 func TestUnavailableRecoveryIsQuiet(t *testing.T) {
 	m := readyModelWithObjects(t, testObjectRegistry())
-	m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
+	m = m.reportUnavailable([]string{"Eris"}, dUnavailable)
 	before := len(m.logLines)
-	m = m.reportUnavailable(nil, tUnavailable)
+	m = m.reportUnavailable(nil, dUnavailable)
 	if len(m.logLines) != before {
 		t.Errorf("recovery wrote %v", m.logPanelLines()[before:])
 	}
-	m = m.reportUnavailable([]string{"Eris"}, tUnavailable)
+	m = m.reportUnavailable([]string{"Eris"}, dUnavailable)
 	if !logMentions(m, "Eris can't be drawn: no ephemeris data for "+strings.TrimSpace(civilDate(1500, 3, 15))) || len(m.logLines) != before+1 {
 		t.Error("losing the body again was not reported")
 	}
@@ -352,7 +354,7 @@ func TestUnavailableRecoveryIsQuiet(t *testing.T) {
 func TestNoUnavailableObjectsSaysNothing(t *testing.T) {
 	m := readyModelWithObjects(t, testObjectRegistry())
 	before := len(m.logLines)
-	m = m.reportUnavailable(nil, tUnavailable)
+	m = m.reportUnavailable(nil, dUnavailable)
 	if len(m.logLines) != before {
 		t.Error("a healthy chart logged a line about unavailable bodies")
 	}
@@ -380,4 +382,36 @@ func TestUnavailableNamesAreUnionedNotDropped(t *testing.T) {
 }
 
 // tUnavailable is the date the unavailable-body tests report for.
-var tUnavailable = time.Date(1500, 3, 15, 12, 0, 0, 0, time.UTC)
+var dUnavailable = strings.TrimSpace(civilDate(1500, 3, 15))
+
+// The date a can't-be-drawn line names is the one the chart's row shows, in
+// Astrolog's calendar: a chart file's own clock, and Now's moment read as
+// Astrolog reads it (Julian before the reform), never Go's proleptic date.
+func TestUnavailableNamesTheRowsDate(t *testing.T) {
+	file := &store.Slot{Time: time.Date(-43, 3, 13, 11, 10, 0, 0, time.UTC), Chart: store.SessionChart{Clock: store.ChartClock{Year: -44, Month: 3, Day: 15, Hour: 12, Julian: true, Zone: "LMT"}}}
+	if got, want := slotDate(file), strings.TrimSpace(civilDate(-44, 3, 15)); got != want {
+		t.Errorf("a chart file's line names %q, want its own %q", got, want)
+	}
+	now := &store.Slot{Floating: true, Time: time.Date(1500, 3, 15, 12, 0, 0, 0, time.UTC), Location: location.PlaceInfo{Name: "Greenwich", TZ: "UTC"}}
+	if got, want := slotDate(now), strings.TrimSpace(civilDate(1500, 3, 5)); got != want {
+		t.Errorf("Now's line names %q, want Astrolog's Julian %q", got, want)
+	}
+}
+
+// A cast that leaves out a body for lack of data writes one line in the log
+// console and none in the Log panel.
+func TestAnAbsentBodyIsNotedInTheConsoleNotTheLog(t *testing.T) {
+	m := readyModelWithObjects(t, testObjectRegistry())
+	panelBefore := len(m.logPanelLines())
+	consoleBefore := len(m.consoleLines())
+
+	m = m.reportUnavailable([]string{"Chiron"}, dUnavailable)
+
+	if got := m.logPanelLines(); len(got) != panelBefore {
+		t.Errorf("the Log panel gained %v", got[panelBefore:])
+	}
+	lines := m.consoleLines()
+	if len(lines) != consoleBefore+1 || !strings.Contains(lines[len(lines)-1].text, "Chiron can't be drawn: no ephemeris data") {
+		t.Errorf("the console gained %d lines, want 1 naming Chiron: %+v", len(lines)-consoleBefore, lines[consoleBefore:])
+	}
+}

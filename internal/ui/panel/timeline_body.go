@@ -23,8 +23,9 @@ type TimelineSearch struct {
 
 // TimelineBag is everything RenderTimeline draws from, resolved by ui: the rows
 // as shown, which of them are marked (Marked[i] for Rows[i]; AnyMarked says
-// the list has any mark at all), the nearest event, whether Details holds the
-// keyboard, the row cursor and window, the search line, and whether the body
+// the list has any mark at all), the nearest event, whether the list has a row
+// cursor (Attached) and whether its panel's border shows focus (Focused: the
+// one fact that lights the cursor row), the row cursor and window, the search line, and whether the body
 // dims while its tab waits.
 type TimelineBag struct {
 	Rows      []lookup.TimelineRow
@@ -32,6 +33,7 @@ type TimelineBag struct {
 	AnyMarked bool
 	Nearest   int
 	Attached  bool
+	Focused   bool
 	Cursor    int
 	RowOffset int
 	Search    TimelineSearch
@@ -98,6 +100,19 @@ func AlignRowPad(r lookup.TimelineRow, pad bool) string {
 	return fmt.Sprintf("%-3s %10s%s %7s %s %7s%s", r.Weekday, r.Date, mark, r.Time, trans, r.Body, r.Rest)
 }
 
+// NoRowMatches is the one plain line a filter that keeps nothing leaves.
+const NoRowMatches = "no row matches"
+
+// drawSearchLine is searchLine as the panel draws it: a closed line that keeps
+// a query is faint with colours on, the open line is plain.
+func drawSearchLine(open bool, query string, shown, total, innerW int, cfg term.Style) string {
+	line := term.CutRight(searchLine(open, query, shown, total, innerW), innerW, cfg)
+	if !open && query != "" && cfg.UseColor() {
+		return term.SGRFaint + menu.ReapplyAfterSGR(line, term.SGRFaint) + term.SGRReset
+	}
+	return line
+}
+
 // searchLine draws the last row: `/<query>█` with `N of M` right-aligned while
 // open, `/<query>  N of M` once closed. The slashes are the mode's: `/` exact,
 // `//` fuzzy, `///` exact respecting case.
@@ -130,8 +145,9 @@ func DimBody(body string, cfg term.Style) string {
 // RenderTimeline draws the window of timeline rows. A row is Astrolog's
 // line, clipped at the panel edge — truncated, never wrapped, because one
 // row is one event and Enter and the cursor both depend on that (V2) — and
-// the cursor row carries the shared active-row treatment only while Details
-// is attached, the way a ring panel's cursor shows only while it is focused.
+// the cursor row carries the shared active-row treatment only while the
+// panel's border shows focus, and is bold alone while Details is attached and
+// something else has the keyboard.
 func RenderTimeline(bag TimelineBag) (string, pane.Viewport) {
 	rows, search, innerW, innerH, cfg := bag.Rows, bag.Search, bag.InnerW, bag.InnerH, bag.Style
 	if innerW <= 0 || innerH <= 0 {
@@ -147,10 +163,10 @@ func RenderTimeline(bag TimelineBag) (string, pane.Viewport) {
 	out := make([]string, 0, innerH)
 	for i := scroll.Offset; i < end; i++ {
 		cursorRow := bag.Attached && i == bag.Cursor
-		text := menu.RowPrefix(bag.Attached, cursorRow, i < len(bag.Marked) && bag.Marked[i], bag.AnyMarked, cfg) + DisplayRowPad(rows[i], cfg, pad)
+		text := menu.RowPrefix(bag.Focused, cursorRow, i < len(bag.Marked) && bag.Marked[i], bag.AnyMarked, cfg) + DisplayRowPad(rows[i], cfg, pad)
 		// The cursor row is bold with the band while Details has the keyboard;
 		// the nearest event is bold, and nothing more, always (rule 2).
-		state := menu.CursorRowState(bag.Attached, cursorRow)
+		state := menu.CursorRowState(bag.Focused, cursorRow)
 		if state == menu.RowPlain && i == bag.Nearest {
 			state = menu.RowCursorBlurred
 		}
@@ -158,12 +174,12 @@ func RenderTimeline(bag TimelineBag) (string, pane.Viewport) {
 	}
 	if search.Show {
 		if len(rows) == 0 && search.Query != "" && listH > 0 {
-			out = append(out, term.CutRight(fmt.Sprintf("No rows match %q.", search.Query), innerW, cfg))
+			out = append(out, term.CutRight(NoRowMatches, innerW, cfg))
 		}
 		for len(out) < listH {
 			out = append(out, "")
 		}
-		out = append(out, term.CutRight(searchLine(search.Open, search.Query, len(rows), search.Total, innerW), innerW, cfg))
+		out = append(out, drawSearchLine(search.Open, search.Query, len(rows), search.Total, innerW, cfg))
 	}
 	body := strings.Join(out, "\n")
 	if bag.Dim && len(rows) > 0 {

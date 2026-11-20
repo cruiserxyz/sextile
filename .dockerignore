@@ -1,6 +1,8 @@
 *
 !go.mod
 !go.sum
+!license.go
+!LICENSE
 !cmd/
 !internal/
 !pkg/

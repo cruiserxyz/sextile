@@ -106,18 +106,17 @@ func TestEnterMovesTheChartCursorWithoutMovingFocus(t *testing.T) {
 	}
 }
 
-// E1 (operator, 2026-10-24: "the UI simulating details-exit, refocus,
-// reenter-details is NOT permitted"): Details stays attached and drawn
-// focused through the whole Enter, in the state the key leaves and in every
-// state a delivered message leaves after it; the ring focus never moves. Only
-// the Chart cursor and the Aspects tab change, underneath.
-func TestEnterOnATimelineRowKeepsDetailsFocused(t *testing.T) {
+// Enter on a timeline row closes Details once, in the state the key leaves and
+// in every state a delivered message leaves after it: Details is never drawn
+// again while the new moment is computed, and the ring focus stays on the
+// Chart panel. Only the Chart cursor and the Aspects tab change.
+func TestEnterOnATimelineRowClosesDetailsAndKeepsItClosed(t *testing.T) {
 	m, _ := enteredFixture(t, 2, true, Config{Color: ColorAlways})
 	focus := m.focused
 	held := func(m Model, when string) {
 		t.Helper()
-		if !m.details.attached || !m.detailsFrame().state.attached || m.focused != focus {
-			t.Errorf("%s: Details attached %v, drawn focused %v, ring focus %v; want attached, drawn focused, %v",
+		if m.details.attached || m.detailsFrame().state.attached || m.focused != focus {
+			t.Errorf("%s: Details attached %v, drawn focused %v, ring focus %v; want closed, not drawn, %v",
 				when, m.details.attached, m.detailsFrame().state.attached, m.focused, focus)
 		}
 	}

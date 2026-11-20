@@ -58,6 +58,9 @@ func TestEveryMainKeyWorksInDetailsOrIsRefused(t *testing.T) {
 		if _, refused := detailsRefused[e.ID]; refused {
 			continue
 		}
+		if len(e.Binding.Keys()) == 0 {
+			continue // a command with no Ctrl key: the comma form and the Actions row reach it
+		}
 		k := e.Binding.Keys()[0]
 		// The leader's own entries are typed after the leader. A sequence the
 		// leader does not know only clears it, so that is the baseline they must
@@ -118,28 +121,13 @@ func TestRefusedKeysDoNothingInDetails(t *testing.T) {
 	}
 }
 
-// `, a` from attached Details opens the House display popup, and Esc puts the
-// operator back in Details, attached; `, c d` saves the defaults from there.
+// `, c d` saves the defaults from attached Details, and Details stays attached.
 func TestLeaderWorksFromDetails(t *testing.T) {
-	t.Run("house display", func(t *testing.T) {
-		m := onTimeline(t, Config{Accessible: true})
-		m, _ = tpress(t, m, keyDown)
-		row := m.details.cursor
-		m, _ = tpress(t, m, runes(","))
-		m, _ = tpress(t, m, runes("a"))
-		if got := m.currentOwner(); got != ownerDisplay {
-			t.Fatalf("`, a` in Details: owner %v, want the House display popup", got)
-		}
-		m, _ = tpress(t, m, keyEsc)
-		if got := m.currentOwner(); got != ownerDetails || !m.details.attached || m.details.cursor != row {
-			t.Errorf("Esc in House display: owner %v attached=%v row %d, want Details attached on row %d", got, m.details.attached, m.details.cursor, row)
-		}
-	})
 	t.Run("save defaults", func(t *testing.T) {
 		stubTextCompute(t)
 		sessionSandbox(t)
 		m := onTimeline(t, Config{Accessible: true})
-		m.place, m.placeGuessed = amsterdamNL, true
+		m.place, m.placeFromZone = amsterdamNL, true
 		var cmd tea.Cmd
 		for _, k := range []string{",", "c", "d"} {
 			m, cmd = tpress(t, m, runes(k))
@@ -157,19 +145,19 @@ func TestLeaderWorksFromDetails(t *testing.T) {
 	})
 }
 
-// Rule pinned (operator, 2026-11-07): Ctrl+P refused by attached Details shows
-// the footer notice "Actions: leave Details first (Esc)"; every other refused
-// key stays silent, as the 2026-10-24 list has them.
-func TestRefusedActionsKeyInDetailsSaysSo(t *testing.T) {
+// Ctrl+P in attached Details opens Keybindings over it, at the commands and
+// with the Details' own keys under Local; every refused key stays silent, as
+// the 2026-10-24 list has them.
+func TestKeybindingsOpensFromDetails(t *testing.T) {
 	stubTextCompute(t)
 	stubRawReports(t)
 	s := detailsKeyStates(t)[0]
 	got, _ := tpress(t, s, tea.KeyMsg{Type: tea.KeyCtrlP})
-	if got.currentOwner() != ownerDetails {
-		t.Fatalf("Ctrl+P in Details: owner %v, want Details (no popup)", got.currentOwner())
+	if got.currentOwner() != ownerKeybindings || got.keybindings.Origin != ownerDetails {
+		t.Fatalf("Ctrl+P in Details: owner %v, origin %v, want Keybindings over Details", got.currentOwner(), got.keybindings.Origin)
 	}
-	if want := "Actions: leave Details first (Esc)"; got.footerIndicator() != want {
-		t.Errorf("notice %q, want %q", got.footerIndicator(), want)
+	if back, _ := tpress(t, got, keyEsc); back.currentOwner() != ownerDetails || !back.details.attached {
+		t.Errorf("Esc did not return to attached Details: owner %v", back.currentOwner())
 	}
 	// Another refused key: no notice.
 	other, _ := tpress(t, s, tea.KeyMsg{Type: tea.KeyTab})

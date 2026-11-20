@@ -180,143 +180,6 @@ func TestSlots_CopySelectionsFromPreservesWorkspaceRoles(t *testing.T) {
 	}
 }
 
-// TestSlots_AdvanceFloating_AppliesCalendarAndDuration asserts that the
-// floating slot's Time advances by AddDate semantics (calendar-aware
-// year/month/day) followed by Add (wall-clock duration). Anchored slot
-// is untouched — only the floating slot's Time is mutable per the
-// canonical slot vocabulary contract.
-func TestSlots_AdvanceFloating_AppliesCalendarAndDuration(t *testing.T) {
-	floatingPlace := location.PlaceInfo{
-		Name: "Berlin", Country: "DE",
-		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
-	}
-	natalPlace := location.PlaceInfo{
-		Name: "Amsterdam", Country: "NL",
-		Lat: 52.3676, Lon: 4.9041, TZ: "Europe/Amsterdam",
-	}
-	start := time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC)
-	natalWhen := time.Date(1990, 6, 15, 14, 30, 0, 0, time.UTC)
-
-	slots, err := NewSlots(start, floatingPlace)
-	if err != nil {
-		t.Fatalf("NewSlots: %v", err)
-	}
-	if err := slots.AddAnchored(SessionChart{}, natalWhen, natalPlace); err != nil {
-		t.Fatalf("AddAnchored: %v", err)
-	}
-
-	// +1 month from Jan 31 normalizes to Mar 3 in 2026 (Feb has 28 days);
-	// this is the documented AddDate behavior and the operator should see
-	// it consistently. +3 hours on top.
-	slots.AdvanceFloating(0, 1, 0, 3*time.Hour)
-
-	floating := slots.All()[1] // anchored at [0], floating at [1] with anchor present
-	wantTime := time.Date(2026, 3, 3, 15, 0, 0, 0, time.UTC)
-	if !floating.Time.Equal(wantTime) {
-		t.Errorf("floating.Time = %v, want %v (AddDate(0,1,0)+3h from Jan 31)",
-			floating.Time.UTC(), wantTime)
-	}
-
-	// Anchor must NOT have moved.
-	if !slots.All()[0].Time.Equal(natalWhen) {
-		t.Errorf("anchored.Time mutated to %v, want unchanged %v",
-			slots.All()[0].Time.UTC(), natalWhen)
-	}
-}
-
-// TestSlots_AdvanceFloating_ZeroIsNoOp asserts the explicit no-op case
-// — calling AdvanceFloating(0, 0, 0, 0) leaves Time exactly as it was.
-func TestSlots_AdvanceFloating_ZeroIsNoOp(t *testing.T) {
-	place := location.PlaceInfo{
-		Name: "Berlin", Country: "DE",
-		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
-	}
-	start := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
-
-	slots, err := NewSlots(start, place)
-	if err != nil {
-		t.Fatalf("NewSlots: %v", err)
-	}
-
-	slots.AdvanceFloating(0, 0, 0, 0)
-
-	if !slots.All()[0].Time.Equal(start) {
-		t.Errorf("zero-step mutated Time: got %v, want %v", slots.All()[0].Time.UTC(), start)
-	}
-}
-
-// TestSlots_AdvanceFloating_NegativeStepsBack asserts the convention used
-// by the UI key bindings (uppercase = backward): negative arguments step
-// the floating slot's Time backward.
-func TestSlots_AdvanceFloating_NegativeStepsBack(t *testing.T) {
-	place := location.PlaceInfo{
-		Name: "Berlin", Country: "DE",
-		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
-	}
-	start := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
-
-	slots, err := NewSlots(start, place)
-	if err != nil {
-		t.Fatalf("NewSlots: %v", err)
-	}
-
-	slots.AdvanceFloating(-1, 0, 0, 0) // -1 year
-	want := time.Date(2025, 4, 25, 12, 0, 0, 0, time.UTC)
-	if !slots.All()[0].Time.Equal(want) {
-		t.Errorf("after -1 year: Time = %v, want %v", slots.All()[0].Time.UTC(), want)
-	}
-
-	slots.AdvanceFloating(0, 0, 0, -2*time.Hour) // -2 hours
-	want = time.Date(2025, 4, 25, 10, 0, 0, 0, time.UTC)
-	if !slots.All()[0].Time.Equal(want) {
-		t.Errorf("after -2 hours: Time = %v, want %v", slots.All()[0].Time.UTC(), want)
-	}
-}
-
-// TestSlots_AdvanceFloating_DST_PreservesLocalClockTime is the reviewer
-// a review finding stepping +1 month across the
-// Europe/Berlin DST transition (CEST → CET on the last Sunday of
-// October) must preserve the user-visible local clock time, not the
-// underlying UTC offset. Pre-fix, AdvanceFloating did raw UTC
-// arithmetic on slot.Time — a "+1 month" step from late September
-// (CEST, UTC+2) to late October (CET, UTC+1) would have left the UTC
-// hour unchanged but the local clock shifted by an hour, confusing
-// the operator.
-func TestSlots_AdvanceFloating_DST_PreservesLocalClockTime(t *testing.T) {
-	berlin := location.PlaceInfo{
-		Name: "Berlin", Country: "DE",
-		Lat: 52.5244, Lon: 13.4105, TZ: "Europe/Berlin",
-	}
-	// Sep 25 12:00 UTC = Sep 25 14:00 CEST (Berlin DST on).
-	start := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
-	slots, err := NewSlots(start, berlin)
-	if err != nil {
-		t.Fatalf("NewSlots: %v", err)
-	}
-
-	slots.AdvanceFloating(0, 1, 0, 0)
-
-	// User mental model: same local clock time, one calendar month
-	// forward. Oct 25 in Berlin is CET (DST ended Oct 25 2026), so
-	// 14:00 local = 13:00 UTC.
-	want := time.Date(2026, 10, 25, 13, 0, 0, 0, time.UTC)
-	got := slots.All()[0].Time
-	if !got.Equal(want) {
-		t.Errorf("DST month-step regression:\n  got:  %v (%v)\n  want: %v (%v)\nLocal clock time must remain 14:00 across the DST boundary.",
-			got.UTC(), got, want, want)
-	}
-
-	// Also verify by rendering the slot in Berlin TZ: the local clock
-	// hour and minute should match the start's local clock hour and
-	// minute (14:00).
-	loc, _ := time.LoadLocation(berlin.TZ)
-	gotLocal := got.In(loc)
-	if gotLocal.Hour() != 14 || gotLocal.Minute() != 0 {
-		t.Errorf("DST step local clock = %02d:%02d, want 14:00 (same as start)",
-			gotLocal.Hour(), gotLocal.Minute())
-	}
-}
-
 // TestSlots_AddAnchored_RefusesUntimedPlace asserts the IANA-timezone
 // requirement is enforced for anchors the same way it is for NewSlots.
 func TestSlots_AddAnchored_RefusesUntimedPlace(t *testing.T) {
@@ -390,7 +253,6 @@ func TestSlotsHoldsAnyNumber(t *testing.T) {
 // C2: time stepping touches the floating slot's Time and nothing else.
 func TestOnlyFloatingTimeMoves(t *testing.T) {
 	steps := map[string]func(*Slots){
-		"AdvanceFloating": func(s *Slots) { s.AdvanceFloating(0, 0, 3, 90*time.Minute) },
 		"SetFloatingTime": func(s *Slots) { s.SetFloatingTime(time.Date(2031, 8, 9, 10, 11, 0, 0, time.UTC)) },
 	}
 	for name, step := range steps {
@@ -407,12 +269,6 @@ func TestOnlyFloatingTimeMoves(t *testing.T) {
 			after := slots.Floating()
 			if after.Time.Equal(beforeFloating.Time) {
 				t.Fatalf("the floating Time did not move")
-			}
-			if name == "AdvanceFloating" {
-				want := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC).Add(90 * time.Minute)
-				if !after.Time.Equal(want) {
-					t.Errorf("floating Time = %v, want %v (exactly the step)", after.Time, want)
-				}
 			}
 			after.Time = beforeFloating.Time
 			if !reflect.DeepEqual(after, beforeFloating) {

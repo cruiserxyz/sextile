@@ -64,10 +64,10 @@ func OverlayCrossAspects(
 	// Both staged charts carry their own local clock and zone, so the report
 	// Details shows reads each chart's own time (the specification C6); the
 	// cross-aspect values are the UT run's, to the byte.
-	spec, err := lens.localComparisonSpecAt(
-		astrolog.SlotJD(natalChart.When), natalChart.Place, natalChart.Label,
-		astrolog.SlotJD(transitWhen), transitPlace, store.ReportLabel{},
-	)
+	if lens.AspectRegistry.Refusal() != "" {
+		return OverlayAspects{}, nil // the pair tab shows the refusal, not a list
+	}
+	spec, err := lens.localComparisonSpecAt(AtChart(natalChart), AtMoment(astrolog.SlotJD(transitWhen), transitPlace, store.ReportLabel{}))
 	if err != nil {
 		return OverlayAspects{}, fmt.Errorf("lookup: OverlayCrossAspects: %w", err)
 	}
@@ -97,14 +97,12 @@ func SynastryCrossAspects(
 	ctx context.Context,
 	lens Lens,
 	natalChart store.AnchorChart,
-	otherWhen time.Time,
-	otherPlace location.PlaceInfo,
-	otherLabel store.ReportLabel,
+	other store.AnchorChart,
 ) (OverlayAspects, error) {
-	spec, err := lens.localSynastrySpecAt(
-		astrolog.SlotJD(natalChart.When), natalChart.Place, natalChart.Label,
-		astrolog.SlotJD(otherWhen), otherPlace, otherLabel,
-	)
+	if lens.AspectRegistry.Refusal() != "" {
+		return OverlayAspects{}, nil // the pair tab shows the refusal, not a list
+	}
+	spec, err := lens.localSynastrySpecAt(AtChart(natalChart), AtChart(other))
 	if err != nil {
 		return OverlayAspects{}, fmt.Errorf("lookup: SynastryCrossAspects: %w", err)
 	}

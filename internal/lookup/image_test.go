@@ -9,6 +9,7 @@ import (
 
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/store"
 )
 
 // TestRenderWheelImageAgainstLiveAstrolog exercises the full lookup→astrolog
@@ -22,7 +23,7 @@ func TestRenderWheelImageAgainstLiveAstrolog(t *testing.T) {
 	place := location.PlaceInfo{Name: "London", Country: "GB", Lat: 51.5074, Lon: -0.1278, TZ: "Europe/London"}
 	when := time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	data, err := RenderWheelImage(context.Background(), when, place, Hellenistic, WheelHighlight{})
+	data, err := RenderWheelImage(context.Background(), store.AnchorChart{When: when, Place: place}, Hellenistic, WheelHighlight{})
 	if err != nil {
 		t.Fatalf("RenderWheelImage: %v", err)
 	}
@@ -50,15 +51,6 @@ func TestPreviewImageFormatMatchesBackend(t *testing.T) {
 				t.Fatalf("previewImageFormat() = %d, want %d", got, tc.want)
 			}
 		})
-	}
-}
-
-// TestRenderWheelImage_RefusesUntimedPlace is hermetic: a place without a
-// timezone is rejected before any astrolog spawn.
-func TestRenderWheelImage_RefusesUntimedPlace(t *testing.T) {
-	_, err := RenderWheelImage(context.Background(), time.Now(), location.PlaceInfo{Name: "Nowhere"}, Hellenistic, WheelHighlight{})
-	if err == nil {
-		t.Error("RenderWheelImage must refuse a place with no timezone")
 	}
 }
 
@@ -103,7 +95,7 @@ func TestWheelFormatPNGAgainstLiveAstrolog(t *testing.T) {
 	SetWheelFormat(recipe.ImagePNG)
 	t.Cleanup(func() { SetWheelFormat(recipe.ImageSVG) })
 	place := location.PlaceInfo{Name: "London", Country: "GB", Lat: 51.5074, Lon: -0.1278, TZ: "Europe/London"}
-	data, err := RenderWheelImage(context.Background(), time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC), place, Hellenistic, WheelHighlight{})
+	data, err := RenderWheelImage(context.Background(), store.AnchorChart{When: time.Date(2000, 1, 1, 12, 0, 0, 0, time.UTC), Place: place}, Hellenistic, WheelHighlight{})
 	if err != nil {
 		t.Fatalf("RenderWheelImage: %v", err)
 	}

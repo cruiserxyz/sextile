@@ -2,12 +2,14 @@ package astrolog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/payload"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
 
 // ComputeChart compiles a chart's positions + aspects from a validated semantic
@@ -21,11 +23,26 @@ import (
 // Returns Run's payload.RawOutput unchanged: Positions, Aspects, and the merged
 // Raw stdout for diagnostics.
 func ComputeChart(ctx context.Context, spec recipe.ChartSpec) (payload.RawOutput, error) {
+	if err := requireAspectRegistry(spec.AspectRegistry); err != nil {
+		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChart: %w", err)
+	}
+	if spec.AspectRegistry.Refusal() != "" {
+		// The aspect list refuses (the panels say so); the positions do not
+		// depend on it, so the chart is cast without asking for the list.
+		return ComputeChartPositionsOnly(ctx, spec)
+	}
 	plan, err := Compile(spec, recipe.Positions{})
 	if err != nil {
 		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChart: %w", err)
 	}
-	return Run(ctx, plan.Invocations[0].Call())
+	// A chart cast from its file reads a staged copy (recipe.FileChart); for a
+	// moment at a place this is a no-op.
+	call, _, cleanup, err := stageCall(plan.Invocations[0])
+	defer cleanup()
+	if err != nil {
+		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChart: %w", err)
+	}
+	return Run(ctx, call)
 }
 
 // ComputeChartPositionsOnly is ComputeChart minus the second `-aa` invocation:
@@ -41,7 +58,14 @@ func ComputeChartPositionsOnly(ctx context.Context, spec recipe.ChartSpec) (payl
 	if err != nil {
 		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChartPositionsOnly: %w", err)
 	}
-	return RunPositionsOnly(ctx, plan.Invocations[0].Call())
+	// A chart cast from its file reads a staged copy (recipe.FileChart); for a
+	// moment at a place this is a no-op.
+	call, _, cleanup, err := stageCall(plan.Invocations[0])
+	defer cleanup()
+	if err != nil {
+		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChartPositionsOnly: %w", err)
+	}
+	return RunPositionsOnly(ctx, call)
 }
 
 // rawReportDegreeSwitch is `-k0`: the degree character without colour.
@@ -95,7 +119,14 @@ func ComputeChartProbe(ctx context.Context, spec recipe.ChartSpec) (payload.RawO
 	if err != nil {
 		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChartProbe: %w", err)
 	}
-	return RunPositionsProbing(ctx, plan.Invocations[0].Call())
+	// A chart cast from its file reads a staged copy (recipe.FileChart); for a
+	// moment at a place this is a no-op.
+	call, _, cleanup, err := stageCall(plan.Invocations[0])
+	defer cleanup()
+	if err != nil {
+		return payload.RawOutput{}, fmt.Errorf("astrolog: ComputeChartProbe: %w", err)
+	}
+	return RunPositionsProbing(ctx, call)
 }
 
 // ComputeCrossAspects runs astrolog's -r0 relationship aspect list for a
@@ -107,6 +138,9 @@ func ComputeChartProbe(ctx context.Context, spec recipe.ChartSpec) (payload.RawO
 // files, runs under ctx (a superseded run SIGKILLs cleanly), and parses with the
 // role-preserving cross-aspect parser. The spec's Source must be a Comparison.
 func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.CrossAspectOutput, error) {
+	if err := requireReadableAspects(spec.AspectRegistry); err != nil {
+		return payload.CrossAspectOutput{}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
+	}
 	plan, err := Compile(spec, recipe.Aspects{})
 	if err != nil {
 		return payload.CrossAspectOutput{}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
@@ -148,11 +182,12 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 			// pair's names travel in its staged files alone.
 			primary.Name, primary.Place = "", ""
 			probe := recipe.ChartSpec{
-				Source:   primary,
-				Houses:   spec.Houses,
-				Zodiac:   spec.Zodiac,
-				Objects:  recipe.ObjectPolicy{Baseline: recipe.AstrologDefault},
-				Registry: spec.Registry,
+				Source:         primary,
+				Houses:         spec.Houses,
+				Zodiac:         spec.Zodiac,
+				Objects:        recipe.ObjectPolicy{Baseline: recipe.AstrologDefault},
+				Registry:       spec.Registry,
+				AspectRegistry: spec.AspectRegistry,
 			}
 			probed, err := ComputeChartPositionsOnly(ctx, probe)
 			commands = append(commands, probed.Commands...)
@@ -178,7 +213,10 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 	if err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
 	}
-	cross := parseCrossAspects(out, spec.Registry)
+	cross, err := parseCrossAspects(out, spec.Registry, spec.AspectRegistry)
+	if err != nil {
+		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
+	}
 	if err := checkCrossAspectSanity(out); err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w (output: %.400s)", err, out)
 	}
@@ -186,7 +224,7 @@ func ComputeCrossAspects(ctx context.Context, spec recipe.ChartSpec) (payload.Cr
 	if err != nil {
 		return payload.CrossAspectOutput{Commands: commands}, fmt.Errorf("astrolog: ComputeCrossAspects: %w", err)
 	}
-	return payload.CrossAspectOutput{Aspects: cross, AspectStyles: mapCrossAspectStyles(rows, spec.Registry), Report: reportText(out), Commands: commands}, nil
+	return payload.CrossAspectOutput{Aspects: cross, AspectStyles: mapCrossAspectStyles(rows, spec.Registry, spec.AspectRegistry), Report: reportText(out), Commands: commands}, nil
 }
 
 // formatLon emits astrolog's "<deg>:<arcmin><E|W>" form. Atlas convention
@@ -223,4 +261,39 @@ func splitDegMin(d float64) (int, int) {
 		min = 0
 	}
 	return deg, min
+}
+
+// ErrAspectsUnread is the refusal of a computation that lists aspects while the
+// aspect registry has not been read: no chart file is staged and no process is
+// started, because no row of the list could be given an identity.
+var ErrAspectsUnread = errors.New("the aspect registry has not been read")
+
+// AspectsRefusedError is the refusal of an aspect list whose aspects cannot all
+// be read: the registry holds an aspect renamed to letters the lists cannot be
+// matched with. It is decided from the registry, before a list is read, so no
+// list is ever shown with a row missing. Text is the sentence the screen shows.
+type AspectsRefusedError struct{ Text string }
+
+func (e *AspectsRefusedError) Error() string { return "astrolog: " + e.Text }
+
+// requireAspectRegistry is the check every aspect-producing entry point makes
+// before it compiles, stages a chart file or starts Astrolog: the registry has
+// been read.
+func requireAspectRegistry(reg aspect.AspectRegistry) error {
+	if !reg.Ready() {
+		return ErrAspectsUnread
+	}
+	return nil
+}
+
+// requireReadableAspects is requireAspectRegistry and, beyond it, refuses a
+// registry holding an aspect whose letters no list can be read with.
+func requireReadableAspects(reg aspect.AspectRegistry) error {
+	if err := requireAspectRegistry(reg); err != nil {
+		return err
+	}
+	if text := reg.Refusal(); text != "" {
+		return &AspectsRefusedError{Text: text}
+	}
+	return nil
 }

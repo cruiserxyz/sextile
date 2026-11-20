@@ -30,7 +30,7 @@ type Place struct{ Lon, Lat float64 }
 // UT, the form every pair report took before the clock pins, and returns
 // Astrolog's report and parsed cross aspects.
 func UTTransitCross(ctx context.Context, natal time.Time, natalAt Place, transit time.Time, transitAt Place,
-	houses recipe.HouseSystem, zodiac recipe.Zodiac, objects recipe.ObjectPolicy, aspects recipe.AspectPolicy, registry aspect.Registry) (string, []aspect.CrossAspect, error) {
+	houses recipe.HouseSystem, zodiac recipe.Zodiac, objects recipe.ObjectPolicy, aspects recipe.AspectPolicy, registry aspect.Registry, aspectList aspect.AspectRegistry) (string, []aspect.CrossAspect, error) {
 	spec, err := recipe.NewChartSpec(recipe.Comparison{
 		Primary:   recipe.MomentAtPlace{JD: JD(natal), Lon: natalAt.Lon, Lat: natalAt.Lat},
 		Secondary: recipe.MomentAtPlace{JD: JD(transit), Lon: transitAt.Lon, Lat: transitAt.Lat},
@@ -41,6 +41,7 @@ func UTTransitCross(ctx context.Context, natal time.Time, natalAt Place, transit
 	}
 	spec.Aspects = aspects
 	spec.Registry = registry
+	spec.AspectRegistry = aspectList
 	out, err := astrolog.ComputeCrossAspects(ctx, spec)
 	if err != nil {
 		return "", nil, err

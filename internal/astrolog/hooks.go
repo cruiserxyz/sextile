@@ -10,9 +10,11 @@ import (
 // hooks.go is how a call keeps the host's astrolog.as out of the answer
 // (the specification). Astrolog lets its data file define
 // AstroExpression hooks that rewrite orbs, positions, cusps and filters, and
-// print to stderr while doing it. Sextile defines no hooks of its own (I-013),
-// so every call clears every hook by name, right after `-YQ 0`, and a chart
-// call refuses on any stderr line that is not a wheel progress line.
+// print to stderr while doing it. Sextile defines no hooks of its own except one: the void search's Moon
+// event filter (`-~d`, void.go), set after the clear band, whose output
+// ReadVoids refuses when the filter did not apply. Every call clears every hook
+// by name, right after `-YQ 0`, and a chart call refuses on any stderr line
+// that is not a wheel progress line.
 
 // hookNames are the 54 hooks of Astrolog 8.00, in the order the band clears
 // them: the 52 `astrolog -Y` advertises (bracket forms expanded) plus XQ and

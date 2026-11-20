@@ -15,7 +15,7 @@ no charts folder is chosen and there is no terminal to ask. Run sextile --charts
 [exit 2]
 
 === remote endpoint ===
-only a local Docker is supported (this endpoint is tcp://build-host:2375): Sextile mounts a folder of this machine, which a remote Docker cannot see
+Sextile needs Docker on this computer. This Docker runs elsewhere (tcp://build-host:2375) and cannot see your charts folder
 [exit 2]
 
 === config: relative XDG_CONFIG_HOME ===
@@ -27,19 +27,19 @@ the config location $CLONE/cfg/sextile/launcher.conf is inside the Sextile check
 [exit 2]
 
 === config: folder is a symlink ===
-the config folder $XDG/sextile is a symlink. The launcher will not read or write through it
+the settings folder $XDG/sextile is a link. Sextile does not read or write through a link. Make it a real folder
 [exit 2]
 
 === config: not valid ===
-the config file $XDG/sextile/launcher.conf is not valid: it must hold exactly one line, charts-dir=<absolute folder>. Fix it or delete it to be asked again
+$XDG/sextile/launcher.conf is not valid. It must hold one line: charts-dir=<full path of a folder>. Correct it, or delete it to be asked again
 [exit 2]
 
 === config: remembered folder is gone ===
-the remembered charts folder $TMP/usb/charts (from $XDG/sextile/launcher.conf) does not exist — Sextile will not create it again, in case a disk is not mounted. Restore it, fix the file, or delete the file to be asked again
+your charts folder $TMP/usb/charts (named in $XDG/sextile/launcher.conf) is not there. Sextile does not make it again, because a disk may be missing. Bring it back, or delete the file to be asked again
 [exit 2]
 
 === docker: permission denied ===
-you cannot reach the Docker daemon (permission denied on its socket). Join the docker group (https://docs.docker.com/engine/install/linux-postinstall/) or start Docker Desktop
+Docker refuses your user account. Add your account to the docker group (https://docs.docker.com/engine/install/linux-postinstall/), or start Docker Desktop
 [exit 2]
 
 === forwarded --charts-dir ===

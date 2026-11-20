@@ -85,17 +85,17 @@ func (s ObjectSet) Members() []int {
 //     has the right way)
 //   - Selection: under Explicit only, the chosen objects as Astrolog's own
 //     registry numbers
-//   - TrueNodeMode: use astrolog's true node + Black Moon Lilith (-Yn) instead
-//     of the mean variants
+//   - Nodes: the form of the Nodes and Lilith the chart is cast in (NodeForm);
+//     the zero value is Astrolog's own, the mean Node and the mean Lilith
 //   - Only: a narrowing applied AFTER the rest is resolved (see the field)
 //
 // Add/Remove and Selection are mutually exclusive, and which pair is live is
 // decided by Baseline alone — never by whether a field happens to be populated.
 type ObjectPolicy struct {
-	Baseline     VisibilityProfile
-	Add          ObjectSet
-	Remove       ObjectSet
-	TrueNodeMode bool
+	Baseline VisibilityProfile
+	Add      ObjectSet
+	Remove   ObjectSet
+	Nodes    NodeForm
 
 	// Selection is the operator's chosen objects under Explicit, as Astrolog's
 	// own object numbers from `astrolog -R1 -HO`. It is order-free: Selected
@@ -273,7 +273,7 @@ func ObjectManual(n int) bool {
 // no other body can answer for n. The body popup's ephemeris probe is its one
 // user. (It was named Only until the Only field took the name.)
 func (o ObjectPolicy) OnlyObject(n int) ObjectPolicy {
-	return ObjectPolicy{Baseline: Explicit, Selection: []int{n}, TrueNodeMode: o.TrueNodeMode}
+	return ObjectPolicy{Baseline: Explicit, Selection: []int{n}, Nodes: o.Nodes}
 }
 
 // Toggles returns the objects the policy names, ascending: Add ∪ Remove, the

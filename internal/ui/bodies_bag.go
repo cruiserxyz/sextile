@@ -15,6 +15,7 @@ import (
 func resolveBodiesBag(v bodiesView, state chartViewState, slots *store.Slots, slotIdx, cursorIdx, innerWidth, innerHeight int, panelFocused bool, cfg Config) panel.BodiesBag {
 	bag := panel.BodiesBag{
 		Positions:      state.positions,
+		Nodes:          state.nodes,
 		Cusps:          state.cusps,
 		Stations:       state.stations,
 		Forced:         state.forced,
@@ -25,6 +26,7 @@ func resolveBodiesBag(v bodiesView, state chartViewState, slots *store.Slots, sl
 		NatalCusps:     state.natalCusps,
 		Framed:         state.framedPositions,
 		HouseForm:      state.houseForm,
+		MoonLane:       state.moonLane,
 		Columns:        v.cols,
 		ColumnsOK:      v.ok,
 		Comparing:      v.comparing,

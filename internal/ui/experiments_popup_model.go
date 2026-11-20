@@ -10,8 +10,8 @@ import (
 )
 
 // experiments_popup_model.go is the Model's half of the hidden Experiments popup
-// (`,l p`; the popup itself is internal/ui/popup/experiments.go). The door is
-// in no key bar, Help, Actions list or document.
+// (`,L p`; the popup itself is internal/ui/popup/experiments.go). The door is
+// in no key bar, Keybindings popup or document.
 //
 // A flip writes first: Space runs store.SetExperimental as a command and only
 // its successful result changes the Model and the tick, so the screen never
@@ -41,10 +41,10 @@ func (m Model) openExperiments() (tea.Model, tea.Cmd) {
 
 // experimentsBindings is the popup's table: move, flip, close.
 func experimentsBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{
-		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true},
-		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
-		{ID: keys.BindingToggle, Binding: key.NewBinding(key.WithKeys(" ")), Title: "Flip", BarKey: "space", Bar: true},
+	return keys.TitledLocal([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row up", BarKey: "up"},
+		{ID: keys.BindingListDown, Binding: key.NewBinding(key.WithKeys("down", "j")), Title: "Move row down", BarKey: "down"},
+		{ID: keys.BindingToggle, Binding: key.NewBinding(key.WithKeys(" ")), Title: "Switch", BarKey: "space", Bar: true},
 		{ID: keys.BindingClose, Binding: key.NewBinding(key.WithKeys("enter", "esc", "q")), Title: "Close", BarKey: "enter/esc/q", Bar: true, Pinned: true},
 	})
 }

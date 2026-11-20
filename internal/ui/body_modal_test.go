@@ -121,17 +121,17 @@ func TestUnnamedObjectsAreStillSelectable(t *testing.T) {
 	}
 }
 
-// The policy the modal produces is always Explicit, and it carries TrueNodeMode
+// The policy the modal produces is always Explicit, and it carries Nodes
 // through from the entry policy. Dropping it would silently swap the mean node
 // for the true one in a slice that is not about nodes.
-func TestBodyPolicyKeepsTrueNodeMode(t *testing.T) {
-	st := openBodyTest(recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, TrueNodeMode: true}, []int{1, 16})
+func TestBodyPolicyKeepsNodes(t *testing.T) {
+	st := openBodyTest(recipe.ObjectPolicy{Baseline: recipe.AstrologDefault, Nodes: recipe.NodesTrue}, []int{1, 16})
 	p := st.Policy()
 	if p.Baseline != recipe.Explicit {
 		t.Errorf("Baseline = %v, want Explicit", p.Baseline)
 	}
-	if !p.TrueNodeMode {
-		t.Error("TrueNodeMode must survive the modal; it selects the true-node VARIANT of object 16, not which objects are drawn")
+	if p.Nodes != recipe.NodesTrue {
+		t.Error("Nodes must survive the modal; it selects the true-node VARIANT of object 16, not which objects are drawn")
 	}
 }
 
@@ -203,7 +203,7 @@ func TestBodyEmptyFilterIsSafe(t *testing.T) {
 	st.Refilter()
 	st.ToggleAt(st.Cursor) // must not panic
 	rows := popup.ListRows(st, Config{}, 40, 5)
-	if len(rows) != 1 || !strings.Contains(rows[0], "no matching") {
+	if len(rows) != 1 || !strings.Contains(rows[0], "no body of that name") {
 		t.Errorf("rows = %v, want a single no-matches line", rows)
 	}
 }

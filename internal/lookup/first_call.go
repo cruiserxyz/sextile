@@ -94,7 +94,7 @@ func FirstCallTransits(ctx context.Context, probers *Probers, now time.Time, pla
 		return Result{}, fmt.Errorf("lookup: FirstCallTransits: place %q has no IANA timezone", place.Display())
 	}
 	jd := astrolog.SlotJD(now)
-	spec, err := lens.chartSpecAt(jd, place, store.ReportLabel{})
+	spec, err := lens.chartSpecAt(AtMoment(jd, place, store.ReportLabel{}))
 	if err != nil {
 		return Result{}, fmt.Errorf("lookup: FirstCallTransits: %w", err)
 	}
@@ -117,6 +117,7 @@ func FirstCallTransits(ctx context.Context, probers *Probers, now time.Time, pla
 		Commands:      raw.Commands,
 		Cusps:         raw.Cusps,
 		HousesUsed:    raw.HousesUsed,
+		Nodes:         raw.Nodes,
 		Unavailable:   raw.Unavailable,
 	}, nil
 }

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,12 +43,15 @@ type wheelPlan struct {
 	// when and place are the single render's chart; highlight its body tiers.
 	when      time.Time
 	place     location.PlaceInfo
+	record    string
 	highlight lookup.WheelHighlight
 	// floating says which of the plan's moments is the floating slot's: the
 	// single render's when, and each ring by index. They are the only moments a
 	// held time step moves (stillKey).
 	floating     bool
 	ringFloating []bool
+	// label names the single render's chart as the Log does (numeral and name).
+	label string
 }
 
 // slotLabel names a selected slot the way a failure line must: its numeral and
@@ -85,7 +89,7 @@ func (m Model) wheelPlanFor(sc scene) (wheelPlan, bool) {
 	if slot.Floating {
 		when = m.floatingImageTime()
 	}
-	return wheelPlan{mode: wheelSingle, when: when, place: slot.Location, highlight: m.wheelHighlight(), floating: slot.Floating}, true
+	return wheelPlan{mode: wheelSingle, when: when, place: slot.Location, record: slot.Chart.Record, highlight: m.wheelHighlight(), floating: slot.Floating, label: slotLabel(sc.numeral(slot), slot, m.cfg)}, true
 }
 
 // pairWheelPlan is the bi-wheel of two slots: the frame first (Astrolog's
@@ -97,11 +101,24 @@ func (m Model) pairWheelPlan(sc scene, inner, outer *store.Slot) wheelPlan {
 		if s.Floating {
 			when = m.floatingImageTime()
 		}
-		p.rings = append(p.rings, lookup.WheelRing{When: when, Place: s.Location})
+		p.rings = append(p.rings, lookup.WheelRing{When: when, Place: s.Location, Record: s.Chart.Record})
 		p.ringFloating = append(p.ringFloating, s.Floating)
 		p.labels = append(p.labels, slotLabel(sc.numeral(s), s, m.cfg))
 	}
 	return p
+}
+
+// shows is what the Log says the wheel draws: a pair as the chart read in the
+// base (`① Kepler in ② Goethe`, the cursor's chart first), a single chart by
+// its own label, a set of rings in numeral order.
+func (p wheelPlan) shows() string {
+	switch {
+	case p.mode == wheelSingle:
+		return p.label
+	case p.mode == wheelPair && len(p.labels) == 2:
+		return p.labels[1] + " in " + p.labels[0]
+	}
+	return strings.Join(p.labels, ", ")
 }
 
 // wheelLens is the lens plan p is drawn under: the single chart's own wheel
@@ -169,14 +186,14 @@ func (m Model) wheelUnchanged() bool {
 // renderMultiWheelCmd renders the selected set as rings (astrolog -r3..-r6),
 // tagged with the image surface's runID/wantID; labels name each ring for a
 // failure line. Same coordinator contract as renderWheelCmd.
-func renderMultiWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, []lookup.WheelRing, lookup.Lens) ([]byte, []string, error), rings []lookup.WheelRing, labels []string, lens lookup.Lens) tea.Cmd {
+func renderMultiWheelCmd(ctx context.Context, runID, wantID uint64, render func(context.Context, []lookup.WheelRing, lookup.Lens) ([]byte, []string, error), rings []lookup.WheelRing, labels []string, lens lookup.Lens, shows string) tea.Cmd {
 	return func() tea.Msg {
 		img, commands, err := render(ctx, rings, lens)
 		return refreshResultMsg{
 			surface: surfaceImage,
 			runID:   runID,
 			wantID:  wantID,
-			payload: imagePayload{bytes: img, rings: labels, commands: commands},
+			payload: imagePayload{bytes: img, rings: labels, commands: commands, shows: shows},
 			err:     err,
 		}
 	}
@@ -205,15 +222,17 @@ func buildImageCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd {
 	wheel := m.rows[surfaceImage].spawn.wheel
 	switch plan.mode {
 	case wheelPair:
-		// The active tab's bi-wheel: the pair's left chart, the base,
-		// passed first, which Astrolog draws on the outer ring with its
-		// houses; the cursor's chart inside (the floating slot at the
-		// operator's target, or an anchored slot at its own moment).
-		return renderOverlayWheelCmd(ctx, runID, wantID, wheel.renderOverlay, plan.inner, plan.rings[1].When, plan.rings[1].Place, lens, plan.labels)
+		// The active tab's bi-wheel: the pair's left chart, the base, is the
+		// first ring, which Astrolog draws on the outer ring with its houses;
+		// the cursor's chart (the floating slot at the operator's target, or an
+		// anchored slot at its own moment) is the second, inside. Two rings
+		// compile to the -r0 bi-wheel and stage both chart records, so a chart
+		// opened from a file, which has no IANA zone, draws like any other.
+		return renderMultiWheelCmd(ctx, runID, wantID, wheel.renderRings, plan.rings, plan.labels, lens, plan.shows())
 	case wheelRings:
-		return renderMultiWheelCmd(ctx, runID, wantID, wheel.renderRings, plan.rings, plan.labels, lens)
+		return renderMultiWheelCmd(ctx, runID, wantID, wheel.renderRings, plan.rings, plan.labels, lens, plan.shows())
 	}
-	return renderWheelCmd(ctx, runID, wantID, wheel.render, plan.when, plan.place, lens, plan.highlight)
+	return renderWheelCmd(ctx, runID, wantID, wheel.render, store.AnchorChart{When: plan.when, Place: plan.place, Record: plan.record}, lens, plan.highlight, plan.shows())
 }
 
 // stampWheelRunKey is the Image row's started column: the key of the wheel the
@@ -277,10 +296,10 @@ func commitImageResult(m Model, msg refreshResultMsg) (Model, tea.Cmd) {
 			// the picture on screen is still the last one, and the line
 			// names the slot (C16).
 			if p, _ := msg.payload.(imagePayload); ring >= 1 && ring <= len(p.rings) {
-				reason = "The chart file for " + p.rings[ring-1] + " could not be written."
+				reason = "the chart file for " + p.rings[ring-1] + " could not be written"
 			}
 		}
-		return m.logError("Couldn't draw the wheel. %s", reason).logWarnings(msg.err), nil
+		return m.logError("wheel", "wheel not drawn, %s", reason).logWarnings(msg.err), nil
 	}
 	// Symmetric to the build's render-start gate: drop a SUCCESSFUL render
 	// that was already in flight when the preview was disabled (a render or
@@ -295,6 +314,6 @@ func commitImageResult(m Model, msg refreshResultMsg) (Model, tea.Cmd) {
 	// browser launch off the render loop while preserving order (one publish
 	// at a time) and latest-wins.
 	img, _ := msg.payload.(imagePayload)
-	m.wheelPublishPending, m.wheelPublishKey = img.bytes, m.wheelRunKey
+	m.wheelPublishPending, m.wheelPublishKey, m.wheelPublishShows = img.bytes, m.wheelRunKey, img.shows
 	return m.kickWheelPublish()
 }

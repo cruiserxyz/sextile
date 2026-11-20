@@ -2,39 +2,9 @@ package aspect
 
 import "math"
 
-// harmonics.go holds the two angle facts the aspect chooser needs, here rather
+// harmonics.go holds the angle facts the aspect chooser needs, here rather
 // than in the UI because an angle is an astrological fact and `internal/ui`
 // must not carry one as a literal.
-
-// angleTolerance is how close a registry angle must be to a kind's canonical
-// angle to be that kind. `astrolog -HA` prints angles rounded to two decimals —
-// the harmonic aspects read 51.43, 102.86, 130.91 — so an exact float compare
-// would be a coin toss. Every one of the eleven named kinds is an exact decimal
-// and matches well inside this.
-const angleTolerance = 0.01
-
-// KindForAngle maps a separation in degrees to the AspectKind Sextile names for
-// it. The second return is false when no kind matches within tolerance, which
-// is the ordinary case for most of Astrolog's registry: it carries 24 aspects
-// and this enum names 11. A non-match maps to NO kind — never to the nearest
-// one, which would silently relabel a septile as a sextile.
-func KindForAngle(deg float64) (AspectKind, bool) {
-	for _, k := range AllKinds() {
-		if math.Abs(k.Angle()-deg) <= angleTolerance {
-			return k, true
-		}
-	}
-	return AspectUnknown, false
-}
-
-// AllKinds lists every real AspectKind, ascending by angle. AspectUnknown is
-// not a kind and is absent.
-func AllKinds() []AspectKind {
-	return []AspectKind{
-		Conjunction, Semisextile, Semisquare, Sextile, Quintile, Square,
-		Trine, Sesquisquare, Biquintile, Quincunx, Opposition,
-	}
-}
 
 // CircleDivision is the harmonic family an angle belongs to: the SMALLEST n
 // such that the angle is a whole multiple of 360/n. It is not 360/angle — the

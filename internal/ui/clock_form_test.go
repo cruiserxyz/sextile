@@ -86,15 +86,14 @@ func TestSlotMomentMatchesAstrologsClock(t *testing.T) {
 			holdForm(t, c)
 			rows := func(at time.Time) map[string]string {
 				return map[string]string{
-					"floating": tagSlotLine(at.UTC(), berlin, "WhTr", 100, Config{Accessible: true}),
-					"named":    tagNamedSlotLine("Ann", 3, 4, at.UTC(), berlin, "WhTr", 110, Config{Accessible: true}),
-					"moment":   slotMoment(at.UTC(), berlin) + " CEST",
+					"floating": rowText(at.UTC(), berlin, "", "WhTr", 100, Config{Accessible: true}),
+					"named":    rowText(at.UTC(), berlin, "Ann", "WhTr", 110, Config{Accessible: true}),
 				}
 			}
 			for _, day := range []int{5, 15} {
 				for _, hour := range []int{0, 9, 12, 13} {
 					at := time.Date(2026, 10, day, hour, 5, 0, 0, loc)
-					want := refMoment(at, c) + " CEST"
+					want := clockSeconds(refMoment(at, c)) + " +2 DT"
 					for name, got := range rows(at) {
 						if !strings.Contains(got, want) {
 							t.Errorf("%s row, day %d hour %d: %q lacks %q", name, day, hour, got, want)
@@ -104,15 +103,15 @@ func TestSlotMomentMatchesAstrologsClock(t *testing.T) {
 			}
 			at := time.Date(2026, 10, 5, 9, 5, 0, 0, loc)
 			for name, got := range rows(at) {
-				if !strings.Contains(got, literal[c]+" CEST") {
+				if !strings.Contains(got, clockSeconds(literal[c])+" +2 DT") {
 					t.Errorf("%s row: %q lacks the spec's literal %q", name, got, literal[c])
 				}
 			}
 			if c.hours == "12" && c.dates == "month-first" {
 				for name, want := range midnightNoon {
 					hour := map[string]int{"midnight": 0, "noon": 12}[name]
-					got := tagSlotLine(time.Date(2026, 10, 5, hour, 5, 0, 0, loc).UTC(), berlin, "", 100, Config{Accessible: true})
-					if !strings.Contains(got, want+" CEST") {
+					got := rowText(time.Date(2026, 10, 5, hour, 5, 0, 0, loc).UTC(), berlin, "", "", 100, Config{Accessible: true})
+					if !strings.Contains(got, clockSeconds(want)+" +2 DT") {
 						t.Errorf("%s: %q lacks %q", name, got, want)
 					}
 				}
@@ -159,7 +158,7 @@ func TestPickerDateKeepsTheFilesCivilDate(t *testing.T) {
 		holdForm(t, clockCase{"24", "month-first"})
 		c := mk(2026, 10, 5)
 		c.Place.Name, c.Place.Country = "Llanfairpwllgwyngyllgogerychwyrndrobwll", "GB"
-		got := menu.Row(chartRow(c, false, time.Time{}), plainCfg, 54)
+		got := menu.Row(chartRow(c, false, false, time.Time{}), plainCfg, 54)
 		if !strings.HasSuffix(got, "Oct  5, 2026") {
 			t.Errorf("the date was cut before the place: %q", got)
 		}

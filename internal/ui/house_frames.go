@@ -31,7 +31,7 @@ const (
 	houseFallback houseSource = iota // nothing named a system: Whole Sign
 	houseDefault                     // preferences.yaml `frame: houses:`
 	houseFile                        // the chart file's own line, as Astrolog reads it
-	houseChosen                      // a session record (chosen, or preserved at a rename)
+	houseChosen                      // a session record (chosen)
 	houseSession                     // chosen for a chart with no file: until quit
 )
 
@@ -40,14 +40,20 @@ type fileFrame struct {
 	when   time.Time
 	houses recipe.HouseSystem
 	has    bool
+	// nodes is the form of the Nodes and Lilith the file states; nodesStated is
+	// false when it states none.
+	nodes       recipe.NodeForm
+	nodesStated bool
 }
 
 // castKey names one chart cast in one asked-for system, for the polar
-// substitutions Astrolog reported (C7).
+// substitutions Astrolog reported (C7). The record tells apart two chart
+// files at one moment and place that set their own houses differently.
 type castKey struct {
 	floating bool
 	when     int64
 	lat, lon float64
+	record   string
 	asked    recipe.HouseSystem
 }
 
@@ -62,7 +68,7 @@ type castFact struct {
 func (f castFact) mapKey() castKey { return makeCastKey(f.key, f.asked) }
 
 func makeCastKey(k chartKey, asked recipe.HouseSystem) castKey {
-	return castKey{floating: k.floating, when: k.when.UnixNano(), lat: k.place.Lat, lon: k.place.Lon, asked: asked}
+	return castKey{floating: k.floating, when: k.when.UnixNano(), lat: k.place.Lat, lon: k.place.Lon, record: k.record, asked: asked}
 }
 
 // frameState is everything the model knows about house systems. Maps and slices
@@ -81,6 +87,12 @@ type frameState struct {
 	volatile map[string]recipe.HouseSystem
 	// volatileZ is volatile for the zodiac: a choice for a chart with no file.
 	volatileZ map[string]recipe.Zodiac
+	// volatileN is volatile for the form of the Nodes and Lilith.
+	volatileN map[string]recipe.NodeForm
+	// defN is the preferences default form, when `node:` and `lilith:` named a
+	// pair Astrolog casts.
+	defN    recipe.NodeForm
+	defNSet bool
 	// def is the preferences default, when it named a usable system.
 	def    recipe.HouseSystem
 	defSet bool
@@ -91,9 +103,6 @@ type frameState struct {
 	logged map[string]bool
 	// casts remembers the system Astrolog said it used for a cast (C7).
 	casts map[castKey]string
-	// renames are the preservation records written for rewrites in flight,
-	// by write generation, so a failure can take them back.
-	renames map[int]renameUndo
 	// pruneOK is set by a chart-library listing that succeeded and listed at
 	// least one chart: only then may a session write drop a record (C10).
 	pruneOK bool
@@ -122,6 +131,23 @@ func (f frameState) with(rec store.FrameRecord) frameState {
 	}
 	if !replaced {
 		out = append(out, rec)
+	}
+	f.records = out
+	return f
+}
+
+// withOrWithout is with, except that a record holding no choice at all is
+// removed instead: the removal of the last choice leaves no empty entry.
+func (f frameState) withOrWithout(rec store.FrameRecord) frameState {
+	if rec.HasHouses || rec.HasZodiac || rec.HasNodes {
+		return f.with(rec)
+	}
+	out := make([]store.FrameRecord, 0, len(f.records))
+	for _, r := range f.records {
+		if r.Floating == rec.Floating && (rec.Floating || r.File == rec.File) {
+			continue
+		}
+		out = append(out, r)
 	}
 	f.records = out
 	return f
@@ -234,7 +260,7 @@ func (m Model) ownHouses(s *store.Slot) ownHouse {
 			rec, found = m.frames.find(f, false)
 		}
 		if found && rec.HasHouses {
-			if s.Floating || rec.When.Equal(m.chartMoment(s)) {
+			if s.Floating || sameRemembered(rec.When, m.chartMoment(s)) {
 				return ownHouse{hs: rec.Houses, src: houseChosen}
 			}
 			out.rejected = true
@@ -262,6 +288,25 @@ func (m Model) ownHouses(s *store.Slot) ownHouse {
 // record, else the preferences default, else tropical. The chart file never
 // names one: Astrolog's own writer puts no zodiac in a file, and a `_s` or
 // `=s` a file does carry is not read.
+// zodiacChosen says the operator chose s's zodiac: a session record for this
+// chart (ownZodiac's first answer). The default zodiac is not a choice for one
+// chart, so a chart file's own zodiac stands over it.
+func (m Model) zodiacChosen(s *store.Slot) bool {
+	if s == nil || s.Floating {
+		return false
+	}
+	f := slotFile(s)
+	if f == "" {
+		return false
+	}
+	rec, found := m.frames.find(f, false)
+	if !found || !rec.HasZodiac || !sameRemembered(rec.When, m.chartMoment(s)) {
+		return false
+	}
+	_, ok := recipe.ParseZodiacRecord(rec.Zodiac)
+	return ok
+}
+
 func (m Model) ownZodiac(s *store.Slot) recipe.Zodiac {
 	if s != nil {
 		if z, ok := m.frames.volatileZ[volatileKey(s)]; ok && s.Chart.Source.File == "" {
@@ -276,10 +321,19 @@ func (m Model) ownZodiac(s *store.Slot) recipe.Zodiac {
 		}
 		// A record made for another chart (a different birth moment in the same
 		// file name) is no record, for the zodiac as for the houses (C11a).
-		if found && rec.HasZodiac && (s.Floating || rec.When.Equal(m.chartMoment(s))) {
+		if found && rec.HasZodiac && (s.Floating || sameRemembered(rec.When, m.chartMoment(s))) {
 			if z, ok := recipe.ParseZodiacRecord(rec.Zodiac); ok {
 				return z
 			}
+		}
+	}
+	// The chart's file names its zodiac: that is the chart's starting setting
+	// (operator, 2026-11-15), when it is tropical or one of the named
+	// ayanamsas. An offset no ayanamsa has stays in the file's record, which
+	// Astrolog casts, and the row's tag names it.
+	if s != nil && !s.Floating && s.Chart.Clock.ZodiacSet {
+		if z, ok := lookup.ZodiacOfOffset(s.Chart.Clock.Sidereal, s.Chart.Clock.Offset); ok {
+			return z
 		}
 	}
 	if m.frames.defZSet {
@@ -308,8 +362,10 @@ func (m Model) slotIndexOf(s *store.Slot) int {
 // (comparisonLens).
 func (m Model) lensFor(s *store.Slot) lookup.Lens {
 	l := m.lens
-	l.Houses = m.ownHouses(s).hs
-	l.Zodiac = m.ownZodiac(s)
+	own := m.ownHouses(s)
+	l.Houses, l.HousesChosen = own.hs, own.src == houseChosen
+	l.Zodiac, l.ZodiacChosen = m.ownZodiac(s), m.zodiacChosen(s)
+	l.Objects.Nodes, _ = m.ownNodes(s)
 	return l
 }
 
@@ -368,7 +424,8 @@ func parseHouseName(v string) (recipe.HouseSystem, bool) {
 	return 0, false
 }
 
-// applyFrameConfig reads the preferences defaults (C1, C11d). A value that is
+// applyFrameConfig reads the preferences defaults (C1, C11d, and the form of
+// the Nodes and Lilith, applyNodesConfig). A value that is
 // not a house system, or not a zodiac in the form a record carries
 // (the specification C6), leaves Whole Sign, or tropical, in force and is
 // said once. A `base:` key left over from the retired base switch is ignored.
@@ -378,7 +435,7 @@ func (m Model) applyFrameConfig(cfg store.FrameConfig) Model {
 			m.frames.def, m.frames.defSet = hs, true
 		} else if !m.frames.logged["bad default"] {
 			m.frames = m.frames.withLogged("bad default")
-			m = m.logNote("houses", "preferences: %s is not a house system, using Whole Sign", logIdent(cfg.Houses, m.cfg))
+			m = m.logNote("houses", "%s is not a house system, Whole Sign is used", logIdent(cfg.Houses, m.cfg))
 		}
 	}
 	if cfg.ZodiacPresent {
@@ -386,10 +443,10 @@ func (m Model) applyFrameConfig(cfg store.FrameConfig) Model {
 			m.frames.defZ, m.frames.defZSet = z, true
 		} else if !m.frames.logged["bad zodiac default"] {
 			m.frames = m.frames.withLogged("bad zodiac default")
-			m = m.logNote("zodiac", "preferences: %s is not a zodiac, using tropical", logIdent(cfg.Zodiac, m.cfg))
+			m = m.logNote("zodiac", "%s is not a zodiac, tropical is used", logIdent(cfg.Zodiac, m.cfg))
 		}
 	}
-	return m
+	return m.applyNodesConfig(cfg)
 }
 
 // loadFrames puts the session's records and the startup file reads in place.
@@ -404,7 +461,7 @@ func (m Model) loadFrames(p ingest.StartupPerimeterReadMsg) Model {
 		}
 	}
 	for file, r := range p.FileReads {
-		m.frames = m.frames.withFile(file, fileFrame{when: r.When, houses: r.Houses, has: r.HasHouses})
+		m.frames = m.frames.withFile(file, fileFrame{when: r.When, houses: r.Houses, has: r.HasHouses, nodes: r.Nodes, nodesStated: r.HasNodes})
 	}
 	if len(p.FileReadFailures) > 0 {
 		failed := make(map[string]string, len(p.FileReadFailures))
@@ -432,12 +489,15 @@ type frameChoice struct {
 	// line ("house", "zodiac").
 	lane, noun string
 	// runOnly is the choice in the Log line of a run that cannot save it
-	// ("houses are", "zodiac is").
+	// ("houses", "zodiac").
 	runOnly string
 	// set puts the choice into a session record.
 	set func(rec *store.FrameRecord)
 	// setVolatile remembers the choice until quit, for a chart with no file.
 	setVolatile func(f *frameState, key string)
+	// quiet says the change is the removal of a choice, which a chart with no
+	// file has nothing to say about.
+	quiet bool
 }
 
 // chooseHouseSystem is the one door a house choice comes through (the finder
@@ -449,7 +509,7 @@ func (m Model) chooseHouseSystem(slotIdx int, hs recipe.HouseSystem) (Model, tea
 		return m, nil
 	}
 	return m.chooseFrame(slotIdx, frameChoice{
-		lane: "houses", noun: "house", runOnly: "houses are",
+		lane: "houses", noun: "house", runOnly: "houses",
 		set: func(rec *store.FrameRecord) {
 			rec.Houses, rec.HasHouses, rec.From = hs, true, store.FrameFromChosen
 		},
@@ -472,7 +532,7 @@ func (m Model) chooseZodiac(slotIdx int, z recipe.Zodiac) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.chooseFrame(slotIdx, frameChoice{
-		lane: "zodiac", noun: "zodiac", runOnly: "zodiac is",
+		lane: "zodiac", noun: "zodiac", runOnly: "zodiac",
 		set: func(rec *store.FrameRecord) { rec.Zodiac, rec.HasZodiac = z.RecordName(), true },
 		setVolatile: func(f *frameState, key string) {
 			vol := make(map[string]recipe.Zodiac, len(f.volatileZ)+1)
@@ -500,22 +560,24 @@ func (m Model) chooseFrame(slotIdx int, c frameChoice) (Model, tea.Cmd) {
 		rec, _ := m.frames.find("", true)
 		rec.Floating, rec.File, rec.When = true, "", time.Time{}
 		c.set(&rec)
-		m.frames = m.frames.with(rec)
+		m.frames = m.frames.withOrWithout(rec)
 	case slotFile(slot) != "":
 		file := slotFile(slot)
 		rec, had := m.frames.find(file, false)
 		moment := m.chartMoment(slot)
-		if had && !rec.When.Equal(moment) {
+		if had && !sameRemembered(rec.When, moment) {
 			// A record made for another chart carries nothing over to this one.
 			rec = store.FrameRecord{}
 		}
 		rec.File, rec.Floating, rec.When = file, false, moment
 		c.set(&rec)
-		m.frames = m.frames.with(rec)
+		m.frames = m.frames.withOrWithout(rec)
 	default:
 		remembered = false
 		c.setVolatile(&m.frames, volatileKey(slot))
-		m = m.logNote(c.lane, "%s: this choice can't be remembered, the chart has no file", m.slotLabel(slot))
+		if !c.quiet {
+			m = m.logNote(c.lane, "%s has no file, the choice holds until quit", m.slotLabel(slot))
+		}
 	}
 	if remembered {
 		// A launch whose refused session file could not be kept writes nothing
@@ -528,9 +590,9 @@ func (m Model) chooseFrame(slotIdx int, c frameChoice) (Model, tea.Cmd) {
 					if errors.Is(err, errForeignSession) {
 						// Nothing will retry it at quit: say what is true. Why was
 						// said at start, so the line stays short enough for the Log.
-						m = m.logNote("session", "%s's %s for this run only", m.slotLabel(slot), c.runOnly)
+						m = m.logNote("session", "%s's %s kept until quit", m.slotLabel(slot), c.runOnly)
 					} else {
-						m = m.logError("Couldn't save the %s choice. It will be tried again at quit.", c.noun)
+						m = m.logError(c.lane, "the %s choice was not saved, it is tried again at quit", c.noun)
 					}
 				}
 			}
@@ -558,7 +620,7 @@ func (m Model) openFramesNow() []store.FrameRecord {
 		}
 		moment := m.chartMoment(s)
 		rec, had := m.frames.find(file, false)
-		if had && !rec.When.Equal(moment) {
+		if had && !sameRemembered(rec.When, moment) {
 			// A record made for another chart carries nothing over to this one.
 			rec = store.FrameRecord{}
 		}
@@ -569,7 +631,11 @@ func (m Model) openFramesNow() []store.FrameRecord {
 		if !rec.HasZodiac {
 			keep.Zodiac, keep.HasZodiac = m.ownZodiac(s).RecordName(), true
 		}
-		if keep.HasHouses || keep.HasZodiac {
+		if !rec.HasNodes {
+			keep.Nodes, _ = m.ownNodes(s)
+			keep.HasNodes = true
+		}
+		if keep.HasHouses || keep.HasZodiac || keep.HasNodes {
 			out = append(out, keep)
 		}
 	}
@@ -611,6 +677,10 @@ func (m Model) keepFrames(snapshot []store.FrameRecord) (Model, bool) {
 			rec.Zodiac, rec.HasZodiac = e.Zodiac, true
 			changed = true
 		}
+		if e.HasNodes && !rec.HasNodes {
+			rec.Nodes, rec.HasNodes = e.Nodes, true
+			changed = true
+		}
 		if !changed {
 			continue
 		}
@@ -635,15 +705,13 @@ func (m Model) recastHouses() (Model, tea.Cmd) {
 }
 
 // writeSessionNow writes the session the way quit does (C8). A launch whose
-// refused file could not be kept writes nothing, and says so as an error so a
-// caller that depends on the write (a rename's preservation) does not go on.
+// refused file could not be kept writes nothing, and says so as an error.
 // A launch that runs another charts folder's general session writes nothing
 // either and answers errForeignSession. Callers tell the two apart: an ordinary
 // failure goes on the error lane and the quit write retries it, while
 // errForeignSession is the intended suppression (a house or zodiac choice says it
-// holds for this run only, a rename goes on without its preservation write) and
-// no write of such a run, at quit or at any other time, reaches the general
-// session.
+// holds for this run only) and no write of such a run, at quit or at any other
+// time, reaches the general session.
 func (m Model) writeSessionNow() error {
 	if m.slots == nil || m.cantStart.locked() {
 		return errors.New("no workspace to save")
@@ -680,38 +748,6 @@ func (m Model) frameRecordsToSave() []store.FrameRecord {
 	return out
 }
 
-// rowTag is the Charts row's tag: the house code of the system the row is cast
-// in (the one Astrolog used, with `*`, where it substituted) and the zodiac.
-func (m Model) rowTag(s *store.Slot) string {
-	lens := m.lensFor(s)
-	code := lens.HouseAbbrev()
-	if used, ok := m.knownSubstitution(s, lens.Houses); ok {
-		code = lookup.HouseCode(used) + "*"
-	}
-	return code + lens.ZodiacAbbrev()
-}
-
-// knownSubstitution reports the system Astrolog used for s's chart when it was
-// not the one asked for.
-func (m Model) knownSubstitution(s *store.Slot, asked recipe.HouseSystem) (recipe.HouseSystem, bool) {
-	if s == nil || len(m.frames.casts) == 0 {
-		return 0, false
-	}
-	key := chartKey{when: s.Time, place: s.Location}
-	if s.Floating {
-		key = floatingKey(s.Time, s.Location)
-	}
-	name, ok := m.frames.casts[makeCastKey(key, asked)]
-	if !ok {
-		return 0, false
-	}
-	used, ok := recipe.ParseHouseSystem(name)
-	if !ok || used == asked {
-		return 0, false
-	}
-	return used, true
-}
-
 // commitCasts remembers what each cast of a frame reported and says, once per
 // chart and system, where Astrolog used another system than the one asked (C7).
 func (m Model) commitCasts(casts []castFact) Model {
@@ -720,8 +756,18 @@ func (m Model) commitCasts(casts []castFact) Model {
 			continue
 		}
 		m.frames = m.frames.withCast(c.mapKey(), c.used)
-		used, ok := recipe.ParseHouseSystem(c.used)
-		if !ok || used == c.asked {
+		label, slot := "the floating chart", (*store.Slot)(nil)
+		if m.slots != nil {
+			for _, s := range m.slots.All() {
+				k := chartKey{when: s.Time, place: s.Location, floating: s.Floating, label: s.Chart.Label, record: s.Chart.Record}
+				if k.equal(c.key) {
+					label, slot = m.slotLabel(s), s
+					break
+				}
+			}
+		}
+		asked := m.askedHouses(slot, c.asked)
+		if c.used == asked {
 			continue
 		}
 		key := fmt.Sprintf("sub|%s", fmt.Sprint(c.mapKey()))
@@ -729,20 +775,55 @@ func (m Model) commitCasts(casts []castFact) Model {
 			continue
 		}
 		m.frames = m.frames.withLogged(key)
-		label := "the floating chart"
-		if m.slots != nil {
-			for _, s := range m.slots.All() {
-				k := chartKey{when: s.Time, place: s.Location, floating: s.Floating, label: s.Chart.Label}
-				if k.equal(c.key) {
-					label = m.slotLabel(s)
-					break
-				}
-			}
-		}
-		m = m.logNote("houses", "%s: %s asked, Astrolog used %s", label,
-			lookup.HouseName(c.asked), lookup.HouseName(used))
+		m = m.logNote("houses", "%s asked for %s, Astrolog casts %s here", label, asked, c.used)
 	}
 	return m
+}
+
+// askedHouses is the house system a chart is asked to be cast in, in
+// Astrolog's words: the operator's choice when they made one, else the system
+// the chart's file asks for, else the one Astrolog cast it in, else the
+// system the lens sent.
+func (m Model) askedHouses(s *store.Slot, sent recipe.HouseSystem) string {
+	if s != nil && !s.Floating && m.ownHouses(s).src != houseChosen {
+		if c := s.Chart.Clock; c.HousesAsked != "" {
+			return c.HousesAsked
+		} else if c.Houses != "" {
+			return c.Houses
+		}
+	}
+	return sent.StoredName()
+}
+
+// rowTag is the Charts row's tag: the house system and the zodiac the row is
+// cast in, as Astrolog reports them (operator, 2026-11-15, "Short marks"). A
+// house system Astrolog used in place of the one asked carries a `*`.
+func (m Model) rowTag(s *store.Slot) string {
+	lens := m.lensFor(s)
+	asked := m.askedHouses(s, lens.Houses)
+	house := lookup.HouseTag(asked)
+	if used, ok := m.castHouses(s, lens.Houses); ok && used != asked {
+		house = lookup.HouseTag(used) + "*"
+	}
+	zodiac := lens.ZodiacAbbrev()
+	if s != nil && !s.Floating && !lens.ZodiacChosen && s.Chart.Clock.ZodiacSet {
+		zodiac = lookup.ZodiacTag(s.Chart.Clock.Sidereal, s.Chart.Clock.Offset)
+	}
+	return house + zodiac
+}
+
+// castHouses is the house system Astrolog's own header said it used for s's
+// chart cast with sent, in its words; false before the chart has been cast.
+func (m Model) castHouses(s *store.Slot, sent recipe.HouseSystem) (string, bool) {
+	if s == nil || len(m.frames.casts) == 0 {
+		return "", false
+	}
+	key := anchoredKey(anchorOf(s))
+	if s.Floating {
+		key = floatingKey(s.Time, s.Location)
+	}
+	name, ok := m.frames.casts[makeCastKey(key, sent)]
+	return name, ok && name != ""
 }
 
 // noteHouseSources says, once per chart per launch, where the system the
@@ -760,7 +841,7 @@ func (m Model) noteHouseSources() Model {
 	}
 	if own.rejected && !m.frames.logged["rejected|"+id] {
 		m.frames = m.frames.withLogged("rejected|" + id)
-		m = m.logNote("houses", "%s: the saved house choice was made for a different chart and is ignored", m.slotLabel(s))
+		m = m.logNote("houses", "%s changed since its houses were chosen, the choice is not used", m.slotLabel(s))
 	}
 	var from string
 	switch own.src {
@@ -859,7 +940,7 @@ func readSessionFiles(p ingest.StartupPerimeterReadMsg) (map[string]ingest.Chart
 				reasons[i] = firstLine(err.Error())
 				return
 			}
-			results[i], okRead[i] = ingest.ChartFileRead{When: pc.When, Houses: pc.Houses, HasHouses: pc.HasHouses}, true
+			results[i], okRead[i] = ingest.ChartFileRead{When: pc.When, Houses: pc.Houses, HasHouses: pc.HasHouses, Nodes: pc.Nodes, HasNodes: pc.NodesStated}, true
 		}(i, f)
 	}
 	wg.Wait()
@@ -885,7 +966,7 @@ func (e *unresolvedHouses) Error() string {
 
 // reason is the error-lane sentence for the failure.
 func (e *unresolvedHouses) reason() string {
-	return "The house system in " + e.file + " could not be read."
+	return "the house system in " + e.file + " could not be read"
 }
 
 // unresolvedFor returns the failure for a chart the screen is cast for, or nil
@@ -908,135 +989,11 @@ func (m Model) unresolvedFor(s *store.Slot) *unresolvedHouses {
 // readChartFile is the chart-file read as a seam for tests.
 var readChartFile = lookup.ReadChartFile
 
-// readChartFileIn is the same read in a named directory, the one the confirmed
-// rename uses so it never asks the resolver again.
-var readChartFileIn = lookup.ReadChartFileIn
-
-// renameCmd is the rename's first step (the specification C9). Astrolog
-// rewrites the chart file, and a rewrite drops the file's house line, so a
-// chart whose file names a system the session does not already hold for it
-// needs a record (`from: file`) in the session BEFORE the rewrite.
-//
-// The record belongs to the model, so a quit at any moment writes a session
-// consistent with the file on disk:
-//
-//	(a) this command reads the file's system (no write);
-//	(b) when a record is needed, its result (RenameReadMsg) is handled in Update,
-//	    which adds the record to the model and writes the session in the same
-//	    step; if that write fails the rename is refused;
-//	(c) only then is the rewrite issued (retitleCmd);
-//	(d) a failed rewrite removes the record and writes the session back.
-//
-// A record counts only if its `when` is the fresh read's moment; any other is
-// treated as no record. A chart that needs no record goes straight to the
-// rewrite inside this command, so its result is the finished write.
-//
-// A second window counts no record: one it made itself is not on disk, and it
-// cannot write one, so a file that names a system is refused at step (b).
-func (m Model) renameCmd(gen int, dir string, c store.NamedChart, seen, title, place string) tea.Cmd {
-	file := filepath.Base(c.Source.File)
-	rec, haveRec := m.frames.find(file, false)
-	haveRec = haveRec && m.ownsSession()
-	// The read is always fresh: nothing cached about the file is trusted, since
-	// it may have been replaced since it was last read.
-	return func() tea.Msg {
-		read, err := readChartFileIn(context.Background(), dir, c.Source.File)
-		if err != nil {
-			return TitleWrittenMsg{Gen: gen, Chart: c, Err: err}
-		}
-		if !read.HasHouses || (haveRec && rec.HasHouses && rec.When.Equal(read.When)) {
-			return retitleCmd(gen, dir, c, seen, title, place)()
-		}
-		return RenameReadMsg{Gen: gen, Chart: c, Dir: dir, Seen: seen, Title: title, Place: place, Read: read}
-	}
-}
-
-// RenameReadMsg is the file read of a rename whose chart needs its house system
-// preserved: step (b) of renameCmd.
-type RenameReadMsg struct {
-	Gen          int
-	Chart        store.NamedChart
-	Dir, Seen    string
-	Title, Place string
-	Read         lookup.PickedChart
-}
-
-// renameUndo is what step (d) puts back.
-type renameUndo struct {
-	file  string
-	had   bool
-	prior store.FrameRecord
-}
-
-// applyRenameRead is step (b) and (c): the record goes into the model and the
-// session in one synchronous step, then the rewrite is issued.
-func applyRenameRead(m Model, msg RenameReadMsg) (Model, tea.Cmd) {
-	if msg.Gen != m.titleGen || m.startup != startupTitleOpen || !m.title.Saving {
-		// Esc walked away before anything was written: nothing to undo.
-		m.abandonedTitles, _ = reclaim(m.abandonedTitles, msg.Gen)
-		return m, nil
-	}
-	file := filepath.Base(msg.Chart.Source.File)
-	prior, had := m.frames.find(file, false)
-	keep := prior
-	if had && !prior.When.Equal(msg.Read.When) {
-		// A record for another chart is no record: nothing of it carries over.
-		keep = store.FrameRecord{}
-	}
-	keep.File, keep.Floating, keep.When = file, false, msg.Read.When
-	keep.Houses, keep.HasHouses, keep.From = msg.Read.Houses, true, store.FrameFromFile
-	prev := m.frames
-	m.frames = m.frames.with(keep)
-	// A run that never saves the general session has nothing to preserve in
-	// it: the record stays in the model, so the chart keeps its houses on
-	// screen for the run, and the rename goes on without the write.
-	if err := m.writeSessionNow(); err != nil && !errors.Is(err, errForeignSession) {
-		m.frames = prev
-		m.title.Saving = false
-		if errors.Is(err, errSecondWindow) {
-			m.title.Refusal = "Rename it in the first Sextile window: only that one can keep its house system."
-			return m.logError("Couldn't rename that chart. Its house system can only be kept by the first Sextile window."), nil
-		}
-		m.title.Refusal = "The house system could not be saved first."
-		return m.logError("Couldn't rename that chart. Its house system could not be saved first."), nil
-	}
-	undo := make(map[int]renameUndo, len(m.frames.renames)+1)
-	for k, v := range m.frames.renames {
-		undo[k] = v
-	}
-	undo[msg.Gen] = renameUndo{file: file, had: had, prior: prior}
-	m.frames.renames = undo
-	return m, retitleCmd(msg.Gen, msg.Dir, msg.Chart, msg.Seen, msg.Title, msg.Place)
-}
-
-// settlePreservation is step (d): a rewrite that failed takes back the record
-// written for it and puts the session back at once, so a relaunch still reads
-// the chart file's own house line. A finished one keeps the record.
-func (m Model) settlePreservation(msg TitleWrittenMsg) Model {
-	u, ok := m.frames.renames[msg.Gen]
-	if !ok {
-		return m
-	}
-	left := make(map[int]renameUndo, len(m.frames.renames))
-	for k, v := range m.frames.renames {
-		if k != msg.Gen {
-			left[k] = v
-		}
-	}
-	m.frames.renames = left
-	if msg.Err == nil {
-		return m
-	}
-	if u.had {
-		m.frames = m.frames.with(u.prior)
-	} else {
-		m.frames = m.frames.without(u.file)
-	}
-	// A run that never saves the general session has no file to put back.
-	if err := m.writeSessionNow(); err != nil && !errors.Is(err, errForeignSession) {
-		return m.logError("Couldn't restore the session after the failed rename.")
-	}
-	return m
+// renameCmd rewrites the chart file under the new title and place. The rewrite
+// keeps every other line of the file, so the house system the file names stays
+// with it. stamp names the dated copy the change question chose.
+func renameCmd(gen int, dir string, c store.NamedChart, seen, title, place string, stamp time.Time) tea.Cmd {
+	return retitleCmd(gen, dir, c, seen, title, place, stamp)
 }
 
 // recastAfter adds a recast of everything on screen to a command already
@@ -1047,4 +1004,13 @@ func recastAfter(m Model, cmd tea.Cmd, recast bool) (Model, tea.Cmd) {
 	}
 	m, more := m.recastHouses()
 	return m, tea.Batch(cmd, more)
+}
+
+// sameRemembered says whether a moment a session remembers for a chart is the
+// chart's moment now: the same instant, or that instant rounded to the
+// minute, as Sextile 0.1.3 remembered a chart file's moment. A chart file's
+// moment is read to the second since 0.1.4, so a choice made before it would
+// otherwise read as made for a different chart.
+func sameRemembered(remembered, now time.Time) bool {
+	return remembered.Equal(now) || remembered.Equal(now.Round(time.Minute))
 }

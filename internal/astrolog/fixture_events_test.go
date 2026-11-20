@@ -1,8 +1,10 @@
 package astrolog
 
-// The chart fixtures are public sky events, not people: each file is named for
-// an event a reader can check with Astrolog itself, and says in a comment the
-// instant Astrolog gives for it. See testdata/README.md.
+// The chart fixtures are public sky events and a few public figures. Each event
+// is named for something a reader can check with Astrolog itself, and says in a
+// comment the instant Astrolog gives for it. Each person is a public figure whose
+// birth data is published, and the file names its source and rating. See
+// testdata/README.md.
 
 import (
 	"context"
@@ -28,13 +30,29 @@ var fixtureEvents = []struct{ file, name, id string }{
 	{"Solstice-2025-12.as", "", ""},
 }
 
-// F1-1, F1-1b: only the named events are fixtures, none carries a person's
-// name, one keeps an empty -zi (the name fallback in lookup reads the stem),
-// and the ids stay with their files.
+// fixturePersons is the allowlist of the person fixtures: file and the one -zi
+// name it carries. No other file may name a person, and each of these names the
+// published source of its data and the rating there.
+var fixturePersons = []struct{ file, name string }{
+	{"Bailey-1880-06-16.as", "Alice A. Bailey"},
+	{"Gauquelin-1928-11-13.as", "Michel Gauquelin"},
+	{"Kepler-1571-12-27.as", "Johannes Kepler"},
+	{"Rudhyar-1895-03-23.as", "Dane Rudhyar"},
+}
+
+// reSource is the source line a person fixture keeps.
+var reSource = regexp.MustCompile(`(?m)^; Source: .+\. Rodden Rating (AA|A|B|C|DD|X|XX)\.$`)
+
+// F1-1, F1-1b: only the named events and persons are fixtures, one keeps an
+// empty -zi (the name fallback in lookup reads the stem), and the ids stay with
+// their files.
 func TestFixtureChartsAreEvents(t *testing.T) {
 	allowed := map[string]bool{"InvalidFile.as": true}
 	for _, ev := range fixtureEvents {
 		allowed[ev.file] = true
+	}
+	for _, p := range fixturePersons {
+		allowed[p.file] = true
 	}
 	ents, err := os.ReadDir(filepath.Join("testdata", "charts"))
 	if err != nil {
@@ -44,7 +62,7 @@ func TestFixtureChartsAreEvents(t *testing.T) {
 	for _, e := range ents {
 		present[e.Name()] = true
 		if !allowed[e.Name()] {
-			t.Errorf("%s is a chart fixture outside the event allowlist", e.Name())
+			t.Errorf("%s is a chart fixture outside the allowlist of events and persons", e.Name())
 		}
 	}
 	emptyLabels, ids := 0, 0
@@ -80,6 +98,33 @@ func TestFixtureChartsAreEvents(t *testing.T) {
 	}
 	if ids != 3 {
 		t.Errorf("%d fixtures carry a ;sextile-id: line, want 3", ids)
+	}
+}
+
+// A person fixture carries the person's name and names the source of the birth
+// data and its rating; an event names no one.
+func TestPersonFixturesNameTheirSource(t *testing.T) {
+	for _, p := range fixturePersons {
+		b, err := os.ReadFile(fixture(p.file))
+		if err != nil {
+			t.Errorf("%s is on the allowlist but not in testdata/charts", p.file)
+			continue
+		}
+		if name, _ := scanChartSwitches(string(b)).labels(); name != p.name {
+			t.Errorf("%s: -zi name = %q, want %q", p.file, name, p.name)
+		}
+		if !reSource.Match(b) {
+			t.Errorf("%s names no source: want a line `; Source: <where>. Rodden Rating <rating>.`", p.file)
+		}
+	}
+	for _, ev := range fixtureEvents {
+		b, err := os.ReadFile(fixture(ev.file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reSource.Match(b) {
+			t.Errorf("%s is an event but carries a person's source line", ev.file)
+		}
 	}
 }
 

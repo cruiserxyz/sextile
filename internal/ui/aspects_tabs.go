@@ -16,6 +16,7 @@ func resolveAspectsBag(state chartViewState) panel.AspectsBag {
 		Synastry:    state.crossSynastry,
 		Settled:     state.settled,
 		Mark:        state.mark,
+		Dot:         state.aspectDot,
 	}
 }
 

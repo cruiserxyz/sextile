@@ -53,7 +53,7 @@ func render2(t *testing.T, sec Section, lines ...string) Rendered {
 
 // T1 — legacy slots keep their rendered lines and their load errors, frozen.
 func TestOldSlotsAreUnchanged(t *testing.T) {
-	items := []string{"2026-10-24 0°45′ Sco", "2025-03-23 2°50′ Ari"}
+	items := []string{"2026-10-24 0°45' Sco", "2025-03-23 2°50' Ari"}
 	ts, err := Shipped(reg, set(t))
 	if err != nil {
 		t.Fatal(err)
@@ -64,26 +64,26 @@ func TestOldSlotsAreUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := fmt.Sprint([]Line{
-		{Label: "elongation", Value: "14°52′ east", Aside: "by longitude"},
+		{Label: "elongation", Value: "14°52' east", Aside: "by longitude"},
 		{Label: "phase", Value: "evening star · occidental"},
 		{Value: "approaching the Sun"},
 		{Label: "under the beams", Value: "yes", Aside: "within 17°"},
 		{Value: "no", Aside: "within 12°"},
-		{Label: "combust", Value: "no (condition)", Aside: "within 8°30′"},
+		{Label: "combust", Value: "no (condition)", Aside: "within 8°30'"},
 		{Blank: true},
 		{Label: "motion", Value: "retrograde"},
-		{Label: "station", Value: "last Oct 3, 2026 7:16 8°29′ Sco", Aside: "ecliptic"},
-		{Label: "station", Value: "next Nov 14, 2026 0:27 22°51′ Lib", Aside: "ecliptic"},
-		{Label: "inner conjunction", Value: "last Mar 23, 2025 1:08 2°39′ Ari"},
-		{Label: "inner conjunction", Value: "next Oct 24, 2026 3:44 0°45′ Sco"},
-		{Label: "outer conjunction", Value: "last Jan 6, 2026 16:36 16°22′ Cap"},
-		{Label: "outer conjunction", Value: "next Aug 12, 2027 0:21 19°06′ Leo"},
+		{Label: "station", Value: "last Oct 3, 2026 7:16 8°29' Sco", Aside: "ecliptic"},
+		{Label: "station", Value: "next Nov 14, 2026 0:27 22°51' Lib", Aside: "ecliptic"},
+		{Label: "inner conjunction", Value: "last Mar 23, 2025 1:08 2°39' Ari"},
+		{Label: "inner conjunction", Value: "next Oct 24, 2026 3:44 0°45' Sco"},
+		{Label: "outer conjunction", Value: "last Jan 6, 2026 16:36 16°22' Cap"},
+		{Label: "outer conjunction", Value: "next Aug 12, 2027 0:21 19°06' Leo"},
 		{Blank: true},
 		{Label: "magnitude", Value: "−4.3 · 4% lit"},
 		{Blank: true},
-		{Label: "inner conjunction", Value: "2026-10-24 0°45′ Sco"},
-		{Value: "2025-03-23 2°50′ Ari"},
-		{Label: "8 years", Value: "Mar 25, 2017   4°57′ Ari · −2°18′"},
+		{Label: "inner conjunction", Value: "2026-10-24 0°45' Sco"},
+		{Value: "2025-03-23 2°50' Ari"},
+		{Label: "8 years", Value: "Mar 25, 2017   4°57' Ari · −2°18'"},
 	})
 	if got := fmt.Sprint(r.Lines); got != want {
 		t.Errorf("shipped:\ngot  %s\nwant %s", got, want)
@@ -97,7 +97,7 @@ func TestOldSlotsAreUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = "[{ east  false} {under the beams yes within 17° false} { no within 12° false} { 14°52′  false} { 2026-10-24 0°45′ Sco  false} { 2025-03-23 2°50′ Ari  false}]"
+	want = "[{ east  false} {under the beams yes within 17° false} { no within 12° false} { 14°52'  false} { 2026-10-24 0°45' Sco  false} { 2025-03-23 2°50' Ari  false}]"
 	if got := fmt.Sprint(r.Lines); got != want {
 		t.Errorf("fixture:\ngot  %s\nwant %s", got, want)
 	}
@@ -300,7 +300,7 @@ func TestAbsentInExpressionOmitsTheLine(t *testing.T) {
 		t.Errorf("chosen absent branch: %+v", r.Lines)
 	}
 	// an absent key only in the unchosen branch renders
-	if r := render2(t, absAbsent(), `{has(elongation.lon) ? elongation.lon : elongation.lon.abs}`); n(r) != 1 || r.Lines[0].Value != "14°52′" {
+	if r := render2(t, absAbsent(), `{has(elongation.lon) ? elongation.lon : elongation.lon.abs}`); n(r) != 1 || r.Lines[0].Value != "14°52'" {
 		t.Errorf("unchosen absent branch: %+v", r.Lines)
 	}
 	s := sideAbsent()
@@ -407,7 +407,7 @@ func TestHyphenatedCategoryKey(t *testing.T) {
 	sec := nowFacts(14.87, nil)
 	sec["sign.same-as-sun"] = Fact{Kind: KindCategory, Term: "east"}
 	r, err := Render(ts[0], "venus", map[string]Section{"now": sec}, set(t))
-	if err != nil || len(r.Lines) != 2 || r.Lines[0].Value != "evening star" || r.Lines[1].Value != "14°52′" {
+	if err != nil || len(r.Lines) != 2 || r.Lines[0].Value != "evening star" || r.Lines[1].Value != "14°52'" {
 		t.Errorf("%+v %v", r.Lines, err)
 	}
 }

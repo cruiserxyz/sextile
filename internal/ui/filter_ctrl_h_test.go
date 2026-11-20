@@ -124,24 +124,16 @@ func TestCtrlHDeletesInFormFields(t *testing.T) {
 	}
 }
 
-// Acceptance 4: on the main screen ^H is not consumed by this slice — no
-// command runs and nothing is typed anywhere. the specification C13 later
-// gave the main screen's ^H its one meaning, the house finder: the model now
-// changes by opening it, and by nothing else (Esc puts it back as it was).
+// Acceptance 4: on the main screen ^H runs no command and types nothing
+// anywhere: houses has its comma form only, and a terminal's Backspace sent as
+// ^H must not open a chooser.
 func TestCtrlHOutsideAPickerIsNotConsumed(t *testing.T) {
 	m := detailsTestModel(t)
 	tm, cmd := m.Update(keyCtrlH)
 	if cmd != nil {
 		t.Error("^H on the main screen returned a command")
 	}
-	opened := tm.(Model)
-	if opened.startup != startupHouseOpen {
-		t.Fatalf("^H on the main screen left startup = %q, want the house finder", opened.startup)
-	}
-	closed, _ := opened.Update(keyEsc)
-	back := closed.(Model)
-	back.houseFinder = m.houseFinder
-	if !modelsLookEqual(m, back) {
-		t.Error("^H then Esc on the main screen changed the model")
+	if got := tm.(Model); got.startup != m.startup || !modelsLookEqual(m, got) {
+		t.Errorf("^H on the main screen changed the model (startup %q -> %q)", m.startup, got.startup)
 	}
 }

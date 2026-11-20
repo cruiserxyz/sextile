@@ -87,3 +87,18 @@ func TestParseAspectRowsAllowsAReportWithoutAspects(t *testing.T) {
 		t.Fatalf("ParseAspectRows = %#v, %v; want empty valid result", rows, err)
 	}
 }
+
+// An aspect whose three letters end in a digit (`Un1` to `Un5`, the
+// eleventh-harmonic aspects) is a coloured row like any other, in both lists.
+func TestAspectRowsReadAnAbbreviationEndingInADigit(t *testing.T) {
+	const single = "  1: \x1b[1;31m    Sun\x1b[1;31m (Cap) \x1b[1;33mUn1 \x1b[1;31m(Aqu) \x1b[1;34mMoon      \x1b[0;37m - orb: +0:08'\x1b[0;32m - power: 0.99"
+	rows, err := ParseAspectRows(single)
+	if err != nil || len(rows) != 1 || rows[0].KindName != "Un1" || rows[0].Style.Kind != "\x1b[1;33m" {
+		t.Fatalf("ParseAspectRows = %#v, %v; want one Un1 row", rows, err)
+	}
+	const pair = "  1: \x1b[1;34m   Moon\x1b[1;33m (Tau) \x1b[1;36mUn5 with \x1b[1;34m(Can) \x1b[1;31mSun       \x1b[1;37m- orb: -0:10'\x1b[0;32m - power: 0.09"
+	rows, err = ParseCrossAspectRows(pair)
+	if err != nil || len(rows) != 1 || rows[0].KindName != "Un5" || rows[0].Style.Kind != "\x1b[1;36m" {
+		t.Fatalf("ParseCrossAspectRows = %#v, %v; want one Un5 row", rows, err)
+	}
+}

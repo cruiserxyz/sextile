@@ -76,7 +76,7 @@ func (a *Aspects) Refilter() {
 	var hits []aspect.RegistryAspect
 	var tiers []int
 	for _, r := range a.Registry {
-		t := max(location.MatchTier(strings.ToLower(r.Name), q), location.MatchTier(strings.ToLower(r.Abbrev), q))
+		t := max(location.MatchTier(strings.ToLower(r.Kind.Name), q), location.MatchTier(strings.ToLower(r.Kind.Abbrev), q))
 		if t > 0 {
 			hits = append(hits, r)
 			tiers = append(tiers, t)
@@ -104,7 +104,7 @@ func OpenAspects(registry []aspect.RegistryAspect, policy recipe.AspectPolicy) A
 		// twenty-four and the other nineteen all print positive orbs.
 		for _, r := range registry {
 			if r.InForce {
-				st.SetTick(r.Index, true)
+				st.SetTick(r.Kind.Index, true)
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func OpenAspects(registry []aspect.RegistryAspect, policy recipe.AspectPolicy) A
 // operator cannot change from here.
 func (a Aspects) Selectable(idx int) bool {
 	for _, r := range a.Registry {
-		if r.Index == idx {
+		if r.Kind.Index == idx {
 			return r.CountsAnything()
 		}
 	}
@@ -179,7 +179,7 @@ func (a Aspects) FamilyMembers(f aspect.Family) []int {
 	var out []int
 	for _, r := range a.Matches {
 		if f.Contains(r.Angle) && r.CountsAnything() {
-			out = append(out, r.Index)
+			out = append(out, r.Kind.Index)
 		}
 	}
 	return out
@@ -240,7 +240,7 @@ func (a *Aspects) ToggleAt(cursor int) {
 	if i < 0 || i >= len(a.Matches) {
 		return
 	}
-	n := a.Matches[i].Index
+	n := a.Matches[i].Kind.Index
 	a.SetTick(n, !a.Selected[n])
 }
 
@@ -348,17 +348,17 @@ func aspectFamilyRow(state Aspects, f aspect.Family, cursor bool) menu.RowSpec {
 // Drop order (the specification): the orb goes first, then the
 // name truncates. The marker, the abbreviation and the angle never drop — the
 // abbreviation because it is the bridge to the aspect waterfall, and the angle
-// because among the thirteen harmonics the enum cannot name it is the only
+// because for an aspect the waterfall shows by its letters it is the only
 // thing a practitioner can scan.
 func AspectListRows(state Aspects, cfg term.Style, width, height int) []string {
 	if height < 1 {
 		return nil
 	}
 	if state.Registry == nil {
-		return []string{menu.Note("(no aspect registry)", width, cfg)}
+		return []string{menu.Note("(Astrolog's list of aspects could not be read)", width, cfg)}
 	}
 	if len(state.Matches) == 0 {
-		return []string{menu.Note("(no matching aspects)", width, cfg)}
+		return []string{menu.Note("(no aspect of that name)", width, cfg)}
 	}
 
 	// The cursor walks the family block and the list as one column, so the
@@ -397,15 +397,15 @@ func aspectRowWith(state Aspects, r aspect.RegistryAspect, onCursor, withOrb boo
 	switch {
 	case !r.CountsAnything():
 		mark = "-"
-	case state.Selected[r.Index]:
+	case state.Selected[r.Kind.Index]:
 		mark = "✓"
 	}
-	right := []string{fmt.Sprintf("%-3s", r.Abbrev), fmt.Sprintf("%6.2f°", r.Angle)}
+	right := []string{fmt.Sprintf("%-3s", r.Kind.Abbrev), fmt.Sprintf("%6.2f°", r.Angle)}
 	if withOrb {
 		right = append(right, fmt.Sprintf("orb %4.1f", r.Orb))
 	}
 	return menu.RowSpec{
-		Left:   fmt.Sprintf("[%s] %s", mark, r.Name),
+		Left:   fmt.Sprintf("[%s] %s", mark, r.Kind.Name),
 		Right:  right,
 		Cursor: onCursor,
 		Pinned: true,

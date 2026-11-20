@@ -235,8 +235,8 @@ func TestCompileComparisonWheelSuppressesHighlight(t *testing.T) {
 	}
 }
 
-// siderealHidePlutoSpec mirrors the invariants' sidereal case: astrolog
-// default set with Pluto removed.
+// siderealHidePlutoSpec is a sidereal chart with astrolog's default set less
+// Pluto.
 func siderealHidePlutoSpec(t *testing.T) recipe.ChartSpec {
 	t.Helper()
 	spec, err := recipe.NewChartSpec(

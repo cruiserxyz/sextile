@@ -18,7 +18,7 @@ import (
 
 // All chart values in this file are constructed synthetic test inputs.
 
-// Named sessions (`, o`): a window runs exactly one session, the general one
+// Named sessions (`, O`): a window runs exactly one session, the general one
 // or a named one, and keeps updating only that one.
 
 // sessionsModel is a ready workspace of n anchored charts in a sandbox.
@@ -28,12 +28,12 @@ func sessionsModel(t *testing.T, n int) Model {
 	return listModel(t, n, 0)
 }
 
-// openSessions is `, o`.
+// openSessions is `, O`.
 func openSessions(t *testing.T, m Model) Model {
 	t.Helper()
-	m, _ = press(t, m, ",", "o")
+	m, _ = press(t, m, ",", "O")
 	if m.startup != startupSessionsOpen {
-		t.Fatalf("`, o` did not open the Sessions list (startup %q)", m.startup)
+		t.Fatalf("`, O` did not open the Sessions list (startup %q)", m.startup)
 	}
 	return m
 }
@@ -47,7 +47,7 @@ func clearField(t *testing.T, m Model, n int) Model {
 	return m
 }
 
-// saveAs is `, o`, Enter on the first row, the name typed over the prefill,
+// saveAs is `, O`, Enter on the first row, the name typed over the prefill,
 // Enter.
 func saveAs(t *testing.T, m Model, name string) Model {
 	t.Helper()
@@ -165,7 +165,7 @@ func TestOpenNamedSessionReplacesCharts(t *testing.T) {
 	if len(m.sessions.Rows) != 1 || m.sessions.Rows[0].File != file {
 		t.Fatalf("listed %+v, want %s", m.sessions.Rows, file)
 	}
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	if cmd == nil {
 		t.Fatal("Enter on a saved session started nothing")
@@ -217,7 +217,7 @@ func TestNamedSessionOpenElsewhereIsRefused(t *testing.T) {
 	if view := csText(m.View()); !strings.Contains(view, "in another window") {
 		t.Errorf("the list does not say the session is open elsewhere:\n%s", view)
 	}
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	if cmd != nil || m.named.file != "" || !slices.Equal(anchoredNames(m), []string{"Synthetic 1"}) {
 		t.Errorf("Enter opened a session another window runs (named %q, charts %v)", m.named.file, anchoredNames(m))
@@ -252,7 +252,7 @@ func TestSessionsListRenamesAndTrashes(t *testing.T) {
 		t.Helper()
 		for i, r := range m.sessions.Rows {
 			if r.File == file {
-				m.sessions.Cursor = i + 1
+				m.sessions.Cursor = i + 2
 				return
 			}
 		}
@@ -284,12 +284,13 @@ func TestSessionsListRenamesAndTrashes(t *testing.T) {
 	if _, err := os.Stat(store.NamedSessionPath("mine.yaml")); err != nil {
 		t.Errorf("the running session was trashed: %v", err)
 	}
-	if logHas(m, "Switch to another session first") != 1 {
+	if logHas(m, "runs in this window") != 1 {
 		t.Errorf("the refusal was not said: %v", m.logLines)
 	}
 
 	row("older.yaml")
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlD})
+	m, _ = press(t, m, "y")
 	trash, _ := filepath.Glob(filepath.Join(store.SessionsDir(), ".trash", "older-*.yaml"))
 	if len(trash) != 1 {
 		t.Fatalf("trash holds %v", trash)
@@ -366,19 +367,19 @@ func TestSecondWindowStartsEmptyThenSaveAsPersists(t *testing.T) {
 	}
 }
 
-// The Keys popup lists `, o` with its description.
+// The Keys popup lists Sessions with its letter, O.
 func TestHelpListsSessions(t *testing.T) {
 	m := sessionsModel(t, 1)
-	for _, l := range m.helpLines() {
-		if strings.Contains(l.Text, "Sessions") && strings.Contains(l.Text, ",o") {
+	for _, l := range keybindingLines(m) {
+		if l.Binding && strings.HasPrefix(l.Text, "Sessions ") && strings.HasSuffix(l.Text, "  , O") {
 			return
 		}
 	}
 	var texts []string
-	for _, l := range m.helpLines() {
+	for _, l := range keybindingLines(m) {
 		texts = append(texts, l.Text)
 	}
-	t.Errorf("the Keys popup does not list `,o` Sessions:\n%s", strings.Join(texts, "\n"))
+	t.Errorf("the Keys popup does not list `, O` Sessions:\n%s", strings.Join(texts, "\n"))
 }
 
 // A launch main started with --session reads that named session, not the
@@ -462,7 +463,7 @@ func TestNamedSessionChangedOutsideIsLeftAlone(t *testing.T) {
 	l.Release()
 	file := l.File()
 	m = openSessions(t, m)
-	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "down", "down")
 	m, cmd := press(t, m, "enter")
 	tm, _ := m.Update(cmd())
 	m = tm.(Model)
@@ -482,7 +483,7 @@ func TestNamedSessionChangedOutsideIsLeftAlone(t *testing.T) {
 	if got := fileText(t, store.NamedSessionPath(file)); got != edited {
 		t.Errorf("the edited session was written over:\n%s", got)
 	}
-	if logHas(m, "changed outside Sextile") != 1 {
+	if logHas(m, "changed in another program") != 1 {
 		t.Errorf("no single Log line says the file changed: %v", m.logLines)
 	}
 	m = saveAs(t, m, "Rescued")

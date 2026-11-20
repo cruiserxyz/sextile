@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // stubYank replaces the clipboard seam with one that records what it was
@@ -82,7 +83,7 @@ func TestYankCopiesUntruncatedLine(t *testing.T) {
 	long := "a log line far wider than any panel could ever show: " + strings.Repeat("wide ", 40)
 	m := consoleModel(t, 5)
 	m = m.logCommands([]string{long})
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	m, _ = press(t, m, "enter")
 
 	if *last != long {
@@ -167,18 +168,17 @@ func TestPendingLeaderOutranksYankFlash(t *testing.T) {
 	if !m.leader.pending {
 		t.Fatal("the leader did not arm")
 	}
-	got := m.footerIndicator()
-	if strings.Contains(got, "yank") {
-		t.Errorf("the footer reads %q while a leader is pending", got)
+	if got := m.footerIndicator(); got != "" {
+		t.Errorf("the footer reads %q while a leader is pending, want the menu alone", got)
 	}
-	if !strings.Contains(got, ",") {
-		t.Errorf("the footer reads %q, want the pending leader", got)
+	if bar := ansi.Strip(strings.Join(lastRows(m.View(), 2), "\n")); !strings.Contains(bar, " o open ") || strings.Contains(bar, "Copied") {
+		t.Errorf("the bar is not the comma menu while a leader is pending:\n%s", bar)
 	}
 
 	// The flash tick still in flight must not resurrect anything.
 	var tm tea.Model = m
 	tm, _ = tm.Update(yankFlashMsg{gen: m.yank.gen})
-	if got := tm.(Model).footerIndicator(); !strings.Contains(got, ",") {
+	if got := tm.(Model).footerIndicator(); got != "" {
 		t.Errorf("a late flash tick changed the footer to %q", got)
 	}
 }
@@ -255,7 +255,7 @@ func TestYankFailureIsQuiet(t *testing.T) {
 	// Since an earlier change the line is the sentence, not the backend's words: a copy
 	// has no cause taxonomy worth switching on, and the doctrine's fallback is
 	// a calm line rather than a passed-through error.
-	if last := m.logLines[len(m.logLines)-1]; !strings.HasPrefix(last.text, "Couldn't copy that line") || last.lane != laneError {
+	if last := m.logLines[len(m.logLines)-1]; !strings.HasPrefix(last.text, "log: the line did not reach the clipboard") || last.lane != laneError {
 		t.Errorf("the failure line does not say what happened on the error lane: %+v", last)
 	}
 	if got := m.footerIndicator(); got != noticeCopyFailed {

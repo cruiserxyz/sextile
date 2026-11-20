@@ -297,7 +297,7 @@ func TestSetFrameRefusesAScalarFrame(t *testing.T) {
 			t.Errorf("%q: SetFrame wrote into a scalar frame", text)
 			continue
 		}
-		if !strings.Contains(err.Error(), "not a block") || !strings.Contains(err.Error(), "'frame:") {
+		if !strings.Contains(err.Error(), "expects a list") || !strings.Contains(err.Error(), "'frame:") {
 			t.Errorf("%q: the error does not name the line: %v", text, err)
 		}
 		if got := readPreferences(t, path); got != text {

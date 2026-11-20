@@ -128,6 +128,18 @@ func enteredFixtureUnselectedNow(t *testing.T, anchors int, cfg Config) (Model, 
 // enteredFixtureAt is enteredFixtureRows with the cursor either on ① (the
 // default) or on the floating slot.
 func enteredFixtureAt(t *testing.T, rows []lookup.TimelineRow, anchors int, floatingSelected, cursorOnFloating bool, cfg Config, names ...string) (Model, *[]textCall) {
+	return enteredFixtureAtList(t, listTimeline, rows, anchors, floatingSelected, cursorOnFloating, cfg, names...)
+}
+
+// enteredFixtureOn is enteredFixture with list k's tab chosen and attached.
+func enteredFixtureOn(t *testing.T, k timelineList, anchors int, floatingSelected bool, cfg Config) (Model, *[]textCall) {
+	t.Helper()
+	freshModels(t)
+	return enteredFixtureAtList(t, k, enteredRows(t), anchors, floatingSelected, false, cfg)
+}
+
+// enteredFixtureAtList is enteredFixtureAt for list k.
+func enteredFixtureAtList(t *testing.T, k timelineList, rows []lookup.TimelineRow, anchors int, floatingSelected, cursorOnFloating bool, cfg Config, names ...string) (Model, *[]textCall) {
 	t.Helper()
 	freshModels(t)
 	text := stubTextCompute(t)
@@ -135,9 +147,9 @@ func enteredFixtureAt(t *testing.T, rows []lookup.TimelineRow, anchors int, floa
 		s.cast.overlay = func(_ context.Context, _ lookup.Lens, natal store.AnchorChart, when time.Time, _ location.PlaceInfo) (lookup.OverlayAspects, error) {
 			*text = append(*text, textCall{kind: "aspects", when: when})
 			if natal.When.Equal(enteredSecondNatal) {
-				return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: aspect.Opposition, Orb: 0}}}, nil
+				return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objSun, NatalObject: objVenus, Kind: kindOf("Opp"), Orb: 0}}}, nil
 			}
-			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objMars, NatalObject: objMoon, Kind: aspect.Square, Orb: 3}}}, nil
+			return lookup.OverlayAspects{Aspects: []lookup.OverlayAspect{{TransitObject: objMars, NatalObject: objMoon, Kind: kindOf("Squ"), Orb: 3}}}, nil
 		}
 	})
 	stubTimeline(t, func(lookup.TimelineRequest) (lookup.TimelineResult, error) {
@@ -171,14 +183,14 @@ func enteredFixtureAt(t *testing.T, rows []lookup.TimelineRow, anchors int, floa
 	}
 	m = m.noteArrival()
 	m.width = max(m.width, dualColumnMinWidth(m.shownCount()))
-	m, cmd := syncTimelineVisited(m)
+	m, cmd := syncListVisited(m, k)
 	m = pump(t, m, cmd)
-	if !m.timeline.complete || len(m.timeline.rows) != len(rows) {
-		t.Fatalf("fixture timeline did not load: complete=%v rows=%d", m.timeline.complete, len(m.timeline.rows))
+	if l := m.list(k); !l.complete || len(l.rows) != len(rows) {
+		t.Fatalf("fixture %s list did not load: complete=%v rows=%d", k.scope(), l.complete, len(l.rows))
 	}
-	m, _ = tpress(t, m, runes("0"))
+	m, _ = openList(t, m, k)
 	m, _ = tpress(t, m, keyEnter)
-	if !m.details.attached || m.activeTabID(PanelDetails) != TabDetailsTimeline {
+	if !m.details.attached || m.activeTabID(PanelDetails) != k.tab() {
 		t.Fatalf("fixture: attached=%v tab=%s", m.details.attached, m.activeTabID(PanelDetails))
 	}
 	return m, text
@@ -225,7 +237,7 @@ func TestEnterOnAChartRowPicksItsPair(t *testing.T) {
 		}
 		found := false
 		for _, a := range m.chart.crossAspects {
-			if a.TransitObject == objSun && a.NatalObject == objVenus && a.Kind == aspect.Opposition && a.Orb <= 1.0/60 {
+			if a.TransitObject == objSun && a.NatalObject == objVenus && a.Kind == kindOf("Opp") && a.Orb <= 1.0/60 {
 				found = true
 			}
 		}
@@ -241,13 +253,13 @@ func TestEnterOnAChartRowPicksItsPair(t *testing.T) {
 				t.Errorf("floating selected=%v: the bold fixture's cursor is %d, want now's line", floatingSelected, bm.cursorIdx)
 			}
 			_, aspects := leftPanels(t, bm.View())
-			if got := boldSpanTexts(aspects); len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(aspect.Opposition)+" "+panel.BodyGlyph(objVenus)+" ") {
+			if got := boldSpanTexts(aspects); len(got) != 1 || !strings.HasPrefix(got[0], panel.BodyGlyph(objSun)+" "+panel.AspectGlyph(kindOf("Opp"))+" "+panel.BodyGlyph(objVenus)+" ") {
 				t.Errorf("floating selected=%v: bold cells = %q, want the transiting-Sun-opposite-natal-Venus cell", floatingSelected, got)
 			}
 		}
 		// Rule 3: a `]` after Enter is a deliberate choice and wins over what Enter stored.
 		m, _ = tpress(t, m, keyEsc)
-		m, _ = tpress(t, m, runes("3"))
+		m, _ = tpress(t, m, runes("4"))
 		m, cmd := tpress(t, m, runes("]"))
 		m = pump(t, m, cmd)
 		if got := activeAspectsTitle(m); got == "3 in 2" || m.deriveScene().entered == nil {
@@ -352,7 +364,7 @@ func reportSpawns(t *testing.T) func() int {
 			n++
 			return "cross", "", nil
 		}
-		s.reports.synastry = func(context.Context, lookup.Lens, store.AnchorChart, time.Time, location.PlaceInfo, store.ReportLabel, aspect.Object) (string, string, error) {
+		s.reports.synastry = func(context.Context, lookup.Lens, store.AnchorChart, store.AnchorChart, aspect.Object) (string, string, error) {
 			n++
 			return "syn", "", nil
 		}
@@ -369,6 +381,7 @@ func stripOfDetails(m Model) string { return m.panelTabs(PanelDetails)[0].Title 
 // the tests that pinned a report waiting on the report tab itself while
 // attached are TestReportRefreshesWhileAttached.)
 func TestDetailsIsQuietWhileTheReportTabIsHidden(t *testing.T) {
+	twoTabs(t)
 	spawns := reportSpawns(t)
 	// Control: the same moves with the report tab visible DO spawn, so the
 	// counter is live.
@@ -436,6 +449,11 @@ func TestDetailsIsQuietWhileTheReportTabIsHidden(t *testing.T) {
 	title, body := m.details.title, m.details.body
 	i := chartRowOf(t, m.timeline.rows, 2)
 	m = enter(t, m, i)
+	if m.details.attached {
+		t.Fatal("fixture: Enter on a row left Details open")
+	}
+	// Open Details again from the panel, onto the timeline, as a user would.
+	m, _ = tpress(t, m, keyEnter)
 	for _, k := range []string{"d", "h", "m", "n"} {
 		var cmd tea.Cmd
 		m, cmd = tpress(t, m, runes(k))
@@ -474,8 +492,8 @@ func TestReportRefreshesWhileAttached(t *testing.T) {
 		m := attachedOnBodies(t)
 		// A repeat inside a run of keys rests for the debounce; the first key of
 		// a run starts the report at once (C14), so the run is already going.
-		m.keyRun = detailsRunState{key: "2", keys: 1, last: m.clock.Now()}
-		m, cmd := tpress(t, m, runes("2"))
+		m.keyRun = detailsRunState{key: "3", keys: 1, last: m.clock.Now()}
+		m, cmd := tpress(t, m, runes("3"))
 		if !m.details.timerArmed {
 			t.Fatal("fixture: the focus change armed no report timer")
 		}
@@ -492,7 +510,7 @@ func TestReportRefreshesWhileAttached(t *testing.T) {
 	// A report already running when Details attaches lands inside it.
 	{
 		m := attachedOnBodies(t)
-		m, _ = tpress(t, m, runes("2"))
+		m, _ = tpress(t, m, runes("3"))
 		m.details.body = "the frame before attaching"
 		m, cmd := m.startDetailsNow()
 		m, _ = tpress(t, m, keyEnter)
@@ -509,6 +527,7 @@ func TestReportRefreshesWhileAttached(t *testing.T) {
 // Rule 6: the report catches up on the report tab becoming active (once), and
 // on detach only if something changed while attached.
 func TestReportCatchesUpOnTabSwitchAndDetach(t *testing.T) {
+	twoTabs(t)
 	spawns := reportSpawns(t)
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	base := spawns()
@@ -568,27 +587,28 @@ func TestReportCatchesUpOnTabSwitchAndDetach(t *testing.T) {
 	}
 }
 
-// Rule 7: 1, 2, 3 from attached Details detach and focus that panel; in the
-// open search line they stay text; the bar says so.
-func TestDigitsDetachAndFocus(t *testing.T) {
+// Rule 7: 1-4 from attached Details move the focus to that panel and keep
+// Details attached, following it; in the open search line they stay text; the
+// bar says so.
+func TestDigitsFocusAndKeepDetailsAttached(t *testing.T) {
 	for _, tc := range []struct {
 		key  string
 		want PanelID
-	}{{"1", PanelChart}, {"2", PanelBodies}, {"3", PanelAspects}} {
+	}{{"1", PanelStatus}, {"2", PanelChart}, {"3", PanelBodies}, {"4", PanelAspects}} {
 		m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
-		if !strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1/2/3") {
-			t.Fatalf("the attached key bar does not offer Focus: 1/2/3: %q", keys.BarLine(m.keysContext(), 200))
+		if !strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1-4") {
+			t.Fatalf("the attached key bar does not offer Focus: 1-4: %q", keys.BarLine(m.keysContext(), 200))
 		}
 		m, cmd := tpress(t, m, runes(tc.key))
 		m = pump(t, m, cmd)
-		if m.details.attached || m.focused != tc.want {
-			t.Errorf("%s: attached=%v focused=%s, want detached on %s", tc.key, m.details.attached, m.focused, tc.want)
+		if !m.details.attached || m.focused != tc.want {
+			t.Errorf("%s: attached=%v focused=%s, want attached on %s", tc.key, m.details.attached, m.focused, tc.want)
 		}
 	}
 	m, _ := enteredFixture(t, 2, true, Config{Accessible: true})
 	m, _ = tpress(t, m, runes("/"))
-	if strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1/2/3") {
-		t.Errorf("the search line's key bar offers Focus: 1/2/3, where digits are text: %q", keys.BarLine(m.keysContext(), 200))
+	if strings.Contains(keys.BarLine(m.keysContext(), 200), "Focus: 1-4") {
+		t.Errorf("the search line's key bar offers Focus: 1-4, where digits are text: %q", keys.BarLine(m.keysContext(), 200))
 	}
 	m, _ = tpress(t, m, runes("2"))
 	if !m.details.attached || m.focused != PanelChart || m.timeline.query != "2" {

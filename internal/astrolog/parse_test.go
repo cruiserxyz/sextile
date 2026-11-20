@@ -137,7 +137,7 @@ func TestParsePositions_PlainCuspObjectLabels(t *testing.T) {
 
 func TestParseAspects(t *testing.T) {
 	data := readFixture(t, "natal_1985_positions_aspects.txt")
-	aspects := parseAspects(data, testRegistry(t))
+	aspects := mustAspects(t, data, testRegistry(t))
 
 	// The fixture reports 22 aspects; several involve Ascendant or Midheaven
 	// and drop out. Expect at least ten retained aspects between
@@ -149,7 +149,7 @@ func TestParseAspects(t *testing.T) {
 	// The fixture's top-ranked aspect is a Sun-Moon conjunction — the
 	// chart was captured at a New Moon by design. Verify it survives
 	// canonicalisation through aspect.NewObjectAspect.
-	want := aspect.NewObjectAspect(objSun, objMoon, aspect.Conjunction, 0)
+	want := aspect.NewObjectAspect(objSun, objMoon, kindOf("Con"), 0)
 	var found aspect.Aspect
 	var ok bool
 	for _, a := range aspects {
@@ -192,7 +192,7 @@ func findPosition(t *testing.T, ps []aspect.Position, object aspect.Object) aspe
 // `a`/`s`; the parser reads it into Applying. Plain -a lines (+/- offsets)
 // still parse, with Applying false.
 func TestParseAspects_PhaseMarkers(t *testing.T) {
-	out := parseAspects(`
+	out := mustAspects(t, `
   1:   Venus (Tau) Squ (Leo) Midheaven  - orb: a0:20' - power:  9.51
   2:    Moon (Pis) Tri (Can) Jupiter    - orb: s1:23' - power:  8.68
   3:    Moon (Pis) Sex (Tau) Venus      - orb: +1:38' - power:  8.04
@@ -204,16 +204,16 @@ func TestParseAspects_PhaseMarkers(t *testing.T) {
 	for _, a := range out {
 		byKind[a.Kind] = a
 	}
-	if a := byKind[aspect.Square]; !a.Applying || a.AObject != objVenus || a.BObject != objMidheaven {
+	if a := byKind[kindOf("Squ")]; !a.Applying || a.AObject != objVenus || a.BObject != objMidheaven {
 		t.Errorf("Venus Squ Midheaven marked `a` = %+v, want applying Venus/Midheaven", a)
 	}
-	if a := byKind[aspect.Trine]; a.Applying {
+	if a := byKind[kindOf("Tri")]; a.Applying {
 		t.Errorf("Moon Tri Jupiter marked `s` parsed as applying: %+v", a)
 	}
-	if a := byKind[aspect.Sextile]; a.Applying {
+	if a := byKind[kindOf("Sex")]; a.Applying {
 		t.Errorf("plain +orb line parsed as applying: %+v", a)
 	}
-	single := parseAspects("  6:     Sun (Gem) Squ (Pis) Moon       - orb: a6:57' - power:  4.99 (Half Moon)\n", testRegistry(t))
+	single := mustAspects(t, "  6:     Sun (Gem) Squ (Pis) Moon       - orb: a6:57' - power:  4.99 (Half Moon)\n", testRegistry(t))
 	if len(single) != 1 || !single[0].Applying {
 		t.Errorf("Sun Squ Moon marked `a` = %+v, want applying", single)
 	}
@@ -222,7 +222,7 @@ func TestParseAspects_PhaseMarkers(t *testing.T) {
 // TestParseCrossAspects_PhaseMarkers: the -rt -aa relationship list
 // carries the same `a`/`s` marker; roles stay positional.
 func TestParseCrossAspects_PhaseMarkers(t *testing.T) {
-	out := parseCrossAspects(`
+	out := mustCross(t, `
 Chart #2 comparison for Mon Aug 24, 2026 12:00pm (ST Zone 0W)  13:24E 52:31N
 
   1:    Moon (Pis) Opp with (Vir) Midheaven - orb: a2:18' - power: 11.37
@@ -315,7 +315,7 @@ func findAspect(t *testing.T, got []aspect.Aspect, a, b aspect.Object, kind aspe
 // such line used to be dropped, so the Aspects panel never showed an angle.
 // Fixture: constructed moment 2461156.0 JD at 13:25E 52:31N, no person.
 func TestParseAspectsKeepsAnglesLilithAndNodes(t *testing.T) {
-	got := parseAspects(readFixture(t, "aspects_angles_lilith_nodes.txt"), testRegistry(t))
+	got := mustAspects(t, readFixture(t, "aspects_angles_lilith_nodes.txt"), testRegistry(t))
 	if len(got) != 26 {
 		t.Fatalf("parsed %d aspects, want all 26 lines of the fixture", len(got))
 	}
@@ -325,11 +325,11 @@ func TestParseAspectsKeepsAnglesLilithAndNodes(t *testing.T) {
 		orb      float64
 		applying bool
 	}{
-		{objUranus, objAscendant, aspect.Square, 9.0 / 60, false},
-		{objMoon, objMidheaven, aspect.Square, 3 + 24.0/60, true},
-		{objLilith, objNadir, aspect.Conjunction, 23.0 / 60, false},
-		{objSun, objSouthNode, aspect.Trine, 2 + 3.0/60, true},
-		{objJupiter, objLilith, aspect.Trine, 48.0 / 60, false},
+		{objUranus, objAscendant, kindOf("Squ"), 9.0 / 60, false},
+		{objMoon, objMidheaven, kindOf("Squ"), 3 + 24.0/60, true},
+		{objLilith, objNadir, kindOf("Con"), 23.0 / 60, false},
+		{objSun, objSouthNode, kindOf("Tri"), 2 + 3.0/60, true},
+		{objJupiter, objLilith, kindOf("Tri"), 48.0 / 60, false},
 	}
 	for _, c := range cases {
 		g := findAspect(t, got, c.a, c.b, c.kind)
@@ -344,7 +344,7 @@ func TestParseAspectsKeepsAnglesLilithAndNodes(t *testing.T) {
 // (Ceres, Vertex, East Point) is kept with its own Object, on the side it was
 // printed. Fixture adds objects 12, 20 and 21 to the same moment.
 func TestParseAspectsKeepsGlyphlessBodies(t *testing.T) {
-	got := parseAspects(readFixture(t, "aspects_glyphless.txt"), testRegistry(t))
+	got := mustAspects(t, readFixture(t, "aspects_glyphless.txt"), testRegistry(t))
 	byPair := func(a, b string) (aspect.Aspect, bool) {
 		for _, g := range got {
 			if (g.AObject.Name == a && g.BObject.Name == b) || (g.AObject.Name == b && g.BObject.Name == a) {
@@ -365,7 +365,7 @@ func TestParseAspectsKeepsGlyphlessBodies(t *testing.T) {
 		t.Fatalf("no %s %v %s aspect in %d parsed aspects", a, kind, b, len(got))
 		return aspect.Aspect{}
 	}
-	g := withKind("Ceres", "Midheaven", aspect.Conjunction)
+	g := withKind("Ceres", "Midheaven", kindOf("Con"))
 	if g.AObject.Name != "Ceres" || g.BObject != objMidheaven {
 		t.Errorf("Ceres/Midheaven = %+v, want A the Ceres object, B Midheaven", g)
 	}
@@ -374,7 +374,7 @@ func TestParseAspectsKeepsGlyphlessBodies(t *testing.T) {
 	}
 	// Chiron (Ari) Squ (Cap) Vertex: Chiron (11) comes before Vertex (20), as
 	// printed; each side keeps its own Object.
-	g = withKind("Chiron", "Vertex", aspect.Square)
+	g = withKind("Chiron", "Vertex", kindOf("Squ"))
 	if g.AObject != objChiron || g.BObject.Name != "Vertex" {
 		t.Errorf("Chiron/Vertex = %+v, want Chiron on A and the Vertex object on B", g)
 	}
@@ -394,17 +394,17 @@ func TestParseAspectsKeepsGlyphlessBodies(t *testing.T) {
 // TestCrossAspectsKeepGlyphlessBodies: the -r0 parser keeps an object with no
 // glyph by its printed name, left (Primary) and right (Secondary) as printed.
 func TestCrossAspectsKeepGlyphlessBodies(t *testing.T) {
-	got := parseCrossAspects(readFixture(t, "cross_glyphless.txt"), testRegistry(t))
+	got := mustCross(t, readFixture(t, "cross_glyphless.txt"), testRegistry(t))
 	var vertexLeft, ceresRight, ceresLeft, eastRight bool
 	for _, c := range got {
 		switch {
-		case c.PrimaryObject.Name == "Vertex" && c.SecondaryObject == objSun && c.Kind == aspect.Trine:
+		case c.PrimaryObject.Name == "Vertex" && c.SecondaryObject == objSun && c.Kind == kindOf("Tri"):
 			vertexLeft = true
-		case c.SecondaryObject.Name == "Ceres" && c.PrimaryObject == objMars && c.Kind == aspect.Square:
+		case c.SecondaryObject.Name == "Ceres" && c.PrimaryObject == objMars && c.Kind == kindOf("Squ"):
 			ceresRight = true
-		case c.PrimaryObject.Name == "Ceres" && c.SecondaryObject == objJupiter && c.Kind == aspect.Square:
+		case c.PrimaryObject.Name == "Ceres" && c.SecondaryObject == objJupiter && c.Kind == kindOf("Squ"):
 			ceresLeft = true
-		case c.SecondaryObject.Name == "East Point" && c.PrimaryObject == objSaturn && c.Kind == aspect.Square:
+		case c.SecondaryObject.Name == "East Point" && c.PrimaryObject == objSaturn && c.Kind == kindOf("Squ"):
 			eastRight = true
 		}
 	}

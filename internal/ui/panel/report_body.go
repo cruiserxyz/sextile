@@ -87,7 +87,7 @@ func RenderDetailsReport(bag ReportBag) (string, pane.Viewport) {
 	searchRow := ""
 	if bag.Search.Show {
 		listH = innerH - 1
-		searchRow = term.CutRight(searchLine(bag.Search.Open, bag.Search.Query, bag.Search.Shown, bag.Search.Total, innerW), innerW, cfg)
+		searchRow = drawSearchLine(bag.Search.Open, bag.Search.Query, bag.Search.Shown, bag.Search.Total, innerW, cfg)
 	}
 	scroll := pane.Viewport{
 		Total:   len(lines),

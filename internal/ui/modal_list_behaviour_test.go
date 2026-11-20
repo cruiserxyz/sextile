@@ -312,11 +312,9 @@ func bigRegistry(n int) []aspect.RegistryAspect {
 	reg := make([]aspect.RegistryAspect, 0, n)
 	for i := 1; i <= n; i++ {
 		reg = append(reg, aspect.RegistryAspect{
-			Index:  i,
-			Name:   fmt.Sprintf("Aspect%02d", i),
-			Abbrev: fmt.Sprintf("A%02d", i),
-			Angle:  float64(i),
-			Orb:    1,
+			Kind:  aspect.AspectKind{Index: i, Name: fmt.Sprintf("Aspect%02d", i), Abbrev: fmt.Sprintf("A%02d", i)},
+			Angle: float64(i),
+			Orb:   1,
 		})
 	}
 	return reg
@@ -501,8 +499,8 @@ func TestBodySelectorCursorCannotLeaveTheList(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		st, _ = updateBodyModalKey(st, tea.KeyMsg{Type: tea.KeyUp}, testListHeight)
 	}
-	if st.Cursor != 0 {
-		t.Errorf("cursor ran to %d, want it pinned at 0", st.Cursor)
+	if st.Cursor != menu.LeadCursor {
+		t.Errorf("cursor ran to %d, want it pinned at the restore row %d", st.Cursor, menu.LeadCursor)
 	}
 }
 

@@ -117,3 +117,175 @@ func TestSessionFlag(t *testing.T) {
 		})
 	}
 }
+
+// A start without --session reopens the session this charts folder's window
+// last switched to; --session by hand still wins.
+func TestStartReopensLastSession(t *testing.T) {
+	t.Run("reopened", func(t *testing.T) {
+		a, _ := flagSandbox(t)
+		savedSession(t, "Client Work", a)
+		if err := store.RecordLastSession(a, "client-work.yaml"); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, refused, err := prepareLaunch(&options{})
+		if refused != nil || err != nil {
+			t.Fatalf("refused %v err %v", refused, err)
+		}
+		defer cfg.NamedSession.Release()
+		if cfg.NamedSession.File() != "client-work.yaml" || cfg.NamedSessionName != "Client Work" || cfg.SessionNote != "" {
+			t.Errorf("cfg runs %q named %q, note %q", cfg.NamedSession.File(), cfg.NamedSessionName, cfg.SessionNote)
+		}
+		if _, lerr := store.AcquireInstanceLock(); lerr != nil {
+			t.Errorf("the general session's lock is still held: %v", lerr)
+		}
+		store.ReleaseInstanceLock()
+	})
+	t.Run("flag wins", func(t *testing.T) {
+		a, _ := flagSandbox(t)
+		savedSession(t, "Client Work", a)
+		savedSession(t, "Other", a)
+		if err := store.RecordLastSession(a, "client-work.yaml"); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, _, _ := prepareLaunch(&options{session: "Other"})
+		defer cfg.NamedSession.Release()
+		if cfg.NamedSession.File() != "other.yaml" {
+			t.Errorf("--session Other ran %q", cfg.NamedSession.File())
+		}
+	})
+	t.Run("no record", func(t *testing.T) {
+		a, _ := flagSandbox(t)
+		savedSession(t, "Client Work", a)
+		cfg, _, _, _ := prepareLaunch(&options{})
+		defer store.ReleaseInstanceLock()
+		if cfg.NamedSession != nil || cfg.SessionNote != "" {
+			t.Errorf("a start with no record ran %q, note %q", cfg.NamedSession.File(), cfg.SessionNote)
+		}
+	})
+}
+
+// A recorded session that is missing, unusable or open in another window is
+// not reopened: the start runs the unnamed session, one Log line names the
+// session and why, and no session file changes. Only a missing one clears the record.
+func TestStartLastSessionRefused(t *testing.T) {
+	for _, c := range []struct {
+		name, want string
+		cleared    bool
+		setup      func(t *testing.T, a string) func()
+	}{
+		{"missing", "no longer saved", true, func(t *testing.T, a string) func() { return func() {} }},
+		{"open elsewhere", "open in another window", false, func(t *testing.T, a string) func() {
+			savedSession(t, "Client Work", a)
+			_, _, l, err := store.OpenNamedSession("client-work.yaml", store.FolderID(a))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return l.Release
+		}},
+		{"unreadable", "its file cannot be used", false, func(t *testing.T, a string) func() {
+			savedSession(t, "Client Work", a)
+			p := store.NamedSessionPath("client-work.yaml")
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, append(b, "unknown: kept\n"...), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return func() {}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := flagSandbox(t)
+			defer c.setup(t, a)()
+			if err := store.RecordLastSession(a, "client-work.yaml"); err != nil {
+				t.Fatal(err)
+			}
+			before, _ := os.ReadFile(store.NamedSessionPath("client-work.yaml"))
+			cfg, _, refused, err := prepareLaunch(&options{})
+			if refused != nil || err != nil {
+				t.Fatalf("refused %v err %v", refused, err)
+			}
+			defer store.ReleaseInstanceLock()
+			if cfg.NamedSession != nil {
+				t.Errorf("the start runs %q", cfg.NamedSession.File())
+			}
+			if cfg.SecondWindow {
+				t.Error("premise: this start holds the general lock")
+			}
+			want := `the last session "Client Work" did not open, it`
+			if c.name == "missing" {
+				want = `the last session "client-work" did not open, it`
+			}
+			if !strings.HasPrefix(cfg.SessionNote, want) || !strings.Contains(cfg.SessionNote, c.want) {
+				t.Errorf("Log line = %q, want %q ... %q", cfg.SessionNote, want, c.want)
+			}
+			if after, _ := os.ReadFile(store.NamedSessionPath("client-work.yaml")); string(after) != string(before) {
+				t.Error("the session's file changed")
+			}
+			rec, _ := store.LastSession(a)
+			if cleared := rec == ""; cleared != c.cleared {
+				t.Errorf("record after the start = %q, want cleared %v", rec, c.cleared)
+			}
+		})
+	}
+}
+
+// A recorded session whose file the system will not let Sextile read is said
+// in the user's words, and its file is not touched.
+func TestStartLastSessionUnreadableFile(t *testing.T) {
+	a, _ := flagSandbox(t)
+	savedSession(t, "Client Work", a)
+	if err := store.RecordLastSession(a, "client-work.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	p := store.NamedSessionPath("client-work.yaml")
+	before, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(p, 0o600)
+	if _, err := os.ReadFile(p); err == nil {
+		t.Skip("this user can read a mode-000 file")
+	}
+	cfg, _, _, _ := prepareLaunch(&options{})
+	defer store.ReleaseInstanceLock()
+	if cfg.NamedSession != nil {
+		t.Fatalf("the start runs %q", cfg.NamedSession.File())
+	}
+	if cfg.SessionNote != `the last session "client-work" did not open, its file cannot be read` {
+		t.Errorf("Log line = %q", cfg.SessionNote)
+	}
+	after, err := os.Stat(p)
+	if err != nil || !os.SameFile(before, after) || !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("the session's file was replaced or written (%v)", err)
+	}
+}
+
+// A missing session whose record cannot be removed still starts as usual and
+// says so; the large log says the record stays.
+func TestStartLastSessionRecordNotCleared(t *testing.T) {
+	a, _ := flagSandbox(t)
+	if err := store.RecordLastSession(a, "gone.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "sextile", "last-session")
+	if err := os.Remove(filepath.Join(dir, ".lock")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	cfg, _, _, _ := prepareLaunch(&options{})
+	defer store.ReleaseInstanceLock()
+	if cfg.SessionNote != `the last session "gone" did not open, it is no longer saved` {
+		t.Errorf("Log line = %q", cfg.SessionNote)
+	}
+	if !strings.Contains(cfg.LastSessionTrace, "could not be removed") {
+		t.Errorf("large-log line = %q, want it to say the record stays", cfg.LastSessionTrace)
+	}
+}

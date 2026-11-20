@@ -14,8 +14,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
-// frozenInstantForGolden is the canonical "now" for slot-rendering goldens;
-// matches the invariants-package frozen instant for consistency.
+// frozenInstantForGolden is the canonical "now" for slot-rendering goldens.
 func frozenInstantForGolden() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 }
@@ -35,11 +34,11 @@ func slotsForGolden(floating location.PlaceInfo, anchorWhen time.Time, anchorPla
 
 func TestUISurfaceGolden(t *testing.T) {
 	cases := []struct {
-		name       string
-		width      int
-		height     int
-		helpOpen   bool
-		accessible bool
+		name            string
+		width           int
+		height          int
+		keybindingsOpen bool
+		accessible      bool
 	}{
 		{"single-column-80x24", 80, 24, false, false},
 		{"dual-column-132x40", 132, 40, false, false},
@@ -53,7 +52,7 @@ func TestUISurfaceGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var m tea.Model = newTestModel(t, Config{Accessible: tc.accessible}, RealClock{})
 			m, _ = m.Update(tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
-			if tc.helpOpen {
+			if tc.keybindingsOpen {
 				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 			}
 			got := m.View()
@@ -91,14 +90,14 @@ func TestFocusCycleSkipsPassivePanels(t *testing.T) {
 		t.Fatalf("initial focus: %q, want chart", got)
 	}
 
-	for _, want := range []PanelID{PanelBodies, PanelAspects, PanelChart} {
+	for _, want := range []PanelID{PanelBodies, PanelAspects, PanelStatus, PanelChart} {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		if got := focused(t, m); got != want {
 			t.Errorf("next cycle: got %q, want %q", got, want)
 		}
 	}
 
-	for _, want := range []PanelID{PanelAspects, PanelBodies, PanelChart} {
+	for _, want := range []PanelID{PanelStatus, PanelAspects, PanelBodies, PanelChart} {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 		if got := focused(t, m); got != want {
 			t.Errorf("prev cycle: got %q, want %q", got, want)
@@ -106,8 +105,8 @@ func TestFocusCycleSkipsPassivePanels(t *testing.T) {
 	}
 }
 
-// TestQuitOnlyInMainState verifies `q` quits from main UI but is a no-op
-// while a modal is open it closes help as Esc does and never quits.
+// TestQuitOnlyInMainState verifies `q` quits from main UI but never quits
+// while the Keybindings popup is open: there it is text in the filter.
 func TestQuitOnlyInMainState(t *testing.T) {
 	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -121,16 +120,16 @@ func TestQuitOnlyInMainState(t *testing.T) {
 	}
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	if !m.(Model).helpOpen {
-		t.Fatal("help modal should be open after `?`")
+	if !m.(Model).keybindingsOpen {
+		t.Fatal("Keybindings should be open after `?`")
 	}
 
 	after, cmd2 := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd2 != nil {
 		t.Fatalf("`q` in modal state: expected no command, got %T", cmd2)
 	}
-	if after.(Model).helpOpen {
-		t.Fatal("`q` in the help modal must close it as Esc does")
+	if got := after.(Model); !got.keybindingsOpen || got.keybindings.FilterText != "q" {
+		t.Fatalf("`q` in Keybindings must be typed into the filter: open=%v filter %q", got.keybindingsOpen, got.keybindings.FilterText)
 	}
 }
 
@@ -159,7 +158,7 @@ func TestPanelNavKeysNotShadowedByTimeStepBindings(t *testing.T) {
 	}
 }
 
-// TestNumericDirectJumps verifies `1`/`2`/`3` focus chart/bodies/aspects.
+// TestNumericDirectJumps verifies `1`-`4` focus session/chart/bodies/aspects.
 func TestNumericDirectJumps(t *testing.T) {
 	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -168,9 +167,10 @@ func TestNumericDirectJumps(t *testing.T) {
 		k    string
 		want PanelID
 	}{
-		{"2", PanelBodies},
-		{"3", PanelAspects},
-		{"1", PanelChart},
+		{"3", PanelBodies},
+		{"4", PanelAspects},
+		{"1", PanelStatus},
+		{"2", PanelChart},
 	} {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(c.k)})
 		if got := focused(t, m); got != c.want {
@@ -229,21 +229,21 @@ func TestResizeAcrossBreakpoint(t *testing.T) {
 	}
 }
 
-// TestResizeWithHelpOpen verifies modal survives resize.
-func TestResizeWithHelpOpen(t *testing.T) {
+// TestResizeWithKeybindingsOpen verifies the popup survives resize.
+func TestResizeWithKeybindingsOpen(t *testing.T) {
 	var m tea.Model = newTestModel(t, Config{}, RealClock{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	if !m.(Model).helpOpen {
-		t.Fatal("help should be open after `?`")
+	if !m.(Model).keybindingsOpen {
+		t.Fatal("Keybindings should be open after `?`")
 	}
 
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
-	if !m.(Model).helpOpen {
+	if !m.(Model).keybindingsOpen {
 		t.Error("modal should stay open across resize")
 	}
 	if m.View() == "" {
-		t.Error("empty view with help open after resize")
+		t.Error("empty view with Keybindings open after resize")
 	}
 }
 

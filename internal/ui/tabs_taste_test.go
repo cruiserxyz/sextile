@@ -29,21 +29,21 @@ func tasteOwnAspects() []aspect.Aspect {
 		return asp
 	}
 	return []aspect.Aspect{
-		mk(objSun, objMoon, aspect.Square, 0.5, 22.0, true),
-		mk(objMoon, objSaturn, aspect.Opposition, 1.8, 14.5, false),
-		mk(objSun, objMars, aspect.Trine, 2.1, 11.2, true),
-		mk(objVenus, objJupiter, aspect.Sextile, 3.0, 8.4, false),
-		mk(objMercury, objNeptune, aspect.Square, 4.2, 6.1, true),
-		mk(objMars, objPluto, aspect.Trine, 5.5, 4.3, false),
+		mk(objSun, objMoon, kindOf("Squ"), 0.5, 22.0, true),
+		mk(objMoon, objSaturn, kindOf("Opp"), 1.8, 14.5, false),
+		mk(objSun, objMars, kindOf("Tri"), 2.1, 11.2, true),
+		mk(objVenus, objJupiter, kindOf("Sex"), 3.0, 8.4, false),
+		mk(objMercury, objNeptune, kindOf("Squ"), 4.2, 6.1, true),
+		mk(objMars, objPluto, kindOf("Tri"), 5.5, 4.3, false),
 	}
 }
 
 func tasteCrossAspects() []lookup.OverlayAspect {
 	return []lookup.OverlayAspect{
-		{TransitObject: objSaturn, NatalObject: objSun, Kind: aspect.Square, Orb: 0.5, Power: 9.5, Applying: true},
-		{TransitObject: objJupiter, NatalObject: objMoon, Kind: aspect.Trine, Orb: 1.4, Power: 7.2},
-		{TransitObject: objMars, NatalObject: objMercury, Kind: aspect.Sextile, Orb: 2.2, Power: 5.1, Applying: true},
-		{TransitObject: objVenus, NatalObject: objVenus, Kind: aspect.Conjunction, Orb: 3.1, Power: 3.8},
+		{TransitObject: objSaturn, NatalObject: objSun, Kind: kindOf("Squ"), Orb: 0.5, Power: 9.5, Applying: true},
+		{TransitObject: objJupiter, NatalObject: objMoon, Kind: kindOf("Tri"), Orb: 1.4, Power: 7.2},
+		{TransitObject: objMars, NatalObject: objMercury, Kind: kindOf("Sex"), Orb: 2.2, Power: 5.1, Applying: true},
+		{TransitObject: objVenus, NatalObject: objVenus, Kind: kindOf("Con"), Orb: 3.1, Power: 3.8},
 	}
 }
 
@@ -98,7 +98,7 @@ func TestTabsTasteOverflow(t *testing.T) {
 
 // renderPairSequence drives the real startup stream at 144x40 accessible and
 // returns the four V4 frames: (a) natal-set startup with the first overlay
-// frame committed, (b) after `3` focuses Aspects, (c) after the pair is deselected, the
+// frame committed, (b) after `4` focuses Aspects, (c) after the pair is deselected, the
 // pair and its single-chart frame commits, (d) after it is reselected and the
 // overlay frame commits.
 func renderPairSequence(t *testing.T) map[string]string {
@@ -132,8 +132,8 @@ func renderPairSequence(t *testing.T) map[string]string {
 	}
 	commit(tasteOverlayFrame())
 	frames["a"] = tm.View()
-	// `3` focuses Aspects without changing what it shows (C9).
-	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	// `4` focuses Aspects without changing what it shows (C9).
+	step(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
 	frames["b"] = tm.View()
 	setPair(false) // `t` is retired (the specification C4): the same change, made directly
 	commit(FirstFrameReadyMsg{Positions: tastePositions(), Aspects: tasteOwnAspects()})
@@ -158,16 +158,16 @@ func TestTabsTastePairSequence(t *testing.T) {
 	// Amended by C1 (2026-10-04): `Aspects` opens the strip with the pair after
 	// it, and by the specification C1: with the cursor on
 	// now, `Aspects` itself is the active tab and the pair is not compared.
-	if !strings.Contains(frames["a"], "[3] [Aspects] - 2 in 1-") {
+	if !strings.Contains(frames["a"], "[4] [Aspects] - 2 in 1-") {
 		t.Error("(a) an overlay frame must title the panel with `Aspects` active and its pair, 2 in 1, after it (selected-charts-compare C1)")
 	}
-	if !strings.Contains(frames["b"], "[3] [Aspects] - 2 in 1-") {
+	if !strings.Contains(frames["b"], "[4] [Aspects] - 2 in 1-") {
 		t.Error("(b) focusing Aspects must not change what it shows")
 	}
-	if !strings.Contains(frames["c"], "[3] Aspects----") || strings.Contains(frames["c"], "2 in 1") {
+	if !strings.Contains(frames["c"], "[4] Aspects----") || strings.Contains(frames["c"], "2 in 1") {
 		t.Error("(c) deselecting the pair must return the plain Aspects title")
 	}
-	if !strings.Contains(frames["d"], "[3] [Aspects] - 2 in 1-") {
+	if !strings.Contains(frames["d"], "[4] [Aspects] - 2 in 1-") {
 		t.Error("(d) reselecting the pair must bring the pair title back")
 	}
 }

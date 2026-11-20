@@ -17,11 +17,7 @@ import (
 func (m Model) applyClockConfig(cfg store.ClockConfig) Model {
 	lookup.HoldClock(lookup.ClockPref{Hours12: cfg.Hours == "12", DayFirst: cfg.Dates == "day-first"})
 	for _, r := range cfg.Rejections {
-		want := "24 or 12"
-		if r.Field == "clock.dates" {
-			want = "month-first or day-first"
-		}
-		m = m.logNote("preferences", "%s %q ignored: expected %s", r.Field, r.Value, want)
+		m = m.logNote("settings", "%s %q not valid, ignored", r.Field, r.Value)
 	}
 	return m
 }

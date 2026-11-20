@@ -1,7 +1,8 @@
 # Security
 
-Sextile runs locally and reads the charts you give it. The http preview answers only requests whose Host is
-localhost, and the Docker image publishes the preview port to 127.0.0.1 only; the README's install does the rest.
+Fixes go into the newest release of Sextile. Earlier releases get none.
 
-To report a vulnerability, open a GitHub security advisory on this repository (Security → Report a vulnerability)
-rather than a public issue. You will get an answer within a week.
+To report a weakness, use **Report a vulnerability** on the Security tab of this repository. The report is
+private. Do not open a public issue for it.
+
+Never attach a real person's birth data. A chart file that you made up shows the same weakness.

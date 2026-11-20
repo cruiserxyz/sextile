@@ -26,7 +26,7 @@ func TestAtlasPicked_ClearsStaleChart(t *testing.T) {
 		{Object: objSun, Longitude: 35.5},
 	}
 	m.chart.aspects = []aspect.Aspect{
-		aspect.NewObjectAspect(objSun, objMoon, aspect.Square, aspect.Orb(0.5)),
+		aspect.NewObjectAspect(objSun, objMoon, kindOf("Squ"), aspect.Orb(0.5)),
 	}
 
 	picked := AtlasPickedMsg{Place: location.PlaceInfo{
@@ -331,13 +331,13 @@ func feedBack(m Model, cmd tea.Cmd) Model {
 func TestAtlasPickWritesNothing(t *testing.T) {
 	m, start := guessedStart(t)
 	m = feedBack(m, start)
-	if !m.placeGuessed {
+	if !m.placeFromZone {
 		t.Fatal("fixture: the start is not a guess")
 	}
 	before := profileSnapshot(t)
 
 	m, cmd := applyAtlasPicked(m, AtlasPickedMsg{Place: munichDE})
-	if m.placeGuessed {
+	if m.placeFromZone {
 		t.Error("a pick is a choice: the guess mark stays")
 	}
 	m = feedBack(m, cmd)
@@ -396,7 +396,7 @@ func TestColdStartPickIsNotRemembered(t *testing.T) {
 	}
 
 	r, _ := startFromDisk(t, munichDE) // restart after `,c d`: no question
-	if r.startup == startupAtlasOpen || r.place.Name != "Munich" || r.placeGuessed {
-		t.Errorf("after `,c d` the start is %q at %q (guessed %v), want it settled on Munich", r.startup, r.place.Name, r.placeGuessed)
+	if r.startup == startupAtlasOpen || r.place.Name != "Munich" || r.placeFromZone {
+		t.Errorf("after `,c d` the start is %q at %q (guessed %v), want it settled on Munich", r.startup, r.place.Name, r.placeFromZone)
 	}
 }

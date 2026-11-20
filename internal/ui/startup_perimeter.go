@@ -11,7 +11,6 @@ import (
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/store"
-	"github.com/cruiserxyz/sextile/internal/ui/keys"
 )
 
 // applyStartupPerimeter stores the perimeter read and tries to resolve.
@@ -34,7 +33,7 @@ func applyStartupPerimeter(m Model, msg ingest.StartupPerimeterReadMsg) (Model, 
 		foreign = msg.Session.Folder != "" && !m.named.running() && msg.SessionKeep == (store.SessionKeep{})
 		msg.HasSession, msg.Session = false, store.Session{}
 		m.sessionForeign = foreign
-		m = m.logNote("session", "the saved session is another folder's and was not opened")
+		m = m.logNote("session", "the last session belongs to another charts folder, it was not opened")
 	}
 	m.pendingPerimeter = &msg
 	// The keyboard configuration needs neither the atlas nor a resolved
@@ -44,10 +43,11 @@ func applyStartupPerimeter(m Model, msg ingest.StartupPerimeterReadMsg) (Model, 
 	if foreign {
 		// After the key configuration, so the key it names is the configured one.
 		// Each line fits the Log (76 cells with its scope), so the key is never cut.
-		m = m.logNote("session", "this run is saved only by name (%s)", keys.LeaderSpelling(m.leaderKey, []string{"o"}))
+		m = m.logNote("session", "these charts are not kept unless the session gets a name")
 	}
 	m = m.applyDisplayConfig(msg.Display)
 	m = m.applyWheelFormat(msg.WheelFormat)
+	m = m.applyWindowTitle(msg.WindowTitle)
 	m = m.applyHouseDisplay(msg.HouseDisplay)
 	m = m.applyExperimental(msg.Experimental)
 	m = m.applyFrameConfig(msg.Frame)
@@ -55,11 +55,14 @@ func applyStartupPerimeter(m Model, msg ingest.StartupPerimeterReadMsg) (Model, 
 	// A refused session file was moved aside (or not) by the read itself; say so
 	// now, so a quit from the city modal still reports a failed keep (C4).
 	m = m.reportSessionKeep(msg.SessionKeep)
+	m, folderNotice := m.reportOriginalsAtStart()
 	if !m.cfg.SecondWindow || m.named.running() {
-		return maybeResolveStartup(m)
+		m, cmd := maybeResolveStartup(m)
+		return m, tea.Batch(folderNotice, cmd)
 	}
-	// A second window says once, on the Log and in the key bar, that what is
-	// done here is not kept: the session it restored is the other window's.
+	// A second window restores nothing: it starts empty. It says once, on the
+	// Log and in the key bar, that what is done here is not kept until the
+	// reader saves it as a named session.
 	m = m.logNote("second window", "%s", secondWindowNote)
 	m, notice := m.showNotice(noticeSecondWindow)
 	m, cmd := maybeResolveStartup(m)
@@ -111,8 +114,15 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 	if m.cantStart.ephemerisProbe != "" {
 		return m, nil
 	}
+	if m.aspectRegErr != nil {
+		return m, nil
+	}
 	if m.objectRegistry == nil {
 		m.awaitingRegistry = true
+		return m, nil
+	}
+	if !m.lens.AspectRegistry.Ready() {
+		m.awaitingAspects = true
 		return m, nil
 	}
 	pending := *m.pendingPerimeter
@@ -153,9 +163,9 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.place = locRes.Place
-	m.placeGuessed = locRes.Source == "iana-preseed"
-	if m.placeGuessed {
-		m = m.logNote("city", "%s, from the time zone — , c d saves it", locRes.Place.Display())
+	m.placeFromZone = locRes.Source == "iana-preseed"
+	if m.placeFromZone {
+		m = m.logNote("city", "%s, from the computer's time zone", locRes.Place.Display())
 	}
 
 	// Construct the workspace: one floating slot at (now, resolved place).
@@ -182,7 +192,7 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 	m = m.applySessionSelections(pending).forgetTabMemory()
 	// The restored selection is in place: say again what it names that this
 	// Astrolog cannot draw (once per distinct account).
-	m, say := m.sayEphemeris()
+	m = m.sayEphemeris()
 
 	m.startup = startupComputing
 	// Cold start births the first workspace identity — route through
@@ -194,7 +204,7 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 	// attached to the clock, so its first minute tick is armed with the
 	// workspace.
 	m, tick := m.armNowTick()
-	return m, tea.Batch(recompute, recheck, tick, say)
+	return m, tea.Batch(recompute, recheck, tick)
 }
 
 // applyAtlasPicked transitions out of atlas-open and queues the compute. A pick
@@ -206,9 +216,9 @@ func maybeResolveStartup(m Model) (Model, tea.Cmd) {
 // state and store-owned selection survive the clear so buildTextCmd keeps its
 // comparison route when a selected natal pair is present.
 func applyAtlasPicked(m Model, msg AtlasPickedMsg) (Model, tea.Cmd) {
-	var recheck, say tea.Cmd // set only on the cold start that had to ask for a city
+	var recheck tea.Cmd // set only on the cold start that had to ask for a city
 	m.place = msg.Place
-	m.placeGuessed = false
+	m.placeFromZone = false
 	m = m.clearChartKeepingHold()
 	m = m.suspendDetails()
 	m = m.rememberBodyRow()
@@ -235,7 +245,7 @@ func applyAtlasPicked(m Model, msg AtlasPickedMsg) (Model, tea.Cmd) {
 		// The restored cursor and selections are an arrival: the tab starts on
 		// the chart alone (S4a A27).
 		m = m.applySessionSelections(pending).forgetTabMemory()
-		m, say = m.sayEphemeris()
+		m = m.sayEphemeris()
 	}
 
 	m.startup = startupComputing
@@ -249,7 +259,7 @@ func applyAtlasPicked(m Model, msg AtlasPickedMsg) (Model, tea.Cmd) {
 	// A chart attached to the clock keeps its minute tick through a city
 	// change; the timer armed for the old workspace retires by number.
 	m, tick := m.armNowTick()
-	return m, tea.Batch(recompute, recheck, tick, say)
+	return m, tea.Batch(recompute, recheck, tick)
 }
 
 // applyChartsLoaded stores the loaded chart library into the open picker (or
@@ -276,15 +286,17 @@ func applyChartsLoaded(m Model, msg ChartsLoadedMsg) (Model, tea.Cmd) {
 		m.picker.charts = msg.Charts
 		m.picker.drops = msg.Drops
 		m.picker.seen = msg.Seen
+		m.picker.refused = map[string]string{}
+		for file, err := range msg.Refused {
+			m.picker.refused[file] = refusedReason(err)
+		}
+		m.picker.dir = msg.Dir
 		// A listing that succeeded and listed a chart is evidence the folder is
 		// readable: only then may a session write drop a deleted chart's record
 		// (the specification C10).
-		if len(msg.Charts) > 0 && msg.AtlasErr == nil {
+		if len(msg.Charts) > 0 {
 			m.frames.pruneOK = true
 		}
-	}
-	if msg.AtlasErr != nil {
-		m = m.logError("Couldn't find atlas.as. Put it beside Astrolog and restart.")
 	}
 	m.picker.refilter()
 	if m.picker.fit.Width == 0 {
@@ -375,7 +387,8 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 	m.picker.resolving = false
 	if msg.Err != nil {
 		m.picker.resolveErr = msg.Err
-		return m.noteEphemeris(msg.Err).logError("Couldn't open that chart. %s", m.failureReason(msg.Err, pickFallback)), nil
+		m = m.noteEphemeris(msg.Err).logError("chart", "chart not opened, %s", m.failureReason(msg.Err, pickFallback))
+		return m.logTrace("chart", "the read failed: %v", msg.Err), nil
 	}
 	if m.slots == nil {
 		m.startup = m.picker.prior
@@ -384,11 +397,9 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 	c := msg.Chart
 	// The casting place is the one the read found for the file as it is NOW: a
 	// file replaced since the listing gives its own place with its own moment.
-	if msg.HasPlace {
+	read := msg.Place != (location.PlaceInfo{})
+	if read {
 		c.Place = msg.Place
-	}
-	if msg.Unplaced {
-		return m.refuseAnchor("no known place")
 	}
 	// What the file says about its own houses is known before anything casts.
 	// For a chart that is already open, the system it is shown in is compared
@@ -399,22 +410,20 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 		openBefore = m.ownHouses(m.slots.All()[openIdx]).hs
 	}
 	if f := filepath.Base(c.Source.File); c.Source.Kind == store.ChartKindFile && c.Source.File != "" {
-		m.frames = m.frames.withFile(f, fileFrame{when: msg.When, houses: msg.Houses, has: msg.HasHouses})
+		m.frames = m.frames.withFile(f, fileFrame{when: msg.When, houses: msg.Houses, has: msg.HasHouses, nodes: msg.Nodes, nodesStated: msg.HasNodes})
 	}
 	// The record the session file will name this chart by, built BEFORE
 	// anything moves so it can be checked before anything moves. The slot keeps
 	// the moment and the place; only this remembers which library row they are.
-	rec := store.SessionChart{ID: c.ID, Name: c.Name, When: msg.When, Place: c.Place, Source: c.Source, Label: msg.Label}
-	if msg.HasPlace {
-		// The title the read found, with the moment it found it beside: a file
-		// replaced since the listing is named by what it holds now, and one
-		// that became untitled is shown under its file stem and sends no name.
-		if msg.Label.Name != "" {
-			rec.Name = msg.Label.Name
-		} else {
-			base := filepath.Base(c.Source.File)
-			rec.Name = strings.TrimSuffix(base, filepath.Ext(base))
-		}
+	rec := store.SessionChart{ID: c.ID, Name: c.Name, When: msg.When, Place: c.Place, Source: c.Source, Label: msg.Label, Record: msg.Record, Clock: msg.Clock}
+	// The title the read found, with the moment it found it beside: a file
+	// replaced since the listing is named by what it holds now, and one that
+	// became untitled is shown under its file stem and sends no name.
+	if read && msg.Label.Name != "" {
+		rec.Name = msg.Label.Name
+	} else if read {
+		base := filepath.Base(c.Source.File)
+		rec.Name = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	if reason := rec.UnusableReason(); reason != "" {
 		// The library lists on a weaker bar than anchoring needs, by design: a
@@ -430,13 +439,14 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 	}
 	m.picker.resolveErr = nil
 	m.picker.refusal = ""
+	m = m.logFileNotes(rec.Name, msg.Notes)
 	if i := m.slots.FindAnchored(rec); i >= 0 {
 		// A chart already in the list: the cursor goes to its row and nothing
 		// is added (M3). One file is one row. The pick just read the file, so if
 		// its name, id, moment or place is not the slot's the file wins, in place: the slot keeps its
 		// position, selection, body marks and Bodies row (C5).
 		open := m.slots.All()[i]
-		if open.Time.Equal(msg.When) && open.Location == c.Place && open.Chart.Name == rec.Name && open.Chart.ID == rec.ID && open.Chart.Label == rec.Label {
+		if open.Time.Equal(msg.When) && open.Location == c.Place && open.Chart.Name == rec.Name && open.Chart.ID == rec.ID && open.Chart.Label == rec.Label && open.Chart.Record == rec.Record && open.Chart.Clock == rec.Clock {
 			// Nothing about the chart changed: the pick only moves the cursor.
 			// The picker closes back to where it opened from; the settled frame
 			// stays, and a recompute happens only if the cursor lands on a
@@ -458,7 +468,7 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 		m = m.suspendDetails()
 		m = m.rememberBodyRow()
 		if err := m.slots.ReplaceAnchored(i, rec, msg.When, c.Place); err != nil {
-			m = m.logNote("slots", "anchor refused (%v)", err)
+			m = m.logNote("chart", "chart not opened, %v", err)
 		}
 		m = m.focusSlot(i)
 	} else {
@@ -468,7 +478,7 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 		// the insert shifts what the cursor index points at.
 		m = m.rememberBodyRow()
 		if err := m.slots.AddAnchored(rec, msg.When, c.Place); err != nil {
-			m = m.logNote("slots", "anchor refused (%v)", err)
+			m = m.logNote("chart", "chart not opened, %v", err)
 		} else {
 			// The new slot sits directly above the floating slot and takes
 			// focus, leaving every other slot as it was (M2).
@@ -495,7 +505,7 @@ func applyChartResolved(m Model, msg ChartResolvedMsg) (Model, tea.Cmd) {
 // lacks, and the error lane says so.
 func (m Model) refuseAnchor(reason string) (Model, tea.Cmd) {
 	m.picker.refusal = reason
-	return m.logError("Couldn't anchor that chart. It has %s.", reason), nil
+	return m.logError("chart", "chart not opened, it has %s", reason), nil
 }
 
 // refreshSlotsForPlace rebuilds m.slots for the newly picked place,
@@ -539,6 +549,7 @@ func (m Model) refreshSlotsForPlace(place location.PlaceInfo) Model {
 	m.slots = slots
 	m.cursorIdx = 0
 	m.targetFloatingTime = slots.Floating().Time
+	m = m.clearDetailsFilters()
 	// The whole list comes across, in order, each slot with its own chart. A
 	// slot whose place cannot be re-added (never the case for one that was
 	// added) is dropped and said so; the rest still carry over.

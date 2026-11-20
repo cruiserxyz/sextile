@@ -18,10 +18,9 @@ func TestPopupsOpenFromDetailsAndCloseBackIntoIt(t *testing.T) {
 		{"ctrl+o", tea.KeyMsg{Type: tea.KeyCtrlO}, ownerOpenChart},
 		{"ctrl+s", tea.KeyMsg{Type: tea.KeyCtrlS}, ownerSaveChart},
 		{"ctrl+b", tea.KeyMsg{Type: tea.KeyCtrlB}, ownerBodies},
-		{"ctrl+h", tea.KeyMsg{Type: tea.KeyCtrlH}, ownerHouses},
 		{"ctrl+z", tea.KeyMsg{Type: tea.KeyCtrlZ}, ownerZodiac},
 		{"ctrl+a", tea.KeyMsg{Type: tea.KeyCtrlA}, ownerAspects},
-		{"?", runes("?"), ownerHelp},
+		{"?", runes("?"), ownerKeybindings},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

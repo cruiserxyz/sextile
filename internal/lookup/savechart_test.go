@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,9 +128,6 @@ func TestSavedChartListsAndAnchors(t *testing.T) {
 	if saved.ID != "test-person" {
 		t.Errorf("saved.ID = %q, want %q", saved.ID, "test-person")
 	}
-	if !saved.AtlasPlaced {
-		t.Fatal("saved.AtlasPlaced is false for Amsterdam; the library will not list it")
-	}
 
 	lib, err := LoadChartLibrary()
 	if err != nil {
@@ -170,11 +168,9 @@ func TestSavedChartListsAndAnchors(t *testing.T) {
 	}
 }
 
-// Failure mode: the slot's place matches no atlas city. The save still
-// succeeds -- the file is correct and the operator asked for it -- and says
-// the chart will not list until the atlas can place it, because a .as carries
-// no timezone and the library drops a row it cannot place.
-func TestSavedChartUnplacedByTheAtlas(t *testing.T) {
+// A chart saved far from any atlas city lists like any other: the list reads
+// the file, never the atlas.
+func TestSavedChartFarFromAnyCityLists(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SEXTILE_CHARTS_DIR", dir)
 
@@ -187,17 +183,12 @@ func TestSavedChartUnplacedByTheAtlas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveFloatingChart: %v", err)
 	}
-	if saved.AtlasPlaced {
-		t.Fatal("saved.AtlasPlaced is true for a spot no atlas city is near")
-	}
 	// The file IS there...
 	if _, err := os.Stat(filepath.Join(dir, saved.File)); err != nil {
 		t.Errorf("the chart was reported saved but is not on disk: %v", err)
 	}
-	// A PLACEABLE chart saved into the same directory, so the absence below
-	// means "excluded" rather than "the library is broken". Without this the
-	// test passes against a LoadChartLibrary that returns nothing at all --
-	// which is the whole difference between an absence check and evidence.
+	// A chart in a city, saved into the same directory, so the list below is
+	// known to work.
 	placed, err := SaveFloatingChart(context.Background(), dir, "Placeable Control", amsterdamMoment(), amsterdamPlace())
 	if err != nil {
 		t.Fatalf("SaveFloatingChart (the placeable control): %v", err)
@@ -207,20 +198,20 @@ func TestSavedChartUnplacedByTheAtlas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadChartLibrary: %v", err)
 	}
-	var sawPlaced, sawUnplaced bool
+	var sawPlaced, sawFar bool
 	for _, c := range lib.Charts {
 		switch c.ID {
 		case placed.ID:
 			sawPlaced = true
 		case saved.ID:
-			sawUnplaced = true
+			sawFar = true
 		}
 	}
 	if !sawPlaced {
 		t.Fatalf("the library lists neither chart, so it is not working; this test can prove nothing (drops: %+v)", lib.Drops)
 	}
-	if sawUnplaced {
-		t.Fatalf("the library lists %q after all; the warning would be wrong", saved.ID)
+	if !sawFar {
+		t.Fatalf("the library does not list %q (drops: %+v)", saved.ID, lib.Drops)
 	}
 }
 
@@ -246,16 +237,14 @@ func TestSaveRefusesAnEmptySlug(t *testing.T) {
 // collision scan and the write use that one value rather than each asking
 // store.ChartsDir() again.
 //
-// Found by an independent review round, 2026-09-20: chartOwning and
-// PlaceChartFile each called store.ChartsDir() for themselves, and that
-// function's answer changes the moment the XDG default directory comes into
-// existence -- so one save could check one directory, show the operator a
-// second and write into a third.
+// store.ChartsDir()'s answer changes the moment the XDG default directory comes
+// into existence, so a save that asked it twice could check one directory, show
+// the operator a second and write into a third.
 //
-// The divergence itself needs SEXTILE_DEV_CHARTS_DIR, which
-// TestTestsIsolateChartsDirOnTopTier forbids outside internal/store's own test
-// file (a dev-tier library is shadowed by a real one, which is how a test once
-// reached an operator's real charts). So the property is pinned the other way
+// The divergence itself needs SEXTILE_DEV_CHARTS_DIR, which a test outside
+// internal/store's own test file does not set (a dev-tier library is shadowed
+// by a real one, which is how a test once reached an operator's real charts).
+// So the property is pinned the other way
 // round, on the top tier: ChartsDir() is made to answer somewhere ELSE, and
 // the save must still write where it was told.
 func TestSaveWritesWhereItWasToldNotWhereChartsDirPoints(t *testing.T) {
@@ -284,5 +273,25 @@ func TestSaveWritesWhereItWasToldNotWhereChartsDirPoints(t *testing.T) {
 	// must be found, while one in `elsewhere` must not shadow it.
 	if _, err := SaveFloatingChart(context.Background(), told, "Test Person", amsterdamMoment(), amsterdamPlace()); err == nil {
 		t.Error("the second save was not refused, so the collision scan read a different directory than the write")
+	}
+}
+
+// A moment that arrives in UT (a search's target, such as the next phase) is
+// saved in the place's own clock, to the second it was shown at (bug
+// 20261113T1918Z): the file and the floating row name the same second.
+func TestSaveWritesThePlacesClockToTheSecond(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SEXTILE_CHARTS_DIR", dir)
+	phase := time.Date(2026, 11, 17, 11, 47, 31, 996_000_000, time.UTC)
+	saved, err := SaveFloatingChart(context.Background(), dir, "Next phase", phase, amsterdamPlace())
+	if err != nil {
+		t.Fatalf("SaveFloatingChart: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, saved.File))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "-qb Nov 17 2026 12:47:31pm ST 1:00E") {
+		t.Errorf("the file does not state the Amsterdam clock to the second:\n%s", raw)
 	}
 }

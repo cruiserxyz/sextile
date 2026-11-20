@@ -11,11 +11,10 @@ import (
 // The sky is read a day at a time: Astrolog's month search drops the late
 // events of a day once a month averages more than 75 events a day (Astrolog_8.0
 // NEXT.md BUG 8; operator, 2026-11-06: the planets' moons ticked, the sky list
-// refused). Here the month search has lost a day's last event, as it does then,
-// and the day search has it: the row is shown, from the day search. The Moon's
-// void-of-course mark, which only the month search prints across midnight, is
-// the month search's own row in place of the day search's unmarked one.
-func TestSkyReadsEachDayAndTakesTheMonthsVoidMarks(t *testing.T) {
+// refused). Here the void search holds the Moon row with its mark and a day
+// search has a late event of another body: both are shown, the Moon row from
+// the void search, which alone prints the mark across midnight.
+func TestSkyReadsEachDayAndTakesTheVoidSearchsMarks(t *testing.T) {
 	withClock(t, Clock{Hours: Hours12, Dates: MonthFirst})
 	const (
 		bare   = "Sat 10/ 3/2026  1:10am    Moon (Leo) Sex [Lib] Venus"
@@ -26,23 +25,23 @@ func TestSkyReadsEachDayAndTakesTheMonthsVoidMarks(t *testing.T) {
 		argv := call.Argv()
 		command := "astrolog " + strings.Join(argv, " ")
 		switch {
-		case slices.Contains(argv, "-dm"):
-			return marked + "\nToo many transit events found.\n", command, nil
+		case slices.Contains(argv, "-dY"):
+			return marked + "\nSun 10/ 4/2026  9:27am    Moon (Leo) --> Virgo\n", command, nil
 		case slices.Contains(argv, "-d") && argv[slices.Index(argv, "-qd")+2] == "3":
 			return bare + "\n" + late + "\n", command, nil
 		}
 		return "", command, nil
 	}
 	rows, _, err := ComputeTimeline(context.Background(),
-		TimelineRequest{Year: 2026, Month: time.October, Zone: time.UTC}, []TimelineSource{TimelineSky}, search)
+		TimelineRequest{Year: 2026, Month: time.October, Zone: time.UTC, Registry: testRegistry(t), AspectRegistry: testAspects(t)}, []TimelineSource{TimelineSky}, search)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 2 || rows[0].Line != marked || rows[1].Line != late {
 		t.Fatalf("rows =\n%s want the marked Moon row and the late Io row", dumpRows(rows))
 	}
-	if !strings.Contains(rows[0].Command, " -dm ") || !strings.Contains(rows[1].Command, " -qd 10 3 2026 -d ") {
-		t.Errorf("commands %q and %q, want the month search's and the 3rd's day search's", rows[0].Command, rows[1].Command)
+	if !strings.Contains(rows[0].Command, " -dY ") || !strings.Contains(rows[1].Command, " -qd 10 3 2026 -d ") {
+		t.Errorf("commands %q and %q, want the void search's and the 3rd's day search's", rows[0].Command, rows[1].Command)
 	}
 }
 

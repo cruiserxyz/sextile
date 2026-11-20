@@ -96,7 +96,11 @@ func renderImage(ctx context.Context, inv Invocation) ([]byte, string, error) {
 	if dir != "" {
 		tmpPath = filepath.Join(dir, "wheel"+imageExtension(inv.Argv))
 	} else {
-		tmp, err := os.CreateTemp("", "sextile-wheel-*"+imageExtension(inv.Argv))
+		base, err := PrivateTempBase()
+		if err != nil {
+			return nil, "", fmt.Errorf("astrolog: RenderImage: temp file: %w", err)
+		}
+		tmp, err := os.CreateTemp(base, "sextile-wheel-*"+imageExtension(inv.Argv))
 		if err != nil {
 			return nil, "", fmt.Errorf("astrolog: RenderImage: temp file: %w", err)
 		}

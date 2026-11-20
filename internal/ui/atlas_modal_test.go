@@ -100,7 +100,7 @@ func TestCityShowsACutNameInTheEdge(t *testing.T) {
 		if edge := lines[len(lines)-1]; !strings.Contains(edge, name) {
 			t.Errorf("%+v: the edge does not show %q whole:\n%s", cfg, name, first)
 		}
-		if row := lines[4]; strings.Contains(row, name) || !strings.Contains(row, term.CutMark(cfg)) {
+		if row := lines[3]; strings.Contains(row, name) || !strings.Contains(row, term.CutMark(cfg)) {
 			t.Errorf("%+v: the row should be cut with %q: %q", cfg, term.CutMark(cfg), row)
 		}
 		st.Cursor = 1

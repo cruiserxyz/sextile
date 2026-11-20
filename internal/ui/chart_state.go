@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/cruiserxyz/sextile/internal/astrologstyle"
 	"github.com/cruiserxyz/sextile/internal/lookup"
+	"github.com/cruiserxyz/sextile/internal/recipe"
 	"github.com/cruiserxyz/sextile/internal/ui/panel"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -16,6 +17,9 @@ import (
 // bodies in BOTH modes; Bodies never adds an inline overlay heading.
 type chartViewState struct {
 	positions []aspect.Position
+	// nodes is the form of the Nodes and Lilith the call that cast positions
+	// carried; Bodies names it by a letter.
+	nodes recipe.NodeForm
 	// stations are the focused chart's station marks (D38), committed with
 	// positions in one frame; a frame held on screen keeps its own.
 	stations map[int]lookup.Station
@@ -44,6 +48,9 @@ type chartViewState struct {
 	// (Astrolog -r0): its applying/separating verdict is a synthetic one and
 	// is never displayed.
 	crossSynastry bool
+	// aspectDot says an aspect without a glyph is drawn as a dot, not by its
+	// letters (the aspect-dot experiment), set for this paint only.
+	aspectDot bool
 	// overlay marks an overlay-mode frame. Explicit (not derived from a
 	// populated slice) so an overlay with zero cross-aspects is still an
 	// overlay frame. Since an earlier change it is the frame marker only — the first
@@ -86,4 +93,7 @@ type chartViewState struct {
 	// like mark: Model.paintedChart fills it from the Model, so a committed
 	// frame never carries one and a hard reset cannot lose the choice.
 	houseForm panel.HouseForm
+	// moonLane is the Moon's speed lane for THIS paint only, like houseForm:
+	// Model.paintedChart derives it from void memory (moon_void.go).
+	moonLane map[int]string
 }

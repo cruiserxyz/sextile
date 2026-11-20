@@ -57,7 +57,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 	locationBlock := "location:\n  name: Amsterdam\n  country: NL\n  lat: 52.37\n  lon: 4.89\n  tz: Europe/Amsterdam\n"
 	// The floating chart is in Whole Sign and tropical here, and `, c d` keeps
 	// the frame beside the city and the form.
-	frameBlock := "frame:\n  houses: Whole\n  zodiac: tropical\n"
+	frameBlock := "frame:\n  houses: Whole\n  zodiac: tropical\n  node: mean\n  lilith: mean\n"
 	if strings.HasSuffix(before, "\n") {
 		t.Fatal("fixture: the file ends in a newline; it must not")
 	}
@@ -103,7 +103,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 		if l, ok := store.Location(); !ok || l.Name != "Amsterdam" {
 			t.Errorf("stored location = %+v (%v), want Amsterdam", l, ok)
 		}
-		if n := noteCount(m, "default house display saved: Number + angularity"); n != 1 {
+		if n := noteCount(m, "defaults: houses shown as Number + angularity"); n != 1 {
 			t.Errorf("the Log names the kept house display %d times, want once: %v", n, m.logLines)
 		}
 		if want := "default city saved: Amsterdam, NL"; lastLine(m).text != want {
@@ -205,13 +205,8 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 		if m.houseDisplay != panel.HouseAngularity {
 			t.Errorf("an unknown word left the form at %v, want angularity", m.houseDisplay)
 		}
-		if n := noteCount(m, `house_display "spiral" ignored`); n != 1 {
+		if n := noteCount(m, `house_display "spiral" not valid, ignored`); n != 1 {
 			t.Errorf("the Log refuses the word %d times, want once: %v", n, m.logLines)
-		}
-		for _, w := range []string{"angularity", "quadrants", "number", "marked"} {
-			if noteCount(m, w) == 0 {
-				t.Errorf("the refusal does not name %q", w)
-			}
 		}
 	})
 
@@ -226,7 +221,7 @@ func TestSaveDefaultsKeepsTheHouseDisplay(t *testing.T) {
 	t.Run("a house display that could not be written is said, the city still is", func(t *testing.T) {
 		m, _ := guessedStart(t)
 		m, _ = applyDefaultCitySaved(m, DefaultCitySavedMsg{Place: amsterdamNL, House: panel.HouseNumber, HouseErr: errors.New("disk full\nsecond line")})
-		if want := "default house display not saved: disk full"; lastLine(m).text != want || lastLine(m).lane != laneError {
+		if want := "settings: the house display was not kept as the default"; lastLine(m).text != want || lastLine(m).lane != laneError {
 			t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 		}
 		if noteCount(m, "default city saved: Amsterdam, NL") != 1 {

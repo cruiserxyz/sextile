@@ -15,7 +15,7 @@ import (
 
 var updateGolden = flag.Bool("update", false, "regenerate golden files")
 
-// digestPath is a review aid written by -update, never committed (.gitignore).
+// digestPath is a review aid written by -update and committed with the goldens it describes.
 const digestPath = "testdata/DIGEST.txt"
 
 // goldenChange is one golden seen under -update.

@@ -62,7 +62,7 @@ func wheelOpenLines(m Model) []string {
 func TestWheelNoticeOncePerSession(t *testing.T) {
 	stubShowWheelURL(t, wheelURLStub)
 	m := publishOnce(t, modelWithSlot(t))
-	want := "Wheel at http://localhost:5307 (Ctrl+X again closes it)"
+	want := "wheel: served at http://localhost:5307"
 	if got := wheelOpenLines(m); len(got) != 1 || got[0] != want {
 		t.Fatalf("after the first publish the notice lines = %q, want exactly [%q]", got, want)
 	}
@@ -93,7 +93,7 @@ func wheelNoticeModel(t *testing.T, cfg Config, w, h int, closed bool) Model {
 	m.width, m.height = w, h
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{Positions: fullChartPositions()})
 	m.logLines = nil
-	m = m.logNote("session", "natal not restored")
+	m = m.logNote("session", "the chart of the last session did not open")
 	m = m.logWheelOpen(wheelURLStub)
 	if closed {
 		m = m.logWheelClosed()
@@ -130,7 +130,7 @@ func TestWheelNoticeFrames(t *testing.T) {
 		})
 		t.Run("console-80x24-"+md.label, func(t *testing.T) {
 			m := wheelNoticeModel(t, md.cfg, 80, 24, false)
-			m, _ = press(t, m, ",", "l", "l")
+			m, _ = press(t, m, ",", "L", "l")
 			r, ok := m.consoleRect()
 			if !ok {
 				t.Fatal("no console")
@@ -140,22 +140,25 @@ func TestWheelNoticeFrames(t *testing.T) {
 		})
 	}
 
-	t.Run("colour is its own", func(t *testing.T) {
+	t.Run("the group is cyan, the words are plain", func(t *testing.T) {
 		m := wheelNoticeModel(t, Config{Color: ColorAlways}, 132, 40, false)
 		s := parseDesignScreen(m.View())
-		text := "Wheel at http://localhost:5307 (Ctrl+X again closes it)"
+		text := "Wheel    served at http://localhost:5307"
 		y := rowWith(s, m.geometry()[PanelLog], text)
 		if y < 0 {
 			t.Fatal("the notice is not on screen")
 		}
-		want, green, red := styleFG(t, term.WheelOpenColour), styleFG(t, term.DefaultFocusColour), styleFG(t, term.ErrorColour)
-		if want == green || want == red {
-			t.Fatalf("the notice colour %q collides with the focus green %q or the error red %q", want, green, red)
+		cyan, green, red := styleFG(t, term.LogFactColour), styleFG(t, term.DefaultFocusColour), styleFG(t, term.ErrorColour)
+		if cyan == green || cyan == red {
+			t.Fatalf("the group colour %q collides with the focus green %q or the error red %q", cyan, green, red)
 		}
-		for _, c := range cellsOf(s, y, text) {
-			if c.r != ' ' && c.fg != want {
-				t.Errorf("cell %q is fg %q, want the notice colour %q", c.r, c.fg, want)
-				break
+		cells := cellsOf(s, y, text)
+		for i, c := range cells {
+			switch {
+			case i < len("Wheel") && c.fg != cyan:
+				t.Errorf("group cell %q is fg %q, want cyan %q", c.r, c.fg, cyan)
+			case i >= logGroupCells+1 && c.r != ' ' && c.fg == cyan:
+				t.Errorf("message cell %q is cyan", c.r)
 			}
 		}
 	})
@@ -177,7 +180,7 @@ func TestWheelClosedFrames(t *testing.T) {
 		})
 		t.Run("console-80x24-"+md.label, func(t *testing.T) {
 			m := wheelNoticeModel(t, md.cfg, 80, 24, true)
-			m, _ = press(t, m, ",", "l", "l")
+			m, _ = press(t, m, ",", "L", "l")
 			r, ok := m.consoleRect()
 			if !ok {
 				t.Fatal("no console")
@@ -187,23 +190,22 @@ func TestWheelClosedFrames(t *testing.T) {
 		})
 	}
 
-	t.Run("colour is the error red, the words are plain", func(t *testing.T) {
+	t.Run("a closing line is a fact, not an error", func(t *testing.T) {
 		m := wheelNoticeModel(t, Config{Color: ColorAlways}, 132, 40, true)
 		s := parseDesignScreen(m.View())
-		text := "Wheel closed. Ctrl+X opens it again"
+		text := "Wheel    server closed"
 		y := rowWith(s, m.geometry()[PanelLog], text)
 		if y < 0 {
 			t.Fatal("the closing line is not on screen")
 		}
-		want := styleFG(t, term.WheelClosedColour)
-		for _, c := range cellsOf(s, y, text) {
-			if c.r != ' ' && c.fg != want {
-				t.Errorf("cell %q is fg %q, want the red %q", c.r, c.fg, want)
-				break
+		cyan := styleFG(t, term.LogFactColour)
+		for i, c := range cellsOf(s, y, text) {
+			if i < len("Wheel") && c.fg != cyan {
+				t.Errorf("group cell %q is fg %q, want cyan %q", c.r, c.fg, cyan)
 			}
 		}
 		for _, row := range m.logPanelRows() {
-			if strings.Contains(ansi.Strip(row), "! Wheel") {
+			if strings.Contains(ansi.Strip(row), "! ") && strings.Contains(row, "Wheel") {
 				t.Errorf("the closing line carries the error mark: %q", row)
 			}
 		}

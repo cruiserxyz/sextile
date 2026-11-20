@@ -60,7 +60,7 @@ func syntheticPlaces(n int) []location.PlaceInfo {
 func syntheticAspects(n int) []aspect.RegistryAspect {
 	out := make([]aspect.RegistryAspect, n)
 	for i := range out {
-		out[i] = aspect.RegistryAspect{Index: i + 1, Name: fmt.Sprintf("Aspect %02d", i+1), Abbrev: fmt.Sprintf("A%02d", i+1), Angle: float64(i%90) * 2, Orb: 3, InForce: true}
+		out[i] = aspect.RegistryAspect{Kind: aspect.AspectKind{Index: i + 1, Name: fmt.Sprintf("Aspect %02d", i+1), Abbrev: fmt.Sprintf("A%02d", i+1)}, Angle: float64(i%90) * 2, Orb: 3, InForce: true}
 	}
 	return out
 }
@@ -138,20 +138,6 @@ func pageOwners() []pageOwner {
 	owners = append(owners, pageOwner{
 		name:  "Timeline, attached",
 		open:  func(t *testing.T) Model { return pagedTimeline(t, 100) },
-		read:  timeline,
-		put:   putTimeline,
-		drawn: drawnTimeline,
-	}, pageOwner{
-		name:      "Timeline, search line",
-		noHomeEnd: true,
-		open: func(t *testing.T) Model {
-			m := pagedTimeline(t, 100)
-			m, _ = tpress(t, m, runes("/"))
-			if !m.timeline.searching {
-				t.Fatal("the search line did not open")
-			}
-			return m
-		},
 		read:  timeline,
 		put:   putTimeline,
 		drawn: drawnTimeline,

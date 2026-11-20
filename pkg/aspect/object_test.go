@@ -239,7 +239,7 @@ func TestAspectSidesOrderByNumber(t *testing.T) {
 		{"two unresolved sides keep the printed order", aspect.Object{}, aspect.Object{}, aspect.Object{}, aspect.Object{}},
 		{"the same object twice keeps the printed order", sun, sun, sun, sun},
 	} {
-		got := aspect.NewObjectAspect(tc.a, tc.b, aspect.Opposition, 1)
+		got := aspect.NewObjectAspect(tc.a, tc.b, kindOf("Opp"), 1)
 		if got.AObject != tc.first || got.BObject != tc.other {
 			t.Errorf("%s: sides %+v and %+v, want %+v and %+v", tc.name, got.AObject, got.BObject, tc.first, tc.other)
 		}

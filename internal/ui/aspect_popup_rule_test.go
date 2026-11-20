@@ -89,7 +89,7 @@ func TestAspectPopupRuleSitsBetweenGroupsAndList(t *testing.T) {
 				st.Cursor = menu.ClampCursor(st.Cursor, st.TotalRows())
 				empty := aspectFrameLines(renderAspectModal(st, mode.cfg, size.w, size.h))
 				e := allRowIndex(t, empty)
-				if ruleRun(empty[e+1], mode.glyph) == "" || !strings.Contains(empty[e+2], "(no matching aspects)") {
+				if ruleRun(empty[e+1], mode.glyph) == "" || !strings.Contains(empty[e+2], "(no aspect of that name)") {
 					t.Errorf("empty list lost its rule:\n%s", strings.Join(empty, "\n"))
 				}
 			})

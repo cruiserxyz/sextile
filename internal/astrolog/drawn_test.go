@@ -35,8 +35,8 @@ func TestDrawnIsTheHostDefaultWithFlips(t *testing.T) {
 	marked := recipe.ObjectPolicy{Only: recipe.NewObjectSet(1, 31)}
 
 	// 1. emitObjects' Only list: the Sun, not the Midheaven.
-	if got := objectBandOf(t, marked); !slices.Equal(got, []string{"-R0", "1"}) {
-		t.Errorf("the Only list = %v, want [-R0 1] (the host does not draw 31, so its mark draws nothing)", got)
+	if got := objectBandOf(t, marked); !slices.Equal(got, []string{"_Yn", "_Ynn", "-R0", "1"}) {
+		t.Errorf("the Only list = %v, want [_Yn -R0 1] (the host does not draw 31, so its mark draws nothing)", got)
 	}
 	// 2. ArgvObjectNumbers, the numbers the call is made with.
 	if got, err := ArgvObjectNumbers(marked); err != nil || !slices.Equal(got, []int{1}) {
@@ -71,11 +71,11 @@ func TestDrawnIsTheHostDefaultWithFlips(t *testing.T) {
 	SetAvailability(hostWithout31())
 
 	// Alone, the mark leaves nothing: the narrowing is dropped and the host
-	// default goes out unnarrowed (no switch at all), never a bare list and
-	// never the Midheaven.
+	// default goes out unnarrowed (the node mode only, no object switch), never
+	// a bare list and never the Midheaven.
 	alone := recipe.ObjectPolicy{Only: recipe.NewObjectSet(31)}
-	if got, err := emitObjects(alone); err != nil || len(got) != 0 {
-		t.Errorf("a mark on 31 alone = %v, %v; want the baseline's band, which is empty here (no bare -R0)", got, err)
+	if got, err := emitObjects(alone); err != nil || !slices.Equal(got, []string{"_Yn", "_Ynn"}) {
+		t.Errorf("a mark on 31 alone = %v, %v; want the baseline's band, which is the node mode alone here (no bare -R0)", got, err)
 	}
 	if got, err := ArgvObjectNumbers(alone); err != nil || !slices.Equal(got, []int{1, 2, 3, 19, 22}) {
 		t.Errorf("a mark on 31 alone draws %v, %v; want the host default [1 2 3 19 22]", got, err)
@@ -102,8 +102,8 @@ func TestDrawnIsTheHostDefaultWithFlips(t *testing.T) {
 		t.Errorf("Remove 31 on a host without 31 emitted %v, %v; want no switch", got, err)
 	}
 	removed.Only = recipe.NewObjectSet(1, 31)
-	if got := objectBandOf(t, removed); !slices.Equal(got, []string{"-R0", "1"}) {
-		t.Errorf("Remove 31 with a mark on 31 = %v, want [-R0 1]", got)
+	if got := objectBandOf(t, removed); !slices.Equal(got, []string{"_Yn", "_Ynn", "-R0", "1"}) {
+		t.Errorf("Remove 31 with a mark on 31 = %v, want [_Yn -R0 1]", got)
 	}
 	// And an Add of one the host does list does not turn it off.
 	added := recipe.ObjectPolicy{Add: recipe.NewObjectSet(19)}
@@ -130,8 +130,8 @@ func TestDrawnDrainedNarrowingFallsBackToTheBaseline(t *testing.T) {
 	if got, err := ArgvObjectNumbers(p); err != nil || !slices.Equal(got, []int{1, 2, 22}) {
 		t.Errorf("ArgvObjectNumbers = %v, %v; want the baseline without the absent Ceres [1 2 22]", got, err)
 	}
-	if got := objectBandOf(t, p); !slices.Equal(got, []string{"-R", "12"}) {
-		t.Errorf("object band = %v, want the baseline's [-R 12] (Ceres switched off), not a bare -R0", got)
+	if got := objectBandOf(t, p); !slices.Equal(got, []string{"_Yn", "_Ynn", "-R", "12"}) {
+		t.Errorf("object band = %v, want the baseline's [_Yn -R 12] (Ceres switched off), not a bare -R0", got)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestDrawnMatchesWhatTheArgvDraws(t *testing.T) {
 		"a removed angle":                           {Remove: recipe.NewObjectSet(31)},
 		"an absent addition":                        {Add: recipe.NewObjectSet(13, 19)},
 		"adds and removals":                         {Add: recipe.NewObjectSet(11, 19), Remove: recipe.NewObjectSet(5)},
-		"true node":                                 {TrueNodeMode: true, Add: recipe.NewObjectSet(19)},
+		"true node":                                 {Nodes: recipe.NodesTrue, Add: recipe.NewObjectSet(19)},
 		"a remove of an unlisted object":            {Remove: recipe.NewObjectSet(19)},
 		"an add of a listed object":                 {Add: recipe.NewObjectSet(10)},
 	} {

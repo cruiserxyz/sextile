@@ -60,7 +60,8 @@ func stubWheels(t *testing.T) (*wheelCalls, *[][]byte) {
 	calls := &wheelCalls{}
 	published := &[][]byte{}
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, when time.Time, _ location.PlaceInfo, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, _ lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+			when := chart.When
 			calls.mu.Lock()
 			calls.single = append(calls.single, when)
 			calls.mu.Unlock()
@@ -121,15 +122,15 @@ func ringSpawn(t *testing.T, spawns []spawnRecord, relation string) spawnRecord 
 	return found[0]
 }
 
-// C6: a selected set of exactly two draws today's bi-wheel (-r0, chart 1 the
-// baseline) — the second ring the floating slot at the operator's target when
+// C6: a selected set of exactly two draws the bi-wheel (-r0, chart 1 the
+// baseline, drawn on the outer ring; the cursor's chart inside) through the
+// rings route, which stages both records — the second ring the floating slot at the operator's target when
 // ② is floating, or ②'s own moment and place when it is anchored.
 func TestWheelPairUsesTodaysBiWheel(t *testing.T) {
 	spawns := chartFileCapturingAstrolog(t)
 	stubShowWheel(t)
 
-	// ① × now: byte-identical in argv to the call RenderOverlayWheelImage
-	// makes for the same two charts, as it always has.
+	// ① × now: the argv is the one the bi-wheel has always had, byte for byte.
 	m := selectedSet(t, 1, true, 1)
 	m.base = m.slots.All()[0] // now read in ①: the tab "② in ①"
 	m = openWheel(t, m)
@@ -250,7 +251,7 @@ func TestWheelAloneWhenSingle(t *testing.T) {
 	}
 }
 
-// Reorder inside the selected set (review round 1, High): ⌃j swaps ② and ③, so
+// Reorder inside the selected set (review round 1, High): J swaps ② and ③, so
 // the timeline's numerals change though the baseline and the pair did not. The
 // timeline must follow the new order. (The wheel draws the active tab, which a
 // reorder does not change: it asks for no new picture, TestReorderKeepsTheVisitor.)
@@ -277,7 +278,7 @@ func TestReorderWithinTheSetRenumbersTheTimeline(t *testing.T) {
 	wheels.reset()
 
 	var cmd tea.Cmd
-	m, cmd = tpress(t, m, keyCtrlJ)
+	m, cmd = tpress(t, m, keyMoveDown)
 	m = pump(t, m, cmd)
 
 	if wheels.total() != 0 {
@@ -311,13 +312,13 @@ func TestBiWheelStagingFailureKeepsThePreviousImage(t *testing.T) {
 	m.cfg = Config{Color: ColorNever}
 	m.base = m.slots.All()[0] // now read in ①
 	m = openWheel(t, m)
-	if len(*published) != 1 || string((*published)[0]) != "overlay" {
+	if len(*published) != 1 || string((*published)[0]) != "rings" {
 		t.Fatalf("fixture: published %q, want the first bi-wheel picture", *published)
 	}
 
 	m = withSpawns(m, func(s *rowSpawns) {
-		s.wheel.renderOverlay = func(context.Context, store.AnchorChart, time.Time, location.PlaceInfo, lookup.Lens) ([]byte, error) {
-			return nil, fmt.Errorf("astrolog: RenderImage: %w", stagedFailure{ring: 2})
+		s.wheel.renderRings = func(context.Context, []lookup.WheelRing, lookup.Lens) ([]byte, []string, error) {
+			return nil, nil, fmt.Errorf("astrolog: RenderImage: %w", stagedFailure{ring: 2})
 		}
 	})
 	m, cmd := m.setFloatingTarget(m.targetFloatingTime.Add(24 * time.Hour))
@@ -387,6 +388,7 @@ func (s *mergeSearcher) search(_ context.Context, call lookup.BodyCall) (string,
 	if argv[1] != "-2" {
 		return "", cmd, nil // the CET segment of the month has nothing
 	}
+	void := slices.Contains(argv, "-dY")
 	if failing {
 		return "", cmd, errors.New("astrolog exec: exit status 1")
 	}
@@ -404,9 +406,14 @@ func (s *mergeSearcher) search(_ context.Context, call lookup.BodyCall) (string,
 	case "-tr":
 		return header + "10/14/2026 23:26 trans    Moon (Cap) Con natal (Cap) Moon (Lunar Return)\n", cmd, nil
 	}
-	return "Wed 10/14/2026  2:59    Moon (Sco) --> Sagittarius\n" +
+	sky := "Wed 10/14/2026  2:59    Moon (Sco) --> Sagittarius\n" +
 		"Wed 10/14/2026 23:26    Moon (Sag) Tri [Ari] Saturn\n" +
-		"Thu 10/15/2026 10:21     Sun (Lib) Sex (Leo) Jupiter\n", cmd, nil
+		"Thu 10/15/2026 10:21     Sun (Lib) Sex (Leo) Jupiter\n"
+	if void {
+		// The void search prints the Moon's rows only (its `-~d` filter).
+		return moonRows(sky), cmd, nil
+	}
+	return sky, cmd, nil
 }
 
 // stubTimelineSearch routes the timeline's spawn seam through lookup's own
@@ -418,6 +425,11 @@ func stubTimelineSearch(t *testing.T, s *mergeSearcher) {
 		sp.timeline = func(ctx context.Context, req lookup.TimelineRequest) (lookup.TimelineResult, error) {
 			return lookup.TimelineWith(ctx, req, s.search, stubDefaults)
 		}
+		// The void search is a spawn of its own, scripted through the same
+		// searcher; a test that looks at it alone files its own stub after this.
+		sp.voids = func(ctx context.Context, req lookup.VoidRequest) (lookup.VoidResult, error) {
+			return lookup.RunVoidSearchWith(ctx, req, lookup.TimelineSearcher(s.search))
+		}
 	})
 	markStubbed(t, "timeline")
 }
@@ -427,6 +439,7 @@ func stubTimelineSearch(t *testing.T, s *mergeSearcher) {
 func octoberSet(t *testing.T, cursor int) Model {
 	t.Helper()
 	m := selectedSet(t, 2, true, cursor)
+	m.lens.Registry = lookup.Hellenistic.Registry
 	// Details keeps the 66 cells these rows were written against: the left
 	// column is 52 + 12 per extra chart shown (the specification C5).
 	m.width = leftColumnWidth(len(m.slots.SelectedInOrder())) + 80
@@ -788,7 +801,7 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	stubTimelineSearch(t, s)
 
 	lens := lookup.Hellenistic
-	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7}, TrueNodeMode: true}
+	lens.Objects = recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 3, 4, 5, 6, 7}, Nodes: recipe.NodesTrue}
 	lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 2, 3}}
 
 	// ① ② ③ and now, with the cursor on ②: the pair is anchored x anchored
@@ -848,7 +861,15 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	}
 	for _, cmd := range cmds {
 		argv := strings.Fields(cmd)
-		if !slices.Contains(argv, "-Yn") {
+		if slices.Contains(argv, "-dY") {
+			// The void search carries no chooser: its objects and aspects are
+			// Astrolog's own rule for a void of course, whatever the lens holds.
+			if !strings.Contains(cmd, " -RA0 1 2 3 4 5 ") {
+				t.Errorf("void search %q lacks the five aspects of the void rule", cmd)
+			}
+			continue
+		}
+		if !slices.Contains(argv, "=Yn") && !slices.Contains(argv, "_Yn") {
 			t.Errorf("timeline search %q lacks the node mode", cmd)
 		}
 		// The object band as well as the aspect band, as every other producer's.
@@ -859,8 +880,8 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 
 	// Every one of them is on the console's command list, and nothing else is:
 	// the Log holds exactly the spawns this scenario made, by kind and count.
-	// The wheel opens once (a bi-wheel, which the Log does not list), the cross
-	// pair runs once (-r0 and its raw report), the text frame's chart computes are five -qj (② frames and is the cursor, so
+	// The wheel opens once (a bi-wheel through the rings route, whose -r0
+	// command the Log lists), the cross pair runs once (-r0 and its raw report), the text frame's chart computes are five -qj (② frames and is the cursor, so
 	// its positions and aspects are cast once, ① is listed, `1 in 2`, so its are
 	// cast for Bodies, and the Details report of the Bodies row asks once), and the timeline is the -t and -tr searches of
 	// three natals and the sky's void-mark -dm and its -d for each day, over the
@@ -869,6 +890,8 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 	kindOf := func(line string) string {
 		line += " "
 		switch {
+		case strings.Contains(line, " -Xo "):
+			return "bi-wheel"
 		case strings.Contains(line, " -RO "):
 			return "synastry raw report"
 		case strings.Contains(line, " -r0 "):
@@ -877,8 +900,8 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 			return "timeline -tr"
 		case strings.Contains(line, " -t "):
 			return "timeline -t"
-		case strings.Contains(line, " -dm "):
-			return "timeline -dm"
+		case strings.Contains(line, " -dY "):
+			return "timeline -dY"
 		case strings.Contains(line, " -d "):
 			return "timeline -d"
 		case strings.Contains(line, " -qj "):
@@ -893,13 +916,15 @@ func TestEveryNewCallCarriesTheBand(t *testing.T) {
 		logged[kind]++
 		if strings.HasPrefix(kind, "timeline") {
 			loggedTimeline = append(loggedTimeline, l)
+		} else if kind == "bi-wheel" {
+			// Its command names the chart files it staged, which are gone by now.
 		} else if _, argv, ok := strings.Cut(l, " "); ok {
 			loggedSpawned = append(loggedSpawned, argv) // the line minus the binary path
 		}
 	}
 	wantKinds := map[string]int{
-		"synastry raw report": 1, "synastry cross": 1,
-		"timeline -t": 6, "timeline -tr": 6, "timeline -dm": 2, "timeline -d": 32, "chart compute": 5,
+		"synastry raw report": 1, "synastry cross": 1, "bi-wheel": 1,
+		"timeline -t": 6, "timeline -tr": 6, "timeline -dY": 2, "timeline -d": 32, "chart compute": 5,
 	}
 	if !reflect.DeepEqual(logged, wantKinds) {
 		t.Errorf("the Log's command list holds %v, want exactly %v:\n%s", logged, wantKinds, strings.Join(argvLines(m), "\n"))
@@ -992,5 +1017,35 @@ func TestLoggedMustBeSpawnedButSpawnedNeedNotBeLogged(t *testing.T) {
 	}
 	if miss := notSpawned([]string{"a", "x"}, []string{"a"}); !slices.Equal(miss, []string{"x"}) {
 		t.Errorf("a logged line nobody spawned = %q, want [x]", miss)
+	}
+}
+
+// A pair of charts opened from .as files has places with no IANA zone. Its
+// wheel opens all the same: no refusal in the Log, one process with -r0 and the
+// two chart files staged, the base (Kepler) first and the cursor's chart
+// (Goethe) second.
+func TestWheelPairOfFileChartsWithNoZoneDraws(t *testing.T) {
+	spawns := chartFileCapturingAstrolog(t)
+	stubShowWheel(t)
+	m := selectedSet(t, 2, false, 1)
+	all := m.slots.All()
+	for i, rec := range []string{
+		"@AI800\n-qb Dec 27 1571 14:37 ST LMT 8:52E 48:45N\n-zi \"Kepler\" \"Weil der Stadt\"\n",
+		"@AI800\n-qb Aug 28 1749 11:30 ST LMT 8:41E 50:7N\n-zi \"Goethe\" \"Frankfurt\"\n",
+	} {
+		all[i].Chart.Record = rec
+		all[i].Location.TZ = ""
+		all[i].Chart.Place.TZ = ""
+	}
+	m.base = all[0]
+	m = openWheel(t, m)
+	for _, l := range logTexts(m) {
+		if strings.Contains(l, "wheel not drawn") {
+			t.Fatalf("the pair wheel was refused: %q", l)
+		}
+	}
+	pair := ringSpawn(t, spawns(), "-r0")
+	if len(pair.dats) != 2 || !strings.Contains(pair.dats[0], "1571") || !strings.Contains(pair.dats[1], "1749") {
+		t.Errorf("pair spawn %v staged %q, want Kepler then Goethe", pair.argv, pair.dats)
 	}
 }

@@ -44,9 +44,9 @@ func selectionFor(base VisibilityProfile) []int {
 // nothing of the policy it came from, Only included, so no narrowing can reach
 // the chooser's ephemeris probe.
 func TestObjectPolicy_OnlyObjectDropsOnly(t *testing.T) {
-	p := ObjectPolicy{Baseline: AstrologDefault, TrueNodeMode: true, Only: NewObjectSet(1)}
+	p := ObjectPolicy{Baseline: AstrologDefault, Nodes: NodesTrue, Only: NewObjectSet(1)}
 	got := p.OnlyObject(11)
-	if len(got.Only) != 0 || got.Baseline != Explicit || !reflect.DeepEqual(got.Selected(), []int{11}) || !got.TrueNodeMode {
+	if len(got.Only) != 0 || got.Baseline != Explicit || !reflect.DeepEqual(got.Selected(), []int{11}) || got.Nodes != NodesTrue {
 		t.Errorf("OnlyObject = %+v, want Explicit [11] with the node mode and no Only", got)
 	}
 }

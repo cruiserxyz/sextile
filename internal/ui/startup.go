@@ -35,7 +35,7 @@ const (
 	startupBodyOpen      startupState = "body-open"
 	startupHouseOpen     startupState = "house-open"
 	startupZodiacOpen    startupState = "zodiac-open"
-	startupDisplayOpen   startupState = "display-open"
+	startupNodesOpen     startupState = "nodes-open"
 	startupSessionsOpen  startupState = "sessions-open"
 	// startupExperimentsOpen is the hidden Experiments popup (experiments_popup_model.go).
 	startupExperimentsOpen startupState = "experiments-open"
@@ -129,5 +129,5 @@ func applyAstrologProbe(m Model, msg AstrologProbedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.cantStart.binary = m.cantStart.binary || errors.Is(msg.Err, lookup.ErrAstrologNotInstalled)
-	return m.logError("Couldn't find the Astrolog program. Install it and restart."), nil
+	return m.logError("astrolog", "the Astrolog program was not found"), nil
 }

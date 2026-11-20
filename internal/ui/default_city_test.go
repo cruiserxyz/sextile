@@ -162,7 +162,8 @@ func lastLine(m Model) logLine {
 // deliver feeds every message a command produced back into the model.
 func deliver(m Model, cmd tea.Cmd) Model {
 	for _, msg := range runAll(cmd) {
-		if _, ok := msg.(DefaultCitySavedMsg); ok {
+		switch msg.(type) {
+		case DefaultCitySavedMsg:
 			tm, _ := m.Update(msg)
 			m = tm.(Model)
 		}
@@ -200,7 +201,7 @@ func TestCommaCDSavesTheCity(t *testing.T) {
 				stubTextCompute(t)
 				sessionSandbox(t)
 				m = onTimeline(t, Config{Accessible: true})
-				m.place, m.placeGuessed = amsterdamNL, true
+				m.place, m.placeFromZone = amsterdamNL, true
 			}
 			clock := "clock:\n  mode: held\n"
 			path := store.PreferencesPath()
@@ -257,19 +258,25 @@ func TestCommaCDFailureIsLoudAndLeavesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := profileSnapshot(t)
+	logged := len(m.logLines)
 
 	m, cmd := press(t, m, ",", "c", "d")
 	m = deliver(m, cmd)
 
-	last := lastLine(m)
-	if last.lane != laneError {
-		t.Errorf("failure lane = %d, want the error lane", last.lane)
+	var said []string
+	for _, l := range m.logLines[logged:] {
+		if l.lane == laneError {
+			said = append(said, l.text)
+		} else if len(said) > 0 {
+			t.Errorf("a %d-lane line %q follows the failure", l.lane, l.text)
+		}
 	}
-	if !strings.HasPrefix(last.text, "default city not saved: ") || strings.Contains(last.text, "\n") || strings.Contains(last.text, "keeps") {
-		t.Errorf("failure line = %q", last.text)
+	text := strings.Join(said, " ")
+	if len(said) == 0 || !strings.HasPrefix(said[0], "settings: the city was not kept as the default") || strings.Contains(text, "\n") || strings.Contains(text, "keeps") {
+		t.Errorf("failure lines = %q", said)
 	}
-	if strings.HasSuffix(last.text, ".") || strings.Contains(last.text, "Couldn't") {
-		t.Errorf("the operator's wording was altered: %q", last.text)
+	if strings.HasSuffix(text, ".") || strings.Contains(text, "Couldn't") {
+		t.Errorf("the operator's wording was altered: %q", text)
 	}
 	sameProfile(t, before, profileSnapshot(t), "a failed save")
 	if info, err := os.Stat(path); err != nil || !info.IsDir() {
@@ -289,7 +296,7 @@ func TestCommaCDWithNoCity(t *testing.T) {
 	if cmd != nil {
 		t.Error("`,c d` with no city scheduled a command")
 	}
-	if want := "default city not saved: no city chosen yet"; lastLine(m).text != want || lastLine(m).lane != laneError {
+	if want := "settings: the city was not kept as the default, no city is chosen yet"; lastLine(m).text != want || lastLine(m).lane != laneError {
 		t.Errorf("last Log line = %q (lane %d), want the error line %q", lastLine(m).text, lastLine(m).lane, want)
 	}
 	sameProfile(t, before, profileSnapshot(t), "`,c d` with no city")
@@ -304,15 +311,16 @@ func TestDefaultCitySavedNamesTheSavedCity(t *testing.T) {
 		t.Errorf("line = %q, want %q", lastLine(m).text, want)
 	}
 	m, _ = applyDefaultCitySaved(m, DefaultCitySavedMsg{Place: amsterdamNL, Err: errors.New("disk full\nsecond line")})
-	if want := "default city not saved: disk full"; lastLine(m).text != want {
+	if want := "settings: the city was not kept as the default"; lastLine(m).text != want {
 		t.Errorf("line = %q, want %q (first line of the error)", lastLine(m).text, want)
 	}
 }
 
-// Acceptance 11: store.SetLocation has one caller outside the store, in any
-// production package, and it is the command `,c d` runs. A second caller is a
-// second way to change the stored city without the operator choosing it.
-func TestSetLocationHasOneCaller(t *testing.T) {
+// Acceptance 11: store.SetLocation has two callers outside the store, in any
+// production package: the command `,c d` runs and the city chooser's first row.
+// Each is the operator keeping the city on purpose; a third would be a way to
+// change the stored city without the operator choosing it.
+func TestSetLocationHasTwoCallers(t *testing.T) {
 	fset, files := productionSourcesOutsideStore(t)
 	var in []string
 	for _, f := range files {

@@ -16,14 +16,13 @@ const (
 	ownerBodies      = keys.OwnerBodies
 	ownerHouses      = keys.OwnerHouses
 	ownerZodiac      = keys.OwnerZodiac
+	ownerNodes       = keys.OwnerNodes
 	ownerAspects     = keys.OwnerAspects
-	ownerHelp        = keys.OwnerHelp
 	ownerConsole     = keys.OwnerConsole
 	ownerDetails     = keys.OwnerDetails
-	ownerDisplay     = keys.OwnerDisplay
 	ownerSessions    = keys.OwnerSessions
 	ownerSessionName = keys.OwnerSessionName
-	ownerActions     = keys.OwnerActions
+	ownerKeybindings = keys.OwnerKeybindings
 	ownerLog         = keys.OwnerLog
 	ownerExperiments = keys.OwnerExperiments
 )
@@ -56,45 +55,40 @@ func (m Model) keysFacts(o owner) keys.Context {
 		Style:   m.cfg,
 		Leader: keys.LeaderFacts{
 			Pending: m.leader.pending, Seq: m.leader.seq, Key: m.leaderKey,
-			Bindings: m.leaderBindings, Tree: m.leaderMap, Timeout: m.leaderTimeout,
+			Bindings: m.leaderBindings, Tree: m.leaderMap,
 		},
+	}
+	if m.limitedLeader(o) {
+		c.Leader.Offered, c.Leader.Limited = m.commandsOver(o), true
 	}
 	switch o {
 	case ownerMain:
 		c.Main = keys.MainFacts{
 			Selects: m.mainSelects(), HasWorkspace: m.hasWorkspace(), Moves: m.mainMoves(), Pages: m.mainPages(),
 			CanMoveUp: m.canMoveSlotUp(), CanMoveDown: m.canMoveSlotDown(), CanRemove: m.canRemoveSlot(),
-			DetailsScrolls: m.detailsScrolls(), HoldsAChart: m.holdsAChart(),
+			DetailsScrolls: m.detailsScrolls(), HoldsAChart: m.holdsAChart(), ChartFocused: m.focused == PanelChart,
 		}
 		c.Attach = keys.AttachFacts{CanAttach: m.canAttachDetails(), Title: m.attachTitle()}
-	case ownerHelp:
-		// Help lists the main table and every popup's: it needs the tables, the
-		// one main condition it asks (HelpWhen) and Enter's title.
-		c.Main.HoldsAChart = m.holdsAChart()
-		c.Attach = keys.AttachFacts{Title: m.attachTitle()}
-		c.Help = keys.HelpFacts{
-			Main:       mainBindings(m.keys),
-			LeaderOnly: leaderOnlyBindings(),
-			Popups:     map[keys.Owner][]keys.BindingEntry{},
-			State:      m.help,
-		}
-		for _, po := range keys.HelpPopupOwners() {
-			c.Help.Popups[po] = m.ownerBindings(po)
-		}
 	case ownerDetails:
 		c.Details = keys.DetailsFacts{
 			Moves: m.detailsMoves(), Scrolls: m.detailsScrolls(), OnTimeline: m.detailsOnTimeline(),
 			OnTimelineRows: m.detailsOnTimelineRows(), Filterable: m.detailsFilterable(), HasSeveralTabs: m.detailsHasSeveralTabs(),
+			Back: m.focusedPanelName(),
 		}
-	case ownerCity, ownerBodies, ownerAspects, ownerHouses, ownerZodiac, ownerActions:
+	case ownerCity, ownerBodies, ownerAspects, ownerHouses, ownerZodiac, ownerNodes:
 		c.Popup.Rows = m.popupRows()
+	case ownerKeybindings:
+		c.Popup = keys.PopupFacts{Rows: m.popupRows(), Filtering: m.keybindings.FilterText != ""}
 	case ownerOpenChart:
 		c.Popup.Rows = m.popupRows()
 		c.Picker.Renames = m.pickerRenames()
+		c.Picker.Ticked = len(m.picker.ticked)
+	case ownerChartTitle:
+		c.Picker.InBatch = m.title.batch
 	case ownerSessions:
 		c.Popup.Rows = m.popupRows()
 		c.Sessions = keys.SessionsFacts{
-			OnSaveRow: m.sessionsOnSaveRow(), CanOpen: m.sessionsCanOpen(),
+			OnSaveRow: m.sessionsOnSaveRow(), OnNewRow: m.sessionsOnNewRow(), CanOpen: m.sessionsCanOpen(),
 			OnFreeRow: m.sessionsOnFreeRow(), CanTrash: m.sessionsCanTrash(),
 		}
 	case ownerSessionName:
@@ -105,8 +99,9 @@ func (m Model) keysFacts(o owner) keys.Context {
 		c.Console.Lines = len(m.console.snapshot)
 	case ownerLog:
 		c.Log.Lines = len(m.logPanelLines())
-	case ownerDisplay:
-		c.Display.CanChoose = m.displayCanChoose()
+	}
+	if c.Leader.Limited {
+		c.Leader.Twins = m.twinsOver(o, c)
 	}
 	return c
 }
@@ -118,8 +113,16 @@ func (m Model) variant(o owner) keys.Variant {
 		if m.title.Confirming {
 			return keys.VariantTitleConfirm
 		}
+	case ownerSaveChart:
+		if m.save.Confirming {
+			return keys.VariantSaveAsk
+		}
+	case ownerSessions:
+		if m.sessions.Asking {
+			return keys.VariantNewSessionAsk
+		}
 	case ownerDetails:
-		if m.timeline.searching && m.timelineSearchLine() {
+		if m.list(m.shownList()).searching && m.timelineSearchLine() {
 			return keys.VariantTimelineSearch
 		}
 		if m.detailsReportSearchOpen() {

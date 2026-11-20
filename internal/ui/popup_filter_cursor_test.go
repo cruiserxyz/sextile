@@ -30,7 +30,7 @@ func TestAspectsPopupFilterLandsOnTheFirstMatch(t *testing.T) {
 		t.Fatalf("fixture: the cursor opens at %d, want it in the group rows", st.Cursor)
 	}
 	st = typeIntoPopup(st, "inco", press)
-	if len(st.Matches) == 0 || st.Matches[0].Name != "Inconjunct" {
+	if len(st.Matches) == 0 || st.Matches[0].Kind.Name != "Inconjunct" {
 		t.Fatalf("fixture: matches %v, want Inconjunct first", st.Matches)
 	}
 	if st.Cursor != popup.FamilyRows() {

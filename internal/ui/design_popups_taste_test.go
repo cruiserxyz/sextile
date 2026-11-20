@@ -82,7 +82,7 @@ func TestDesignPopupsV2(t *testing.T) {
 		m.focused = PanelBodies
 		writeDesignFrame(t, "design-position-bodies-focused-"+size.name+"-color", m.View())
 		if size.w == 144 {
-			m, _ = press(t, base, ",", "l", "l")
+			m, _ = press(t, base, ",", "L", "l")
 			writeDesignFrame(t, "design-position-console-"+size.name+"-color", m.View())
 		}
 	}

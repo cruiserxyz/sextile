@@ -63,16 +63,17 @@ type detailsViewState struct {
 	// preEnterSet tells "report" (the empty choice) from "nothing remembered".
 	preEnter    TabID
 	preEnterSet bool
-	// attached is whether row navigation is inside Details (D12). Enter
-	// attaches and Esc detaches; it is a flag and never a focus change,
-	// because Details is not in the focus ring (C15, C40). While it is set,
-	// Details owns the keyboard (D18, updateDetailsKey).
+	// attached is whether Details is open and row navigation is inside it
+	// (D12). Enter attaches and Esc detaches; it is a flag and never a focus
+	// change, because Details is not in the focus ring (C15, C40). Open, it
+	// stands beside the panels or right below the panel in focus (layoutFor).
+	// While it is set, Details owns the keyboard (D18, updateDetailsKey).
 	//
 	// Details' SUBJECT — the (panel, slot) it reports on — is not stored:
 	// it is (m.focused, m.cursorIdx), see detailsSubject. m.focused is never
-	// Details, and the keys that would move either are Details' own while
-	// attached, so the subject is frozen for the whole attachment by
-	// construction rather than by a copy that could drift.
+	// Details. A focus key moves the focus and Details with it, so the subject
+	// is always the panel Details stands beside or below; the slot cursor is
+	// Details' own while attached.
 	attached bool
 	// cursor is the timeline row under the row cursor; rowOffset is the
 	// first timeline row the panel shows. Both are re-clamped against the
@@ -87,6 +88,11 @@ type detailsViewState struct {
 	// instant, and any step or cursor move clears it.
 	pressedAt  timelineMark
 	pressedSet bool
+	// followNow says a navigation key moved Now (a step key, p/P, n) since the
+	// operator last placed the row cursor: an attached list tab then puts the
+	// cursor on the nearest row, scrolling only when that row is out of sight.
+	// Enter on a row, and any cursor, page or scroll key, end it.
+	followNow bool
 	// pressedChart is the slot whose numeral the pressed row carried, resolved
 	// at the press: numerals shift when the set changes, a slot does not. Nil
 	// for a sky row.
@@ -99,8 +105,8 @@ type detailsViewState struct {
 }
 
 // detailsSubject is what Details reports on: the focused ring panel and the
-// focused slot. It follows the ring (tab, ←/→, 1/2/3) and the slot cursor,
-// and attaching or detaching changes neither (C31). The console's priorFocus
+// focused slot. It follows the ring (tab, ←/→, 1-4) and the slot cursor,
+// attached or not, and attaching or detaching changes neither (C31). The console's priorFocus
 // (console.go) is the same shape for the log console.
 type detailsSubject struct {
 	panel PanelID
@@ -112,7 +118,7 @@ func (m Model) detailsSubject() detailsSubject {
 }
 
 // detailsInnerHeight is how many report lines the Details panel body can show,
-// or 0 when the panel is not in the layout.
+// or 0 when Details is not on screen.
 func (m Model) detailsInnerHeight() int {
 	r, ok := m.geometry()[PanelDetails]
 	if !ok {
@@ -208,13 +214,15 @@ type detailsRequest struct {
 	synastry bool
 	// otherLabel is that other chart's name and place for its report header.
 	otherLabel store.ReportLabel
+	// other is that other chart as an anchor, record included.
+	other store.AnchorChart
 	// cursorNumeral is the cursor chart's numeral as the pair tab spells it
 	// (② or 2); the Log line that says the report was filtered names it.
 	cursorNumeral string
 }
 
 // detailsVisible is the work gate, not merely a render check: no Details
-// request may start unless layoutGeometry actually includes the panel.
+// request may start unless the layout actually places the panel.
 func (m Model) detailsVisible() bool {
 	_, ok := m.geometry()[PanelDetails]
 	return ok
@@ -237,6 +245,7 @@ func (m Model) detailsRequestFor() (detailsRequest, bool) {
 	// The report names the chart it is about: the focused slot's label, empty
 	// for the floating slot (the specification C1, C6).
 	req.report.Label = slot.Chart.Label
+	req.report.Record = slot.Chart.Record
 	switch m.focused {
 	case PanelChart:
 		req.title = detailsPrefix + tabTitleChart
@@ -263,6 +272,7 @@ func (m Model) detailsRequestFor() (detailsRequest, bool) {
 			req.when, req.place = pair.right.Time, pair.right.Location
 			req.synastry = !pair.right.Floating
 			req.otherLabel = pair.right.Chart.Label
+			req.other = anchorOf(pair.right)
 			req.cursorNumeral = panel.NumeralForColour(sc.numeral(pair.right), m.cfg)
 		}
 	default:
@@ -283,6 +293,9 @@ func (m Model) detailsBodyTitle() (title string, o aspect.Object, ok bool) {
 		return "", aspect.Object{}, false
 	}
 	title = detailsPrefix + panel.BodyName(o)
+	if word := nodeFormTitle(o, m.detailsLens(detailsRequest{cross: m.deriveScene().pair != nil}).Objects.Nodes); word != "" {
+		title = detailsPrefix + word
+	}
 	if sc := m.deriveScene(); sc.pair != nil {
 		title += " " + m.pairTabTitle(sc.numeral(sc.pair.left), sc.numeral(sc.pair.right))
 	}
@@ -600,12 +613,12 @@ type detailsKey struct {
 	otherLabel      store.ReportLabel
 	title           string
 	// The lens the spawn uses; only is Objects.Only, sorted and joined.
-	houses   recipe.HouseSystem
-	zodiac   recipe.Zodiac
-	objects  string
-	aspects  string
-	trueNode bool
-	only     string
+	houses  recipe.HouseSystem
+	zodiac  recipe.Zodiac
+	objects string
+	aspects string
+	nodes   recipe.NodeForm
+	only    string
 }
 
 // detailsKeyFor is the key of the report the Model would ask for now; ok is
@@ -619,7 +632,7 @@ func (m Model) detailsKeyFor() (detailsKey, bool) {
 	}
 	slot := m.focusedSlot()
 	lens := m.detailsLens(req)
-	objects, aspects, trueNode := chooserKey(lens)
+	objects, aspects, nodes := chooserKey(lens)
 	var only []string
 	for _, n := range lens.Objects.Only.Members() {
 		only = append(only, strconv.Itoa(n))
@@ -638,7 +651,7 @@ func (m Model) detailsKeyFor() (detailsKey, bool) {
 		cross: req.cross, synastry: req.synastry, natalWhen: req.natalChart.When.UnixNano(), natalPlace: req.natalChart.Place, natalLabel: req.natalChart.Label,
 		otherWhen: req.when.UnixNano(), otherPlace: req.place, otherLabel: req.otherLabel,
 		title:  req.title,
-		houses: lens.Houses, zodiac: lens.Zodiac, objects: objects, aspects: aspects, trueNode: trueNode,
+		houses: lens.Houses, zodiac: lens.Zodiac, objects: objects, aspects: aspects, nodes: nodes,
 		only: strings.Join(only, ","),
 	}, true
 }
@@ -665,7 +678,7 @@ func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd
 		// is carried.
 		raw, command, err := "", "", error(nil)
 		if req.cross && req.synastry {
-			raw, command, err = reports.synastry(ctx, lens, req.natalChart, req.when, req.place, req.otherLabel, req.report.Object)
+			raw, command, err = reports.synastry(ctx, lens, req.natalChart, req.other, req.report.Object)
 		} else if req.cross {
 			raw, command, err = reports.cross(ctx, lens, req.natalChart, req.when, req.place, req.report.Object)
 		} else {
@@ -682,8 +695,10 @@ func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd
 			}
 		}
 		var commands []string
+		title := req.title
 		if command != "" {
 			commands = []string{command}
+			title = nodeTitleFromCall(title, req.report.Object, lookup.CommandNodeForm(command))
 		}
 		influence := !req.cross && req.report.Kind == lookup.RawReportChart
 		var starsLeft []int
@@ -694,7 +709,7 @@ func buildDetailsCmd(m Model, ctx context.Context, runID, wantID uint64) tea.Cmd
 			surface: surfaceDetails,
 			runID:   runID,
 			wantID:  wantID,
-			payload: detailsPayload{title: req.title, body: raw, commands: commands, note: note, key: key, influence: influence, starsLeft: starsLeft},
+			payload: detailsPayload{title: title, body: raw, commands: commands, note: note, key: key, influence: influence, starsLeft: starsLeft},
 			err:     err,
 		}
 	}
@@ -798,7 +813,7 @@ func (m Model) commitDetails(msg refreshResultMsg) (Model, tea.Cmd) {
 		m.details.key = contentKey{}
 		m.details.failed.set, m.details.failed.key = true, p.key
 		m.details.query, m.details.searching, m.details.scrollOffset = "", false, 0
-		m = m.noteEphemeris(msg.err).logError("Couldn't read the full report. %s", m.failureReason(msg.err, m.consolePointer(len(p.commands) > 0))).logWarnings(msg.err)
+		m = m.noteEphemeris(msg.err).logError("details", "report not read, %s", m.failureReason(msg.err, m.consolePointer(len(p.commands) > 0))).logWarnings(msg.err)
 		m.errorKeptView = true
 		return m, nil
 	}
@@ -835,4 +850,34 @@ func (m Model) landReport(p detailsPayload) Model {
 	m.details.waitForText = false
 	m.details.timerArmed = false
 	return m
+}
+
+// nodeTitleFromCall is a Details title with the form words of a Node or Lilith
+// report taken from the call that cast it (cast), whatever form the request
+// asked for: the title names what Astrolog drew.
+func nodeTitleFromCall(title string, o aspect.Object, cast recipe.NodeForm) string {
+	to := nodeFormTitle(o, cast)
+	if to == "" {
+		return title
+	}
+	for _, f := range []recipe.NodeForm{recipe.NodesMean, recipe.NodesTrue, recipe.NodesMeanNatural, recipe.NodesTrueNatural} {
+		if from := nodeFormTitle(o, f); from != to && strings.Contains(title, from) {
+			return strings.Replace(title, from, to, 1)
+		}
+	}
+	return title
+}
+
+// nodeFormTitle is the Details title of the North Node, the South Node and
+// Lilith, which names the form of the report's call in words: `North Node
+// (true)`, `Lilith (natural)`. "" for every other object.
+func nodeFormTitle(o aspect.Object, f recipe.NodeForm) string {
+	node, lilith := f.Words()
+	switch o.Name {
+	case "North Node", "South Node":
+		return o.Name + " (" + node + ")"
+	case "Lilith":
+		return o.Name + " (" + lilith + ")"
+	}
+	return ""
 }

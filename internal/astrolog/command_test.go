@@ -155,6 +155,7 @@ func transitSpec(t *testing.T) recipe.ChartSpec {
 		t.Fatalf("comparison spec: %v", err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	return spec
 }
 
@@ -445,16 +446,15 @@ func TestComputeRawReportReturnsCommand(t *testing.T) {
 }
 
 // C8: the argv every in-scope spawn hands Astrolog is byte-for-byte what it
-// was before recording existed — pinned as literals derived from the
-// compiler golden (internal/invariants/testdata/astrolog-compiler-argv.golden)
-// plus the runner's own `-k` / `-aa` suffixes.
+// was before recording existed, pinned as literals plus the runner's own
+// `-k` / `-aa` suffixes.
 func TestInScopeArgvUnchanged(t *testing.T) {
-	prefix := []string{"-qj", "2446232.0000000005", "-zl", "11:34E", "48:08N", "-zi", "", "", "-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "-Yn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28"}
+	prefix := []string{"-qj", "2446232.0000000005", "-zl", "11:34E", "48:08N", "-zi", "", "", "-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "=Yn", "_Ynn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28"}
 	positions := slices.Concat(prefix, []string{"=v0", "-Yw", "0", "-k"})
 	aspects := slices.Concat(prefix, []string{"=v0", "-Yw", "0", "-aa", "-k"})
 	// C8: a raw report also asks for the degree character (`-k0`, no colour).
 	rawChart := slices.Concat(prefix, []string{"=j0", "-k0"})
-	probe := []string{"-qj", "2446232.0000000005", "-zl", "11:34E", "48:08N", "-zi", "", "", "-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "=v0", "-Yw", "0", "-k"}
+	probe := []string{"-qj", "2446232.0000000005", "-zl", "11:34E", "48:08N", "-zi", "", "", "-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "_Yn", "_Ynn", "=v0", "-Yw", "0", "-k"}
 
 	cases := []struct {
 		name string
@@ -492,7 +492,7 @@ func TestInScopeArgvUnchanged(t *testing.T) {
 			t.Fatalf("probe argv drifted:\n got %q\nwant %q", got, probe)
 		}
 		rel := got[1]
-		if len(rel) != 21 || rel[0] != "-rt" || !strings.HasSuffix(rel[1], "/chart0.as") || !strings.HasSuffix(rel[2], "/chart1.as") || !slices.Equal(rel[3:], []string{"-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "-aa", "-k"}) {
+		if len(rel) != 23 || rel[0] != "-rt" || !strings.HasSuffix(rel[1], "/chart0.as") || !strings.HasSuffix(rel[2], "/chart1.as") || !slices.Equal(rel[3:], []string{"-c", "14", "_s", "_Ys", "_sr0", ":sz", "-qag", "10", "15", "1582", "12:00am", "0", "0:00E", "0:00N", "=Yt", "_Yd", "_Yn", "_Ynn", "-aa", "-k"}) {
 			t.Errorf("relationship argv drifted: %q", rel)
 		}
 	})

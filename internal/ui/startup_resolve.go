@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -24,20 +25,23 @@ type AtlasPickedMsg struct {
 // ChartsLoadedMsg carries the saved-chart library read triggered when the
 // chart picker opens (Ctrl+O). Charts is nil when Err is set. Drops names every
 // file in the library directory that did not become a chart, so the picker can
-// say what it could not read instead of showing a quietly short list. AtlasErr
-// is the one failure that drops every chart at once, kept apart because it also
-// goes on the error lane. Gen is the picker generation the read was dispatched
+// say what it could not read instead of showing a quietly short list. Gen is the picker generation the read was dispatched
 // under; applyChartsLoaded drops any message whose Gen != m.pickerGen so a late
 // response from a superseded open cannot clobber a newer one.
 type ChartsLoadedMsg struct {
-	Charts   []store.NamedChart
-	Drops    []store.ChartDrop
-	AtlasErr error
-	Err      error
-	Gen      int
+	Charts []store.NamedChart
+	Drops  []store.ChartDrop
+	// Refused is the chart guard's reason for each listed file it refuses,
+	// by file name (lookup.Library.Refused).
+	Refused map[string]error
+	Err     error
+	Gen     int
 	// Seen is the listing's fingerprint of each chart file (lookup.Library),
 	// handed to a retitle so a file changed since listing is refused.
 	Seen map[string]string
+	// Dir is the charts folder the listing read: a rename of one of its rows
+	// asks about, and writes into, this folder.
+	Dir string
 }
 
 // ChartPickedMsg is emitted by the chart picker on Enter against a real match.
@@ -64,18 +68,20 @@ type ChartResolvedMsg struct {
 	// (the specification C2).
 	Houses    recipe.HouseSystem
 	HasHouses bool
+	// Nodes is the form of the Nodes and Lilith the file states, from the same
+	// read; HasNodes is false when it states none.
+	Nodes    recipe.NodeForm
+	HasNodes bool
 	// Label is the name and place the chart's reports print, and Place the
-	// casting place the chart list would show, both from the same read as When
-	// (the specification C0). HasPlace is false when the read
-	// could not place the chart; the listing row's place then stands.
-	Label    store.ReportLabel
-	Place    location.PlaceInfo
-	HasPlace bool
-	// Unplaced is set by a successful read that could not place the chart (its
-	// coordinates are beyond the atlas): the listing row's name and place are
-	// then NOT the file's, and the pick is refused rather than mixing them with
-	// the read's moment.
-	Unplaced bool
+	// casting place, both from the same read as When (the specification C0).
+	Label store.ReportLabel
+	Place location.PlaceInfo
+	// Record is the file's text from the same read: what Astrolog casts.
+	Record string
+	// Notes are the file's lines Astrolog does not get, for the Log.
+	Notes []lookup.FileNote
+	// Clock is the chart's moment as Astrolog read it, for its row.
+	Clock store.ChartClock
 }
 
 // resolveChartCmd reads the picked chart's authoritative moment off the Update
@@ -92,7 +98,7 @@ func resolveChartCmd(c store.NamedChart, gen int) tea.Cmd {
 func resolveChartCmdIn(dir string, c store.NamedChart, gen int) tea.Cmd {
 	return func() tea.Msg {
 		p, err := lookup.ResolvePickedChartIn(context.Background(), dir, c)
-		return ChartResolvedMsg{Chart: c, When: p.When, Err: err, Gen: gen, Houses: p.Houses, HasHouses: p.HasHouses, Label: p.Label, Place: p.Place, HasPlace: p.HasPlace, Unplaced: err == nil && !p.HasPlace}
+		return ChartResolvedMsg{Chart: c, When: p.When, Err: err, Gen: gen, Houses: p.Houses, HasHouses: p.HasHouses, Nodes: p.Nodes, HasNodes: p.NodesStated, Label: p.Label, Place: p.Place, Record: p.Record, Notes: p.Notes, Clock: p.Clock}
 	}
 }
 
@@ -118,14 +124,16 @@ func loadAtlasCmd() tea.Cmd {
 // band shows up on the next open.
 func loadChartsCmd(gen int) tea.Cmd {
 	return func() tea.Msg {
-		lib, err := lookup.LoadChartLibrary()
+		dir := store.ChartsDir()
+		lib, err := lookup.LoadChartLibraryIn(dir)
 		return ChartsLoadedMsg{
-			Charts:   lib.Charts,
-			Drops:    lib.Drops,
-			AtlasErr: lib.AtlasErr,
-			Err:      err,
-			Gen:      gen,
-			Seen:     lib.Seen,
+			Dir:     dir,
+			Charts:  lib.Charts,
+			Drops:   lib.Drops,
+			Err:     err,
+			Gen:     gen,
+			Seen:    lib.Seen,
+			Refused: lib.Refused,
 		}
 	}
 }
@@ -137,7 +145,7 @@ func loadChartsCmd(gen int) tea.Cmd {
 // HouseSaved says the write landed. The house display is written after the
 // city, and only once the city was, and the frame after the house display, so
 // Err is the city's, HouseErr the house display's and FrameErr the frame's.
-// Frame is the "<house name>, <zodiac name>" that was written, kept only when
+// Frame is the "<house name>, <zodiac name>, <form of the Nodes and Lilith>" that was written, kept only when
 // FrameSaved says the write landed.
 type DefaultCitySavedMsg struct {
 	Place      location.PlaceInfo
@@ -154,11 +162,11 @@ type DefaultCitySavedMsg struct {
 }
 
 // saveDefaultCityCmd writes place, then the house display form, then the frame
-// (houses and zodiac, in the words the store writes), to preferences.yaml
+// (houses, zodiac and the form of the Nodes and Lilith, in the words the store writes), to preferences.yaml
 // through the store. It is the only door to the stored city, the stored house
 // display and the stored frame: a start, a pick in the atlas, a choice in the
 // popup and a quit write nothing there.
-func saveDefaultCityCmd(place location.PlaceInfo, form panel.HouseForm, houses recipe.HouseSystem, zodiac recipe.Zodiac, open []store.FrameRecord) tea.Cmd {
+func saveDefaultCityCmd(place location.PlaceInfo, form panel.HouseForm, houses recipe.HouseSystem, zodiac recipe.Zodiac, nodes recipe.NodeForm, open []store.FrameRecord) tea.Cmd {
 	return func() tea.Msg {
 		msg := DefaultCitySavedMsg{Place: place, Err: store.SetLocation(place), Open: open}
 		if msg.Err != nil {
@@ -170,12 +178,15 @@ func saveDefaultCityCmd(place location.PlaceInfo, form panel.HouseForm, houses r
 		if msg.HouseErr != nil {
 			return msg
 		}
-		msg.Frame = lookup.HouseName(houses) + ", " + zodiac.Name()
-		msg.FrameErr = store.SetFrame(houses.StoredName(), zodiac.RecordName())
+		msg.Frame = lookup.HouseName(houses) + ", " + zodiac.Name() + ", " + nodeFormWords(nodes)
+		msg.FrameErr = store.SetFrameNodes(houses.StoredName(), zodiac.RecordName(), nodes)
 		msg.FrameSaved = msg.FrameErr == nil
 		return msg
 	}
 }
+
+// saveDefaultsSecondWindow is the Log line for Save defaults in a second window.
+const saveDefaultsSecondWindow = "defaults were not kept, only the first Sextile window keeps them"
 
 // saveDefaultCity is `<leader> c d`: it keeps the current city, the house
 // display and the floating chart's house system and zodiac as the defaults.
@@ -186,16 +197,17 @@ func (m Model) saveDefaultCity() (tea.Model, tea.Cmd) {
 	switch m.blocked(keys.BindingSaveCity) {
 	case "":
 	case whyNotFirstWindow:
-		return m.logErrorLine("Save defaults is for the first window, which keeps the session. This window keeps nothing"), nil
+		return m.logErrorLine("settings", saveDefaultsSecondWindow), nil
 	default:
-		return m.logErrorLine("default city not saved: no city chosen yet"), nil
+		return m.logErrorLine("settings", "the city was not kept as the default, no city is chosen yet"), nil
 	}
 	var floating *store.Slot
 	if m.slots != nil {
 		f := m.slots.Floating()
 		floating = &f
 	}
-	return m, saveDefaultCityCmd(m.place, m.houseDisplay, m.ownHouses(floating).hs, m.ownZodiac(floating), m.openFramesNow())
+	nodes, _ := m.ownNodes(floating)
+	return m, saveDefaultCityCmd(m.place, m.houseDisplay, m.ownHouses(floating).hs, m.ownZodiac(floating), nodes, m.openFramesNow())
 }
 
 // applyDefaultCitySaved logs the outcome of a save, and when everything was
@@ -206,43 +218,57 @@ func applyDefaultCitySaved(m Model, msg DefaultCitySavedMsg) (Model, tea.Cmd) {
 	failed := ""
 	switch {
 	case msg.Err != nil:
-		cause, _, _ := strings.Cut(msg.Err.Error(), "\n")
-		failed = "default city not saved: " + cause
+		m = m.logTrace("settings", "%s", saveCause(msg.Err))
+		failed = "the city was not kept as the default"
 	case msg.HouseErr != nil:
-		cause, _, _ := strings.Cut(msg.HouseErr.Error(), "\n")
-		failed = "default house display not saved: " + cause
+		m = m.logTrace("settings", "%s", saveCause(msg.HouseErr))
+		failed = "the house display was not kept as the default"
 	case msg.FrameErr != nil:
-		cause, _, _ := strings.Cut(msg.FrameErr.Error(), "\n")
-		failed = "default frame not saved: " + cause
+		m = m.logTrace("settings", "%s", saveCause(msg.FrameErr))
+		failed = "the houses, zodiac and Nodes were not kept as the default"
 	}
 	if msg.Err == nil {
-		m.placeGuessed = false
+		m.placeFromZone = false
 		if msg.HouseSaved {
-			m = m.logNote("default house display saved", "%s", houseFormRow(msg.House).title)
+			m = m.logNote("defaults", "houses shown as %s", houseFormRow(msg.House).title)
 		}
 		if msg.FrameSaved {
-			m = m.logNote("default frame saved", "%s", msg.Frame)
+			m = m.logNote("defaults", "%s", msg.Frame)
 		}
 		m = m.logNote("default city saved", "%s", msg.Place.Display())
 	}
 	if msg.FrameSaved && failed == "" {
-		// The default is for the floating chart on a fresh start and for charts
-		// opened later: every chart open at the keypress keeps the frame it showed. The
-		// default stays saved when this write fails. For an ordinary failure a
-		// quit retries the frames, never for errForeignSession, which nothing retries.
-		var added bool
-		if m, added = m.keepFrames(msg.Open); added {
-			if err := m.writeSessionNow(); err != nil {
-				var outside bool
-				if m, outside = m.sessionChangedOutside(err); !outside {
-					cause, _, _ := strings.Cut(err.Error(), "\n")
-					failed = "open charts' frames not kept: " + cause
-				}
+		m, failed = m.keepOpenFrames(msg.Open)
+	}
+	if failed != "" {
+		return m.logErrorLine("settings", failed), nil
+	}
+	return m.showNotice(noticeDefaultsSaved)
+}
+
+// keepOpenFrames is what a saved frame default owes the charts open when it was
+// asked for: each keeps the frame it showed (the default is for the floating
+// chart on a fresh start and for charts opened later). The default stays saved
+// when this write fails. For an ordinary failure a quit retries the frames. A
+// run of another charts folder's session keeps nothing of its charts, which the
+// start already said, so it says nothing here. failed is the Log line for a
+// write that did not land, "" otherwise.
+func (m Model) keepOpenFrames(open []store.FrameRecord) (_ Model, failed string) {
+	var added bool
+	if m, added = m.keepFrames(open); added {
+		if err := m.writeSessionNow(); err != nil {
+			var outside bool
+			if m, outside = m.sessionChangedOutside(err); !outside && !errors.Is(err, errForeignSession) {
+				failed = "the houses and zodiac of the open charts were not saved"
 			}
 		}
 	}
-	if failed != "" {
-		return m.logErrorLine(failed), nil
-	}
-	return m.showNotice(noticeDefaultsSaved)
+	return m, failed
+}
+
+// saveCause is the first line of a failed write's error, without the store
+// package's own name in front.
+func saveCause(err error) string {
+	cause, _, _ := strings.Cut(err.Error(), "\n")
+	return strings.TrimPrefix(cause, "store: ")
 }

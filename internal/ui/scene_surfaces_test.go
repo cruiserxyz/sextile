@@ -29,7 +29,7 @@ func TestTextKeyCoversTheShownSet(t *testing.T) {
 		t.Fatal("a non-cursor slot joined the set and the text key did not change")
 	}
 
-	// The order: ⌃j swaps ② and ③ under the cursor on ②. Baseline ① and the
+	// The order: J swaps ② and ③ under the cursor on ②. Baseline ① and the
 	// pair ② are unchanged; only the shown order differs, and the text frame
 	// must be computed again. Driven through the real key and the returned
 	// command tree.
@@ -42,7 +42,7 @@ func TestTextKeyCoversTheShownSet(t *testing.T) {
 		t.Fatal("fixture: the cursor's tab is not the active pair")
 	}
 	sigBefore := m.comparisonSig()
-	m, cmd := tpress(t, m, keyCtrlJ)
+	m, cmd := tpress(t, m, keyMoveDown)
 	if m.comparisonSig() == sigBefore {
 		t.Fatal("the shown order changed and the text key did not")
 	}
@@ -164,7 +164,7 @@ func TestNoComparisonToggleKey(t *testing.T) {
 			t.Errorf("binding %v still shows `t` in the bar", e.ID)
 		}
 	}
-	for _, l := range m.helpLines() {
+	for _, l := range keybindingLines(m) {
 		if strings.Contains(l.Text, "Comparison pair") {
 			t.Errorf("help still lists %q", l.Text)
 		}

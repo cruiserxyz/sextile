@@ -74,17 +74,17 @@ func TestStartLogsNoResolverCandidates(t *testing.T) {
 			t.Errorf("the start logged a resolver note %q; want none", text)
 		}
 	}
-	if !strings.Contains(strings.Join(logTexts(m), "\n"), "city: Amsterdam, NL, from the time zone") {
+	if !strings.Contains(strings.Join(logTexts(m), "\n"), "city: Amsterdam, NL, from the computer's time zone") {
 		t.Errorf("the city line is gone: %q", logTexts(m))
 	}
 }
 
 // Acceptance 3: a start whose city came from the host's time zone says so once,
-// naming the city and the two keys; a start from a stored city says nothing and
+// naming the city and nothing more; a start from a stored city says nothing and
 // carries no mark.
 func TestGuessedStartLogsOnce(t *testing.T) {
 	m, _ := guessedStart(t)
-	want := "city: Amsterdam, NL, from the time zone — , c d saves it"
+	want := "city: Amsterdam, NL, from the computer's time zone"
 	n := 0
 	for _, l := range m.logLines {
 		if l.text == want && l.lane == laneNote {
@@ -97,7 +97,7 @@ func TestGuessedStartLogsOnce(t *testing.T) {
 
 	s, _ := storedStart(t)
 	for _, text := range logTexts(s) {
-		if strings.Contains(text, "from the time zone") {
+		if strings.Contains(text, "from the computer's time zone") {
 			t.Errorf("a stored-city start logged %q", text)
 		}
 	}
@@ -110,8 +110,8 @@ func TestGuessedCityIsNeverWritten(t *testing.T) {
 	sessionSandbox(t)
 	before := profileSnapshot(t)
 	m, cmd := startFromDisk(t, amsterdamNL)
-	if !m.placeGuessed || cmd == nil {
-		t.Fatalf("fixture: guessed=%v cmd=%v", m.placeGuessed, cmd != nil)
+	if !m.placeFromZone || cmd == nil {
+		t.Fatalf("fixture: guessed=%v cmd=%v", m.placeFromZone, cmd != nil)
 	}
 	for _, msg := range runAll(cmd) {
 		tm, next := m.Update(msg)

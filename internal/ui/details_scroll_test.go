@@ -332,7 +332,7 @@ func TestScrollKeysStartNoCompute(t *testing.T) {
 	}
 }
 
-// C20 — both bindings are registered in main scope, reach the help modal, and
+// C20 — both bindings are registered in main scope, reach the Keybindings popup, and
 // the footer carries their single entry wherever Details is on screen.
 func TestScrollBindingsPresent(t *testing.T) {
 	kmap := keys.DefaultKeys()
@@ -345,9 +345,9 @@ func TestScrollBindingsPresent(t *testing.T) {
 		if !ok {
 			t.Fatalf("binding %v missing from mainBindings(keys.KeyMap)", id)
 		}
-		// The pair is one Help row, carried by its first entry.
-		if e.Help == (id == keys.BindingScrollDown) || e.Folded != (id == keys.BindingScrollDown) {
-			t.Errorf("binding %v: help=%v folded=%v, want the pair's row on ScrollUp only", id, e.Help, e.Folded)
+		// Each direction is a Help row of its own.
+		if !e.Help || e.Title == "" {
+			t.Errorf("binding %v: help=%v title=%q, want a titled Help row", id, e.Help, e.Title)
 		}
 	}
 	if got := kmap.ScrollUp.Keys(); len(got) != 1 || got[0] != "ctrl+pgup" {
@@ -364,21 +364,18 @@ func TestScrollBindingsPresent(t *testing.T) {
 		}
 	}
 	help := helpListText(kmap, defaultLeaderKey, defaultLeaderMap())
-	for _, want := range []string{"Scroll Details", "⌃⇞/⌃⇟"} {
+	for _, want := range []string{"Scroll Details up", "<ctrl+pgup>", "Scroll Details down", "<ctrl+pgdown>"} {
 		if !strings.Contains(help, want) {
-			t.Errorf("help modal missing %q", want)
+			t.Errorf("Keybindings is missing %q", want)
 		}
 	}
-	// The bar names the pair wherever Details is on screen, and a layout
-	// without the panel does not advertise a key that does nothing.
-	const scrollPair = "Scroll Details: ⌃⇞⌃⇟"
+	// The footer carries no Ctrl key, so no frame's bar names the pair.
 	m := scrollModel(t, 0)
-	if !strings.Contains(m.View(), scrollPair) {
-		t.Errorf("the 132x40 frame's key bar is missing %q", scrollPair)
-	}
-	m.width, m.height = 80, 24
-	if got := m.View(); strings.Contains(got, scrollPair) {
-		t.Errorf("the 80x24 key bar advertises scrolling with no Details panel")
+	for _, size := range [][2]int{{160, 40}, {80, 24}} {
+		m.width, m.height = size[0], size[1]
+		if got := m.View(); strings.Contains(got, "Scroll Details:") {
+			t.Errorf("the %dx%d key bar names the Ctrl scroll keys", size[0], size[1])
+		}
 	}
 }
 
@@ -464,7 +461,7 @@ func TestScrollKeysIgnoredInModal(t *testing.T) {
 		name  string
 		apply func(Model) Model
 	}{
-		{"help", func(m Model) Model { m.helpOpen = true; return m }},
+		{"help", func(m Model) Model { m = openedKeybindings(m); return m }},
 		{"atlas", func(m Model) Model { m.startup = startupAtlasOpen; return m }},
 		{"charts", func(m Model) Model { m.startup = startupChartOpen; return m }},
 	} {

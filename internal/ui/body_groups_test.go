@@ -66,9 +66,13 @@ func TestBodyGroupRowsComeFirst(t *testing.T) {
 			if search < 0 {
 				t.Fatal("no search line")
 			}
-			// The box draws its own separator under the search line; the
-			// seven group rows follow it, then the dashed rule, then the list.
-			first := search + 2
+			// The box draws its own separator under the search line; the lead
+			// row follows it, then the seven group rows, the dashed rule and
+			// the list.
+			if !strings.Contains(lines[search+2], popup.RestoreRow) {
+				t.Errorf("the first row under the search line = %q, want %q", lines[search+2], popup.RestoreRow)
+			}
+			first := search + 3
 			last := len(groupWant)
 			for i, g := range groupWant {
 				l := lines[first+i]

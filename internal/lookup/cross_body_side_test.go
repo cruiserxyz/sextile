@@ -148,7 +148,7 @@ func TestKeepCursorSideOnTheLiveCrossReports(t *testing.T) {
 			t.Errorf("%s: no Venus row at all:\n%s", name, raw)
 		}
 	}
-	syn, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, chart1, when2, bassum, store.ReportLabel{}, objVenus)
+	syn, _, err := SynastryCrossBodyRawReport(context.Background(), Hellenistic, chart1, store.AnchorChart{When: when2, Place: bassum}, objVenus)
 	if err != nil {
 		t.Fatal(err)
 	}

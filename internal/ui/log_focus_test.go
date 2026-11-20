@@ -46,7 +46,7 @@ func TestLeaderLFocusesLog(t *testing.T) {
 	strip, body := m.tabStrips()[PanelDetails], m.details.body
 	refresh := m.refresh
 
-	m, cmd := press(t, m, ",", "l")
+	m, cmd := press(t, m, ",", "L")
 	if m.console.open {
 		t.Fatal(",l opened the console, want the Log focused")
 	}
@@ -88,7 +88,7 @@ func TestLeaderLFocusesLog(t *testing.T) {
 func TestLogFocusKeys(t *testing.T) {
 	copied := captureYank(t)
 	m := logModel(t, 12)
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	m, _ = press(t, m, "up", "k", "k")
 	if m.logFocus.cursor != 8 {
 		t.Fatalf("cursor after three ups = %d, want 8", m.logFocus.cursor)
@@ -111,7 +111,7 @@ func TestLogFocusKeys(t *testing.T) {
 	}
 	// The window follows the cursor over all lines, not only the visible four.
 	m, _ = press(t, m, "end")
-	if rows := strings.Join(strings.Split(ansi.Strip(m.View()), "\n"), "\n"); !strings.Contains(rows, "test: note 11") {
+	if rows := strings.Join(strings.Split(ansi.Strip(m.View()), "\n"), "\n"); !strings.Contains(rows, "note 11") {
 		t.Error("the newest line is not on screen after End")
 	}
 
@@ -119,7 +119,7 @@ func TestLogFocusKeys(t *testing.T) {
 	m, _ = press(t, m, "up")
 	logLen := len(m.logLines)
 	m, _ = press(t, m, "enter")
-	if !reflect.DeepEqual(*copied, []string{"test: note 10"}) {
+	if !reflect.DeepEqual(*copied, []string{"Sextile  note 10"}) {
 		t.Errorf("enter copied %q, want the highlighted line", *copied)
 	}
 	if len(m.logLines) != logLen {
@@ -148,8 +148,8 @@ func TestLogFocusKeys(t *testing.T) {
 
 	// ,l pressed while the Log is focused opens the console as well, and q
 	// closes it onto the Log as Esc does.
-	m, _ = press(t, m, ",", "l")
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
+	m, _ = press(t, m, ",", "L")
 	if !m.console.open || m.logFocus.active {
 		t.Errorf(",l while focused: console %v, log focus %v", m.console.open, m.logFocus.active)
 	}
@@ -170,9 +170,9 @@ func TestLogFocusKeys(t *testing.T) {
 func TestConsoleLToggles(t *testing.T) {
 	m := logModel(t, 6)
 	m.focused = PanelBodies
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
-		t.Fatal(",l l did not open the console")
+		t.Fatal(", L l did not open the console")
 	}
 	m, _ = press(t, m, "l")
 	if m.console.open || !m.logFocus.active || m.currentOwner() != ownerLog {
@@ -189,16 +189,16 @@ func TestConsoleLToggles(t *testing.T) {
 func TestConsoleDigitLeavesForThePanel(t *testing.T) {
 	m := logModel(t, 6)
 	m.focused = PanelChart
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
-		t.Fatal(",l l did not open the console")
+		t.Fatal(", L l did not open the console")
 	}
-	m, _ = press(t, m, "2")
+	m, _ = press(t, m, "3")
 	if m.console.open || m.logFocus.active || m.focused != PanelBodies || m.currentOwner() != ownerMain {
-		t.Errorf("2: console %v, log focus %v, focused %q, owner %v", m.console.open, m.logFocus.active, m.focused, m.currentOwner())
+		t.Errorf("3: console %v, log focus %v, focused %q, owner %v", m.console.open, m.logFocus.active, m.focused, m.currentOwner())
 	}
 
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	target := m.targetFloatingTime
 	m, _ = press(t, m, "d")
 	if !m.console.open || !m.targetFloatingTime.Equal(target) {
@@ -208,13 +208,13 @@ func TestConsoleDigitLeavesForThePanel(t *testing.T) {
 	// A console opened with no Log panel on screen leaves the same way.
 	m, _ = press(t, m, "esc", "esc")
 	m.width, m.height = 80, 24
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	if !m.console.open {
 		t.Fatal("80x24 ,l did not open the console")
 	}
-	m, _ = press(t, m, "3")
+	m, _ = press(t, m, "4")
 	if m.console.open || m.focused != PanelAspects {
-		t.Errorf("3 at 80x24: console %v, focused %q", m.console.open, m.focused)
+		t.Errorf("4 at 80x24: console %v, focused %q", m.console.open, m.focused)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestConsoleDigitLeavesForThePanel(t *testing.T) {
 func TestConsoleClosesWithoutTheLogPanel(t *testing.T) {
 	m := logModel(t, 6)
 	m.focused = PanelBodies
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	m.width, m.height = 80, 24
 	m, _ = press(t, m, "esc")
 	if m.console.open || m.logFocus.active || m.focused != PanelBodies || m.currentOwner() != ownerMain {
@@ -233,11 +233,11 @@ func TestConsoleClosesWithoutTheLogPanel(t *testing.T) {
 
 func TestLogFocusOtherKeyLeavesAndRuns(t *testing.T) {
 	m := logModel(t, 6)
-	m, _ = press(t, m, ",", "l", "2")
+	m, _ = press(t, m, ",", "L", "3")
 	if m.logFocus.active || m.focused != PanelBodies {
-		t.Errorf("2: log focus %v, focused %q, want it gone and Bodies focused", m.logFocus.active, m.focused)
+		t.Errorf("3: log focus %v, focused %q, want it gone and Bodies focused", m.logFocus.active, m.focused)
 	}
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	target := m.targetFloatingTime
 	m, _ = press(t, m, "d")
 	if m.logFocus.active {
@@ -246,7 +246,7 @@ func TestLogFocusOtherKeyLeavesAndRuns(t *testing.T) {
 	if m.targetFloatingTime.Equal(target) {
 		t.Error("d did not step a day after leaving the Log focus")
 	}
-	m, _ = press(t, m, ",", "l", "tab")
+	m, _ = press(t, m, ",", "L", "tab")
 	if m.logFocus.active || m.focused == PanelBodies {
 		t.Errorf("tab: log focus %v, focused %q", m.logFocus.active, m.focused)
 	}
@@ -255,7 +255,7 @@ func TestLogFocusOtherKeyLeavesAndRuns(t *testing.T) {
 func TestLeaderLOpensConsoleWithoutLogPanel(t *testing.T) {
 	m := logModel(t, 4)
 	m.width, m.height = 80, 24
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	if !m.console.open || m.logFocus.active {
 		t.Errorf("80x24 ,l: console %v, log focus %v, want the console", m.console.open, m.logFocus.active)
 	}
@@ -265,7 +265,7 @@ func TestLeaderLOpensConsoleWithoutLogPanel(t *testing.T) {
 func TestLogFocusKeepsCursorOnArrival(t *testing.T) {
 	captureYank(t)
 	m := logModel(t, 9)
-	m, _ = press(t, m, ",", "l", "up", "up")
+	m, _ = press(t, m, ",", "L", "up", "up")
 	if m.logFocus.cursor != 6 {
 		t.Fatalf("cursor = %d, want 6", m.logFocus.cursor)
 	}
@@ -291,7 +291,7 @@ func copyModel(t *testing.T, two bool) Model {
 		{Object: objAscendant, Longitude: 210.8667, House: 1}, {Object: objMidheaven, Longitude: 124.57, House: 10},
 	}
 	for i := 0; i < 24; i++ {
-		m.chart.aspects = append(m.chart.aspects, aspect.Aspect{AObject: objSun, BObject: objMoon, Kind: aspect.AspectKind(i % 4), Orb: aspect.Orb(float64(i) / 10), Applying: i%2 == 0, Power: float64(100 - i)})
+		m.chart.aspects = append(m.chart.aspects, aspect.Aspect{AObject: objSun, BObject: objMoon, Kind: kindOf([]string{"Con", "Opp", "Squ", "Tri"}[i%4]), Orb: aspect.Orb(float64(i) / 10), Applying: i%2 == 0, Power: float64(100 - i)})
 	}
 	return m
 }
@@ -316,16 +316,16 @@ func TestCopyEveryPanel(t *testing.T) {
 		note  string
 	}
 	cases := []tc{
-		{"log focus", PanelChart, []string{",", "l", ","}, func(m Model) (string, int) {
+		{"log focus", PanelChart, []string{",", "L", ","}, func(m Model) (string, int) {
 			return strings.Join(m.logPanelLines(), "\n"), len(m.logPanelLines())
-		}, "log: copied %d lines"},
-		{"console", PanelChart, []string{",", "l", "l", ","}, func(m Model) (string, int) {
+		}, "log: %d lines copied"},
+		{"console", PanelChart, []string{",", "L", "l", ","}, func(m Model) (string, int) {
 			var out []string
 			for _, l := range m.console.snapshot {
 				out = append(out, l.text)
 			}
 			return strings.Join(out, "\n"), len(out)
-		}, "log: copied %d lines"},
+		}, "log: %d lines copied"},
 		{"chart", PanelChart, []string{","}, func(m Model) (string, int) {
 			var rows []string
 			for i, s := range m.slots.All() {
@@ -334,32 +334,39 @@ func TestCopyEveryPanel(t *testing.T) {
 					name = s.Chart.Name
 				}
 				// Both charts are selected, so each row opens with its numeral.
-				rows = append(rows, fmt.Sprintf("%d %s %s %s %s WhTr", i+1, name, slotMoment(s.Time, s.Location), slotZone(s.Time, s.Location), s.Location.Display()))
+				c := slotCells(s, nil)
+				rows = append(rows, fmt.Sprintf("%d %s %s %s%s %s %s %s WhTr", i+1, name, c.weekday, c.date, map[bool]string{true: " Jul"}[c.julian], strings.TrimSpace(c.clock), c.zone, s.Location.Display()))
 			}
 			return strings.Join(rows, "\n"), len(rows)
-		}, "chart: copied %d rows"},
+		}, "chart: %d rows copied"},
 		{"bodies", PanelBodies, []string{","}, func(m Model) (string, int) {
-			planets, under := panel.BodyRows(m.chart.positions, m.chart.bodyStyles, plain, panel.HouseOverlay{})
+			planets, under := panel.BodyRows(m.chart.positions, m.chart.bodyStyles, plain, panel.HouseOverlay{MoonLane: m.moonLane()})
 			var rows []string
 			for _, r := range append(planets, under...) {
 				rows = append(rows, strings.TrimRight(r.Text, " "))
 			}
 			return trimmed(rows...), len(rows)
-		}, "bodies: copied %d rows"},
+		}, "bodies: %d rows copied"},
 		{"aspects", PanelAspects, []string{","}, func(m Model) (string, int) {
 			var rows []string
 			for _, a := range m.chart.aspects {
 				rows = append(rows, panel.FormatAspectEntryStyled(a, astrologstyle.AspectStyle{}, plain))
 			}
 			return trimmed(rows...), len(rows)
-		}, "aspects: copied %d aspects"},
+		}, "aspects: %d aspects copied"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			copied := captureYank(t)
 			m := copyModel(t, c.name == "chart")
 			m.focused = c.focus
+			if c.name == "log focus" {
+				m.width, m.height = 132, 40 // a size with a Log panel to focus
+			}
 			m, _ = press(t, m, c.keys...)
+			if c.name == "log focus" && !m.logFocus.active {
+				t.Fatal("premise: the Log panel has the focus")
+			}
 			want, n := c.want(m)
 			if n < 2 {
 				t.Fatalf("the fixture gives %d rows to copy, want several", n)
@@ -408,7 +415,7 @@ func TestCopyNothingAndFailure(t *testing.T) {
 	m = copyModel(t, false)
 	m.focused = PanelBodies
 	m, _ = press(t, m, ",", "y")
-	if got := strings.Join(logTexts(m), "\n"); !strings.Contains(got, "Couldn't copy the Bodies panel to the clipboard.") {
+	if got := strings.Join(logTexts(m), "\n"); !strings.Contains(got, "the rows did not reach the clipboard") {
 		t.Errorf("the failure line does not name the panel: %q", got)
 	}
 }
@@ -427,11 +434,11 @@ func TestDetailsKeepsItsChords(t *testing.T) {
 	if len(*copied) != 1 {
 		t.Errorf("attached Details ,y copied %d times, want once", len(*copied))
 	}
-	after, _ = press(t, m, ",", "a")
-	if after.startup != startupDisplayOpen {
-		t.Errorf("attached Details ,a: startup %v, want the House display open", after.startup)
+	after, _ = press(t, m, ",", "u")
+	if after.startup != startupHouseOpen {
+		t.Errorf("attached Details ,u: startup %v, want the house finder open", after.startup)
 	}
-	after, _ = press(t, m, ",", "l")
+	after, _ = press(t, m, ",", "L")
 	if !after.logFocus.active {
 		t.Error("attached Details ,l did not focus the Log")
 	}
@@ -482,7 +489,7 @@ func TestCopyBodiesComparing(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(strings.Join(logTexts(m), "\n"), fmt.Sprintf("bodies: copied %d rows", len(rows))) {
+	if !strings.Contains(strings.Join(logTexts(m), "\n"), fmt.Sprintf("bodies: %d rows copied", len(rows))) {
 		t.Errorf("no Log note for %d rows", len(rows))
 	}
 }
@@ -513,7 +520,7 @@ func logFocusFrameModel(t *testing.T, cfg Config) Model {
 	m.chart.aspects = tasteOwnAspects()
 	m = m.logNote("session", "general session, 2 charts")
 	m = m.logNote("location", "Berlin, DE")
-	m = m.logError("Couldn't cast the chart. Press ,l l for what Astrolog ran.")
+	m = m.logError("astrolog", "the chart not cast, Astrolog returned nothing usable")
 	m = m.logNote("preferences", "keys.leader %q ignored: one key only", ",,")
 	m = m.logNote("chart", "copied 6 rows")
 	m = m.logNote("aspects", "copied 14 aspects")
@@ -527,7 +534,7 @@ func TestLogFocusFrame(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		t.Run(cfg.name, func(t *testing.T) {
 			m := logFocusFrameModel(t, cfg.cfg)
-			m, _ = press(t, m, ",", "l", "up", "up")
+			m, _ = press(t, m, ",", "L", "up", "up")
 			if !m.logFocus.active {
 				t.Fatal("the Log is not focused")
 			}
@@ -540,7 +547,7 @@ func TestLogFocusFrame(t *testing.T) {
 // next key runs on the screen, not on a panel nobody can see.
 func TestLogFocusEndsWhenThePanelGoes(t *testing.T) {
 	m := logModel(t, 5)
-	m, _ = press(t, m, ",", "l")
+	m, _ = press(t, m, ",", "L")
 	m.width, m.height = 80, 24
 	target := m.targetFloatingTime
 	m, _ = press(t, m, "d")
@@ -559,7 +566,7 @@ func TestCopyAspectsPair(t *testing.T) {
 	m.width, m.height = 132, 40
 	for i := 0; i < 24; i++ {
 		m.chart.crossAspects = append(m.chart.crossAspects, lookup.OverlayAspect{
-			TransitObject: objMoon, NatalObject: objSun, Kind: aspect.AspectKind(i % 4),
+			TransitObject: objMoon, NatalObject: objSun, Kind: kindOf([]string{"Con", "Opp", "Squ", "Tri"}[i%4]),
 			Orb: aspect.Orb(float64(i) / 10), Applying: i%2 == 0, Power: float64(100 - i),
 		})
 	}
@@ -575,7 +582,7 @@ func TestCopyAspectsPair(t *testing.T) {
 	if strings.Contains(want, "\x1b") {
 		t.Error("oracle carries an escape")
 	}
-	if note := "aspects: copied 24 aspects"; !strings.Contains(strings.Join(logTexts(m), "\n"), note) {
+	if note := "aspects: 24 aspects copied"; !strings.Contains(strings.Join(logTexts(m), "\n"), note) {
 		t.Errorf("no Log note %q in %q", note, logTexts(m))
 	}
 }

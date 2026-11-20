@@ -24,21 +24,21 @@ func TestOnlyThatDrainsFallsBackToTheBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R0", "1", "2", "5"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R0", "1", "2", "5"}; !slices.Equal(got, want) {
 		t.Errorf("Only = {absent}: %v, want the baseline's list %v", got, want)
 	}
 	got, err = emitObjects(explicit(objChiron, objMars))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R0", "5"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R0", "5"}; !slices.Equal(got, want) {
 		t.Errorf("Only = {absent, present}: %v, want %v", got, want)
 	}
 	got, err = emitObjects(recipe.ObjectPolicy{Baseline: recipe.Explicit})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R0"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R0"}; !slices.Equal(got, want) {
 		t.Errorf("a deliberate empty selection: %v, want the bare %v", got, want)
 	}
 	// A delta baseline falls back to its flips, never to a bare list.
@@ -66,7 +66,7 @@ func TestOnlyOutsideTheDrawnSetFallsBack(t *testing.T) {
 	fortune := recipe.NewObjectSet(19)
 
 	// A delta policy: the baseline's flips go out, never a bare list.
-	delta := recipe.ObjectPolicy{Remove: recipe.NewObjectSet(2), TrueNodeMode: true}
+	delta := recipe.ObjectPolicy{Remove: recipe.NewObjectSet(2), Nodes: recipe.NodesTrue}
 	marked := delta
 	marked.Only = fortune
 	want, err := emitObjects(delta)
@@ -80,7 +80,7 @@ func TestOnlyOutsideTheDrawnSetFallsBack(t *testing.T) {
 	if !slices.Equal(got, want) || slices.Contains(got, "-R0") {
 		t.Errorf("delta, Only = {19} (not drawn): %v, want the baseline's %v and no bare -R0", got, want)
 	}
-	if want := []string{"-Yn", "-R", "2"}; !slices.Equal(got, want) {
+	if want := []string{"=Yn", "_Ynn", "-R", "2"}; !slices.Equal(got, want) {
 		t.Errorf("delta, Only = {19}: %v, want the flips %v", got, want)
 	}
 	if nums, err := ArgvObjectNumbers(marked); err != nil || !slices.Equal(nums, []int{1, 3, 22}) {
@@ -96,7 +96,7 @@ func TestOnlyOutsideTheDrawnSetFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R0", "1", "2", "5"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R0", "1", "2", "5"}; !slices.Equal(got, want) {
 		t.Errorf("explicit, Only = {19} (not in the selection): %v, want %v", got, want)
 	}
 	if nums, err := ArgvObjectNumbers(explicitMarked); err != nil || !slices.Equal(nums, []int{1, 2, 5}) {
@@ -117,7 +117,7 @@ func TestOnlyOutsideTheDrawnSetFallsBack(t *testing.T) {
 	// dropped for being partly stale.
 	partly := explicitMarked
 	partly.Only = recipe.NewObjectSet(2, 19)
-	if got, err := emitObjects(partly); err != nil || !slices.Equal(got, []string{"-R0", "2"}) {
+	if got, err := emitObjects(partly); err != nil || !slices.Equal(got, []string{"_Yn", "_Ynn", "-R0", "2"}) {
 		t.Errorf("Only = {2, 19}: %v, %v; want [-R0 2]", got, err)
 	}
 	if nums, err := DrainedObjects(partly); err != nil || nums != nil {
@@ -127,7 +127,7 @@ func TestOnlyOutsideTheDrawnSetFallsBack(t *testing.T) {
 	// The deliberate empty selection keeps its bare list with marks on it too:
 	// there is no set to fall back to, so nothing is said either.
 	none := recipe.ObjectPolicy{Baseline: recipe.Explicit, Only: recipe.NewObjectSet(1)}
-	if got, err := emitObjects(none); err != nil || !slices.Equal(got, []string{"-R0"}) {
+	if got, err := emitObjects(none); err != nil || !slices.Equal(got, []string{"_Yn", "_Ynn", "-R0"}) {
 		t.Errorf("no bodies chosen, Only = {1}: %v, %v; want the bare [-R0]", got, err)
 	}
 	if nums, err := DrainedObjects(none); err != nil || nums != nil {

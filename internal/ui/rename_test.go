@@ -4,6 +4,7 @@ package ui
 import (
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -101,7 +102,7 @@ func renameDriving(t *testing.T, m Model, file, title, place string, allowRecomp
 		m = eraseField(t, m)
 		m, _ = escSend(t, m, escRunes(place))
 	}
-	m, cmd := escSend(t, m, escKey(tea.KeyEnter))
+	m, cmd := submit(t, m)
 	if cmd == nil || !m.title.Saving {
 		t.Fatal("the submit dispatched no write")
 	}
@@ -154,7 +155,7 @@ func chartPanel(t *testing.T, view string, width int) string {
 			r = r[:width]
 		}
 		row := string(r)
-		if strings.Contains(row, "[1] Chart") {
+		if strings.Contains(row, "[2] Chart") {
 			in = true
 			continue
 		}
@@ -277,7 +278,7 @@ func TestRenameWritesAndReturnsToPicker(t *testing.T) {
 			if fileText(t, backupFile(path)) != original {
 				t.Error("the original was not kept in the backup folder")
 			}
-			assertOneChartLine(t, m, `chart: titled Titled.as as "`+title+`" (original kept as `+store.ChartBackupDisplay(store.ChartsDir(), "Titled.as")+`)`)
+			assertOneChartLine(t, m, `chart: Titled.as titled as "`+title+`" (original kept as `+keptCopy(store.ChartsDir(), "Titled.as")+`)`)
 		})
 	}
 }
@@ -331,7 +332,7 @@ func TestRenameNoChangeWritesNothing(t *testing.T) {
 			}
 			noBackup(t, path)
 			for _, l := range m.logLines {
-				if strings.HasPrefix(l.text, "chart: titled") {
+				if strings.HasPrefix(l.text, "chart: ") && strings.Contains(l.text, " titled as ") {
 					t.Errorf("logged a write: %q", l.text)
 				}
 			}
@@ -353,14 +354,27 @@ func TestCtrlRIsDeclared(t *testing.T) {
 			t.Errorf("owner %d's table matches Ctrl+R (%d)", o, id)
 		}
 	}
-	inBar := false
+	// The popup's own bar shows its Ctrl key, after Open and before Cancel.
+	listed := false
 	for _, e := range openChartBindings() {
-		if e.ID == keys.BindingRename && e.Bar && e.Title == "Rename" {
-			inBar = true
+		if e.ID == keys.BindingRename && e.Title == "Rename" {
+			listed = true
+			if !e.Bar {
+				t.Error("Ctrl+R is not on the open-chart popup's key bar")
+			}
 		}
 	}
-	if !inBar {
-		t.Error("Ctrl+R is not in the open-chart popup's key bar")
+	if !listed {
+		t.Error("Ctrl+R is not in the open-chart popup's table")
+	}
+	c := m.keysContextFor(ownerOpenChart)
+	c.Picker.Renames, c.Popup.Rows = true, 3
+	if line := keys.BarLine(c, 132); !strings.Contains(line, "Open: <enter> | Rename: <c-r> | Cancel: <esc>") {
+		t.Errorf("the open-chart bar reads %q, want Rename: <c-r> between Open and Cancel", line)
+	}
+	// The main screen's bar shows no Ctrl key.
+	if line := keys.BarLine(m.keysContextFor(ownerMain), 132); strings.Contains(line, "ctrl") {
+		t.Errorf("the main bar shows a Ctrl key: %q", line)
 	}
 
 	// Every owner but the picker, the chart title form included.
@@ -392,18 +406,19 @@ func TestCtrlRIsDeclared(t *testing.T) {
 }
 
 // C4.6: renaming the anchored chart changes the name it is shown and
-// remembered under, and does not re-anchor it. A changed REPORT name (the title)
-// recomputes that slot's reports exactly once, because Astrolog's own header
-// names the chart (the specification N3); a place label is not
-// part of the anchor and not part of the header: nothing recomputes.
+// remembered under, and does not re-anchor it. The file's record changes in its
+// `-zi` line only, and the slot's reports recompute exactly once, because
+// Astrolog's own header names the chart and its place as the file states them
+// (the specification N3; operator, 2026-11-15: the file's own place).
 func TestRenameAnchoredUpdatesNameOnly(t *testing.T) {
 	for _, tc := range []struct {
-		name, title, place, want string
-		recompute                bool
+		name, title, place, want, shown string
+		recompute                       bool
 	}{
-		{"title", "Zed One", "", "Zed One", true},
-		// A place label is not part of the anchor: nothing changes at all.
-		{"place only", "", "Munich, Bavaria", "Constructed Titled", false},
+		{"title", "Zed One", "", "Zed One", "Zed One", true},
+		// The place label is the file's, and the header prints it. The row
+		// shows the name as far as the 65-cell table leaves room for it.
+		{"place only", "", "Munich, Bavaria", "Constructed Titled", "Construc...", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			renameLibrary(t)
@@ -429,14 +444,21 @@ func TestRenameAnchoredUpdatesNameOnly(t *testing.T) {
 
 			after := before
 			after.Name = tc.want
-			if tc.recompute {
+			if tc.title != "" {
 				after.Label.Name = tc.want
+			}
+			after.Record, after.Clock = anchorRecord(m).Record, anchorRecord(m).Clock
+			if tc.place != "" && after.Clock.Place != tc.place {
+				t.Errorf("the row's place is %q, want the file's new place %q", after.Clock.Place, tc.place)
+			}
+			if zi := regexp.MustCompile(`(?m)^-zi .*$`); zi.ReplaceAllString(after.Record, "") != zi.ReplaceAllString(before.Record, "") || after.Record == before.Record {
+				t.Errorf("the record changed outside its -zi line, or not at all:\n%s\nwas\n%s", after.Record, before.Record)
 			}
 			if anchorRecord(m) != after {
 				t.Errorf("anchorChart = %+v, want %+v (the name only)", anchorRecord(m), after)
 			}
 			wantHandle := handle
-			wantHandle.Label = after.Label
+			wantHandle.Label, wantHandle.Record = after.Label, after.Record
 			if snapshotForEsc(m).Slots != slots || m.picker.resolving {
 				t.Error("the rename re-anchored")
 			}
@@ -452,8 +474,8 @@ func TestRenameAnchoredUpdatesNameOnly(t *testing.T) {
 			}
 			m, _ = escSend(t, m, escKey(tea.KeyEsc))
 			panel := chartPanel(t, m.View(), 66)
-			if !strings.Contains(panel, tc.want) {
-				t.Errorf("the Chart panel does not show %q:\n%s", tc.want, panel)
+			if !strings.Contains(panel, tc.shown) {
+				t.Errorf("the Chart panel does not show %q:\n%s", tc.shown, panel)
 			}
 			if tc.want != before.Name && strings.Contains(panel, "Constructed") {
 				t.Errorf("the Chart panel still shows the old name:\n%s", panel)

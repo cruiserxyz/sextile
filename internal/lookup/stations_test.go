@@ -123,7 +123,7 @@ func TestStationProbeIsOneCallADayLater(t *testing.T) {
 	if len(cmds) != 1 || cmds[0] != "astrolog probe" {
 		t.Errorf("probe commands = %q, want the probe's own", cmds)
 	}
-	wantSpec, err := Hellenistic.chartSpecAt(2461137.0, place, store.ReportLabel{})
+	wantSpec, err := Hellenistic.chartSpecAt(AtMoment(2461137.0, place, store.ReportLabel{}))
 	if err != nil {
 		t.Fatal(err)
 	}

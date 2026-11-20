@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/cruiserxyz/sextile/internal/ui/dialog"
 	"github.com/cruiserxyz/sextile/internal/ui/keys"
 	"github.com/cruiserxyz/sextile/internal/ui/menu"
 	"github.com/cruiserxyz/sextile/internal/ui/popup"
@@ -10,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,23 +27,18 @@ type Model struct {
 	width, height int
 	panels        []Panel
 	focused       PanelID
-	helpOpen      bool
-	// help is the help popup's cursor and window, reset each time it opens.
-	help keys.HelpState
-	// actionsOpen is the Actions palette (⌃p, actions_popup_model.go). It is a
-	// flag beside helpOpen and never a startup value: blocked reads
-	// startup == startupReady, and a startup value would grey every row.
-	// recentActions are the commands run through it in this run, most recent
-	// first; nothing is written anywhere.
-	actionsOpen   bool
-	actions       actionsState
-	recentActions []keys.BindingID
-	startup       startupState
-	// limitedViewShown is whether the Limited view notice has been offered this
-	// session; it is offered once.
-	limitedViewShown bool
-	keys             keys.KeyMap
-	cfg              Config
+	// keybindingsOpen is the Keybindings popup (`?`, `, p`, ⌃p;
+	// keybindings_popup_model.go). It is a flag over whatever had the keyboard
+	// and never a startup value: blocked reads startup == startupReady, and a
+	// startup value would grey every row.
+	// recentActions are the last commands run through it, most recent first,
+	// at most maxRecentActions. The session file keeps them by title.
+	keybindingsOpen bool
+	keybindings     keys.KbState
+	recentActions   []keys.BindingID
+	startup         startupState
+	keys            keys.KeyMap
+	cfg             Config
 	// logLines is the one ordered log buffer. Every line is appended exactly
 	// once, on one lane; the 6-row Log and the console each derive
 	// their own view from it — see logPanelLines and consoleLines.
@@ -56,6 +51,7 @@ type Model struct {
 	// measurement seam.
 	probers *lookup.Probers
 	atlas   atlasModalState
+	places  *placeMemo       // the atlas witness's answers for the Chart panel's places
 	picker  chartPickerState // saved-chart library picker (Ctrl+O); an earlier change
 	save    saveModalState   // save-the-floating-slot prompt (Ctrl+S / <leader>s)
 	title   titleFormState   // the title form an untitled chart's pick opens
@@ -81,7 +77,10 @@ type Model struct {
 	// chooser refuses to open (C10).
 	aspectModal    popup.Aspects
 	aspectRegistry []aspect.RegistryAspect
-	aspectRegErr   error
+	// awaitingAspects is a start held for the aspect list, as awaitingRegistry
+	// is for the object list: no chart is read before both are in.
+	awaitingAspects bool
+	aspectRegErr    error
 	// aspectOpenPending records that the chooser was asked for before the
 	// registry had landed, so the read can open it on arrival.
 	aspectOpenPending bool
@@ -121,17 +120,17 @@ type Model struct {
 	// bodyModalSeq numbers the openings of the body popup, so a probe result
 	// that outlives its opening is recognised and dropped.
 	bodyModalSeq uint64
-	// houseFinder is the house finder (⌃h, the specification).
+	// houseFinder is the house finder (`, h`, the specification).
 	houseFinder houseFinderState
 	// zodiacFinder is the zodiac finder (⌃z, the specification C8).
 	zodiacFinder zodiacFinderState
+	// nodesFinder is the Nodes and Lilith chooser (`, t`).
+	nodesFinder nodesFinderState
 	// houseDisplay is how the Bodies house column is drawn (house_display.go):
-	// the whole session's choice, all slots, set live from the `, a` popup and
-	// read from preferences.yaml at start. Never part of the session record.
+	// the whole session's choice, all slots, set live from the houses chooser's
+	// Shown as part and read from preferences.yaml at start. Never part of the
+	// session record.
 	houseDisplay panel.HouseForm
-	// houseDisplayPopup is the House display popup (`, a`): its list. The
-	// popup writes no file; `, c d` keeps the form.
-	houseDisplayPopup houseDisplayState
 	// experimentsOn holds the Experiments table's ids that are on (experiments.go);
 	// experimentsPopup is the hidden popup's list. Neither is ever written to a
 	// file from here but through the popup's own command.
@@ -145,7 +144,9 @@ type Model struct {
 	chart        chartViewState
 	// shown is the previous scene's frame while a scene change waits for its
 	// own (shown.go).
-	shown      shownFrame
+	shown shownFrame
+	// refused is the text frame Astrolog refused to cast (subject.go).
+	refused    textRefused
 	chartEpoch uint64 // last epoch a text commit gave the chart
 	details    detailsViewState
 	// textAsked is the key the newest text want was registered for
@@ -163,17 +164,22 @@ type Model struct {
 	// pre is the idle prefetch loop (prefetch.go): not a surface, it touches no
 	// surface's want or run.
 	pre prefetch
+	// void is the void searches in flight and the ones that failed (moon_void.go).
+	void voidState
 	// timeline is the Details timeline tab's list and the search inputs it
 	// belongs to (timeline.go). Ephemeral: never written to store.
 	timeline timelineState
+	// moonList is the Moon tab's list: the second instance of the same state,
+	// read only through list (timeline_lists.go).
+	moonList timelineState
 	// tpl is a body template tab's lines and the facts' inputs
 	// (template_tab.go). Ephemeral: never written to store.
 	tpl   templateState
 	place location.PlaceInfo // populated once atlas-Enter resolves
-	// placeGuessed says place came from the host time zone and no city has
+	// placeFromZone says place came from the host time zone and no city has
 	// been chosen or saved since; the floating Chart row then says so.
-	placeGuessed bool
-	lens         lookup.Lens // active calculation lens; cp2 = Hellenistic
+	placeFromZone bool
+	lens          lookup.Lens // active calculation lens; cp2 = Hellenistic
 
 	// slots is the workspace (canonical 2026-05-04). Constructed once
 	// location resolution completes; carries the floating slot (now+place)
@@ -204,7 +210,7 @@ type Model struct {
 	// bodyTop is the display row the Bodies list is drawn from (the rule counts
 	// as a row), remembered like chartTop so a window can hold still while the
 	// cursor moves inside it, and so a page op can leave the cursor at the top
-	// of a scrolled window. Presentation state: bodyWindowStart is the one rule
+	// of a scrolled window. Presentation state: panel.BodyWindowStart is the one rule
 	// for it, and it is re-settled wherever bodyCursorIdx is clamped.
 	bodyTop int
 
@@ -220,11 +226,14 @@ type Model struct {
 	// Never the floating slot. `[` / `]`, Enter on a timeline row, a deselect
 	// or a removal write it, and one arrival: landing on the base swaps it for
 	// the chart you came from. A slot pointer, so it follows a chart through
-	// ⌃k/⌃j.
+	// K/J.
 	base *store.Slot
 	// at is the row the cursor last arrived on, so the next arrival knows the
 	// chart it came from (noteArrival).
 	at *store.Slot
+	// lastSelected is the chart selected last, so the next selection knows
+	// which chart it is compared with (selectionOpensComparison).
+	lastSelected *store.Slot
 
 	// searchBefore is what the open `/` line found when it opened; Esc puts it back.
 	searchBefore searchBefore
@@ -238,7 +247,7 @@ type Model struct {
 	// file it read names another charts folder (applyStartupPerimeter): the
 	// file is that folder's, so this run never writes the general session. It
 	// lasts for the whole launch -- no transition clears it, not saving or
-	// opening a named session, not `<leader> n`, not a city change -- and the
+	// opening a named session, not a new session, not a city change -- and the
 	// path is never read again, so a file deleted or replaced meanwhile is
 	// still not written. A named session keeps saving as ever.
 	sessionForeign bool
@@ -247,6 +256,9 @@ type Model struct {
 	// general one (sessions_popup_model.go). sessions is the Sessions list.
 	named    namedRun
 	sessions sessionsPopupState
+	// sessionInfo is what the Status panel's Details read from disk, kept
+	// while that Details is on screen (session_panel.go).
+	sessionInfo sessionInfo
 	// sessionGen numbers the named-session opens; a load that is not the
 	// latest one is dropped.
 	sessionGen int
@@ -276,16 +288,10 @@ type Model struct {
 	// also loads. Resolution runs once both signals are in. cp3.
 	pendingPerimeter *ingest.StartupPerimeterReadMsg
 
-	// previousFloatingTime backs the one-level n/N toggle: `n` jumps the
-	// floating target to now (stashing the prior target here); `N` swaps the
-	// target with this stash. It tracks the TARGET (operator intent), never the
-	// lagging committed slot.Time, so it stays correct mid-held-key-burst.
-	previousFloatingTime time.Time
-
 	// floatingDetached is false while the floating chart follows the clock
 	// (attached: its title reads `~ Now`) and true once the operator has moved
 	// it (`~`). Its zero value is attached, which is how a session starts, and
-	// how one comes back from a restore. A time-step key, `N` and Enter on a
+	// how one comes back from a restore. A time-step key, `p` and Enter on a
 	// timeline row detach it; `n` attaches it again; nothing else changes it.
 	floatingDetached bool
 
@@ -311,11 +317,9 @@ type Model struct {
 	// again.
 	wheelURL string
 
-	// refresh holds the per-surface refresh coordinators (image, text, Details): a
-	// latest-wins single-flight with cancellation (see internal/ui/refresh.go).
-	// The image surface (S3) replaced the old wheelRendering/wheelPending
-	// single-flight; the text surface (S4) replaced the retired
-	// computeGen/dispatchSeq/lastCommittedSeq ordering counters.
+	// refresh holds the per-surface refresh coordinators (image, text, Details,
+	// the two lists, templates): a latest-wins single-flight with cancellation
+	// (see internal/ui/refresh.go).
 	refresh [numSurfaces]refreshState
 
 	// rows is the refresh table: one row per surface (row_spawns.go
@@ -338,6 +342,10 @@ type Model struct {
 	// asks for that plan, time apart (S4b B4): one that waited behind a publish
 	// while the cursor moved on is a picture of a chart the screen has left.
 	wheelPublishKey string
+	// wheelPublishShows names the charts of the pending bytes; wheelShown is the
+	// naming the Log last carried, so the line comes again only when it changes.
+	wheelPublishShows string
+	wheelShown        string
 	// wheelOpenSeq counts Ctrl+X presses. A publish carries the count it was
 	// started under, so a "viewer closed" answer older than the newest Ctrl+X
 	// cannot cancel the reopen that press asked for.
@@ -353,16 +361,15 @@ type Model struct {
 	// it is a frame of the same animation or a picture of a chart left behind.
 	wheelRunKey string
 
-	// leaderKey is the key that arms a pending sequence; leaderTimeout is
-	// how long that sequence waits for its next key. Both are configuration
-	// (preferences.yaml `keys:`), resolved once at startup by
-	// applyKeyConfig — the leader is deliberately NOT a key.Binding, since
-	// the resolver dispatches it and key.Matches never sees it.
-	leaderKey     string
-	leaderTimeout time.Duration
+	// leaderKey is the key that arms a pending sequence, which then waits
+	// until a key or Esc. It is configuration (preferences.yaml `keys:`),
+	// resolved once at startup by applyKeyConfig — the leader is deliberately
+	// NOT a key.Binding, since the resolver dispatches it and key.Matches never
+	// sees it.
+	leaderKey string
 
 	// leaderMap is the compiled-in prefix tree; leaderBindings is the same
-	// map in the order the help modal lists it. No user-writable map ships
+	// map in the order the Keybindings popup lists it. No user-writable map ships
 	// yet, so both are built once and never mutated.
 	leaderMap      *keys.LeaderNode
 	leaderBindings []keys.LeaderBinding
@@ -375,6 +382,10 @@ type Model struct {
 	// so the same word is not refused again at every Ctrl+X. A valid value
 	// clears it.
 	wheelFormatRefused string
+	// titleSession is whether window_title asks for the session name, and
+	// titleSent the title last sent to the terminal ("" before any change).
+	titleSession bool
+	titleSent    string
 
 	// leader is the pending prefix: armed or not, what has been typed, and
 	// the generation a timeout tick must match to act.
@@ -390,9 +401,6 @@ type Model struct {
 
 	// yank is the copy confirmation shown in the key bar's right slot.
 	yank yankState
-	// resetArmed is the yank generation of the "`, n` again" notice that armed
-	// the second press of `, n`; 0 when nothing is armed (reset_session.go).
-	resetArmed uint64
 	// loading is when the active Details tab started waiting (loading_overlay.go).
 	loading loadingState
 	// errorUnseen records an error line appended since the console was last
@@ -421,8 +429,8 @@ func NewModel(cfg Config) Model {
 	return NewModelWithClock(cfg, RealClock{})
 }
 
-// NewModelWithClock is the test-friendly constructor: invariants tests
-// pass FrozenClock(t) to make first-frame goldens deterministic.
+// NewModelWithClock is the test-friendly constructor: a test passes
+// FrozenClock(t) to make its frames deterministic.
 func NewModelWithClock(cfg Config, clock Clock) Model {
 	m := Model{
 		panels:  defaultPanels(),
@@ -433,12 +441,12 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 		startup: startupBootstrapping,
 		clock:   clock,
 		lens:    lookup.Hellenistic,
-		// The compiled-in defaults. preferences.yaml can replace the leader
-		// and the timeout at startup; the map is not user-writable yet.
+		// The compiled-in defaults. preferences.yaml can replace the leader at
+		// startup; the map is not user-writable yet.
 		leaderKey:      defaultLeaderKey,
-		leaderTimeout:  defaultLeaderTimeout,
 		leaderMap:      mustDefaultLeaderMap(),
 		leaderBindings: defaultLeaderMap(),
+		places:         &placeMemo{seen: map[placeKey]bool{}},
 	}
 	if text, ok := launchNote(cfg.Launch); ok {
 		// First, so the large log always says what ran.
@@ -447,13 +455,17 @@ func NewModelWithClock(cfg Config, clock Clock) Model {
 	if cfg.Migration != "" {
 		m = m.logTrace("state", "%s", cfg.Migration)
 	}
-	// A launch with --session runs that named session, whose lock main took;
-	// one it could not open says why, once.
+	// A launch with --session, or one reopening the last session, runs that
+	// named session, whose lock main took; one it could not open says why, once.
 	if cfg.NamedSession != nil {
 		m.named = namedRun{file: cfg.NamedSession.File(), name: cfg.NamedSessionName, lock: cfg.NamedSession}
+		m = m.recordLastSession()
 	}
 	if cfg.SessionNote != "" {
 		m = m.logNote("session", "%s", cfg.SessionNote)
+	}
+	if cfg.LastSessionTrace != "" {
+		m = m.logTrace("session", "%s", cfg.LastSessionTrace)
 	}
 	if cfg.InstanceLockUnsupported {
 		// Said once, that a second copy cannot be told apart from this one
@@ -498,13 +510,22 @@ func (m Model) Init() tea.Cmd {
 	// and running it first is what makes "Astrolog is not installed" the FIRST
 	// line rather than a line that may or may not beat the compute failure it
 	// explains. Everything after it still starts together.
-	return tea.Sequence(probeAstrologCmd(), loadEphemerisCmd(), tea.Batch(m.perimeterCmd(), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
+	return tea.Sequence(tea.SetWindowTitle(windowTitleDefault), probeAstrologCmd(), loadEphemerisCmd(), tea.Batch(m.perimeterCmd(), loadAtlasCmd(), loadAspectRegistryCmd(), loadObjectRegistryCmd()))
 }
 
 // Update is the program's one entry. The work a minute tick starts is quiet in
 // the Log: whatever surface wants it registers are marked once the message has
 // been handled (hush).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.updateHushed(msg)
+	if nm, ok := next.(Model); ok {
+		nm, cmd = nm.withTitle(cmd)
+		next = nm
+	}
+	return next, cmd
+}
+
+func (m Model) updateHushed(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.isTickWork(msg) {
 		return m.updateSynced(msg)
 	}
@@ -522,6 +543,13 @@ func (m Model) updateSynced(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return next, cmd
 	}
+	// What the layout decides (the panel in focus, Details open, the charts
+	// shown) moved the panels: the windows that depend on their heights settle
+	// for the new ones, and the Status panel's Details is read again.
+	if nm.layoutInput() != m.layoutInput() {
+		nm = nm.settleLayout()
+	}
+	nm = nm.refreshSessionInfo()
 	// The reconciler: every pane that shows a computed result is owed the
 	// result for the key it wants now, whatever entry point changed it
 	// (reconcile.go). Before the run of equal keys is judged, because a request
@@ -539,16 +567,21 @@ func (m Model) updateSynced(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// The idle prefetch comes last: whatever the message owed has been started,
 	// and a run of the operator's own stops a call that is out.
+	var vcmd tea.Cmd
+	switch msg.(type) {
+	case FirstFrameReadyMsg, refreshResultMsg:
+		nm, vcmd = nm.askShownVoid()
+	}
 	nm, pcmd := nm.prefetchAfter(msg, m.startup == startupReady)
 	// The loading overlay's timer goes last, after the work this message
 	// started: the program runs them all at once, but a test's pump waits on a
 	// batch in order and must not stall on the timer before the work.
 	nm, lcmd := nm.syncLoading()
 	switch {
-	case rcmd == nil && pcmd == nil && lcmd == nil:
+	case rcmd == nil && pcmd == nil && lcmd == nil && vcmd == nil:
 		return nm, cmd
 	}
-	return nm, tea.Batch(cmd, rcmd, pcmd, lcmd)
+	return nm, tea.Batch(cmd, rcmd, vcmd, pcmd, lcmd)
 }
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -624,8 +657,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case ChartResolvedMsg:
 		var cmd tea.Cmd
+		current := msg.Gen == m.pickGen
 		m, cmd = applyChartResolved(m, msg)
-		return m, cmd
+		if !current {
+			return m, cmd
+		}
+		// A chart of several ticked ones is done, opened or refused: the next
+		// goes on.
+		m, next, started := nextTicked(m)
+		if !started {
+			return m, cmd
+		}
+		return m, tea.Batch(cmd, next)
 	case SaveChartDoneMsg:
 		var cmd tea.Cmd
 		m, cmd = applySaveDone(m, msg)
@@ -634,8 +677,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = applyNamedSessionLoaded(m, msg)
 		return m, cmd
-	case RenameReadMsg:
-		return applyRenameRead(m, msg)
 	case TitleWrittenMsg:
 		var cmd tea.Cmd
 		m, cmd = applyTitleWritten(m, msg)
@@ -657,8 +698,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case nowTickMsg:
 		return m.onNowTick(msg)
-	case leaderTimeoutMsg:
-		return m.onLeaderTimeout(msg)
 	case yankFlashMsg:
 		return m.onYankFlash(msg)
 	case loadingTickMsg:
@@ -667,6 +706,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onPrefetchIdle(msg)
 	case prefetchDoneMsg:
 		return m.onPrefetchDone(msg)
+	case voidLandedMsg:
+		return m.onVoidLanded(msg), nil
 	case refreshTickMsg:
 		return m.onRefreshTick(msg)
 	case refreshResultMsg:
@@ -681,7 +722,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Ctrl+C quits from every owner, a pending leader included, before
 		// any of them sees the key (C10).
 		if key.Matches(msg, m.keys.ForceQuit) {
-			return m.quit()
+			return m.quitOrAsk()
 		}
 		// Several keys read at once are pressed one at a time, each through
 		// whichever owner has the keyboard by then (C14).
@@ -697,18 +738,32 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // dispatchKey hands one key to whatever has the keyboard.
 func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Any key but the two that make `, n` disarms the reset warning.
-	if m.resetArmed != 0 {
-		starts := !m.leader.pending && m.leaderKey != "" && msg.String() == m.leaderKey
-		ends := m.leader.pending && msg.String() == "n"
-		if !starts && !ends {
-			m.resetArmed = 0
-		}
-	}
 	// A layout that lost the Log panel (a third chart widened the left column)
 	// leaves nothing to hold the keyboard: the focus ends before the key runs.
 	if m.logFocus.active && !m.logOnScreen() {
 		m.logFocus = logFocusState{}
+	}
+	// In the command line `?` closes it and opens Keybindings, wherever it is open.
+	if m.leader.pending && msg.String() == "?" {
+		return openKeybindings(m.clearLeader(), false)
+	}
+	if msg.String() == "?" && m.questionOpensKeybindings() {
+		return openKeybindings(m, false)
+	}
+	// Over a list with a filter, an open search line or the console the leader key
+	// is never text: it opens the command line over it where the owner binds a
+	// chord, and otherwise does nothing.
+	if m.limitedLeader(m.currentOwner()) {
+		if m.leader.pending {
+			return m.leaderOverPopup(msg)
+		}
+		if m.leaderKey != "" && msg.String() == m.leaderKey {
+			// With nothing to offer here the key does nothing at all.
+			if f := m.keysFacts(m.currentOwner()); len(f.Leader.Offered)+len(f.Leader.Twins) == 0 {
+				return m, nil
+			}
+			return m.armLeader()
+		}
 	}
 	switch m.currentOwner() {
 	case ownerCity:
@@ -723,8 +778,8 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return updateHouseFinderKey(m, msg)
 	case ownerZodiac:
 		return updateZodiacFinderKey(m, msg)
-	case ownerDisplay:
-		return updateHouseDisplayKey(m, msg)
+	case ownerNodes:
+		return updateNodesFinderKey(m, msg)
 	case ownerExperiments:
 		return updateExperimentsKey(m, msg)
 	case ownerSessions:
@@ -735,10 +790,8 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return updateSaveModalKey(m, msg)
 	case ownerChartTitle:
 		return updateTitleFormKey(m, msg)
-	case ownerHelp:
-		return m.updateHelpKey(msg)
-	case ownerActions:
-		return updateActionsKey(m, msg)
+	case ownerKeybindings:
+		return updateKeybindingsKey(m, msg)
 	case ownerConsole:
 		return m.updateConsoleKey(msg)
 	case ownerLog:
@@ -749,8 +802,7 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.leader.pending {
 			return m.updateLeaderKey(msg)
 		}
-		// An open search line takes every key, the comma included.
-		if m.leaderKey != "" && msg.String() == m.leaderKey && !(m.timeline.searching && m.timelineSearchLine()) && !m.detailsReportSearchOpen() {
+		if m.leaderKey != "" && msg.String() == m.leaderKey {
 			return m.armLeader()
 		}
 		return m.updateDetailsKey(msg)
@@ -766,6 +818,22 @@ func (m Model) dispatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.updateMainKey(msg)
 }
 
+// questionOpensKeybindings is whether `?` opens Keybindings over whatever has
+// the keyboard: every list popup, the City list included, and the Log and its
+// console. It stays text in a true form field (a chart title, a session name,
+// the save prompt) and in an open search line, and in a question that waits
+// for its answer. The main screen and attached Details have `?` in their own
+// tables.
+func (m Model) questionOpensKeybindings() bool {
+	switch m.currentOwner() {
+	case ownerCity, ownerOpenChart, ownerBodies, ownerAspects, ownerHouses, ownerZodiac, ownerNodes, ownerExperiments, ownerConsole, ownerLog:
+		return true
+	case ownerSessions:
+		return !m.sessions.Asking
+	}
+	return false
+}
+
 func (m Model) updateMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.dispatchMainBinding(keys.MatchBinding(msg, m.available(ownerMain, mainBindings(m.keys))), msg)
 }
@@ -779,6 +847,9 @@ func (m Model) dispatchMainBinding(id keys.BindingID, msg tea.KeyMsg) (tea.Model
 	if p, ok := panelDigits[id]; ok {
 		return m.pressPanelDigit(p)
 	}
+	if tm, cmd, ok := m.pressTimeStep(id); ok {
+		return tm, cmd
+	}
 	switch id {
 	case keys.BindingNextView:
 		return m.setFocusedPanel(m.nextFocus())
@@ -791,23 +862,15 @@ func (m Model) dispatchMainBinding(id keys.BindingID, msg tea.KeyMsg) (tea.Model
 	case keys.BindingDetailsTab:
 		// `0` is Details' digit, and Details is not in the ring: it cycles
 		// Details' tabs from anywhere and never focuses it (D14, C33, C40).
+		// Where Details is not on screen it opens it below the panel in focus.
+		if !m.detailsVisible() {
+			return m.attachDetails()
+		}
 		return m.cycleTab(PanelDetails, +1)
 	case keys.BindingSlotCycleUp:
 		return m.cycleFocusedRow(-1)
 	case keys.BindingSlotCycleDown:
 		return m.cycleFocusedRow(+1)
-	case keys.BindingTimeStepYear:
-		return m.advanceTime(unitYear, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepMonth:
-		return m.advanceTime(unitMonth, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepWeek:
-		return m.advanceTime(unitWeek, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepDay:
-		return m.advanceTime(unitDay, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepHour:
-		return m.advanceTime(unitHour, stepDirectionFromRune(msg))
-	case keys.BindingTimeStepMinute:
-		return m.advanceTime(unitMinute, stepDirectionFromRune(msg))
 	case keys.BindingScrollDown:
 		return m.scrollDetailsTab(detailsScrollStep), nil
 	case keys.BindingScrollUp:
@@ -826,9 +889,6 @@ func (m Model) dispatchMainBinding(id keys.BindingID, msg tea.KeyMsg) (tea.Model
 		return m.pageFocusedList(menu.PageHome)
 	case keys.BindingPageEnd:
 		return m.pageFocusedList(menu.PageEnd)
-	case keys.BindingActions:
-		// The door to the commands, not one of them (actions_popup_model.go).
-		return openActions(m)
 	}
 	// Everything else is a command, which runs by its id (actions.go).
 	if tm, cmd, ok := m.runAction(id); ok {
@@ -883,18 +943,48 @@ const (
 	unitDay
 	unitHour
 	unitMinute
+	unitSecond
 )
 
-// stepDirectionFromRune returns +1 (forward) or -1 (backward) based on
-// whether the pressed key's rune is uppercase. Per pitch.md convention:
-// lowercase = forward, uppercase = backward. Defaults to forward when
-// the message carries no rune (defensive — shouldn't happen for the
-// time-step bindings, which only accept rune keys).
-func stepDirectionFromRune(msg tea.KeyMsg) int {
-	if len(msg.Runes) > 0 && unicode.IsUpper(msg.Runes[0]) {
-		return -1
+// timeStepKeys is what each time key does: the unit it steps and which way.
+// The lower case key of a step goes forward and the upper case key goes back;
+// each is an action of its own.
+var timeStepKeys = map[keys.BindingID]struct {
+	unit timeStepUnit
+	dir  int
+}{
+	keys.BindingTimeStepYear:       {unitYear, +1},
+	keys.BindingTimeStepYearBack:   {unitYear, -1},
+	keys.BindingTimeStepMonth:      {unitMonth, +1},
+	keys.BindingTimeStepMonthBack:  {unitMonth, -1},
+	keys.BindingTimeStepWeek:       {unitWeek, +1},
+	keys.BindingTimeStepWeekBack:   {unitWeek, -1},
+	keys.BindingTimeStepDay:        {unitDay, +1},
+	keys.BindingTimeStepDayBack:    {unitDay, -1},
+	keys.BindingTimeStepHour:       {unitHour, +1},
+	keys.BindingTimeStepHourBack:   {unitHour, -1},
+	keys.BindingTimeStepMinute:     {unitMinute, +1},
+	keys.BindingTimeStepMinuteBack: {unitMinute, -1},
+	keys.BindingTimeStepSecond:     {unitSecond, +1},
+	keys.BindingTimeStepSecondBack: {unitSecond, -1},
+}
+
+// pressTimeStep runs a time key, a Moon phase jump included, and says whether
+// id is one.
+func (m Model) pressTimeStep(id keys.BindingID) (Model, tea.Cmd, bool) {
+	switch id {
+	case keys.BindingMoonPhase:
+		m, cmd := m.stepPhase(+1)
+		return m, cmd, true
+	case keys.BindingMoonPhasePrev:
+		m, cmd := m.stepPhase(-1)
+		return m, cmd, true
 	}
-	return +1
+	if s, ok := timeStepKeys[id]; ok {
+		m, cmd := m.advanceTime(s.unit, s.dir)
+		return m, cmd, true
+	}
+	return m, nil, false
 }
 
 // advanceTime mutates the time-step TARGET by the given step and registers
@@ -927,9 +1017,9 @@ func (m Model) advanceTime(unit timeStepUnit, direction int) (Model, tea.Cmd) {
 	// leaves the time where it is and says why in one plain line
 	// (the specification C10).
 	if lookup.BeforeJulianDayZero(target) {
-		return m.logNote("time", "stopped at Julian Day 0, the earliest moment Astrolog can cast"), nil
+		return m.logNote("time", "the earliest moment Astrolog can cast is in 4713 BC"), nil
 	}
-	m.details.pressedSet = false
+	m.details.pressedSet, m.details.followNow = false, true
 	m.floatingDetached = true
 	return m.setFloatingTarget(target)
 }
@@ -953,6 +1043,12 @@ func (m Model) floatingTitle() string {
 // text surface; the committed slot Time, Bodies, Aspects and — through the
 // commit's refreshWheelIfActive — the wheel follow from that one compute.
 func (m Model) setFloatingTarget(target time.Time) (Model, tea.Cmd) {
+	return m.clearDetailsFilters().followFloatingTarget(target)
+}
+
+// followFloatingTarget is setFloatingTarget for the clock's own tick, which
+// keeps the Details filters: the moment moves by itself there.
+func (m Model) followFloatingTarget(target time.Time) (Model, tea.Cmd) {
 	m.targetFloatingTime = target
 	m = m.waitDetailsForText()
 	m, textCmd := m.noteWant(surfaceText, true)
@@ -963,31 +1059,16 @@ func (m Model) setFloatingTarget(target time.Time) (Model, tea.Cmd) {
 	return m, tea.Batch(textCmd, imageCmd)
 }
 
-// advanceTimeForPlace is the DST-aware calendar+duration arithmetic
-// store.Slots.AdvanceFloating uses, extracted so advanceTime can apply
-// it to m.targetFloatingTime without going through the store mutator.
-// Calendar arithmetic (years/months/days) runs in the floating slot's
-// local timezone so "+1 month at the same local clock time" survives
-// DST boundaries. dur is added as a fixed wall-clock duration.
+// advanceTimeForPlace is a time-step of the floating slot: years, months and
+// days in Astrolog's calendar at the place's wall clock, so "+1 month at the
+// same clock time" survives a daylight change and lands on Astrolog's date
+// before 1583 (lookup.StepMoment), then dur of elapsed time.
 func advanceTimeForPlace(t time.Time, place location.PlaceInfo, years, months, days int, dur time.Duration) time.Time {
-	if years == 0 && months == 0 && days == 0 && dur == 0 {
-		return t
-	}
-	if years != 0 || months != 0 || days != 0 {
-		if loc, err := time.LoadLocation(place.TZ); err == nil {
-			t = t.In(loc).AddDate(years, months, days)
-		} else {
-			t = t.AddDate(years, months, days)
-		}
-	}
-	if dur != 0 {
-		t = t.Add(dur)
-	}
-	return t
+	return lookup.StepMoment(t, place, years, months, days, dur)
 }
 
 // stepDelta translates a (unit, direction) pair into AddDate + Duration
-// arguments suitable for store.Slots.AdvanceFloating. Centralizes the
+// arguments for advanceTimeForPlace. Centralizes the
 // magnitude-per-unit decision so the unit table is one place.
 func stepDelta(unit timeStepUnit, direction int) (years, months, days int, dur time.Duration) {
 	switch unit {
@@ -1003,6 +1084,8 @@ func stepDelta(unit timeStepUnit, direction int) (years, months, days int, dur t
 		return 0, 0, 0, time.Duration(direction) * time.Hour
 	case unitMinute:
 		return 0, 0, 0, time.Duration(direction) * time.Minute
+	case unitSecond:
+		return 0, 0, 0, time.Duration(direction) * time.Second
 	}
 	return 0, 0, 0, 0
 }
@@ -1159,10 +1242,20 @@ func (m Model) focusSlot(i int) Model {
 	return m.clampTimelineCursor().settleChartTop().settleBodiesColStart().resetBodyTop()
 }
 
+// settleLayout holds every window whose height the layout decides where the
+// cursor is: the Chart list, the Bodies list, the Details report and timeline.
+func (m Model) settleLayout() Model {
+	m = m.settleChartTop().settleBodyTop().clampDetailsOffset()
+	if m.detailsVisible() {
+		m = m.clampTimelineCursor()
+	}
+	return m
+}
+
 // settleChartTop records the Chart window for the cursor's current place.
 func (m Model) settleChartTop() Model {
-	if m.slots == nil {
-		return m
+	if r := m.geometry()[PanelChart]; m.slots == nil || r.h < 3 {
+		return m // a folded panel keeps the window it had
 	}
 	m.chartTop, _ = chartWindow(len(m.slots.All()), m.cursorIdx, m.geometry()[PanelChart].h-2, m.chartTop)
 	return m
@@ -1290,7 +1383,7 @@ func (m Model) canMoveSlot(delta int) bool {
 func (m Model) canMoveSlotUp() bool   { return m.canMoveSlot(-1) }
 func (m Model) canMoveSlotDown() bool { return m.canMoveSlot(+1) }
 
-// moveFocusedSlot is ⌃k / ⌃j: the focused anchored slot swaps with its
+// moveFocusedSlot is K / J: the focused anchored slot swaps with its
 // neighbour and the cursor follows it. The slot itself is unchanged, so its
 // Bodies row, selection and marks travel with it; what can change is which
 // slot is the baseline, and the text recomputes only then (comparisonSig:
@@ -1325,8 +1418,8 @@ func (m Model) moveFocusedSlot(delta int) (Model, tea.Cmd) {
 		m = m.holdShown()
 		m, textCmd = m.bumpIdentity(surfaceText)
 	}
-	if m.timeline.keyed {
-		// A timeline never asked for has nothing stale to renumber; its first
+	if m.list(m.shownList()).keyed {
+		// A list never asked for has nothing stale to renumber; its first
 		// search is the next text commit's business (C43).
 		m, timelineCmd = m.syncTimeline()
 	}
@@ -1438,6 +1531,9 @@ func (m Model) bodiesRows() (planets, under, height int) {
 // holds the cursor is not moved.
 func (m Model) settleBodyTop() Model {
 	planets, under, height := m.bodiesRows()
+	if height < 1 {
+		return m // a folded panel keeps the window it had
+	}
 	m.bodyTop = panel.BodyWindowStart(planets, under, m.bodyCursorIdx, m.bodyTop, height)
 	return m
 }
@@ -1453,7 +1549,7 @@ func (m Model) resetBodyTop() Model {
 // pageBodies pages the Bodies cursor over the focused slot's rows by the paging
 // rule (cursor_page.go), counted on the window the panel DRAWS: the cursor rows
 // it shows with the cusp rule inside it or not, not the smallest count it could
-// show. The page re-derives the window the render will draw (bodyWindowStart) and
+// show. The page re-derives the window the render will draw (panel.BodyWindowStart) and
 // puts the cursor on its first or last cursor row, so a page up lands on the top
 // drawn row and a page down on the bottom one at every panel height. Bodies
 // follows as it does for an arrow step: Details defers and an open wheel repaints.
@@ -1527,7 +1623,7 @@ func (m Model) toggleFocusedSelection() (Model, tea.Cmd) {
 		// Rule 8 of the specification: a selection change
 		// ends the entered row.
 		m.details.pressedSet = false
-		m = m.pruneTabMemory().noteArrival()
+		m = m.pruneTabMemory().noteArrival().selectionOpensComparison()
 		if m.comparisonSig() == before {
 			return m, nil
 		}
@@ -1557,7 +1653,7 @@ func anchorOf(s *store.Slot) store.AnchorChart {
 	if s == nil {
 		return store.AnchorChart{}
 	}
-	return store.AnchorChart{When: s.Time, Place: s.Location, Label: s.Chart.Label}
+	return store.AnchorChart{When: s.Time, Place: s.Location, Label: s.Chart.Label, Record: s.Chart.Record}
 }
 
 // baselineChart is the comparison's left side: the first selected anchored
@@ -1653,6 +1749,7 @@ func (m Model) closeWheel() (Model, tea.Cmd) {
 	_ = m.rows[surfaceImage].spawn.wheel.closeServer()
 	m.previewActive = false
 	m.wheelURL = ""
+	m.wheelShown = ""
 	m.wheelPublishPending = nil
 	return m.logWheelClosed(), nil
 }
@@ -1703,81 +1800,18 @@ func (m Model) focusedIsFloating() bool {
 }
 
 // jumpFloatingToNow handles `n`: jump the floating-slot target to wall-clock
-// now, stashing the prior target so `N` can toggle back. It acts from any
-// cursor position (D37).
+// now. It acts from any cursor position (D37).
 func (m Model) jumpFloatingToNow() (Model, tea.Cmd) {
 	if m.blocked(keys.BindingJumpNow) != "" {
 		return m, nil
 	}
-	m.details.pressedSet = false
-	m.previousFloatingTime = m.targetFloatingTime
+	m.details.pressedSet, m.details.followNow = false, true
 	m.targetFloatingTime = m.clock.Now()
 	m.floatingDetached = false
 	m = m.waitDetailsForText()
 	m, wantCmd := m.noteWant(surfaceText, true)
 	m, tickCmd := m.armNowTick()
 	return m, tea.Batch(wantCmd, tickCmd)
-}
-
-// toggleFloatingBack handles `N`: swap the floating-slot target with the
-// stashed previous target, a one-level back-and-forth toggle. A silent
-// no-op when there is no stash yet; from any cursor position like `n` (D37).
-func (m Model) toggleFloatingBack() (Model, tea.Cmd) {
-	if m.blocked(keys.BindingToggleBack) != "" {
-		return m, nil
-	}
-	m.details.pressedSet = false
-	m.floatingDetached = true
-	m.targetFloatingTime, m.previousFloatingTime = m.previousFloatingTime, m.targetFloatingTime
-	m = m.waitDetailsForText()
-	return m.noteWant(surfaceText, true)
-}
-
-// helpBindings is the Keys popup's table. It has nothing to type into, so j
-// and k move as they do on the main screen, q closes it as Esc does, and ?
-// closes it as it opened it.
-func helpBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{
-		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true},
-		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
-		{ID: keys.BindingScrollUp, Binding: key.NewBinding(key.WithKeys("pgup")), Title: "Page list", HelpKey: "⇞/⇟", BarKey: "⇞⇟", Bar: true},
-		{ID: keys.BindingScrollDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
-		// The text has no filter box, so g and G are Home and End here.
-		{ID: keys.BindingPageHome, Title: "First row", Binding: key.NewBinding(key.WithKeys("home", "g")), BarKey: "home/g"},
-		{ID: keys.BindingPageEnd, Title: "Last row", Binding: key.NewBinding(key.WithKeys("end", "G")), BarKey: "end/G"},
-		{ID: keys.BindingHelp, Binding: key.NewBinding(key.WithKeys("?")), BarKey: "?"},
-		closeOnEscOrQ("Close"),
-	})
-}
-
-// updateHelpKey handles a key while help is open: ↑/↓ walk the bindings
-// (the specification C5b), and ? or Esc close it. The list
-// stops at its ends.
-func (m Model) updateHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	step := 0
-	switch keys.MatchBinding(msg, helpBindings()) {
-	case keys.BindingClose, keys.BindingHelp:
-		m.helpOpen = false
-		return m, nil
-	case keys.BindingListUp:
-		step = -1
-	case keys.BindingListDown:
-		step = 1
-	case keys.BindingScrollUp:
-		step = -keys.HelpListHeight(m.height)
-	case keys.BindingScrollDown:
-		step = keys.HelpListHeight(m.height)
-	case keys.BindingPageHome:
-		m.help.Offset = 0
-		return m, nil
-	case keys.BindingPageEnd:
-		m.help.Offset = keys.HelpScroll(0, len(m.helpLines()), len(m.helpLines()), keys.HelpListHeight(m.height))
-		return m, nil
-	default:
-		return m, nil
-	}
-	m.help.Offset = keys.HelpScroll(m.help.Offset, step, len(m.helpLines()), keys.HelpListHeight(m.height))
-	return m, nil
 }
 
 func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -1794,7 +1828,7 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if msg.Action != tea.MouseActionPress {
 		return m, nil
 	}
-	panel := hitTestPanel(m.width, m.height, chartContentLines(m.slots), m.shownCount(), msg.X, msg.Y)
+	panel := m.panelAt(msg.X, msg.Y)
 	switch msg.Button {
 	case tea.MouseButtonWheelDown:
 		// The wheel scrolls the panel it is pointing at, and Details is the
@@ -1836,6 +1870,7 @@ func (m Model) wheelScroll(panel PanelID, delta int) Model {
 // TestPanelDigitAgainStepsItsTabs walks it, so a panel that gains tabs gains
 // the gesture with no per-panel code.
 var panelDigits = map[keys.BindingID]PanelID{
+	keys.BindingFocusSession: PanelStatus,
 	keys.BindingFocusChart:   PanelChart,
 	keys.BindingFocusBodies:  PanelBodies,
 	keys.BindingFocusAspects: PanelAspects,
@@ -1856,7 +1891,20 @@ func (m Model) setFocusedPanel(panel PanelID) (Model, tea.Cmd) {
 		return m, nil
 	}
 	crossesBodies := panel == PanelBodies || m.focused == PanelBodies
+	if panel == PanelStatus || m.focused == PanelStatus {
+		m.details.scrollOffset = 0 // the Status panel's Details is another text
+	}
 	m.focused = panel
+	if m.details.attached {
+		// Details follows the focus: it is now the new panel's, below it or
+		// beside the panels, and the keys stay in it. A search the old subject
+		// had open ends with it.
+		for _, k := range allLists {
+			m.list(k).searching = false
+		}
+		m.details.searching = false
+		m = m.placeDetailsCursor()
+	}
 	// Details and the Chart's Timeline follow the focus through the reconciler
 	// (reconcile.go): the new subject's report, and the Timeline's first search.
 	if !crossesBodies {
@@ -1900,14 +1948,12 @@ const (
 	// (the specification C12). Written only by logWarnings.
 	laneWarning
 	// laneWheelOpen is the one line that says where the wheel is served,
-	// written by logWheelOpen when the first publish of a session lands. It is
-	// not an error and not a note: it has its own colour (WheelOpenColour) and
-	// its own words, so it takes neither the error form nor the `scope:` form.
+	// written by logWheelOpen when the first publish of a session lands. It
+	// reads as a note and is a lane of its own so the toggle can find it.
 	laneWheelOpen
 	// laneWheelClosed is the one line that says the wheel was closed by a
-	// second Ctrl+X, written by logWheelClosed. Red like an error, but the
-	// operator asked for it: it is not in the error lane, marks no unseen
-	// error and takes no "Couldn't" form.
+	// second Ctrl+X, written by logWheelClosed. The operator asked for it: it
+	// is not in the error lane and marks no unseen error.
 	laneWheelClosed
 	// laneNow is the one line that keeps the provenance of the minute tick's
 	// calls, which write no argv line: the last command of the latest tick,
@@ -1930,26 +1976,40 @@ const (
 // logLine is one entry of the Model's log buffer: its lane and its text.
 type logLine struct {
 	lane logLane
+	// text is the line as the large Log shows and copies it: `scope: message`
+	// for a note and an error, the bare command for an argv line.
 	text string
+	// scope, group and msg are set for a note, an error and a wheel line: the
+	// Log panel draws group and msg apart, the large Log draws text.
+	scope string
+	group logGroup
+	msg   string
 	// failed marks an argv or now line whose Astrolog call ended in an error:
 	// the large log draws a red `!` before it. It is drawn, never stored in
 	// text, so Enter and `,y` copy the plain command.
 	failed bool
+	// cleared marks a line a new or opened session took off the Log panel. The
+	// console still holds it.
+	cleared bool
 }
 
-// logNote appends a note: `scope: what happened`, the form every note
-// takes (the specification A3). scope is a literal of lower-case
-// letters and dots, kept by convention (the invariant was retired 2026-10-03). The
-// line is built here, so substituted text cannot break the form: a line break
-// becomes a space and a closing full stop is dropped.
+// logNote appends a note. scope is the word the large Log prints before the
+// line and the key of scopeGroups, which gives the Log panel its group. The
+// message is a fact in few words, thing first: lower case unless it starts with
+// a name, no closing full stop, no advice, no key, no colon. It is built here,
+// so substituted text cannot break the form: a line break becomes a space and a
+// closing full stop is dropped.
 //
 // The Log speaks only when something happened the operator would otherwise
 // have to check for (§ Log scope): a file written, or a thing that did not
 // come back as it was left. Routine reading writes nothing, and neither does
 // a key that had nothing to act on.
 func (m Model) logNote(scope, format string, args ...any) Model {
-	return m.appendLog(laneNote, scope+": "+closeLine(oneLine(fmt.Sprintf(format, args...)), ""))
+	return m.appendScoped(laneNote, scope, fmt.Sprintf(format, args...))
 }
+
+// logBare is logNote for a message with no format to fill.
+func (m Model) logBare(scope, text string) Model { return m.appendScoped(laneNote, scope, text) }
 
 // logTrace appends a console-only line, `scope: what happened`, formed as
 // logNote forms it. See laneTrace for what belongs here.
@@ -1961,28 +2021,32 @@ func (m Model) logTrace(scope, format string, args ...any) Model {
 // the server's address as preview reports it; its closing slash is dropped
 // from the line, which is read by a person and typed into a browser.
 func (m Model) logWheelOpen(url string) Model {
-	return m.appendLog(laneWheelOpen, closeLine(oneLine(fmt.Sprintf("Wheel at %s (Ctrl+X again closes it)", strings.TrimSuffix(url, "/"))), ""))
+	return m.appendScoped(laneWheelOpen, "wheel", "served at "+strings.TrimSuffix(url, "/"))
 }
 
 // logWheelClosed appends the line that says the wheel server was stopped.
 func (m Model) logWheelClosed() Model {
-	return m.appendLog(laneWheelClosed, "Wheel closed. Ctrl+X opens it again")
+	return m.appendScoped(laneWheelClosed, "wheel", "server closed")
 }
 
 // logError appends an error line: a failure of something the operator asked
-// for, as one sentence in the error-style voice (A4). format starts
-// "Couldn't "; the line ends with exactly one full stop whatever the
-// substituted cause ended with. Errors render in the 6-row Log and the
-// console, in the error colour, and are never evicted. The call sites are
-// pinned by TestErrorLaneMembership.
-func (m Model) logError(format string, args ...any) Model {
-	return m.appendLog(laneError, closeLine(oneLine(fmt.Sprintf(format, args...)), "."))
+// for, said as what did not happen. scope names what failed. Errors render in
+// the Log panel and the console in the error colour, and are never evicted. The
+// call sites are pinned by TestErrorLaneMembership.
+func (m Model) logError(scope, format string, args ...any) Model {
+	return m.appendScoped(laneError, scope, fmt.Sprintf(format, args...))
 }
 
-// logErrorLine appends text to the error lane exactly as written: the caller
-// owns the wording, so no "Couldn't" form and no full stop are added.
-func (m Model) logErrorLine(text string) Model {
-	return m.appendLog(laneError, closeLine(oneLine(text), ""))
+// logErrorLine is logError for a message the caller has already formed.
+func (m Model) logErrorLine(scope, text string) Model {
+	return m.appendScoped(laneError, scope, text)
+}
+
+// appendScoped is the one writer of a line that has a scope: it forms the
+// message and the console's `scope: message` text, and sets the group.
+func (m Model) appendScoped(lane logLane, scope, message string) Model {
+	msg := closeLine(oneLine(message), "")
+	return m.appendLogLine(logLine{lane: lane, text: scope + ": " + msg, scope: scope, group: groupOf(scope), msg: msg})
 }
 
 // abandon adds gen to a set of abandoned write generations. It copies, so a
@@ -2021,16 +2085,19 @@ func oneLine(s string) string {
 
 // logWarnings appends, for the console only, the warning lines of a refused
 // Astrolog call after the first: the error line already carries the first as
-// its reason (failureReason), and the Log has no room for the rest. A line
+// its reason (failureReason), and the Log has no room for the rest. A first
+// line about a body with no data is said in the operator's words there, so
+// Astrolog's own line goes to the console too. A line
 // reaches the buffer with its terminal control bytes removed, so neither the
 // console's render nor a copy can carry one (C12). An err that is not such a
 // refusal appends nothing.
 func (m Model) logWarnings(err error) Model {
 	lines := warningTexts(err)
-	if len(lines) > 1 {
-		for _, l := range lines[1:] {
-			m = m.appendLog(laneWarning, l)
-		}
+	if len(lines) > 0 && lookup.NoDataBody(lines[0]) == "" {
+		lines = lines[1:] // the Log line quotes the first (failureReason)
+	}
+	for _, l := range lines {
+		m = m.appendLog(laneWarning, l)
 	}
 	return m
 }
@@ -2121,29 +2188,37 @@ func trimConsoleOnly(lines []logLine) []logLine {
 	return out
 }
 
-// logPanelLines is the 6-row Log's view of the buffer: error and note lines
-// in arrival order, never an argv line. Derived live on every
-// render.
+// logPanelLines is the Log panel's view of the buffer as plain text, the way
+// it is copied: error and note lines in arrival order, never an argv line, each
+// as its group cell, one space and its message. Derived live on every render.
 func (m Model) logPanelLines() []string {
 	out := make([]string, 0, len(m.logLines))
-	for _, l := range m.logLines {
-		if l.lane != laneArgv && l.lane != laneWarning && l.lane != laneNow && l.lane != laneTrace {
-			out = append(out, l.text)
-		}
+	for _, l := range m.logPanelEntries() {
+		out = append(out, l.group.cell()+" "+l.msg)
 	}
 	return out
 }
 
-// logPanelRows is logPanelLines as the 6-row Log draws them: an error line
-// in the error colour, or behind `! ` with colours off (A1, A2).
+// clearLogPanel empties the Log panel and the footer's error mark for a new
+// session. The console keeps every line. The buffer is copied, not edited,
+// because earlier Model values share it.
+func (m Model) clearLogPanel() Model {
+	lines := make([]logLine, len(m.logLines))
+	for i, l := range m.logLines {
+		l.cleared = true
+		lines[i] = l
+	}
+	m.logLines = lines
+	m.errorUnseen, m.errorKeptView = false, false
+	return m
+}
+
+// logPanelRows is the Log panel's lines as it draws them: the group column,
+// then the message (renderPanelLine).
 func (m Model) logPanelRows() []string {
 	out := make([]string, 0, len(m.logLines))
-	for _, l := range m.logLines {
-		switch l.lane {
-		case laneArgv, laneWarning, laneNow, laneTrace:
-		default:
-			out = append(out, renderLaneLine(l, 0, m.cfg))
-		}
+	for _, l := range m.logPanelEntries() {
+		out = append(out, renderPanelLine(l, m.cfg))
 	}
 	return out
 }
@@ -2199,7 +2274,7 @@ func (m Model) nowInSnapshot(line logLine) Model {
 }
 
 func (m Model) modalOpen() bool {
-	return m.helpOpen || m.actionsOpen || m.startupShowsModal()
+	return m.keybindingsOpen || m.startupShowsModal()
 }
 
 // startupShowsModal reports whether `startup` is currently naming an open modal
@@ -2207,7 +2282,7 @@ func (m Model) modalOpen() bool {
 // transitions startup has to ask which job it is doing.
 func (m Model) startupShowsModal() bool {
 	switch m.startup {
-	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupDisplayOpen, startupExperimentsOpen, startupSessionsOpen, startupSessionNameOpen, startupSaveOpen, startupTitleOpen:
+	case startupAtlasOpen, startupChartOpen, startupAspectOpen, startupBodyOpen, startupHouseOpen, startupZodiacOpen, startupNodesOpen, startupExperimentsOpen, startupSessionsOpen, startupSessionNameOpen, startupSaveOpen, startupTitleOpen:
 		return true
 	}
 	return false
@@ -2228,14 +2303,18 @@ func (m Model) viewFrame() string {
 	if m.modalOpen() {
 		visualFocus = PanelNone
 	}
-	composed := compose(m.width, m.height, m.panels, visualFocus, m.modalOpen(), m.keysContext(), m.cfg, m.logPanelRows(), m.paintedChart(), m.detailsFrame(), m.slots, m.cursorIdx, m.bodyCursorIdx, m.chartTop, m.clock.Now(), m.place, m.lens, m.rowTag, m.floatingTitle(), m.tabStrips(), m.console, m.bodiesView(), m.logFocusView())
-	if m.helpOpen {
-		modal := keys.RenderHelp(m.keysContextFor(ownerHelp), popupChrome(m.cfg), m.width, m.height)
-		return term.Centered(composed, modal, m.width, m.height)
+	composed := compose(m.width, m.height, m.layout(), m.panels, visualFocus, m.modalOpen(), m.keysContext(), m.cfg, m.logPanelRows(), m.paintedChart(), m.detailsFrame(), m.slots, m.cursorIdx, m.bodyCursorIdx, m.chartTop, m.clock.Now(), m.place, m.lens, m.rowTag, m.floatingTitle(), m.placeWitness(), m.tabStrips(), m.console, m.bodiesView(), m.logFocusView(), m.sessionLine(), chartCaption(m.focusedSlot()))
+	shown := m.underKeybindings(composed)
+	if m.keybindingsOpen {
+		return term.Centered(shown, renderKeybindings(m.keybindings, m.kbOff, m.cfg, m.width, m.height), m.width, m.height)
 	}
-	if m.currentOwner() == ownerActions {
-		return term.Centered(composed, renderActions(m.actions, m.blocked, m.cfg, m.width, m.height), m.width, m.height)
-	}
+	return shown
+}
+
+// underKeybindings is the frame with the open chooser or form drawn over the
+// composed screen, or the composed screen when none is open: what the
+// Keybindings popup is drawn over.
+func (m Model) underKeybindings(composed string) string {
 	if m.startup == startupAtlasOpen {
 		modal := renderAtlasModal(m.atlas, m.cfg, m.width, m.height)
 		return term.Centered(composed, modal, m.width, m.height)
@@ -2248,11 +2327,19 @@ func (m Model) viewFrame() string {
 	}
 	if m.startup == startupSaveOpen {
 		modal := renderSaveModal(m.save, m.cfg, m.width, m.height)
-		return term.Centered(composed, modal, m.width, m.height)
+		shown := term.Centered(composed, modal, m.width, m.height)
+		if m.save.Confirming {
+			shown = term.Centered(shown, dialog.RenderChoice(firstWriteChoice(m.save), m.cfg, m.width, m.height, popupChrome(m.cfg)), m.width, m.height)
+		}
+		return shown
 	}
 	if m.startup == startupTitleOpen {
 		modal := renderTitleForm(m.title, m.cfg, m.width, m.height)
-		return term.Centered(composed, modal, m.width, m.height)
+		shown := term.Centered(composed, modal, m.width, m.height)
+		if m.title.Confirming {
+			shown = term.Centered(shown, dialog.RenderChoice(changeChoice(m.title, m.cfg), m.cfg, m.width, m.height, popupChrome(m.cfg)), m.width, m.height)
+		}
+		return shown
 	}
 	if m.startup == startupBodyOpen {
 		modal := renderBodyModal(m.bodyModal, m.cfg, m.width, m.height)
@@ -2266,8 +2353,8 @@ func (m Model) viewFrame() string {
 		modal := renderZodiacFinder(m.zodiacFinder, m.cfg, m.width, m.height)
 		return term.Centered(composed, modal, m.width, m.height)
 	}
-	if m.startup == startupDisplayOpen {
-		modal := renderHouseDisplay(m.houseDisplayPopup, m.cfg, m.width, m.height)
+	if m.startup == startupNodesOpen {
+		modal := renderNodesFinder(m.nodesFinder, m.cfg, m.width, m.height)
 		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupExperimentsOpen {
@@ -2279,7 +2366,18 @@ func (m Model) viewFrame() string {
 		return term.Centered(composed, modal, m.width, m.height)
 	}
 	if m.startup == startupSessionsOpen {
-		return term.Centered(composed, renderSessions(m, m.width, m.height), m.width, m.height)
+		shown := term.Centered(composed, renderSessions(m, m.width, m.height), m.width, m.height)
+		if m.sessions.Asking && m.sessions.Deleting == "" && m.sessions.Exit == popup.ExitQuit {
+			shown = composed // quit has no list under its question
+		}
+		if m.sessions.Asking {
+			choice := newSessionChoice(m)
+			if m.sessions.Deleting != "" {
+				choice = deleteChoice(m)
+			}
+			shown = term.Centered(shown, dialog.RenderChoice(choice, m.cfg, m.width, m.height, popupChrome(m.cfg)), m.width, m.height)
+		}
+		return shown
 	}
 	if m.startup == startupSessionNameOpen {
 		return term.Centered(composed, renderSessionName(m, m.width, m.height), m.width, m.height)
@@ -2290,7 +2388,7 @@ func (m Model) viewFrame() string {
 // focusablePanels lists the panels that can receive focus via Tab / Shift+Tab
 // / number keys / mouse click.
 func focusablePanels() []PanelID {
-	return []PanelID{PanelChart, PanelBodies, PanelAspects}
+	return []PanelID{PanelStatus, PanelChart, PanelBodies, PanelAspects}
 }
 
 func isFocusable(name PanelID) bool {

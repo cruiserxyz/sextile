@@ -238,28 +238,39 @@ func probeCandidates(registry []aspect.RegistryObject, out string) []int {
 	return cands
 }
 
-// probeCast casts the given objects at probeJD and returns the positions text,
-// the missing-file names and the first line Astrolog wrote on stderr; no
-// stderr line refuses it (probingCall).
-func probeCast(ctx context.Context, nums []int) (string, []string, string, error) {
+// probeCall is the cast probeCast asks of the given objects at probeJD. The
+// probe asks whether a body has its ephemeris, not for a form, so it pins the
+// mean Node and Lilith: a host's own `=Yn` or `=Ynn` changes nothing it learns.
+func probeCall(nums []int) (BodyCall, error) {
 	spec := recipe.ChartSpec{Source: recipe.MomentAtPlace{JD: probeJD, Lon: 0, Lat: 0}}
 	frame, err := emitFrame(spec)
 	if err != nil {
-		return "", nil, "", err
+		return BodyCall{}, err
 	}
 	jd, err := momentArg(probeJD)
 	if err != nil {
-		return "", nil, "", err
+		return BodyCall{}, err
 	}
 	argv := []string{"-qj", jd, "-zl", formatLon(0), formatLat(0)}
 	argv = append(argv, frame...)
 	argv = append(argv, reformPin...)
 	argv = append(argv, CurrentClock().Pins()...)
-	obj := emitShowList(flagMainShow, nums)
+	obj := append(emitShowList(flagMainShow, nums), emitNodeMode(recipe.ObjectPolicy{})...)
 	argv = append(argv, obj...)
 	argv = append(argv, "=v0", "-Yw", "0")
 	call := newBodyCall(argv, newBand(obj, nil))
 	call.Objects = nums
+	return call, nil
+}
+
+// probeCast casts the given objects at probeJD and returns the positions text,
+// the missing-file names and the first line Astrolog wrote on stderr; no
+// stderr line refuses it (probingCall).
+func probeCast(ctx context.Context, nums []int) (string, []string, string, error) {
+	call, err := probeCall(nums)
+	if err != nil {
+		return "", nil, "", err
+	}
 	if err := validateArgv(call.argv); err != nil {
 		return "", nil, "", err
 	}

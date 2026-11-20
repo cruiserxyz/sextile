@@ -363,7 +363,7 @@ func symlinkLeftAlone(t *testing.T, targetText *string) {
 		t.Fatal(err)
 	}
 	_, _, keep, _ := LoadSessionKeepingRefused()
-	if keep.Problem != "it is a symlink" || keep.Kept != "" {
+	if keep.Problem != "it is a link" || keep.Kept != "" {
 		t.Errorf("keep = %+v, want the symlink problem", keep)
 	}
 	if l, err := os.Readlink(link); err != nil || l != target {

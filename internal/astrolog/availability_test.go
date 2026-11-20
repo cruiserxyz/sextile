@@ -41,7 +41,7 @@ func TestExplicitObjectListLeavesOutAnAbsentBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R0", "1", "2"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R0", "1", "2"}; !slices.Equal(got, want) {
 		t.Errorf("explicit show-list = %v, want %v", got, want)
 	}
 }
@@ -52,7 +52,7 @@ func TestDeltaObjectListSwitchesAnAbsentDefaultOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"-R", "12", "-R", "13", "-R", "14"}; !slices.Equal(got, want) {
+	if want := []string{"_Yn", "_Ynn", "-R", "12", "-R", "13", "-R", "14"}; !slices.Equal(got, want) {
 		t.Errorf("delta object list = %v, want the host's default asteroids flipped off %v", got, want)
 	}
 }
@@ -73,11 +73,11 @@ func TestDeltaObjectListNeverSwitchesAnAbsentBodyOn(t *testing.T) {
 func TestTimelineBandLeavesOutAnAbsentBody(t *testing.T) {
 	withAvailability(t, ceresPallasJuno())
 	d := DefaultSets{Main: ceresPallasJuno().Default, Transit: []int{1, 3, 4, 5, 6, 7, 8, 9, 10, 16}}
-	band, err := timelineBand(TimelineSky, recipe.ObjectPolicy{}, nil, recipe.AspectPolicy{}, d, false)
+	band, err := timelineBand(TimelineSky, recipe.ObjectPolicy{}, nil, recipe.AspectPolicy{}, d, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-R0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "16", "22", "31"}
+	want := []string{"_Yn", "_Ynn", "-R0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "16", "22", "31"}
 	if !slices.Equal(band.tokens, want) {
 		t.Errorf("timeline band = %v, want %v", band.tokens, want)
 	}
@@ -178,15 +178,22 @@ func TestTimelineNeverComputesABodyWithoutItsFile(t *testing.T) {
 	if !slices.Contains(defaults.Main, 12) {
 		t.Fatalf("the fixture's default main set %v does not list Ceres", defaults.Main)
 	}
-	req := TimelineRequest{Year: 2026, Month: time.November, Zone: time.UTC, Defaults: defaults}
+	req := TimelineRequest{Year: 2026, Month: time.November, Zone: time.UTC, Defaults: defaults, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 	run := func() ([]TimelineRow, error) {
 		rows, _, err := ComputeTimeline(ctx, req, []TimelineSource{TimelineSky}, nil)
 		return rows, err
 	}
 
-	// Unprobed (the old behaviour): the call is refused, never shown.
-	if _, err := run(); !errors.Is(err, ErrAstrologWarned) {
-		t.Fatalf("with the object list unnarrowed the search returned %v, want a refusal (ErrAstrologWarned)", err)
+	// Unprobed: Astrolog warns, the search is run again without the bodies it
+	// cannot place, and no row names one of them (they were never shown at 0 Aries).
+	rows, err := run()
+	if err != nil {
+		t.Fatalf("with the object list unnarrowed the search returned %v, want the other events", err)
+	}
+	for _, r := range rows {
+		if strings.Contains(r.Line, "Ceres") || strings.Contains(r.Line, "Pallas") || strings.Contains(r.Line, "Juno") {
+			t.Errorf("an unnarrowed search shows a body without its file: %q", r.Line)
+		}
 	}
 
 	av, err := ProbeAvailability(ctx)
@@ -194,7 +201,7 @@ func TestTimelineNeverComputesABodyWithoutItsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	withAvailability(t, av)
-	rows, err := run()
+	rows, err = run()
 	if err != nil {
 		t.Fatalf("narrowed search: %v", err)
 	}
@@ -212,12 +219,19 @@ func TestChartNeverComputesABodyWithoutItsFile(t *testing.T) {
 	needAstrolog(t)
 	astrodir.Reduced(t, []string{"seas_18.se1", "seas_12.se1"})
 	spec := recipe.ChartSpec{
-		Source:   recipe.MomentAtPlace{JD: 2451545.0, Lon: 4.9, Lat: 52.37},
-		Objects:  recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 12, 13, 14}},
-		Registry: testRegistry(t),
+		Source:         recipe.MomentAtPlace{JD: 2451545.0, Lon: 4.9, Lat: 52.37},
+		Objects:        recipe.ObjectPolicy{Baseline: recipe.Explicit, Selection: []int{1, 2, 12, 13, 14}},
+		Registry:       testRegistry(t),
+		AspectRegistry: testAspects(t),
 	}
-	if _, err := ComputeChart(context.Background(), spec); !errors.Is(err, ErrAstrologWarned) {
-		t.Fatalf("a chart asking for Ceres without its file returned %v, want a refusal", err)
+	// Without the file the asteroids are left out and named; the Sun and the
+	// Moon are cast.
+	left, err := ComputeChart(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("a chart asking for Ceres without its file: %v", err)
+	}
+	if len(left.Positions) != 2 || !slices.Equal(left.Unavailable, []string{"Ceres", "Pallas", "Juno"}) {
+		t.Fatalf("%d positions, left out %v; want the Sun and Moon cast and Ceres, Pallas and Juno named", len(left.Positions), left.Unavailable)
 	}
 	av, err := ProbeAvailability(context.Background())
 	if err != nil {
@@ -245,11 +259,12 @@ func TestEveryCallKindRefusesAMissingEphemerisLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	spec.AspectRegistry = testAspects(t)
 	cycle, err := CycleCall(CycleRequest{StartYear: 2026, Years: 1, Other: objMars})
 	if err != nil {
 		t.Fatal(err)
 	}
-	tl := TimelineRequest{Year: 2026, Month: time.November, Zone: time.UTC}
+	tl := TimelineRequest{Year: 2026, Month: time.November, Zone: time.UTC, Registry: testRegistry(t), AspectRegistry: testAspects(t)}
 	kinds := map[string]func() error{
 		"chart":     func() error { _, err := ComputeChart(ctx, spec); return err },
 		"positions": func() error { _, err := ComputeChartPositionsOnly(ctx, spec); return err },
@@ -390,6 +405,7 @@ func TestProbingCallTakesAnyStderrLineAsEvidenceNormalCallsRefuse(t *testing.T) 
 		t.Fatal(err)
 	}
 	spec.Registry = testRegistry(t)
+	spec.AspectRegistry = testAspects(t)
 	if _, err := ComputeChartPositionsOnly(context.Background(), spec); !errors.Is(err, ErrAstrologWarned) {
 		t.Errorf("a normal call returned %v, want ErrAstrologWarned", err)
 	}

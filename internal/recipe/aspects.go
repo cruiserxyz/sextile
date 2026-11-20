@@ -20,10 +20,8 @@ import (
 //   - Explicit true, Indices set — exactly those aspects.
 //
 // Indices are Astrolog's own registry indices, as read from `astrolog -HA` at
-// startup. They are NOT aspect.AspectKind values: Astrolog's registry runs to
-// 24 and orders by importance, where the enum names 11 and orders by angle.
-// Carrying the registry's own numbers is what lets the operator select the
-// thirteen aspects the enum cannot name.
+// startup. They are a registry row's Kind.Index, Astrolog's own numbers, which
+// is what lets the operator select any of its aspects.
 type AspectPolicy struct {
 	Explicit bool
 	Indices  []int

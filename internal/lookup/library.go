@@ -18,15 +18,14 @@ import (
 	"github.com/cruiserxyz/sextile/internal/store"
 )
 
-// Library is one chart-library read: the charts the picker can show, the files
-// it could not read (named, with reasons), and the single failure that takes
-// every chart down at once — an unavailable atlas. AtlasErr is kept apart from
-// Drops because it is not a fact about any one file: it is the one condition
-// the picker reports on the error lane as well as in the list.
+// Library is one chart-library read: the charts the picker can show, and the
+// files it could not read (named, with reasons).
 type Library struct {
-	Charts   []store.NamedChart
-	Drops    []store.ChartDrop
-	AtlasErr error
+	Charts []store.NamedChart
+	Drops  []store.ChartDrop
+	// Refused maps a listed chart's file name to the reason the chart guard
+	// refuses it (a *ChartRefused): the row lists, and does not open.
+	Refused map[string]error
 	// Seen maps each listed chart's file name to a fingerprint of the bytes
 	// the listing read. A retitle compares it at submit, so a chart that
 	// changed after the picker listed it is refused rather than rewritten
@@ -38,15 +37,16 @@ type Library struct {
 // LoadChartLibrary returns the chart library the picker shows: the astrolog
 // chart-info files in ChartsDir(): every file there that opens with Astrolog's
 // `@AI` header, whatever it is called. It SPAWNS NOTHING. Every fact a listing row displays — a
-// name, a place and a year — is already in the file or in the atlas Sextile
-// holds in memory, so a library of forty clients costs forty file reads and no
-// subprocesses, and a first launch is as fast as the hundredth.
+// name, a place and a date — is read from the file's own text, so a library of
+// forty clients costs forty file reads and no subprocesses, and a first launch
+// is as fast as the hundredth.
 //
 // What a row does NOT carry is the birth moment. That is obtained by
-// ResolvePicked when a chart is actually picked, from the file the row names.
-// A chart whose header is unreadable, or whose coordinates match no atlas
-// city, is dropped rather than surfaced half-resolved — and named in Drops
-// rather than dropped in silence. Two chart files claiming ONE identity is a
+// ResolvePicked when a chart is actually picked, from the file the row names:
+// whether a file is a chart Astrolog can cast is Astrolog's to say, at the
+// pick, so the list never drops a file for what Sextile cannot read in its
+// text. A file that cannot be read at all is named in Drops rather than
+// dropped in silence. Two chart files claiming ONE identity is a
 // conflict between two charts, where the loser is named like any other file
 // that did not become a row. A visible `.yaml` chart is named too: YAML charts
 // were retired on 2026-10-02 (the specification), and a client file that is
@@ -54,8 +54,8 @@ type Library struct {
 // not, is never a chart and is skipped silently. Charts are returned sorted
 // by ID; drops by filename.
 //
-// The chart grammar and the atlas merge live here because the store may not
-// perform them (it cannot import astrolog).
+// The chart grammar lives here because the store may not read it (it cannot
+// import astrolog).
 func LoadChartLibrary() (Library, error) {
 	return LoadChartLibraryIn(store.ChartsDir())
 }
@@ -72,7 +72,7 @@ func LoadChartLibraryIn(dir string) (Library, error) {
 	// those bytes and no others. A file saved in between gets none, and a
 	// retitle of it is refused rather than made against the wrong version.
 	before := fingerprintDir(dir)
-	dat, drops, atlasErr := translateChartFiles(dir)
+	dat, drops, refused := translateChartFiles(dir)
 
 	bySlug := make(map[string]store.NamedChart)
 	for _, c := range dat {
@@ -88,7 +88,7 @@ func LoadChartLibraryIn(dir string) (Library, error) {
 			// words; stems that merely slugify alike name the shared id.
 			reason := fmt.Sprintf("%s already uses the id %q", filepath.Base(prior.Source.File), c.ID)
 			if stem(c.Source.File) == stem(prior.Source.File) {
-				reason = fmt.Sprintf("another file already has this name (%s)", filepath.Base(prior.Source.File))
+				reason = fmt.Sprintf("another file in the folder has the same name (%s)", filepath.Base(prior.Source.File))
 			}
 			drops = append(drops, store.ChartDrop{
 				File:   filepath.Base(c.Source.File),
@@ -113,7 +113,7 @@ func LoadChartLibraryIn(dir string) (Library, error) {
 			seen[c.Source.File] = fp
 		}
 	}
-	return Library{Charts: out, Drops: drops, AtlasErr: atlasErr, Seen: seen}, nil
+	return Library{Charts: out, Drops: drops, Refused: refused, Seen: seen}, nil
 }
 
 // betweenListingReads is a test seam between the rows and the second set of
@@ -184,17 +184,23 @@ type PickedChart struct {
 	HasHouses bool
 
 	// Label is the name and place text this chart's reports print in
-	// Astrolog's header (the specification C0), taken from the
-	// SAME read of the file as When: the file's own title, and the place the
-	// chart list shows for its coordinates (the nearest atlas city). Both are
-	// empty for an untitled file, whatever stem the listing shows for it, and
-	// for a file whose place the atlas cannot name.
+	// Astrolog's header (the specification C0), taken from the SAME read of
+	// the file as When: the file's own title and place. Both are empty for an
+	// untitled file, whatever stem the listing shows for it.
 	Label store.ReportLabel
-	// Place is that read's resolved casting place, valid only when HasPlace:
-	// the atlas city, country and zone for the coordinates the file holds
-	// NOW, with the file's own precise coordinates.
-	Place    location.PlaceInfo
-	HasPlace bool
+	// Place is where that read casts: the file's own place (filePlace), with
+	// the coordinates Astrolog read.
+	Place location.PlaceInfo
+	// Record is the file's text from that same read: what Astrolog casts.
+	Record string
+	// Notes are the file's lines Astrolog does not get, for the Log.
+	Notes []FileNote
+	// Clock is the chart's moment as Astrolog read it, for its row.
+	Clock store.ChartClock
+	// Nodes is the form of the Nodes and Lilith the file states, when it
+	// states one (NodesStated).
+	Nodes       recipe.NodeForm
+	NodesStated bool
 }
 
 // ResolvePickedChart is ResolvePicked with the file's own house system, from
@@ -213,29 +219,14 @@ func ResolvePickedChartIn(ctx context.Context, dir string, c store.NamedChart) (
 		if err != nil {
 			return PickedChart{}, err
 		}
-		picked := pickedFrom(cf)
-		// The place the list would show for these coordinates. Without the
-		// atlas, or a city near them, the file is not castable as a listing row
-		// either; the label stays empty rather than half-filled.
-		if atlas, err := loadAtlas(); err == nil {
-			if city, ok := location.NearestNamed(atlas, cf.Lon, cf.Lat, cf.PlaceLabel); ok {
-				picked.Place = location.PlaceInfo{Name: city.Name, Country: city.Country, Lat: cf.Lat, Lon: cf.Lon, TZ: city.TZ}
-				picked.HasPlace = true
-				if cf.Name != "" {
-					picked.Label = store.ReportLabel{Name: cf.Name, Place: picked.Place.Display()}
-				}
-			}
-		}
-		return picked, nil
+		return pickedFrom(cf), nil
 	default:
 		return PickedChart{}, fmt.Errorf("lookup: ResolvePicked: %q has no readable source", c.Name)
 	}
 }
 
 // ReadChartFile reads the chart file named by file (a base name inside the
-// chart directory) through Astrolog. It writes no byte into the directory. It
-// carries no label and no place: those need the atlas, and this read also runs
-// at startup, before the first frame (ResolvePickedChart is the pick's).
+// chart directory) through Astrolog. It writes no byte into the directory.
 func ReadChartFile(ctx context.Context, file string) (PickedChart, error) {
 	return ReadChartFileIn(ctx, store.ChartsDir(), file)
 }
@@ -259,23 +250,36 @@ func readChartRecord(ctx context.Context, dir, file string) (astrolog.ChartFile,
 }
 
 func pickedFrom(cf astrolog.ChartFile) PickedChart {
-	return PickedChart{When: cf.WhenUTC, Houses: cf.Houses, HasHouses: cf.HasHouses}
+	p := PickedChart{When: cf.WhenUTC, Houses: cf.Houses, HasHouses: cf.HasHouses, Record: cf.Record, Notes: cf.Notes, Clock: ClockOfRead(cf), Nodes: cf.Nodes, NodesStated: cf.NodesStated,
+		Place: filePlace(cf.PlaceLabel, cf.Lon, cf.Lat, true)}
+	if cf.Name != "" {
+		p.Label = store.ReportLabel{Name: cf.Name, Place: cf.PlaceLabel}
+	}
+	return p
+}
+
+// filePlace is where a chart file casts, in the file's own words: its -zi
+// place, or its coordinates when it names none (hasCoords false leaves the
+// name empty). It carries no time zone, because a chart file is cast from its
+// own record and shows its own clock (the specification).
+func filePlace(label string, lon, lat float64, hasCoords bool) location.PlaceInfo {
+	name := label
+	if name == "" && hasCoords {
+		name = CoordinateWords(lon, lat)
+	}
+	return location.PlaceInfo{Name: name, Lon: lon, Lat: lat}
 }
 
 // translateChartFiles turns every chart file in ChartsDir() (known by its first
-// bytes, see entryKind) into a listing row by
-// reading the file's own header and matching its coordinates against the atlas
-// for a real country, IANA timezone and canonical city name. No process is
-// started: the year on the row is the -qb line's own year field, and the moment
-// the row does not show is never computed.
+// bytes, see entryKind) into a listing row by reading the file's own text: its
+// title, its place and the date it states. No process is started, and the
+// moment the row does not show is never computed.
 //
-// Every failure — an unreadable directory, an unreadable or non-chart file,
-// coordinates matching no atlas city, or a row that came out incomplete —
-// returns as a named drop instead of vanishing. When the atlas itself is
-// unavailable no chart can be given a timezone, so each one drops for that
-// reason and the atlas error is returned once for the caller to report on the
-// error lane.
-func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, error) {
+// Every failure — an unreadable directory or file, a filename that gives no
+// id — returns as a named drop instead of vanishing. A file the chart guard
+// refuses (astrolog.GuardChartFile, which spawns nothing either) lists, and
+// its reason comes back in refused, by file name.
+func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, map[string]error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -285,7 +289,7 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 		}
 		return nil, []store.ChartDrop{{File: dir, Reason: "this chart folder could not be read"}}, nil
 	}
-	atlas, atlasErr := loadAtlas()
+	refused := map[string]error{}
 
 	var out []store.NamedChart
 	var drops []store.ChartDrop
@@ -297,7 +301,7 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 			continue // hidden files are never charts, and are never reported
 		}
 		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".yaml") {
-			drop(e.Name(), "YAML charts are no longer read")
+			drop(e.Name(), "Sextile no longer reads charts in the old .yaml form")
 			continue
 		}
 		kind, err := entryKind(dir, e)
@@ -313,23 +317,10 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 		if kind != astrolog.FileChart {
 			continue // not a chart by its bytes: ignored, silently
 		}
-		if atlasErr != nil {
-			// No place list, so no city and no timezone to assign. Blame
-			// that rather than the file's own coordinates — and keep it
-			// short enough to read whole in the picker's narrow rows; the
-			// full cause goes on the error lane, once.
-			drop(e.Name(), "no place list, so no city or timezone")
-			continue
-		}
 		path := filepath.Join(dir, e.Name())
 		h, err := astrolog.ReadChartFileHeader(path)
 		if err != nil {
-			drop(e.Name(), "not a chart astrolog can read")
-			continue
-		}
-		place, ok := location.NearestNamed(atlas, h.Lon, h.Lat, h.PlaceLabel)
-		if !ok {
-			drop(e.Name(), "no known city near its coordinates")
+			drop(e.Name(), "this file could not be read")
 			continue
 		}
 		id := chartFileID(path)
@@ -341,22 +332,16 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 			// would collide with each other. Name it, like every other file
 			// that could not become a row — guessing an identity from the
 			// display label is exactly what an earlier change removed.
-			drop(e.Name(), "its filename gives no usable id")
+			drop(e.Name(), "its file name has no letters or digits")
 			continue
 		}
 		nc := store.NamedChart{
-			ID:    id,
-			Name:  chartFileName(path, h),
-			Year:  h.Year,
-			Month: h.Month,
-			Day:   h.Day,
-			Place: location.PlaceInfo{
-				Name:    place.Name,    // canonical atlas city
-				Country: place.Country, // real ISO country code
-				Lat:     h.Lat,         // file's precise coordinate (for compute)
-				Lon:     h.Lon,         // file's precise coordinate
-				TZ:      place.TZ,      // real IANA timezone
-			},
+			ID:         id,
+			Name:       chartFileName(path, h),
+			Year:       h.Year,
+			Month:      h.Month,
+			Day:        h.Day,
+			Place:      filePlace(h.PlaceLabel, h.Lon, h.Lat, h.HasCoords),
 			Source:     store.ChartSource{Kind: store.ChartKindFile, File: e.Name()},
 			Untitled:   h.Name == "",
 			PlaceLabel: h.PlaceLabel,
@@ -365,9 +350,14 @@ func translateChartFiles(dir string) ([]store.NamedChart, []store.ChartDrop, err
 			drop(e.Name(), reason)
 			continue
 		}
+		if raw, err := os.ReadFile(path); err == nil {
+			if _, _, err := astrolog.GuardChartFile(string(raw)); err != nil {
+				refused[e.Name()] = err
+			}
+		}
 		out = append(out, nc)
 	}
-	return out, drops, atlasErr
+	return out, drops, refused
 }
 
 // chartFileName is the chart's display label: the file's -zi name, or the filename
@@ -406,27 +396,16 @@ func fingerprint(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return fingerprintOf(b), nil
+}
+
+// fingerprintOf is fingerprint of bytes already read.
+func fingerprintOf(b []byte) string {
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
 }
 
 func stem(path string) string {
 	base := filepath.Base(path)
 	return strings.TrimSuffix(base, filepath.Ext(base))
-}
-
-// loadAtlas reads the atlas entries once for a library load. The error comes
-// back with them rather than being swallowed: without the atlas every chart drops
-// for one shared reason, and the operator is told what to fix (the error names
-// every path that was tried) instead of watching their charts disappear.
-func loadAtlas() ([]location.PlaceInfo, error) {
-	path, err := location.AtlasPath()
-	if err != nil {
-		return nil, err
-	}
-	entries, err := location.LoadAtlas(path)
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
 }

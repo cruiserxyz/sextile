@@ -144,18 +144,18 @@ func designAt(t *testing.T, cfg Config, w, h int) Model {
 
 func positionOwners() []positionOwner {
 	return []positionOwner{
-		{name: "chart slots", title: "[1] Chart", model: func(t *testing.T, cfg Config, w, h int) Model {
-			m, _ := press(t, designAt(t, cfg, w, h), "1")
+		{name: "chart slots", title: "[2] Chart", model: func(t *testing.T, cfg Config, w, h int) Model {
+			m, _ := press(t, designAt(t, cfg, w, h), "2")
 			m.cursorIdx = 0
 			return m
 		}, pos: func(m Model) (int, int) { return m.cursorIdx, len(m.slots.All()) }},
-		{name: "bodies", title: "[2] Bodies", model: func(t *testing.T, cfg Config, w, h int) Model {
-			m, _ := press(t, designAt(t, cfg, w, h), "2")
+		{name: "bodies", title: "[3] Bodies", model: func(t *testing.T, cfg Config, w, h int) Model {
+			m, _ := press(t, designAt(t, cfg, w, h), "3")
 			m.bodyCursorIdx = 0
 			return m
 		}, pos: func(m Model) (int, int) { return m.bodyCursorIdx, len(m.chart.positions) }},
 		{name: "log console", title: "Log", model: func(t *testing.T, cfg Config, w, h int) Model {
-			m, _ := press(t, designAt(t, cfg, w, h), ",", "l", "l")
+			m, _ := press(t, designAt(t, cfg, w, h), ",", "L", "l")
 			m.console.cursor = 0
 			m.console.offset = 0
 			return m
@@ -280,7 +280,7 @@ func TestEmptyListsReadZeroOfZero(t *testing.T) {
 			return m
 		}},
 		{"console, empty", "Log", func(t *testing.T) Model {
-			m, _ := press(t, consoleTasteModel(t, cfg, 80, 24, 0), ",", "l", "l")
+			m, _ := press(t, consoleTasteModel(t, cfg, 80, 24, 0), ",", "L", "l")
 			return m
 		}},
 	}
@@ -327,7 +327,7 @@ func manyCharts(n int) []store.NamedChart {
 // manyAspects is more aspects than the Aspects panel's grid can hold.
 func manyAspects() []aspect.Aspect {
 	bodies := []aspect.Object{objSun, objMoon, objMercury, objVenus, objMars, objJupiter, objSaturn, objUranus, objNeptune, objPluto}
-	kinds := []aspect.AspectKind{aspect.Conjunction, aspect.Opposition, aspect.Square, aspect.Trine, aspect.Sextile}
+	kinds := []aspect.AspectKind{kindOf("Con"), kindOf("Opp"), kindOf("Squ"), kindOf("Tri"), kindOf("Sex")}
 	var out []aspect.Aspect
 	for i, a := range bodies {
 		for _, b := range bodies[i+1:] {
@@ -356,12 +356,15 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 		model       func(t *testing.T) Model
 		want        bool
 	}{
-		{"Bodies panel at 80x24", "[2] Bodies", func(t *testing.T) Model { return designAt(t, cfg, 80, 24) }, true},
+		{"Bodies panel at 80x24", "[3] Bodies", func(t *testing.T) Model {
+			m, _ := press(t, designAt(t, cfg, 80, 24), "3")
+			return m
+		}, true},
 		{"Details report", "[0] ", func(t *testing.T) Model { return scrollModel(t, 0) }, true},
 		{"side Log, 30 lines", "Log", func(t *testing.T) Model { return designAt(t, cfg, 144, 40) }, true},
 		{"side Log, 2 lines", "Log", func(t *testing.T) Model { return consoleTasteModel(t, cfg, 144, 40, 2) }, false},
 		{"console, 30 lines at 80x24", "Log", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 80, 24), ",", "l", "l")
+			m, _ := press(t, designAt(t, cfg, 80, 24), ",", "L", "l")
 			return m
 		}, true},
 		{"city popup, capped matches", dialog.TitleCity, func(t *testing.T) Model {
@@ -398,12 +401,12 @@ func TestEveryOverflowShowsTheBar(t *testing.T) {
 			m.startup = startupAspectOpen
 			return m
 		}, len(listRowsAspectState("").Matches) > dialog.ListHeight(24)-popup.FamilyRows()},
-		{"help popup at 80x24", dialog.TitleKeys, func(t *testing.T) Model {
+		{"Keybindings popup at 80x24", dialog.TitleKeybindings, func(t *testing.T) Model {
 			m, _ := press(t, designAt(t, cfg, 80, 24), "?")
 			return m
 		}, true},
-		{"Aspects panel, more than fit", "[3] ", func(t *testing.T) Model {
-			m := designAt(t, cfg, 80, 24)
+		{"Aspects panel, more than fit", "[4] ", func(t *testing.T) Model {
+			m, _ := press(t, designAt(t, cfg, 80, 24), "4")
 			m.chart.aspects = manyAspects()
 			m.chart.crossAspects = manyCrossAspects()
 			return m
@@ -446,16 +449,16 @@ func TestPositionCounterStyle(t *testing.T) {
 		model       func(t *testing.T) Model
 		keyboard    bool
 	}{
-		{"bodies focused", "[2] Bodies", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 144, 40), "2")
+		{"bodies focused", "[3] Bodies", func(t *testing.T) Model {
+			m, _ := press(t, designAt(t, cfg, 144, 40), "3")
 			return m
 		}, true},
-		{"bodies unfocused", "[2] Bodies", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 144, 40), "1")
+		{"bodies unfocused", "[3] Bodies", func(t *testing.T) Model {
+			m, _ := press(t, designAt(t, cfg, 144, 40), "2")
 			return m
 		}, false},
 		{"console open", "Log", func(t *testing.T) Model {
-			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l", "l")
+			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "L", "l")
 			return m
 		}, true},
 		{"timeline attached", "[0] ", func(t *testing.T) Model { return onTimeline(t, cfg) }, true},
@@ -521,46 +524,36 @@ func cursorRowText(t *testing.T, view string, r frameRect) string {
 	return ""
 }
 
-// Help fits whole on screen, has no cursor row and no `N of M` counter, and
-// scrolls: ↓ moves the window one line (the first visible line changes), ↑
-// returns, and it reopens at the top.
-func TestHelpPopupFits(t *testing.T) {
+// Keybindings fits whole on screen, draws a cursor row and an `N of M` counter
+// that follows it: ↓ moves the cursor one row, ↑ returns, and it reopens at the
+// top.
+func TestKeybindingsPopupFits(t *testing.T) {
 	cfg := Config{Color: ColorNever}
 	for _, size := range positionSizes {
 		w, h := size[0], size[1]
 		t.Run(fmt.Sprintf("%dx%d", w, h), func(t *testing.T) {
 			m, _ := press(t, designAt(t, cfg, w, h), "?")
 			view := m.View()
-			r := findTitledFrame(t, view, dialog.TitleKeys)
+			r := findTitledFrame(t, view, dialog.TitleKeybindings)
 			rows := screenRunes(view)
 			if r.y < 0 || r.x < 0 || r.y+r.h > h || r.x+r.w > w || rows[r.y+r.h-1][r.x+r.w-1] != '╯' {
-				t.Fatalf("help's frame %+v is not whole on a %dx%d screen:\n%s", r, w, h, ansi.Strip(view))
+				t.Fatalf("the frame %+v is not whole on a %dx%d screen:\n%s", r, w, h, ansi.Strip(view))
 			}
-			for y := r.y + 1; y < r.y+r.h-1; y++ {
-				if strings.Contains(edgeText(view, r, y), menu.RowCursorUnicode) {
-					t.Fatalf("help draws a cursor row:\n%s", ansi.Strip(view))
-				}
+			cur, total, ok := readCounter(t, view, r)
+			if !ok || cur != 1 || total != len(m.keybindings.All) {
+				t.Fatalf("counter %d of %d (shown %v), want 1 of %d", cur, total, ok, len(m.keybindings.All))
 			}
-			if _, _, ok := readCounter(t, view, r); ok {
-				t.Fatalf("help shows an `N of M` counter:\n%s", ansi.Strip(view))
-			}
-			first := func(m Model) string {
-				return strings.TrimSpace(edgeText(m.View(), r, r.y+2))
-			}
-			top := first(m)
 			m, _ = press(t, m, "down")
-			if m.help.Offset != 1 || first(m) == top {
-				t.Fatalf("↓ did not scroll one line (offset %d)", m.help.Offset)
+			if cur, _, _ := readCounter(t, m.View(), r); cur != 2 || m.keybindings.Cursor != 1 {
+				t.Fatalf("↓ did not move the cursor one row (cursor %d, counter %d)", m.keybindings.Cursor, cur)
 			}
 			m, _ = press(t, m, "up")
-			if m.help.Offset != 0 || first(m) != top {
-				t.Fatalf("↑ did not return to the top (offset %d)", m.help.Offset)
+			if m.keybindings.Cursor != 0 {
+				t.Fatalf("↑ did not return to the first row (cursor %d)", m.keybindings.Cursor)
 			}
-			m, _ = press(t, m, "down")
-			m, _ = press(t, m, "?")
-			m, _ = press(t, m, "?")
-			if m.help.Offset != 0 {
-				t.Fatalf("help reopened at offset %d, want 0", m.help.Offset)
+			m, _ = press(t, m, "down", "down", "?", "?")
+			if m.keybindings.Cursor != 0 || m.keybindings.Top != 0 {
+				t.Fatalf("Keybindings reopened at cursor %d, top %d, want the start", m.keybindings.Cursor, m.keybindings.Top)
 			}
 		})
 	}
@@ -591,13 +584,13 @@ func TestTruncationIsMarked(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				// The cut stays in the comparing layout; the one-chart layout drops
-				// what does not fit without a mark (the specification
-				// rule 3), so this case needs two selected charts.
+				// Two selected charts, so the table cuts the long place words
+				// with a mark.
 				if err := addAnchor(slots, testFrozenTime().AddDate(-30, 0, 0), place); err != nil {
 					t.Fatal(err)
 				}
 				m.slots, m.cursorIdx = slots, 0
+				m, _ = press(t, m, "2") // two panels are open at rest: Chart with Bodies
 				return m.View()
 			}, "Llanfair", ""},
 			{"Open chart list row", func(t *testing.T) string {
@@ -623,7 +616,7 @@ func TestTruncationIsMarked(t *testing.T) {
 			}, "Astrolog", ""},
 			{"Side Log line", func(t *testing.T) string {
 				m := consoleTasteModel(t, mode.cfg, 144, 40, 2)
-				m = m.appendLog(laneNote, "note: "+long+" "+long)
+				m = m.logNote("chart", "%s %s", long, long)
 				return m.View()
 			}, "Constructed", ""},
 			{"Timeline row", func(t *testing.T) string {
@@ -801,7 +794,7 @@ func TestTitlesAreSentenceCase(t *testing.T) {
 		"workspace": func(t *testing.T) string { return designAt(t, cfg, 144, 40).View() },
 		"timeline":  func(t *testing.T) string { return onTimeline(t, cfg).View() },
 		"console": func(t *testing.T) string {
-			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "l", "l")
+			m, _ := press(t, designAt(t, cfg, 144, 40), ",", "L", "l")
 			return m.View()
 		},
 	}
@@ -831,7 +824,7 @@ func TestTitlesAreSentenceCase(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"Timeline", dialog.TitleKeys, dialog.TitleSaveChart, dialog.TitleChartTitle} {
+	for _, want := range []string{"Timeline", dialog.TitleKeybindings, dialog.TitleSaveChart, dialog.TitleNameChart} {
 		found := false
 		for title := range seen {
 			if strings.Contains(title, want) {

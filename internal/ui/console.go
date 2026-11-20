@@ -18,7 +18,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// The console is the Log with the keyboard. `,l` gives it the whole right
+// The console is the Log with the keyboard. `,L l` gives it the whole right
 // column (or the whole main area when the terminal is narrow), a cursor that
 // moves line by line, and an Enter that copies the line under it. Esc puts
 // everything back.
@@ -56,7 +56,7 @@ type consoleState struct {
 	//. Everything the console does — cursor, window, indicator,
 	// Enter — addresses THIS list, never the Model's live buffer: a line
 	// arriving or evicted while the console is open changes nothing on
-	// screen, and the next `,l` takes a fresh one. The operator chose the
+	// screen, and the next `,L l` takes a fresh one. The operator chose the
 	// snapshot over a live list ("snapshot and open. simplify."), which is
 	// what let absorbTrim and its state machine go.
 	snapshot   []logLine
@@ -67,6 +67,9 @@ type consoleState struct {
 	// gives it back, so the console opened with `l` from the focused Log closes
 	// onto the focused Log, and only the Log's own Esc returns to the panel.
 	priorLog logFocusState
+	// panel draws the lines as the Log panel does, group column and message,
+	// instead of as the console does. The focused Log sets it.
+	panel bool
 }
 
 // yankState is the copy confirmation: whether one is showing and which
@@ -96,21 +99,16 @@ const noticeDuration = 3 * time.Second
 
 // The key bar's notices: a key that did nothing, or a copy that did not land.
 const (
-	noticeOnlyNow       = "Only Now can be saved as a new chart. Focus Now first."
+	noticeOnlyNow       = "Only Now can be saved. Move the cursor to Now."
 	noticeNothingCopy   = "Nothing to copy"
 	noticeCopyFailed    = "Copy failed: the clipboard is unavailable."
 	noticeDefaultsSaved = "Defaults saved"
-	// noticeActionsInDetails answers Ctrl+P while Details is attached.
-	noticeActionsInDetails = "Actions: leave Details first (Esc)"
 	// noticeSecondWindow is shown once, when a second window starts.
-	noticeSecondWindow = "Another Sextile window runs the general session. This one keeps nothing until saved as a named session."
+	noticeSecondWindow = "Another Sextile window holds the unnamed session. Save this one under a name to keep it."
 )
 
-// secondWindowNote is the same on the Log's note lane, after its scope.
-const secondWindowNote = "another Sextile window runs the general session. This window started empty and keeps nothing until you save it as a named session"
-
-// limitedViewPrefix opens the notice a terminal too small for Details shows.
-const limitedViewPrefix = "Limited view: "
+// secondWindowNote is the same on the Log's note lane.
+const secondWindowNote = "this window starts empty, nothing is kept until the session has a name"
 
 // showNotice puts text in the key bar's right slot for noticeDuration. It
 // writes no Log line.
@@ -126,27 +124,31 @@ func (m Model) showNotice(text string) (Model, tea.Cmd) {
 // isNotice reports whether a footer indicator is one of the notices.
 func isNotice(indicator string) bool {
 	s := ansi.Strip(indicator)
-	return s == noticeOnlyNow || s == noticeNothingCopy || s == noticeCopyFailed || s == noticeDefaultsSaved || s == noticeActionsInDetails || s == noticeSecondWindow || strings.HasPrefix(s, limitedViewPrefix) || strings.Contains(s, ephemerisNoticeMark)
+	return s == noticeOnlyNow || s == noticeNothingCopy || s == noticeCopyFailed || s == noticeDefaultsSaved || s == noticeSecondWindow || isOriginalsNotice(s)
 }
 
-// consoleRect is the console's rectangle: the whole right column when the
-// layout is dual, the whole main area when it is not. Reports false below the
-// minimum terminal size, where tooSmallView renders instead — the console
-// state survives that, so widening returns to it.
-func consoleRect(width, height, chartLines, shown int) (panelRect, bool) {
-	if layoutGeometry(width, height, chartLines, shown) == nil {
+// consoleRectOf is the console's rectangle: the whole right column when
+// Details and the Log stand beside the panels, the whole main area when they
+// do not.
+func consoleRectOf(l *screenLayout, height int) (panelRect, bool) {
+	if l == nil {
 		return panelRect{}, false
 	}
 	mainHeight := height - KeyBarHeight
-	if left := leftColumnWidth(shown); width >= dualColumnMinWidth(shown) {
-		return panelRect{x: left, y: 0, w: width - left, h: mainHeight}, true
+	if d, ok := l.rects[PanelDetails]; ok && l.beside {
+		return panelRect{x: d.x, y: 0, w: d.w, h: mainHeight}, true
 	}
-	return panelRect{x: 0, y: 0, w: width, h: mainHeight}, true
+	w := 0
+	for _, r := range l.rects {
+		w = max(w, r.x+r.w)
+	}
+	return panelRect{x: 0, y: 0, w: w, h: mainHeight}, true
 }
 
-func (m Model) consoleRect() (panelRect, bool) {
-	return consoleRect(m.width, m.height, chartContentLines(m.slots), m.shownCount())
-}
+// consoleRect is the console's rectangle for the screen now. Reports false
+// below the minimum terminal size, where tooSmallView renders instead; the
+// console state survives that, so widening returns to it.
+func (m Model) consoleRect() (panelRect, bool) { return consoleRectOf(m.layout(), m.height) }
 
 // consoleInnerHeight is how many buffer lines the console can show, or 0 when
 // there is no console-sized rectangle to show them in.
@@ -274,13 +276,14 @@ func (m Model) clampConsole() Model {
 
 // consoleBindings is the Log console's table.
 func consoleBindings() []keys.BindingEntry {
-	return keys.Titled([]keys.BindingEntry{
-		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row", HelpKey: "↑/↓", BarKey: "↑↓", Bar: true, When: func(c keys.Context) bool { return c.Console.Lines > 1 }},
-		{ID: keys.BindingListDown, Folded: true, Binding: key.NewBinding(key.WithKeys("down", "j")), BarKey: "↓"},
+	return keys.TitledLocal([]keys.BindingEntry{
+		{ID: keys.BindingListUp, Binding: key.NewBinding(key.WithKeys("up", "k")), Title: "Move row up", BarKey: "up", When: func(c keys.Context) bool { return c.Console.Lines > 1 }},
+		{ID: keys.BindingListDown, Binding: key.NewBinding(key.WithKeys("down", "j")), Title: "Move row down", BarKey: "down"},
 		{ID: keys.BindingCopy, Binding: key.NewBinding(key.WithKeys("enter")), Title: "Copy line", BarKey: "enter", Bar: true, When: func(c keys.Context) bool { return c.Console.Lines > 0 }},
+		{ID: keys.BindingCopy, Binding: key.NewBinding(), Title: "Copy all", BarKeyFn: chordKey("y"), BarKey: ", y", Chord: true, HelpWhen: func(keys.Context) bool { return false }},
 		// ⇞ ⇟ Home End (and g G, the console has nothing to type) page the cursor.
-		{ID: keys.BindingPageUp, Title: "Page list", HelpKey: "⇞/⇟", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "⇞"},
-		{ID: keys.BindingPageDown, Folded: true, Binding: key.NewBinding(key.WithKeys("pgdown")), BarKey: "⇟"},
+		{ID: keys.BindingPageUp, Title: "Page list up", Binding: key.NewBinding(key.WithKeys("pgup")), BarKey: "pgup"},
+		{ID: keys.BindingPageDown, Binding: key.NewBinding(key.WithKeys("pgdown")), Title: "Page list down", BarKey: "pgdown"},
 		{ID: keys.BindingPageHome, Title: "First row", Binding: key.NewBinding(key.WithKeys("home", "g")), BarKey: "home/g"},
 		{ID: keys.BindingPageEnd, Title: "Last row", Binding: key.NewBinding(key.WithKeys("end", "G")), BarKey: "end/G"},
 		closeOnEscOrQ("Close"),
@@ -295,14 +298,11 @@ func consoleBindings() []keys.BindingEntry {
 // operator cannot see the effect of (the specification C11). Ctrl+C still
 // quits; Update takes it before the console sees it.
 func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// The leader works for one chord here, `,y`, which copies every line.
-	if m.leader.pending {
-		return m.updateLeaderKeyAmong(msg, func(id keys.BindingID) bool { return id == keys.BindingCopy })
+	// ⌃y is `, y`, the one chord of the leader the console takes (commandsOver).
+	if key.Matches(msg, m.keys.Copy) {
+		return m.copyAll()
 	}
-	if m.leaderKey != "" && msg.String() == m.leaderKey {
-		return m.armLeader()
-	}
-	if key.Matches(msg, m.keys.FocusChart, m.keys.FocusBodies, m.keys.FocusAspects) {
+	if key.Matches(msg, m.keys.FocusSession, m.keys.FocusChart, m.keys.FocusBodies, m.keys.FocusAspects) {
 		return m.leaveConsoleFor(msg)
 	}
 	// Opened with l from the focused Log, l closes it onto the Log again: the
@@ -311,7 +311,7 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyRunes && string(msg.Runes) == "l" && !msg.Alt && m.console.priorLog.active {
 		return m.closeConsole()
 	}
-	// The hidden door of the Experiments popup: in no table, bar or help.
+	// The hidden door of the Experiments popup: in no table, bar or Keybindings popup.
 	if isPlainKey(msg, "p") {
 		return m.openExperiments()
 	}
@@ -362,7 +362,7 @@ func (m Model) yankConsoleLine() (tea.Model, tea.Cmd) {
 	if err := yankLine(text); err != nil {
 		// One of the five error-lane sites: the copy the
 		// operator asked for did not happen.
-		return m.logError("Couldn't copy that line to the clipboard.").showNotice(noticeCopyFailed)
+		return m.logError("log", "the line did not reach the clipboard").showNotice(noticeCopyFailed)
 	}
 	m.yank.gen++
 	m.yank.active = true
@@ -374,9 +374,6 @@ func (m Model) yankConsoleLine() (tea.Model, tea.Cmd) {
 // onYankFlash retires a copy confirmation. A tick carrying any generation but
 // the current one belongs to a flash that is already gone.
 func (m Model) onYankFlash(msg yankFlashMsg) (tea.Model, tea.Cmd) {
-	if m.resetArmed != 0 && msg.gen == m.resetArmed {
-		m.resetArmed = 0 // the `, n` warning ran out
-	}
 	if !m.yank.active || msg.gen != m.yank.gen {
 		return m, nil
 	}
@@ -402,7 +399,7 @@ func renderConsole(lines []logLine, st consoleState, strip tabStrip, width, heig
 	start, end := consoleWindow(total, st.offset, innerH)
 	rows := make([]string, 0, innerH)
 	for i := start; i < end; i++ {
-		rows = append(rows, consoleRow(lines[i], i == st.cursor, innerW, cfg))
+		rows = append(rows, consoleRow(lines[i], i == st.cursor, st.panel, focused, innerW, cfg))
 	}
 	if total == 0 {
 		// An empty console says so rather than standing blank (A6).
@@ -419,10 +416,15 @@ func renderConsole(lines []logLine, st consoleState, strip tabStrip, width, heig
 // rows, so no selection column is reserved. An error line is drawn as one
 // (RenderErrorLine); the stored text, and so what Enter copies, is never
 // edited here.
-func consoleRow(line logLine, cursorRow bool, innerW int, cfg Config) string {
-	prefix := menu.RowPrefix(true, cursorRow, false, false, cfg)
-	text := renderLaneLine(line, innerW-ansi.StringWidth(prefix), cfg)
-	return menu.RenderRowState(prefix+text, innerW, cursorRow, cfg)
+func consoleRow(line logLine, cursorRow, panel, focused bool, innerW int, cfg Config) string {
+	prefix := menu.RowPrefix(focused, cursorRow, false, false, cfg)
+	var text string
+	if panel {
+		text = renderPanelLine(line, cfg)
+	} else {
+		text = renderLaneLine(line, innerW-ansi.StringWidth(prefix), cfg)
+	}
+	return menu.RenderRow(prefix+text, innerW, menu.CursorRowState(focused, cursorRow), cfg)
 }
 
 // failedMarkWidth is the cells failedMark takes: the `!` and one space.
@@ -435,11 +437,37 @@ func failedMark(cfg Config) string {
 	return term.RenderErrorMark("!", cfg) + " "
 }
 
+// renderPanelLine draws one note or error line as the Log panel shows it: the
+// group in a cell of logGroupCells, one plain space, then the message. The
+// group is coloured by kind in the terminal's own colours, Settings yellow,
+// Astrolog magenta, every other group cyan; an error is red in both its group
+// and its message. The message of a fact is plain. With colours off the group
+// column stands alone and an error's message follows `! `.
+func renderPanelLine(l logLine, cfg Config) string {
+	cell, msg := l.group.cell(), l.msg
+	if l.lane == laneError {
+		if !cfg.UseColor() {
+			return cell + " " + term.ErrorLinePrefix + msg
+		}
+		red := lipgloss.NewStyle().Foreground(term.ErrorColour)
+		return red.Render(cell) + " " + red.Render(msg)
+	}
+	if !cfg.UseColor() {
+		return cell + " " + msg
+	}
+	colour := term.LogFactColour
+	switch l.group {
+	case groupSettings:
+		colour = term.LogSettingsColour
+	case groupAstrolog:
+		colour = term.LogAstrologColour
+	}
+	return lipgloss.NewStyle().Foreground(colour).Render(cell) + " " + msg
+}
+
 // renderLaneLine draws one stored line the way its lane is drawn: an error line
 // in the error colour (or behind ErrorLinePrefix with colours off), the wheel
-// lines in WheelOpenColour and WheelClosedColour. Colours off, a wheel line is
-// its plain text: the words carry the meaning, so it needs no mark. Every other lane is its
-// text as stored.
+// lines are plain text. Every other lane is its text as stored.
 //
 // w is the cells the text may take; an argv line is fitted to it by
 // argvDisplay, and w <= 0 shows it whole.
@@ -447,14 +475,6 @@ func renderLaneLine(l logLine, w int, cfg Config) string {
 	switch l.lane {
 	case laneError:
 		return term.RenderErrorLine(l.text, cfg)
-	case laneWheelOpen:
-		if cfg.UseColor() {
-			return lipgloss.NewStyle().Foreground(term.WheelOpenColour).Render(l.text)
-		}
-	case laneWheelClosed:
-		if cfg.UseColor() {
-			return lipgloss.NewStyle().Foreground(term.WheelClosedColour).Render(l.text)
-		}
 	case laneArgv:
 		if l.failed {
 			return failedMark(cfg) + argvDisplay(l.text, w-failedMarkWidth, cfg)

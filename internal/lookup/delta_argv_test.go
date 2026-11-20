@@ -7,6 +7,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/astrolog"
 	"github.com/cruiserxyz/sextile/internal/location"
 	"github.com/cruiserxyz/sextile/internal/recipe"
+	"github.com/cruiserxyz/sextile/internal/store"
 )
 
 // A delta policy in Astrolog's object numbers compiles to exactly the argv the
@@ -40,31 +41,31 @@ func TestDeltaPolicyOnNumbersEmitsTheSameArgv(t *testing.T) {
 		{
 			name:      "the Hellenistic lens",
 			lens:      Hellenistic,
-			positions: tail("-Yn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0"),
-			wheel:     tail("-Yn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "-XV", "-Xw", "1200", "-Xi", "-XA", "-Xx", "-Xx0", "-Xr", "-Xu", "-Xs", "400", "-XS", "400", "-Xt", "-XL"),
+			positions: tail("_Yn", "_Ynn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0"),
+			wheel:     tail("_Yn", "_Ynn", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "-XV", "_XJ", "=Xm", "=XQ", "=XQ0", "=Xv0", ":Xv", "1", ":YXG", "111221", ":Xs", "200", ":XS", "100", ":XI0", "25", "1", ":Xkv", "Aut", ":YXf", "#000000", ":YXg", "0", ":YXx", "0", "-Xw", "1200", "=Xi", "=XA", "=Xx", "=Xx0", "=Xr", "_Xu", "_Xt", "=XL", "-Xs", "400", "-XS", "400"),
 		},
 		{
 			name:      "the Hellenistic lens with the Moon removed",
 			lens:      withRemove(Hellenistic, 2),
-			positions: tail("-Yn", "-R", "2", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0"),
-			wheel:     tail("-Yn", "-R", "2", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "-XV", "-Xw", "1200", "-Xi", "-XA", "-Xx", "-Xx0", "-Xr", "-Xu", "-Xs", "400", "-XS", "400", "-Xt", "-XL"),
+			positions: tail("_Yn", "_Ynn", "-R", "2", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "=v0", "-Yw", "0"),
+			wheel:     tail("_Yn", "_Ynn", "-R", "2", "-R", "11", "-R", "17", "-R", "18", "-R", "25", "-R", "28", "-XV", "_XJ", "=Xm", "=XQ", "=XQ0", "=Xv0", ":Xv", "1", ":YXG", "111221", ":Xs", "200", ":XS", "100", ":XI0", "25", "1", ":Xkv", "Aut", ":YXf", "#000000", ":YXg", "0", ":YXx", "0", "-Xw", "1200", "=Xi", "=XA", "=Xx", "=Xx0", "=Xr", "_Xu", "_Xt", "=XL", "-Xs", "400", "-XS", "400"),
 		},
 		{
 			name:      "the default lens with the Moon removed",
 			lens:      plainLens(nil, recipe.NewObjectSet(2)),
-			positions: tail("-R", "2", "=v0", "-Yw", "0"),
-			wheel:     tail("-R", "2", "-XV", "-Xw", "1200", "-Xi", "-XA", "-Xx", "-Xx0", "-Xr", "-Xu", "-Xs", "400", "-XS", "400", "-Xt", "-XL"),
+			positions: tail("_Yn", "_Ynn", "-R", "2", "=v0", "-Yw", "0"),
+			wheel:     tail("_Yn", "_Ynn", "-R", "2", "-XV", "_XJ", "=Xm", "=XQ", "=XQ0", "=Xv0", ":Xv", "1", ":YXG", "111221", ":Xs", "200", ":XS", "100", ":XI0", "25", "1", ":Xkv", "Aut", ":YXf", "#000000", ":YXg", "0", ":YXx", "0", "-Xw", "1200", "=Xi", "=XA", "=Xx", "=Xx0", "=Xr", "_Xu", "_Xt", "=XL", "-Xs", "400", "-XS", "400"),
 		},
 		{
 			name:      "the default lens with Chiron added and Pluto and the Moon removed",
 			lens:      plainLens(recipe.NewObjectSet(11), recipe.NewObjectSet(2, 10)),
-			positions: tail("-R", "2", "-R", "10", "-R", "11", "=v0", "-Yw", "0"),
-			wheel:     tail("-R", "2", "-R", "10", "-R", "11", "-XV", "-Xw", "1200", "-Xi", "-XA", "-Xx", "-Xx0", "-Xr", "-Xu", "-Xs", "400", "-XS", "400", "-Xt", "-XL"),
+			positions: tail("_Yn", "_Ynn", "-R", "2", "-R", "10", "-R", "11", "=v0", "-Yw", "0"),
+			wheel:     tail("_Yn", "_Ynn", "-R", "2", "-R", "10", "-R", "11", "-XV", "_XJ", "=Xm", "=XQ", "=XQ0", "=Xv0", ":Xv", "1", ":YXG", "111221", ":Xs", "200", ":XS", "100", ":XI0", "25", "1", ":Xkv", "Aut", ":YXf", "#000000", ":YXg", "0", ":YXx", "0", "-Xw", "1200", "=Xi", "=XA", "=Xx", "=Xx0", "=Xr", "_Xu", "_Xt", "=XL", "-Xs", "400", "-XS", "400"),
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			spec, err := tc.lens.specAt(2446232.0, place)
+			spec, err := tc.lens.specAt(AtMoment(2446232.0, place, store.ReportLabel{}))
 			if err != nil {
 				t.Fatal(err)
 			}

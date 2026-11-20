@@ -17,7 +17,7 @@ func TestParseCycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := ParseCycleEvents(string(b), testRegistry(t))
+	events, err := ParseCycleEvents(string(b), testRegistry(t), testAspects(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +61,12 @@ func TestParseCycleEvents(t *testing.T) {
 		t.Error("no 2017-03-25 conjunction")
 	}
 	// The occultation suffix is read, not refused.
-	occ, err := ParseCycleEvents("Mon  6/ 6/2016 21:49:20     Sun (16Gem35) Con (16Gem35) Venus (Total Solar Occultation 98%)\n", testRegistry(t))
+	occ, err := ParseCycleEvents("Mon  6/ 6/2016 21:49:20     Sun (16Gem35) Con (16Gem35) Venus (Total Solar Occultation 98%)\n", testRegistry(t), testAspects(t))
 	if err != nil || occ[0].OtherObject != objVenus || occ[0].OtherAt.Bracket != '(' || occ[0].Instant.Hour() != 21 {
 		t.Errorf("occultation line: %+v, %v", occ, err)
 	}
 	// The clock is pinned to 24 hours: midnight is 0:00.
-	mid, err := ParseCycleEvents("Thu  1/ 1/2026  0:00:05   Venus (10Cap00) --> Capricorn\nThu  1/ 1/2026 12:00:05   Venus <10Cap00> S/D\n", testRegistry(t))
+	mid, err := ParseCycleEvents("Thu  1/ 1/2026  0:00:05   Venus (10Cap00) --> Capricorn\nThu  1/ 1/2026 12:00:05   Venus <10Cap00> S/D\n", testRegistry(t), testAspects(t))
 	if err != nil || mid[0].Instant.Hour() != 0 || mid[1].Instant.Hour() != 12 || mid[1].Station != "S/D" {
 		t.Errorf("24-hour clock: %+v, %v", mid, err)
 	}
@@ -88,7 +88,7 @@ func TestParseCycleEventsRefusesUnknownLines(t *testing.T) {
 		"an ingress and more": "Sat  3/ 4/2017  9:08:52   Venus (13Ari08) --> Taurus later\n",
 		"a 12-hour time":      "Sat  3/25/2017 10:17:07am     Sun ( 4Ari57) Con [ 4Ari57] Venus\n",
 	} {
-		if _, err := ParseCycleEvents(good+bad, testRegistry(t)); err == nil {
+		if _, err := ParseCycleEvents(good+bad, testRegistry(t), testAspects(t)); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
 	}
@@ -103,7 +103,7 @@ func TestCycleCallArgv(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(call.argv, " ")
-	if !strings.HasPrefix(got, "-z 0 -qy 2016 -dY 13 -b0 ") || !strings.HasSuffix(got, " =Yt _Yd -R0 1 4 -RA0 1") {
+	if !strings.HasPrefix(got, "-z 0 -qy 2016 -dY 13 =b0 ") || !strings.HasSuffix(got, " =Yt _Yd -R0 1 4 -RA0 1 _Yn _Ynn") {
 		t.Errorf("argv %q", got)
 	}
 	for _, bad := range []CycleRequest{{StartYear: 1500, Years: 13, Other: objVenus}, {StartYear: 2016, Years: 0, Other: objVenus}, {StartYear: 2016, Years: 13, Other: objSun}} {
@@ -123,7 +123,7 @@ func TestCycleSearchAgainstAstrolog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := ParseCycleEvents(out, testRegistry(t))
+	events, err := ParseCycleEvents(out, testRegistry(t), testAspects(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestSunPairToTheSecond(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(call.argv, " "); !strings.HasPrefix(got, "-qj 2461328.0000000005 -zl 0:00E 51:00N -b0 -v -Z ") || !strings.HasSuffix(got, " =Yt _Yd -R0 1 4 -RA0 1") {
+	if got := strings.Join(call.argv, " "); !strings.HasPrefix(got, "-qj 2461328.0000000005 -zl 0:00E 51:00N =b0 -v -Z ") || !strings.HasSuffix(got, " =Yt _Yd -R0 1 4 -RA0 1 _Yn _Ynn") {
 		t.Errorf("argv %q", got)
 	}
 	out, _, err = RunTimelineSearch(t.Context(), call)

@@ -59,7 +59,7 @@ func (m Model) onNowTick(msg nowTickMsg) (Model, tea.Cmd) {
 	if now.Equal(m.targetFloatingTime) {
 		return m, next
 	}
-	m, cmd := m.setFloatingTarget(now)
+	m, cmd := m.followFloatingTarget(now)
 	// The want this tick registered: its frame is the tick's, and quiet.
 	m.tickWant = m.refresh[surfaceText].wantID
 	return m, tea.Batch(next, cmd)

@@ -1,36 +1,36 @@
 == 80 accessible details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                      
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q    
 == 80 accessible details=true ==
- Switch panel: ←→ | Report: enter | Select: space | ... | Help: ? | Quit: q     
+ Moon phase: p/P | ... | Commands: , | Keybindings: ? | Quit: q                 
 == 80 color-always details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                      
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q    
 == 80 color-always details=true ==
- Switch panel: ←→ | Report: enter | Select: space | … | Help: ? | Quit: q       
+ Details: <enter> | Moon phase: p/P | … | Commands: , | Keybindings: ? | Quit: q
 == 80 color-never details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                      
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q    
 == 80 color-never details=true ==
- Switch panel: ←→ | Report: enter | Select: space | … | Help: ? | Quit: q       
+ Details: <enter> | Moon phase: p/P | … | Commands: , | Keybindings: ? | Quit: q
 == 132 accessible details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                          
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                        
 == 132 accessible details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | ... | Help: ? | Quit: q            
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | ... | Commands: , | Keybindings: ? | Quit: q   
 == 132 color-always details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                          
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                        
 == 132 color-always details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | … | Help: ? | Quit: q              
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | … | Commands: , | Keybindings: ? | Quit: q     
 == 132 color-never details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                          
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                        
 == 132 color-never details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | … | Help: ? | Quit: q              
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | … | Commands: , | Keybindings: ? | Quit: q     
 == 200 accessible details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                                                                                              
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                                                                                            
 == 200 accessible details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Move down: ⌃j | Remove: del | Focus panel: 1/2/3 | Scroll Details: ⌃⇞⌃⇟ | Help: ? | Quit: q            
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | Move down: J | Remove: <delete> | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                        
 == 200 color-always details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                                                                                              
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                                                                                            
 == 200 color-always details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Move down: ⌃j | Remove: del | Focus panel: 1/2/3 | Scroll Details: ⌃⇞⌃⇟ | Help: ? | Quit: q            
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | Move down: J | Remove: <delete> | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                        
 == 200 color-never details=false ==
- Switch panel: ←→ | Focus panel: 1/2/3 | Help: ? | Quit: q                                                                                                                                              
+ Moon phase: p/P | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                                                                                                                            
 == 200 color-never details=true ==
- Switch panel: ←→ | Report: enter | Select: space | Step day: d/D | Move row: ↑↓ | Move up: ⌃k | Move down: ⌃j | Remove: del | Focus panel: 1/2/3 | Scroll Details: ⌃⇞⌃⇟ | Help: ? | Quit: q            
+ Details: <enter> | Moon phase: p/P | Select: <space> | Step day: d/D | Move up: K | Move down: J | Remove: <delete> | Focus panel: 1-4 | Commands: , | Keybindings: ? | Quit: q                        

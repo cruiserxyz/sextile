@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/cruiserxyz/sextile"
 	"github.com/cruiserxyz/sextile/internal/env"
 	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
@@ -40,6 +41,10 @@ func main() {
 			Accessible: opts.accessible,
 			Color:      resolveColorMode(opts.color),
 		}, refused)))
+	}
+	if err := recordLauncherWord(store.ChartsDir()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
 	}
 	status := runProgram(ui.NewModel(cfg))
 	runtime.KeepAlive(lock) // the descriptor holding the lock lives as long as the program
@@ -79,14 +84,76 @@ func prepareLaunch(opts *options) (cfg ui.Config, lock *store.InstanceLock, refu
 		InstanceLockUnsupported: lockCfg.InstanceLockUnsupported,
 		SecondWindow:            lockCfg.SecondWindow,
 		Launch:                  os.Getenv("SEXTILE_LAUNCH"),
+		Version:                 runningVersion(),
+		Copyright:               sextile.Copyright(),
 	}
 	if !cfg.SecondWindow {
 		cfg.Migration = store.MigrateLegacyState(store.ChartsDir()).Line()
 	}
 	if opts.session != "" {
 		cfg = openSessionFlag(cfg, opts.session)
+	} else {
+		cfg = reopenLastSession(cfg)
 	}
 	return cfg, lock, nil, nil
+}
+
+// reopenLastSession is a start without --session: it runs the named session
+// this charts folder's window last switched to, as --session would. One that
+// is no longer saved, cannot be used, or is open in another window is not
+// opened: the launch goes on with the unnamed session and one Log line says
+// which session and why.
+func reopenLastSession(cfg ui.Config) ui.Config {
+	file, name, lock, err := store.ReopenLastSession(store.ChartsDir())
+	switch {
+	case file == "" && err == nil:
+		return cfg
+	case file == "":
+		// The record itself could not be read: nothing was asked for by
+		// name, so the start is the usual one and the reason is a trace.
+		cfg.LastSessionTrace = "Sextile could not read which session you used last: " + firstLine(err.Error())
+		return cfg
+	case err != nil:
+		cfg.SessionNote = fmt.Sprintf("the last session %q did not open, %s", name, reopenRefusal(err))
+		var stale *store.RecordNotClearedError
+		if errors.As(err, &stale) {
+			cfg.LastSessionTrace = "the record of the last session could not be removed: " + firstLine(stale.Err.Error())
+		}
+		return cfg
+	}
+	return runNamedSession(cfg, lock, name)
+}
+
+// reopenRefusal is why the last session was not reopened, in the user's
+// words and short enough for the Log line to fit beside the session's name.
+func reopenRefusal(err error) string {
+	switch {
+	case errors.Is(err, store.ErrSessionNotFound):
+		return "it is no longer saved"
+	case errors.Is(err, store.ErrSessionOpenElsewhere):
+		return "it is open in another window"
+	case errors.Is(err, store.ErrSessionUnreadable), errors.Is(err, store.ErrSessionUnknownContent):
+		return "its file cannot be used"
+	case errors.Is(err, store.ErrSessionOtherFolder):
+		return "it belongs to another charts folder"
+	}
+	return "its file cannot be read"
+}
+
+// runNamedSession hands the window the named session whose lock was taken,
+// letting go of the general one: a window holds exactly one.
+func runNamedSession(cfg ui.Config, lock *store.SessionLock, name string) ui.Config {
+	if !cfg.SecondWindow {
+		store.ReleaseInstanceLock()
+	}
+	cfg.NamedSession, cfg.NamedSessionName = lock, name
+	return cfg
+}
+
+// firstLine is s up to its first line break.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
 }
 
 // openSessionFlag is --session NAME: the launch runs that named session from
@@ -101,14 +168,31 @@ func openSessionFlag(cfg ui.Config, name string) ui.Config {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			why = "there is no saved session of that name in " + store.SessionsDir()
 		}
-		cfg.SessionNote = fmt.Sprintf("--session %q not opened: %s. Started as usual", name, why)
+		cfg.SessionNote = fmt.Sprintf("--session %q did not open, %s, started as usual", name, why)
 		return cfg
 	}
-	if !cfg.SecondWindow {
-		store.ReleaseInstanceLock()
+	return runNamedSession(cfg, lock, display)
+}
+
+// recordLauncherWord writes the charts folder's position the launcher handed
+// over, before the first frame: SEXTILE_ORIGINALS_SET=<word> is --originals,
+// and a word that cannot be recorded stops the launch with the reason;
+// SEXTILE_ORIGINALS_CREATED=1 means the launcher made the folder, which is
+// recorded as add, and if that fails the folder stays at ask.
+func recordLauncherWord(dir string) error {
+	if w := os.Getenv("SEXTILE_ORIGINALS_SET"); w != "" {
+		if err := store.SetPositionReplacing(dir, store.Position(w)); err != nil {
+			if errors.Is(err, store.ErrFolderBusy) {
+				return fmt.Errorf("Another Sextile window is open on this charts folder.\nClose it, then start again.")
+			}
+			return fmt.Errorf("The charts folder could not be set to %s.\n%v", w, err)
+		}
+		return nil
 	}
-	cfg.NamedSession, cfg.NamedSessionName = lock, display
-	return cfg
+	if os.Getenv("SEXTILE_ORIGINALS_CREATED") == "1" {
+		_ = store.SetPosition(dir, store.PositionAdd)
+	}
+	return nil
 }
 
 // loadEnv is env.Load; a test swaps it to stand in for a .env, which an
@@ -129,12 +213,35 @@ func lockOutcome(lock *store.InstanceLock, err error) (ui.Config, error) {
 	return ui.Config{InstanceLockUnsupported: lock.Unsupported}, nil
 }
 
+// Terminal title stack (xterm): push saves the terminal's own title, pop puts
+// it back. One push before the program's first title, one pop on every way out.
+var (
+	titlePush = "\x1b[22" + semicolon + "0t"
+	titlePop  = "\x1b[23" + semicolon + "0t"
+)
+
+// semicolon is spelled apart: the terminal's parameter separator is not text
+// for a person.
+const semicolon = "\x3b"
+
 // runProgram runs one model on the alternate screen and returns the exit status.
 func runProgram(m tea.Model) int {
+	return runProgramOn(m, os.Stdout, os.Stdin)
+}
+
+// runProgramOn is runProgram on the given terminal streams. The terminal's own
+// title is pushed before the program can set one, and popped by the deferred
+// call, so a quit, Ctrl+C, the can't-start screen and a panic that unwinds
+// through here all give it back.
+func runProgramOn(m tea.Model, out io.Writer, in io.Reader) int {
+	io.WriteString(out, titlePush)
+	defer io.WriteString(out, titlePop)
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
+		tea.WithOutput(out),
+		tea.WithInput(in),
 	)
 	final, err := p.Run()
 	return finish(final, err, os.Stderr)
@@ -217,6 +324,12 @@ func versionString(ldflag string, info *debug.BuildInfo, haveInfo bool) string {
 	return "devel (" + rev + ")"
 }
 
+// runningVersion is the version this binary reports, as --version prints it.
+func runningVersion() string {
+	info, ok := readBuildInfo()
+	return versionString(version, info, ok)
+}
+
 // astrologLine is line 2 of --version's answer. It only asks Astrolog for its
 // version; the exit status of --version does not depend on the answer.
 func astrologLine() string {
@@ -242,10 +355,10 @@ func runVersion(w io.Writer) int {
 
 func registerFlags(fs *flag.FlagSet) *options {
 	opts := &options{}
-	fs.StringVar(&opts.chartsDir, "charts-dir", "", "directory containing the chart library (Astrolog chart files)")
+	fs.StringVar(&opts.chartsDir, "charts-dir", "", "the charts folder (Astrolog chart files)")
 	fs.BoolVar(&opts.accessible, "accessible", false, "use ASCII box-drawing glyphs, and choose color independently with --color")
 	fs.StringVar(&opts.color, "color", "auto", "color policy: auto, always, or never")
-	fs.StringVar(&opts.session, "session", "", "start running the named session NAME (saved with , o in this charts folder)")
+	fs.StringVar(&opts.session, "session", "", "open the session NAME (saved with , O in this charts folder)")
 	fs.BoolVar(&opts.version, "version", false, "print Sextile's version and the Astrolog it finds, then exit — checks only Astrolog's version answer (no ephemeris or atlas check)")
 	fs.Usage = func() { printUsage(fs) }
 	return opts
@@ -264,7 +377,7 @@ func setChartsDir(dir string) error {
 
 func printUsage(fs *flag.FlagSet) {
 	out := fs.Output()
-	fmt.Fprintln(out, "Sextile — a focused chart workspace for professional astrological practice.")
+	fmt.Fprintln(out, "Sextile shows astrology charts in a terminal window.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "Usage:")
 	fmt.Fprintln(out, "  sextile [options]")
@@ -273,8 +386,8 @@ func printUsage(fs *flag.FlagSet) {
 	fmt.Fprintln(out, "  sextile --charts-dir ~/Clients/charts")
 	fmt.Fprintln(out, "  sextile --charts-dir ./charts")
 	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "The directory holds one Astrolog chart per file, found by its first bytes and not")
-	fmt.Fprintln(out, "its name. Charts saved during this session are written there as name.as.")
+	fmt.Fprintln(out, "The folder holds one Astrolog chart in each file. Sextile knows a chart by its first")
+	fmt.Fprintln(out, "characters, not by its name. A chart that you save is written there as name.as.")
 	fmt.Fprintln(out, "Relative paths are resolved from your current working directory. The flag takes")
 	fmt.Fprintln(out, "precedence over SEXTILE_CHARTS_DIR.")
 	fmt.Fprintln(out, "")

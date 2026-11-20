@@ -44,7 +44,7 @@ func TestPaneFramesNewSubject(t *testing.T) {
 	}{{132, 40, paneColour}, {132, 40, paneAccessible}, {80, 24, paneColour}} {
 		t.Run(goldenName("new-subject", tc.w, tc.h, tc.mode), func(t *testing.T) {
 			m, _ := paneFixture(t, tc.mode, tc.w, tc.h)
-			m, _ = pressOnly(t, m, runes("2"))
+			m, _ = pressOnly(t, m, runes("3"))
 			checkGolden(t, goldenName("new-subject", tc.w, tc.h, tc.mode), m.View())
 		})
 	}
@@ -56,7 +56,7 @@ func TestPaneFramesSameSubject(t *testing.T) {
 	for _, mode := range []paneMode{paneColour, paneAccessible} {
 		t.Run(goldenName("same-subject", 132, 40, mode), func(t *testing.T) {
 			m, _ := paneFixture(t, mode, 132, 40)
-			m, cmd := pressOnly(t, m, runes("2"))
+			m, cmd := pressOnly(t, m, runes("3"))
 			m = pump(t, m, cmd)
 			m, cmd = pressOnly(t, m, runes("d"))
 			frame := ""
@@ -86,7 +86,7 @@ func TestPaneFramesOtherChart(t *testing.T) {
 func TestPaneFramesFailed(t *testing.T) {
 	m, stub := paneFixture(t, paneColour, 132, 40)
 	stub.failBodies = true
-	m, cmd := pressOnly(t, m, runes("2"))
+	m, cmd := pressOnly(t, m, runes("3"))
 	m = pump(t, m, cmd)
 	if m.detailsReportState() != paneFailed {
 		t.Fatalf("fixture: the Sun's report did not fail (%v)", m.detailsReportState())

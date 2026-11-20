@@ -7,8 +7,6 @@ package ui
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -123,7 +121,7 @@ func stubHouseLookups(t *testing.T) *houseSpy {
 			spy.record("cross", lens.Houses)
 			return lookup.OverlayAspects{Report: "transit cross"}, nil
 		}
-		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, _ time.Time, _ location.PlaceInfo, _ store.ReportLabel) (lookup.OverlayAspects, error) {
+		s.cast.synastry = func(_ context.Context, lens lookup.Lens, _ store.AnchorChart, other store.AnchorChart) (lookup.OverlayAspects, error) {
 			spy.record("synastry", lens.Houses)
 			return lookup.OverlayAspects{Report: "synastry cross"}, nil
 		}
@@ -427,7 +425,7 @@ func TestSubstitutionMarksTheTagAndLogsOnce(t *testing.T) {
 		t.Errorf("ordinary row tag = %q, want PlTr", got)
 	}
 	m = settleHouses(t, m)
-	line := "Placidus asked, Astrolog used Porphyry"
+	line := "asked for Placidus, Astrolog casts Porphyry here"
 	if n := logHas(m, line); n != 1 {
 		t.Errorf("the substitution was logged %d times, want once: %v", n, m.logLines)
 	}
@@ -483,7 +481,7 @@ func TestHouseChoiceSavesTheSession(t *testing.T) {
 		if len(savedFrames(t)) != 0 {
 			t.Errorf("a chart with no file got a record: %+v", savedFrames(t))
 		}
-		if logHas(m, "can't be remembered") != 1 {
+		if logHas(m, "the choice holds until quit") != 1 {
 			t.Errorf("the Log does not say it cannot be remembered: %v", m.logLines)
 		}
 	})
@@ -504,11 +502,11 @@ func TestHouseChoiceSavesTheSession(t *testing.T) {
 		if got := m.ownHouses(m.slots.All()[0]).hs; got != recipe.Koch {
 			t.Errorf("the choice must still apply on screen: %v", got)
 		}
-		if logHas(m, "Couldn't save the house choice") != 1 {
+		if logHas(m, "the house choice was not saved") != 1 {
 			t.Errorf("the failure is not on the error lane: %v", m.logLines)
 		}
 		for _, l := range m.logLines {
-			if strings.Contains(l.text, "Couldn't save the house choice") && l.lane != laneError {
+			if strings.Contains(l.text, "the house choice was not saved") && l.lane != laneError {
 				t.Errorf("failure on lane %v", l.lane)
 			}
 		}
@@ -716,7 +714,7 @@ func TestWheelChangesWithFocusedHouseSystem(t *testing.T) {
 	var mu sync.Mutex
 	var drawn []recipe.HouseSystem
 	stubSpawns(t, func(s *rowSpawns) {
-		s.wheel.render = func(_ context.Context, _ time.Time, _ location.PlaceInfo, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
+		s.wheel.render = func(_ context.Context, chart store.AnchorChart, lens lookup.Lens, _ lookup.WheelHighlight) ([]byte, error) {
 			mu.Lock()
 			drawn = append(drawn, lens.Houses)
 			mu.Unlock()
@@ -757,7 +755,7 @@ func TestReplacedChartDoesNotInheritHouseChoice(t *testing.T) {
 	if got := spy.lastOf(t, "n1"); got != recipe.Equal {
 		t.Errorf("the first cast carried %v, want the file's Equal", got)
 	}
-	if n := logHas(m, "different chart"); n != 1 {
+	if n := logHas(m, "changed since its houses were chosen"); n != 1 {
 		t.Errorf("the rejected record was named %d times, want once: %v", n, m.logLines)
 	}
 }
@@ -769,7 +767,7 @@ func TestInvalidFrameEntryIsLogged(t *testing.T) {
 		"  - file: good.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Koch\n    from: chosen\n"+
 		"  - file: bad.as\n    when: \"1995-03-20T10:00:00Z\"\n    houses: Nonsense\n    from: chosen\n"))
 	m := startedModel(t, withLocation(realPerimeter(t)))
-	if n := logHas(m, "frames entry was dropped"); n != 1 {
+	if n := logHas(m, "could not be read and is dropped"); n != 1 {
 		t.Errorf("the dropped entry was named %d times, want once: %v", n, m.logLines)
 	}
 	if _, ok := m.frames.find("good.as", false); !ok {
@@ -914,17 +912,16 @@ func kochChart(title string, withC bool) string {
 	return text
 }
 
-// The rename tests: the real Astrolog rewrites the real file, and a rewrite
-// drops the file's house line (measured 2026-10-08), so the record is the only
-// thing that keeps the chart's houses.
-func fileNamesNoSystem(t *testing.T, dir, file string) {
+// The rename tests: the real Astrolog rewrites the real file, and the rewrite
+// keeps the file's house line, so the file still names its system after it.
+func fileKeepsItsSystem(t *testing.T, dir, file string) {
 	t.Helper()
 	cf, err := lookup.ReadChartFile(context.Background(), file)
 	if err != nil {
 		t.Fatalf("read %s: %v", file, err)
 	}
-	if cf.HasHouses {
-		t.Fatalf("premise: the rewritten %s still names %v", file, cf.Houses)
+	if !cf.HasHouses || cf.Houses != recipe.Koch {
+		t.Fatalf("the rewritten %s names %v (has %v), want Koch", file, cf.Houses, cf.HasHouses)
 	}
 }
 
@@ -944,9 +941,9 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 			t.Fatalf("Ctrl+R did not open the rename form (startup %v)", m.startup)
 		}
 		m = typeText(t, m, "Client Kay")
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, cmd := submit(t, m)
 		m, _ = finishRename(t, m, cmd)
-		assertPreserved(t, m, dir, "K.as")
+		fileKeepsItsSystem(t, dir, "K.as")
 	})
 	t.Run("the title form of a pick", func(t *testing.T) {
 		sessionSandbox(t)
@@ -958,10 +955,9 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 			t.Fatalf("the untitled pick did not open the title form (startup %v)", m.startup)
 		}
 		m = typeText(t, m, "Client U")
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // the second step
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, cmd := submit(t, m)
 		m, _ = finishRename(t, m, cmd)
-		assertPreserved(t, m, dir, "U.as")
+		fileKeepsItsSystem(t, dir, "U.as")
 	})
 	t.Run("a chart that already has a choice is not touched", func(t *testing.T) {
 		sessionSandbox(t)
@@ -975,60 +971,17 @@ func TestRenameKeepsTheFilesHouseSystem(t *testing.T) {
 		}
 		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
 		m = typeText(t, m, "Client Kay")
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, cmd := submit(t, m)
 		m, _ = finishRename(t, m, cmd)
 		rec, _ := m.frames.find("K.as", false)
 		if rec.Houses != recipe.Equal || rec.From != store.FrameFromChosen {
 			t.Errorf("the chosen record was replaced: %+v", rec)
 		}
 	})
-	t.Run("the preservation write fails: the rename does not proceed", func(t *testing.T) {
-		sessionSandbox(t)
-		dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
-		before := fileText(t, filepath.Join(dir, "K.as"))
-		if err := os.MkdirAll(filepath.Dir(store.SessionDir()), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(store.SessionDir(), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		m := openedPicker(t)
-		for i, c := range m.picker.Matches {
-			if c.Source.File == "K.as" {
-				m.picker.Cursor = i
-			}
-		}
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-		m = typeText(t, m, "Client Kay")
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		m, _ = finishRename(t, m, cmd)
-		if got := fileText(t, filepath.Join(dir, "K.as")); got != before {
-			t.Errorf("the chart file was rewritten although its houses could not be saved:\n%s", got)
-		}
-		noBackup(t, filepath.Join(dir, "K.as"))
-		if m.title.Refusal == "" {
-			t.Error("the form does not say why the rename was refused")
-		}
-		if logHas(m, "house system") == 0 {
-			t.Errorf("the error lane does not say why: %v", m.logLines)
-		}
-	})
 }
 
-func assertPreserved(t *testing.T, m Model, dir, file string) {
-	t.Helper()
-	rec, ok := m.frames.find(file, false)
-	if !ok || rec.Houses != recipe.Koch || rec.From != store.FrameFromFile {
-		t.Fatalf("record for %s = %+v (found %v), want Koch from file", file, rec, ok)
-	}
-	s, _, err := store.LoadSession()
-	if err != nil || len(s.Frames) != 1 || s.Frames[0].File != file || s.Frames[0].From != store.FrameFromFile {
-		t.Errorf("session frames = %+v (%v), want the preserving record on disk", s.Frames, err)
-	}
-	fileNamesNoSystem(t, dir, file)
-}
-
-// Pass-4 build note.
+// A rename the file refuses leaves the session without a record, and the
+// file's own house line is what the next open reads.
 func TestFailedRenameDoesNotFreezeFileHouseSystem(t *testing.T) {
 	sessionSandbox(t)
 	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
@@ -1041,22 +994,24 @@ func TestFailedRenameDoesNotFreezeFileHouseSystem(t *testing.T) {
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
 	m = typeText(t, m, "Client Kay")
-	// The file changes after the picker listed it: the rename is refused, after
-	// the preservation record was written.
+	// The file changes after the picker listed it: the rename is refused.
 	path := filepath.Join(dir, "K.as")
 	if err := os.WriteFile(path, []byte(kochChart("Client K", true)+"; changed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := submit(t, m)
 	m, _ = finishRename(t, m, cmd)
 	if m.title.Refusal == "" {
 		t.Fatal("fixture: the rename was not refused")
 	}
 	if _, ok := m.frames.find("K.as", false); ok {
-		t.Error("the failed rename left its record in the model")
+		t.Error("the failed rename left a record in the model")
 	}
 	if s, ok, _ := store.LoadSession(); ok && len(s.Frames) != 0 {
-		t.Errorf("the failed rename left its record on disk: %+v", s.Frames)
+		t.Errorf("the failed rename left a record on disk: %+v", s.Frames)
+	}
+	if got := fileText(t, path); !strings.Contains(got, "; changed") || !strings.Contains(got, `"Client K"`) {
+		t.Errorf("the refused rename touched the file:\n%s", got)
 	}
 	// The file's line is edited afterwards: the new system is what is read.
 	if err := os.WriteFile(path, []byte(strings.Replace(kochChart("Client K", true), "Koch", "Equal", 1)), 0o600); err != nil {
@@ -1071,65 +1026,31 @@ func TestFailedRenameDoesNotFreezeFileHouseSystem(t *testing.T) {
 	}
 }
 
-// Pass-5 build note: Esc while the rename is in flight.
-func TestAbandonedRenameKeepsHouseRecordConsistent(t *testing.T) {
-	open := func(t *testing.T) (Model, string, tea.Cmd) {
-		sessionSandbox(t)
-		dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
-		m := openedPicker(t)
-		for i, c := range m.picker.Matches {
-			if c.Source.File == "K.as" {
-				m.picker.Cursor = i
-			}
+// Esc while the rewrite is in flight does not stop it: it lands and logs.
+func TestAbandonedRenameStillLands(t *testing.T) {
+	sessionSandbox(t)
+	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
+	m := openedPicker(t)
+	for i, c := range m.picker.Matches {
+		if c.Source.File == "K.as" {
+			m.picker.Cursor = i
 		}
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-		m = typeText(t, m, "Client Kay")
-		return m, dir, nil
 	}
-	t.Run("Esc after the rewrite was issued: it lands and the record stays", func(t *testing.T) {
-		m, dir, _ := open(t)
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		m, rewrite := runCmd(t, m, cmd)
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-		m, _ = runCmd(t, m, rewrite)
-		assertPreserved(t, m, dir, "K.as")
-	})
-	t.Run("Esc after the rewrite was issued and it fails: the record goes", func(t *testing.T) {
-		m, dir, _ := open(t)
-		path := filepath.Join(dir, "K.as")
-		if err := os.WriteFile(path, []byte(kochChart("Client K", true)+"; changed\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		m, rewrite := runCmd(t, m, cmd)
-		if _, ok := m.frames.find("K.as", false); !ok {
-			t.Fatal("fixture: the record was not in the model while the rewrite was in flight")
-		}
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-		m, _ = runCmd(t, m, rewrite)
-		if _, ok := m.frames.find("K.as", false); ok {
-			t.Error("a failed late rename left its record in the model")
-		}
-		if s, ok, _ := store.LoadSession(); ok && len(s.Frames) != 0 {
-			t.Errorf("a failed late rename left its record on disk: %+v", s.Frames)
-		}
-	})
-	t.Run("Esc before the read lands: nothing is written", func(t *testing.T) {
-		m, dir, _ := open(t)
-		before := fileText(t, filepath.Join(dir, "K.as"))
-		m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-		m, next := runCmd(t, m, cmd)
-		if next != nil {
-			t.Error("a rewrite was issued for a rename Esc walked away from")
-		}
-		if _, ok := m.frames.find("K.as", false); ok {
-			t.Error("an abandoned rename left a record")
-		}
-		if got := fileText(t, filepath.Join(dir, "K.as")); got != before {
-			t.Error("an abandoned rename rewrote the file")
-		}
-	})
+	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
+	m = typeText(t, clearField(t, m, 20), "Client Kay")
+	m, rewrite := submit(t, m)
+	if rewrite == nil || !m.title.Saving {
+		t.Fatalf("no rewrite was issued (saving %v)", m.title.Saving)
+	}
+	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = runCmd(t, m, rewrite)
+	if got := fileText(t, filepath.Join(dir, "K.as")); !strings.Contains(got, `"Client Kay"`) {
+		t.Errorf("the abandoned rename did not land:\n%s", got)
+	}
+	fileKeepsItsSystem(t, dir, "K.as")
+	if logHas(m, "Client Kay") == 0 {
+		t.Errorf("the late rename was not logged: %v", m.logLines)
+	}
 }
 
 // Pass-7 build note: a chart no slot holds.
@@ -1148,7 +1069,7 @@ func TestUnopenedChartRenamePreservesFileHouseSystem(t *testing.T) {
 	}
 	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
 	m = typeText(t, m, "Client Kay")
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := submit(t, m)
 	m, cmd = finishRename(t, m, cmd) // the rename lands; the picker reloads
 	m, _ = runCmd(t, m, cmd)
 	m, cmd = pickRow(t, m, "K.as")
@@ -1244,7 +1165,7 @@ func TestChartFileReadFailureCastsNothing(t *testing.T) {
 	if m.slots.AnchoredCount() != 0 {
 		t.Error("an unreadable chart was anchored")
 	}
-	if logHas(m, "Couldn't open that chart") != 1 {
+	if logHas(m, "chart not opened") != 1 {
 		t.Errorf("the existing failure path did not report it: %v", m.logLines)
 	}
 	if len(spy.snapshot()) != 0 {
@@ -1259,8 +1180,7 @@ func withLocation(p ingest.StartupPerimeterReadMsg) ingest.StartupPerimeterReadM
 	return p
 }
 
-// finishRename runs a rename's commands until the write has landed: a chart
-// that needs its houses preserved takes one more step than one that does not.
+// finishRename runs a rename's commands until the write has landed.
 func finishRename(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 	t.Helper()
 	for i := 0; i < 3 && cmd != nil; i++ {
@@ -1344,10 +1264,10 @@ func TestRestoredChartFileReadFailureCastsNothing(t *testing.T) {
 }
 
 // F2: a record made for another chart under the same file name does not stop
-// the file being read, so the file's system applies and a rename preserves it.
+// the file being read, so the file's system applies.
 func TestStaleRecordStillReadsTheFile(t *testing.T) {
 	sessionSandbox(t)
-	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
+	titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
 	stubHouseLookups(t)
 	stale := store.FrameRecord{File: "K.as", When: frameWhenUI.Add(-24 * time.Hour), Houses: recipe.Equal, HasHouses: true, From: store.FrameFromChosen}
 	m := openedPicker(t)
@@ -1363,42 +1283,6 @@ func TestStaleRecordStillReadsTheFile(t *testing.T) {
 	slot := p.slots.All()[p.slots.AnchoredCount()-1]
 	if own := p.ownHouses(slot); own.hs != recipe.Koch || !own.rejected {
 		t.Fatalf("own = %+v, want the file's Koch with the record rejected", own)
-	}
-	// Rename: the file is read, and its Koch is preserved.
-	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-	m = typeText(t, m, "Client Kay")
-	m, cmd = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	m, _ = finishRename(t, m, cmd)
-	assertPreserved(t, m, dir, "K.as")
-}
-
-// F3: from the moment the rewrite is issued, any session write already holds
-// the preservation record.
-func TestQuitDuringRenameKeepsThePreservationRecord(t *testing.T) {
-	sessionSandbox(t)
-	dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart("Client K", true)})
-	before := fileText(t, filepath.Join(dir, "K.as"))
-	m := openedPicker(t)
-	for i, c := range m.picker.Matches {
-		if c.Source.File == "K.as" {
-			m.picker.Cursor = i
-		}
-	}
-	m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-	m = typeText(t, m, "Client Kay")
-	m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	m, rewrite := runCmd(t, m, cmd) // the read lands; the rewrite is issued, not run
-	if rewrite == nil || !m.title.Saving {
-		t.Fatalf("no rewrite was issued (saving %v)", m.title.Saving)
-	}
-	if got := fileText(t, filepath.Join(dir, "K.as")); got != before {
-		t.Fatalf("the chart file was rewritten before the record was in the session:\n%s", got)
-	}
-	_, qcmd := m.quit()
-	assertQuits(t, qcmd)
-	s, ok, err := store.LoadSession()
-	if err != nil || !ok || len(s.Frames) != 1 || s.Frames[0].File != "K.as" || s.Frames[0].Houses != recipe.Koch || s.Frames[0].From != store.FrameFromFile {
-		t.Fatalf("the session written at quit = %+v (%v %v), want the preserving record", s.Frames, ok, err)
 	}
 }
 
@@ -1440,85 +1324,47 @@ func TestRepickedChartWithChangedHouseLineRecasts(t *testing.T) {
 	}
 }
 
-// Review round 2: a rename trusts no cached read. K.as was read once as chart
-// A (a record for A exists), then replaced on disk by chart B naming Koch; the
-// rename re-reads the file, finds the record is not B's, and preserves B's Koch.
-func TestRenameRereadsAReplacedFile(t *testing.T) {
-	for _, route := range []string{"Ctrl+R in the picker", "the title form of a pick"} {
-		t.Run(route, func(t *testing.T) {
-			sessionSandbox(t)
-			titled := route == "Ctrl+R in the picker"
-			titleA := "Client A"
-			if !titled {
-				titleA = ""
-			}
-			dir := titleLibrary(t, nil, map[string]string{"K.as": kochChart(titleA, false)})
-			path := filepath.Join(dir, "K.as")
-			a, err := lookup.ReadChartFile(context.Background(), "K.as")
-			if err != nil {
-				t.Fatal(err)
-			}
-			m := openedPicker(t)
-			// What the model last knew of K.as: chart A, with a record for A.
-			m.frames = m.frames.withFile("K.as", fileFrame{when: a.When})
-			m.frames.records = []store.FrameRecord{{File: "K.as", When: a.When, Houses: recipe.Equal, HasHouses: true, From: store.FrameFromChosen}}
-			// K.as is replaced by chart B, which names Koch; the picker is not
-			// reloaded, but its fingerprint is the replaced file's, so the
-			// rewrite itself is not refused.
-			replacement := strings.Replace(kochChart(titleA, true), "12:00pm", "1:00pm", 1)
-			if err := os.WriteFile(path, []byte(replacement), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			b, err := lookup.ReadChartFile(context.Background(), "K.as")
-			if err != nil || !b.HasHouses || b.Houses != recipe.Koch || b.When.Equal(a.When) {
-				t.Fatalf("fixture: B reads as %+v (%v), A at %v", b, err, a.When)
-			}
-			sum := sha256.Sum256([]byte(replacement))
-			m.picker.seen = map[string]string{"K.as": hex.EncodeToString(sum[:])}
-			for i, c := range m.picker.Matches {
-				if c.Source.File == "K.as" {
-					m.picker.Cursor = i
-				}
-			}
-			if titled {
-				m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
-			} else {
-				var cmd tea.Cmd
-				m, cmd = pickRow(t, m, "K.as")
-				_ = cmd
-			}
-			if m.startup != startupTitleOpen {
-				t.Fatalf("no form opened (startup %v)", m.startup)
-			}
-			m = typeText(t, m, "Client B")
-			if !titled {
-				m, _ = sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // a pick confirms first; a rename writes at once
-			}
-			m, cmd := sendKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-			m, _ = finishRename(t, m, cmd)
-			rec, ok := m.frames.find("K.as", false)
-			if !ok || rec.Houses != recipe.Koch || rec.From != store.FrameFromFile || !rec.When.Equal(b.When) {
-				t.Fatalf("record = %+v (%v), want Koch from file at B's moment %v", rec, ok, b.When)
-			}
-			s, _, err := store.LoadSession()
-			if err != nil || len(s.Frames) != 1 || s.Frames[0].Houses != recipe.Koch || !s.Frames[0].When.Equal(b.When) {
-				t.Errorf("session frames = %+v (%v), want the Koch record for B", s.Frames, err)
-			}
-			// The next cast of B is Koch although the rewrite dropped its line.
-			fileNamesNoSystem(t, dir, "K.as")
-			m = m.withFileForTest("K.as", fileFrame{when: b.When})
-			slotChart := store.SessionChart{ID: "k", Name: "Client B", Source: store.ChartSource{Kind: store.ChartKindFile, File: "K.as"}}
-			if err := m.slots.AddAnchored(slotChart, b.When, berlinP); err != nil {
-				t.Fatal(err)
-			}
-			if got := m.ownHouses(m.slots.All()[0]); got.hs != recipe.Koch {
-				t.Errorf("B is cast in %v, want Koch", got.hs)
-			}
-		})
+// A session from Sextile 0.1.3 remembers a chart file's moment rounded to the
+// minute; 0.1.4 reads it to the second. Kepler's chart (14:37 LMT at 8°52'E)
+// is 14:01:32 UT, which 0.1.3 remembered as 14:02. A house system chosen
+// for it then still holds, and no Log line says it was made for a different
+// chart.
+func TestAnOldSessionsHouseChoiceHoldsForAnLMTChart(t *testing.T) {
+	needLiveAstrolog(t)
+	sessionSandbox(t)
+	kepler := "@AI800  ; Astrolog chart info.\n-qb Dec 27 1571 14:37 ST LMT   8:52E 48:45N\n-zi \"Johannes Kepler\" \"Weil der Stadt, Germany\"\n"
+	titleLibrary(t, nil, map[string]string{"Kepler.as": kepler})
+	lib, err := lookup.LoadChartLibrary()
+	if err != nil || len(lib.Charts) != 1 {
+		t.Fatalf("fixture library: %+v %v", lib.Charts, err)
 	}
-}
-
-func (m Model) withFileForTest(file string, ff fileFrame) Model {
-	m.frames = m.frames.withFile(file, ff)
-	return m
+	row := lib.Charts[0]
+	read, err := lookup.ResolvePickedChart(context.Background(), row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := read.When.Round(time.Minute)
+	if old.Equal(read.When) {
+		t.Fatalf("fixture: %v has no seconds to round away", read.When)
+	}
+	rec := store.SessionChart{ID: row.ID, Name: row.Name, When: old, Place: row.Place, Source: row.Source}
+	frames := []store.FrameRecord{{File: "Kepler.as", When: old, Houses: recipe.Campanus, HasHouses: true, From: store.FrameFromChosen}}
+	if err := store.SaveSession(here(store.Session{Slots: []store.SessionSlot{{Chart: rec, Usable: true, Selected: true}}, Frames: frames})); err != nil {
+		t.Fatal(err)
+	}
+	var m tea.Model = newTestModel(t, Config{Accessible: true}, FrozenClock(sessionFrozen))
+	m, _ = m.Update(AtlasLoadedMsg{Index: location.NewIndex([]location.PlaceInfo{berlinP, fixtureOneP})})
+	p := withLocation(readPerimeterCmd(false)().(ingest.StartupPerimeterReadMsg))
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 132, Height: 40})
+	m, cmd := m.Update(p)
+	got := pumpPatient(t, m.(Model), cmd)
+	slot := slotOf(t, got, "Kepler.as")
+	if hs := got.ownHouses(slot).hs; hs != recipe.Campanus {
+		t.Errorf("the chosen Campanus was lost: the chart is shown in %v", hs)
+	}
+	for _, l := range got.logPanelLines() {
+		if strings.Contains(l, "different chart") {
+			t.Errorf("the Log says %q", l)
+		}
+	}
 }

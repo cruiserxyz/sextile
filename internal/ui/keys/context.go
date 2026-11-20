@@ -1,14 +1,12 @@
 package keys
 
 import (
-	"time"
-
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 )
 
 // Context is everything one frame's keys need to know about the program: which
 // owner has the keyboard, that owner's table, the answers to the conditions
-// its entries ask, and what the bar and the Keys popup draw with. The ui
+// its entries ask, and what the bar and the Keybindings popup draw with. The ui
 // package resolves it from the Model (keysContext) and resolves only the
 // active owner's answers; every other group is its zero value, so an entry's
 // condition is a read of one field and never reaches into the program.
@@ -19,7 +17,7 @@ type Context struct {
 	Table   []BindingEntry
 
 	// Availability, one group per owner. Only the owner's own group is filled
-	// (Main is also filled, in part, for Help, which lists the main table).
+
 	Main     MainFacts
 	Details  DetailsFacts
 	Popup    PopupFacts
@@ -28,7 +26,6 @@ type Context struct {
 	Save     SaveFacts
 	Console  ConsoleFacts
 	Log      LogFacts
-	Display  DisplayFacts
 
 	// Attach is Enter on the main screen: whether it opens Details and the
 	// title it carries (the tab it would show).
@@ -36,9 +33,6 @@ type Context struct {
 
 	// Leader is the leader's configuration and pending state.
 	Leader LeaderFacts
-
-	// Help is what the Keys popup lists, filled for its owner only.
-	Help HelpFacts
 
 	// Presentation: the terminal's style, and the footer's right-hand slot as
 	// ui finished it (a pending leader, a copy receipt, a notice, the error
@@ -59,7 +53,8 @@ type MainFacts struct {
 	CanMoveDown    bool
 	CanRemove      bool
 	DetailsScrolls bool // Details is on screen with more than it can show
-	HoldsAChart    bool // at least one chart is open (the Keys popup lists the list keys)
+	HoldsAChart    bool // at least one chart is open
+	ChartFocused   bool // the Chart panel has the focus (the chart list's keys are local to it)
 }
 
 // DetailsFacts are attached Details' conditions.
@@ -70,17 +65,31 @@ type DetailsFacts struct {
 	OnTimelineRows bool
 	Filterable     bool
 	HasSeveralTabs bool
+	// Back names the panel Esc returns to (`Bodies`).
+	Back string
 }
 
-// PopupFacts are the open popup list's: how many rows it holds right now.
-type PopupFacts struct{ Rows int }
+// PopupFacts are the open popup list's: how many rows it holds right now, and
+// whether a filter is typed (the Keybindings popup's Esc clears it first).
+type PopupFacts struct {
+	Rows      int
+	Filtering bool
+}
 
-// PickerFacts are the chart picker's.
-type PickerFacts struct{ Renames bool }
+// PickerFacts are the chart picker's: whether Ctrl+R acts on the row under
+// the cursor, and how many charts are ticked.
+type PickerFacts struct {
+	Renames bool
+	Ticked  int
+	// InBatch: the title form asks for one chart of an Enter on ticked charts,
+	// and Esc skips that chart.
+	InBatch bool
+}
 
 // SessionsFacts are the Sessions list's and its name form's.
 type SessionsFacts struct {
 	OnSaveRow bool
+	OnNewRow  bool
 	CanOpen   bool
 	OnFreeRow bool
 	CanTrash  bool
@@ -96,9 +105,6 @@ type ConsoleFacts struct{ Lines int }
 // LogFacts are the focused Log's: how many lines the panel holds.
 type LogFacts struct{ Lines int }
 
-// DisplayFacts are the House display popup's.
-type DisplayFacts struct{ CanChoose bool }
-
 // AttachFacts are Enter's on the main screen.
 type AttachFacts struct {
 	CanAttach bool
@@ -106,21 +112,26 @@ type AttachFacts struct {
 }
 
 // LeaderFacts are the leader's key, its pending sequence, the sequences it
-// knows (the Keys popup lists them), the prefix tree and the timeout.
+// knows and the prefix tree.
 type LeaderFacts struct {
 	Pending  bool
 	Seq      []string
 	Key      string
 	Bindings []LeaderBinding
 	Tree     *LeaderNode
-	Timeout  time.Duration
+	// Limited is set while the command line stands over a popup: only Offered
+	// acts, and the menu names those and Esc.
+	Limited bool
+	Offered []BindingID
+	// Twins are the comma forms of the Ctrl keys the owner binds: the leader then
+	// the letter runs the same entry, and the menu lists it with the entry's word.
+	Twins []Twin
 }
 
-// HelpFacts are the Keys popup's: the main table, the leader-only entries, the
-// table of each popup it lists, and the scroll position.
-type HelpFacts struct {
-	Main       []BindingEntry
-	LeaderOnly []BindingEntry
-	Popups     map[Owner][]BindingEntry
-	State      HelpState
+// Twin is the comma form of one Ctrl key of an owner: the letter after the
+// leader, the key it stands for, and the entry's own word.
+type Twin struct {
+	Letter string
+	Key    string
+	Word   string
 }

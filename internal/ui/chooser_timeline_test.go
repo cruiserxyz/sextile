@@ -252,13 +252,13 @@ func TestTimelineShowsDefaultSetRefusal(t *testing.T) {
 			lane = append(lane, l.text)
 		}
 	}
-	const want = "Couldn't read the timeline. Astrolog's default body lists could not be read"
+	const want = "timeline: the timeline not read, Astrolog's default body lists could not be read"
 	if len(lane) != 1 || !strings.HasPrefix(lane[0], want) {
 		t.Fatalf("error lane = %q, want one line starting %q", lane, want)
 	}
 	// The Log panel cuts a long line at its edge (Enter copies the whole), so
 	// the screen shows the line's opening words.
-	if !strings.Contains(ansi.Strip(m.View()), "Couldn't read the timeline. Astrolog's default body lists") {
+	if !strings.Contains(ansi.Strip(m.View()), "the timeline not read, Astrolog's default body") {
 		t.Error("the refusal is not on the rendered screen")
 	}
 }

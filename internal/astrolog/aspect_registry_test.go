@@ -1,9 +1,12 @@
 package astrolog
 
 import (
+	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -26,10 +29,10 @@ func TestParseAspectRegistry(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	if len(reg) != 24 {
-		t.Fatalf("parsed %d aspects, want 24 — the registry runs well past the eleven aspect kinds Sextile names", len(reg))
+		t.Fatalf("parsed %d aspects, want 24: Astrolog 8.00 lists twenty-four aspects", len(reg))
 	}
 
-	if got := reg[0]; got.Index != 1 || got.Name != "Conjunct" || got.Abbrev != "Con" || got.Angle != 0 || got.Orb != 7 {
+	if got := reg[0]; got.Kind.Index != 1 || got.Kind.Name != "Conjunct" || got.Kind.Abbrev != "Con" || got.Angle != 0 || got.Orb != 7 {
 		t.Errorf("row 1 = %+v", got)
 	}
 	// The septile is the row that matters: `-HA` prints its angle rounded to
@@ -37,7 +40,7 @@ func TestParseAspectRegistry(t *testing.T) {
 	// demanding exactness would lose it.
 	var septile bool
 	for _, r := range reg {
-		if r.Index == 13 {
+		if r.Kind.Index == 13 {
 			septile = true
 			if r.Angle != 51.43 {
 				t.Errorf("septile angle = %v, want the printed 51.43", r.Angle)
@@ -52,7 +55,7 @@ func TestParseAspectRegistry(t *testing.T) {
 	// CURRENT restriction state, not part of the registry. Sweeping it in
 	// would invent aspects that do not exist.
 	for _, r := range reg {
-		if r.Index > 24 {
+		if r.Kind.Index > 24 {
 			t.Errorf("parsed a row past the registry: %+v", r)
 		}
 	}
@@ -68,7 +71,7 @@ func TestParseAspectRegistryReadsEffectiveOrb(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	for _, r := range reg {
-		if r.Index != 5 {
+		if r.Kind.Index != 5 {
 			continue
 		}
 		if r.Orb != 0 {
@@ -99,11 +102,11 @@ func TestParseAspectRegistryReadsTheInForceSet(t *testing.T) {
 	// to registry indices rather than to the order they were printed in.
 	want := map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true}
 	for _, r := range reg {
-		if r.InForce != want[r.Index] {
-			t.Errorf("%s (%d): InForce = %v, want %v", r.Name, r.Index, r.InForce, want[r.Index])
+		if r.InForce != want[r.Kind.Index] {
+			t.Errorf("%s (%d): InForce = %v, want %v", r.Kind.Name, r.Kind.Index, r.InForce, want[r.Kind.Index])
 		}
 		if !r.InForce && r.Orb <= 0 {
-			t.Errorf("%s (%d): the fixture's restricted rows are supposed to carry positive orbs, or this proves nothing", r.Name, r.Index)
+			t.Errorf("%s (%d): the fixture's restricted rows are supposed to carry positive orbs, or this proves nothing", r.Kind.Name, r.Kind.Index)
 		}
 	}
 
@@ -119,7 +122,7 @@ func TestParseAspectRegistryReadsTheInForceSet(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	for _, r := range reg2 {
-		if r.Index != 5 {
+		if r.Kind.Index != 5 {
 			continue
 		}
 		if !r.InForce {
@@ -141,7 +144,7 @@ func TestParseAspectRegistryReadsTheInForceSet(t *testing.T) {
 	}
 	for _, r := range reg3 {
 		if r.InForce {
-			t.Errorf("%s is in force with an empty unrestricted section", r.Name)
+			t.Errorf("%s is in force with an empty unrestricted section", r.Kind.Name)
 		}
 	}
 }
@@ -192,18 +195,18 @@ func TestParseAspectRegistrySurvivesEveryRenameShape(t *testing.T) {
 			}
 			var five *aspect.RegistryAspect
 			for i := range reg {
-				if reg[i].Index == 5 {
+				if reg[i].Kind.Index == 5 {
 					five = &reg[i]
 				}
 			}
 			if five == nil {
 				t.Fatal("index 5 missing")
 			}
-			if five.Name != tc.name {
-				t.Errorf("name = %q, want %q", five.Name, tc.name)
+			if five.Kind.Name != tc.name {
+				t.Errorf("name = %q, want %q", five.Kind.Name, tc.name)
 			}
-			if five.Abbrev != tc.abbrev {
-				t.Errorf("abbrev = %q, want %q", five.Abbrev, tc.abbrev)
+			if five.Kind.Abbrev != tc.abbrev {
+				t.Errorf("abbrev = %q, want %q", five.Kind.Abbrev, tc.abbrev)
 			}
 			// The angle and the orb are what a decoy can steal, and they are
 			// what C5's grouping and C14's selectability are computed from.
@@ -217,8 +220,8 @@ func TestParseAspectRegistrySurvivesEveryRenameShape(t *testing.T) {
 				t.Error("came back restricted though the unrestricted section lists it")
 			}
 			for _, r := range reg {
-				if want := r.Index <= 5; r.InForce != want {
-					t.Errorf("%s (%d): InForce = %v, want %v", r.Name, r.Index, r.InForce, want)
+				if want := r.Kind.Index <= 5; r.InForce != want {
+					t.Errorf("%s (%d): InForce = %v, want %v", r.Kind.Name, r.Kind.Index, r.InForce, want)
 				}
 			}
 		})
@@ -291,7 +294,7 @@ func TestParseAspectRegistryRefusesAnAmbiguousRow(t *testing.T) {
 			if err == nil {
 				var five aspect.RegistryAspect
 				for _, r := range reg {
-					if r.Index == 5 {
+					if r.Kind.Index == 5 {
 						five = r
 					}
 				}
@@ -337,6 +340,57 @@ func TestParseAspectRegistryRefusesAmbiguity(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, err := ParseAspectRegistry(in); err == nil {
 				t.Error("parsed without error")
+			}
+		})
+	}
+}
+
+// A rename to letters the lists cannot be read with is read by the registry
+// and recorded: NewAspectRegistry names the aspect and its letters in the one
+// sentence every aspect list shows. A rename that fits (Kon) is read as it is.
+func TestRenamedLettersAreReadAndLettersOutsideTheFormAreNamed(t *testing.T) {
+	for _, tc := range []struct{ fixture, name, letters string }{
+		{"ha-renamed.txt", "Semi Square", "S X"},
+		{"ha-colon.txt", "Sextile", "S:X"},
+		{"ha-paren.txt", "Sextile", "X)Y"},
+		{"ha-overflow.txt", "Semi Square With A Longer Name", "LONGABBR"},
+	} {
+		t.Run(tc.fixture, func(t *testing.T) {
+			rows, err := ParseAspectRegistry(loadHA(t, tc.fixture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "Can't read the aspect list. " + tc.name + " is renamed " + strconv.Quote(tc.letters) + " in your Astrolog settings."
+			if got := NewAspectRegistry(rows).Refusal(); got != want {
+				t.Errorf("refusal = %q, want %q", got, want)
+			}
+		})
+	}
+	reg := renamedConjunct(t, "Kon")
+	if reg.Refusal() != "" || len(reg.Unreadable()) != 0 {
+		t.Fatalf("Conjunct renamed Kon: refusal %q", reg.Refusal())
+	}
+	got, err := parseAspects(singleLine("Kon"), testRegistry(t), reg)
+	if err != nil || len(got) != 1 || got[0].Kind.Abbrev != "Kon" || got[0].Kind.Index != 1 {
+		t.Errorf("a list row Kon: %+v, err %v; want the conjunction read by its new letters", got, err)
+	}
+	for _, shut := range []struct{ name string }{{"single"}, {"pair"}, {"timeline"}} {
+		t.Run("refuses/"+shut.name, func(t *testing.T) {
+			rows, _ := ParseAspectRegistry(loadHA(t, "ha-colon.txt"))
+			bad := NewAspectRegistry(rows)
+			var err error
+			switch shut.name {
+			case "single":
+				_, err = parseAspects(singleLine("Con"), testRegistry(t), bad)
+			case "pair":
+				_, err = parseCrossAspects(pairLine("Con"), testRegistry(t), bad)
+			default:
+				withClock(t, Clock{})
+				_, err = ParseTimeline(timelineLine("Con"), time.UTC, testRegistry(t), bad)
+			}
+			var refused *AspectsRefusedError
+			if !errors.As(err, &refused) || !strings.Contains(refused.Text, `"S:X"`) {
+				t.Errorf("err = %v, want the refusal naming S:X before any row is read", err)
 			}
 		})
 	}

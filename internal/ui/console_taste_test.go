@@ -45,7 +45,6 @@ func consoleTasteModel(t *testing.T, cfg Config, w, h, lines int) Model {
 	t.Helper()
 	m := tabsPairModel(t, cfg)
 	m.width, m.height = w, h
-	m.limitedViewShown = true // the first-frame notice is not what this fixture is about
 	m, _ = applyTextCommit(m, FirstFrameReadyMsg{
 		Positions:    fullChartPositions(),
 		Aspects:      tasteOwnAspects(),
@@ -101,7 +100,7 @@ func tasteFrameWidth(view string) int {
 	return ansi.StringWidth(rows[0])
 }
 
-// V1 — the pending-leader indicator beside the at-rest slot.
+// V1 — the comma menu on the bar.
 func TestLeaderPendingTaste(t *testing.T) {
 	forceColor(t)
 	for _, cfg := range tasteConfigs() {
@@ -124,7 +123,7 @@ func TestYankFlashTaste(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		t.Run(cfg.name, func(t *testing.T) {
 			m := consoleTasteModel(t, cfg.cfg, 144, 40, 60)
-			m, _ = press(t, m, ",", "l", "l")
+			m, _ = press(t, m, ",", "L", "l")
 			m, _ = press(t, m, "enter")
 			if !m.yank.active {
 				t.Fatal("the copy did not flash")
@@ -160,21 +159,13 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 		dir = filepath.Join("..", "..", "docs", "90-assets")
 	}
 
-	// V1: the three pending treatments, each beside the at-rest slot.
+	// V1: the comma menu, beside the at-rest slot.
 	var v1 strings.Builder
 	for _, cfg := range tasteConfigs() {
 		m := consoleTasteModel(t, cfg.cfg, 144, 40, 12)
 		fmt.Fprintf(&v1, "== %s / at rest ==\n%s\n\n", cfg.name, footerRowOf(m.View()))
-		for _, style := range []struct {
-			name string
-			mode keys.LeaderPendingStyleMode
-		}{{"bare", keys.LeaderPendingBare}, {"ellipsis", keys.LeaderPendingEllipsis}, {"bracketed", keys.LeaderPendingBracketed}} {
-			prev := keys.LeaderPendingStyle
-			keys.LeaderPendingStyle = style.mode
-			pending, _ := press(t, m, ",")
-			fmt.Fprintf(&v1, "== %s / pending %s ==\n%s\n\n", cfg.name, style.name, footerRowOf(pending.View()))
-			keys.LeaderPendingStyle = prev
-		}
+		pending, _ := press(t, m, ",")
+		fmt.Fprintf(&v1, "== %s / pending ==\n%s\n\n", cfg.name, strings.Join(footerRowsOf(pending.View(), 2), "\n"))
 	}
 	writeSheet(t, dir, "t105-v1-leader-pending.txt", v1.String())
 
@@ -184,7 +175,7 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 	for _, cfg := range tasteConfigs() {
 		for _, size := range []struct{ w, h int }{{144, 40}, {80, 24}} {
 			m := consoleTasteModel(t, cfg.cfg, size.w, size.h, 60)
-			m, _ = press(t, m, ",", "l", "l")
+			m, _ = press(t, m, ",", "L", "l")
 			fmt.Fprintf(&v2, "== %s / %dx%d ==\n%s\n\n", cfg.name, size.w, size.h, m.View())
 		}
 	}
@@ -202,7 +193,7 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 			prev := keys.YankFlashStyle
 			keys.YankFlashStyle = style.mode
 			m := consoleTasteModel(t, cfg.cfg, 144, 40, 60)
-			m, _ = press(t, m, ",", "l", "l")
+			m, _ = press(t, m, ",", "L", "l")
 			m, _ = press(t, m, "enter")
 			fmt.Fprintf(&v4, "== %s / %s ==\n%s\n\n", cfg.name, style.name, footerRowOf(m.View()))
 			keys.YankFlashStyle = prev
@@ -212,10 +203,16 @@ func TestConsoleTasteContactSheet(t *testing.T) {
 }
 
 // footerRowOf returns the frame's last row: the key bar, which is where the
-// pending leader and the copy confirmation now live.
+// copy confirmation lives.
 func footerRowOf(view string) string {
 	rows := strings.Split(view, "\n")
 	return rows[len(rows)-1]
+}
+
+// footerRowsOf returns the frame's last n rows: the comma menu's lines.
+func footerRowsOf(view string, n int) []string {
+	rows := strings.Split(view, "\n")
+	return rows[len(rows)-n:]
 }
 
 func writeSheet(t *testing.T, dir, name, body string) {

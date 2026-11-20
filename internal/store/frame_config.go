@@ -21,6 +21,13 @@ type FrameConfig struct {
 	HousesPresent bool
 	Zodiac        string // likewise for `zodiac:`
 	ZodiacPresent bool
+	// Node and Lilith are the words of the default form of the Nodes and
+	// Lilith (`node: true`, `lilith: natural`), as written. Whether the two
+	// name a form Astrolog can cast is internal/ui's to decide.
+	Node          string
+	NodePresent   bool
+	Lilith        string
+	LilithPresent bool
 }
 
 // Frame reads the `frame:` block from preferences.yaml:
@@ -64,6 +71,8 @@ func readFrame(path string) FrameConfig {
 	}
 	cfg.Houses, cfg.HousesPresent = value("houses")
 	cfg.Zodiac, cfg.ZodiacPresent = value("zodiac")
+	cfg.Node, cfg.NodePresent = value("node")
+	cfg.Lilith, cfg.LilithPresent = value("lilith")
 	return cfg
 }
 
@@ -106,16 +115,12 @@ func findBlock(lines []string, name string) (prefBlock, bool) {
 	if fb.start < 0 {
 		return fb, false
 	}
-	head := strings.TrimRight(lines[fb.start], "\r\n")
-	rest := head[len(name)+1:]
-	value := strings.TrimLeft(rest, " \t")
-	// A comment after the colon still opens a mapping; a value does not.
-	fb.scalar = value != "" && !(len(value) < len(rest) && value[0] == '#')
+	fb.scalar = headerHoldsValue(lines[fb.start], name)
 	for i := fb.start + 1; i < len(lines); i++ {
 		// A column-zero list entry (`- houses: Koch`) carries a colon, but it
 		// is the block's value, not the next key: it stays in the span, where
 		// it is a stray line. topLevelKey itself is left alone, because the
-		// whole-block writers (mergeBlock) would then swallow such lines.
+		// block readers would then read its children as the block's own.
 		if _, ok := topLevelKey(lines[i]); (ok && !isSequenceEntry(lines[i])) || isDocumentMarker(lines[i]) {
 			fb.end = i
 			break
@@ -160,11 +165,38 @@ func findBlock(lines []string, name string) (prefBlock, bool) {
 	return fb, true
 }
 
+// headerHoldsValue reports whether the top-level line `<name>:...` holds a
+// value after its colon. A comment after the colon still opens a mapping, and
+// so does a node's anchor or tag (`&saved`, `!!map`) standing alone: the
+// value is on the lines below.
+func headerHoldsValue(line, name string) bool {
+	rest := strings.TrimRight(line, "\r\n")[len(name)+1:]
+	value := strings.TrimLeft(rest, " \t")
+	if value == "" || (len(value) < len(rest) && value[0] == '#') {
+		return false
+	}
+	for _, f := range strings.Fields(value) {
+		if f[0] == '#' {
+			break
+		}
+		if f[0] != '&' && f[0] != '!' {
+			return true
+		}
+	}
+	return false
+}
+
 // isSequenceEntry reports a YAML block sequence entry in column zero: a dash
 // alone, or followed by a space or tab.
 func isSequenceEntry(line string) bool {
 	line = strings.TrimRight(line, "\r\n")
 	return line == "-" || strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "-\t")
+}
+
+// isDirective reports a YAML directive (`%YAML 1.2`, `%TAG ...`) in column
+// zero: it belongs to the document after it.
+func isDirective(line string) bool {
+	return strings.HasPrefix(line, "%")
 }
 
 // isDocumentMarker reports a YAML document start or end (`---`, `...`) in
@@ -180,7 +212,7 @@ func isDocumentMarker(line string) bool {
 }
 
 // SetFrame writes the default frame to preferences.yaml: `houses:` and
-// `zodiac:` in the first top-level `frame:` block, atomically, creating the
+// `zodiac:` (SetFrameNodes also `node:` and `lilith:`) in the first top-level `frame:` block, atomically, creating the
 // file, the block and either key as needed. houses is Astrolog's header name
 // and zodiac the record form (`tropical` or `sidereal <name>`), the words
 // recipe parses; a value outside them is refused and nothing is written,
@@ -199,29 +231,62 @@ func isDocumentMarker(line string) bool {
 // refused, because keys cannot be added under it, and so is a block with a
 // column-zero line YAML would not read as part of it.
 func SetFrame(houses, zodiac string) error {
-	if _, ok := recipe.ParseHouseSystem(houses); !ok {
-		return fmt.Errorf("store: frame: %q is not a house system name", houses)
-	}
-	if _, ok := recipe.ParseZodiacRecord(zodiac); !ok {
-		return fmt.Errorf("store: frame: %q is not a zodiac", zodiac)
+	kvs, err := frameValues(houses, zodiac)
+	if err != nil {
+		return err
 	}
 	return writePreferencesChecked(PreferencesPath(), func(existing string) (string, error) {
-		return mergeFrame(existing, houses, zodiac)
+		return mergeFrame(existing, kvs)
 	})
 }
 
-// mergeFrame is SetFrame's text edit.
-func mergeFrame(existing, houses, zodiac string) (string, error) {
+// SetFrameNodes is SetFrame with the default form of the Nodes and Lilith: the
+// same write also owns `node:` and `lilith:`, in the words recipe gives the
+// form (NodeForm.Words), so the four keys land together or not at all.
+func SetFrameNodes(houses, zodiac string, nodes recipe.NodeForm) error {
+	kvs, err := frameValues(houses, zodiac)
+	if err != nil {
+		return err
+	}
+	if nodes < recipe.NodesMean || nodes > recipe.NodesTrueNatural {
+		return fmt.Errorf("store: frame: %d is not a form of the Nodes and Lilith", int(nodes))
+	}
+	node, lilith := nodes.Words()
+	kvs = append(kvs, [2]string{"node", node}, [2]string{"lilith", lilith})
+	return writePreferencesChecked(PreferencesPath(), func(existing string) (string, error) {
+		return mergeFrame(existing, kvs)
+	})
+}
+
+// frameValues checks the two words SetFrame vouches for and pairs them with
+// their keys.
+func frameValues(houses, zodiac string) ([][2]string, error) {
+	if _, ok := recipe.ParseHouseSystem(houses); !ok {
+		return nil, fmt.Errorf("store: frame: %q is not a house system name", houses)
+	}
+	if _, ok := recipe.ParseZodiacRecord(zodiac); !ok {
+		return nil, fmt.Errorf("store: frame: %q is not a zodiac", zodiac)
+	}
+	return [][2]string{{"houses", houses}, {"zodiac", zodiac}}, nil
+}
+
+// mergeFrame is the text edit of SetFrame and SetFrameNodes: kvs are the keys
+// the write owns, in the order a missing one is added.
+func mergeFrame(existing string, kvs [][2]string) (string, error) {
 	lines := splitAfterNewlines(existing)
 	fb, found := findBlock(lines, "frame")
 	if !found {
 		if existing != "" && !strings.HasSuffix(existing, "\n") {
 			existing += "\n"
 		}
-		return existing + "frame:\n  houses: " + houses + "\n  zodiac: " + zodiac + "\n", nil
+		out := existing + "frame:\n"
+		for _, kv := range kvs {
+			out += "  " + kv[0] + ": " + kv[1] + "\n"
+		}
+		return out, nil
 	}
 	if fb.scalar {
-		return "", fmt.Errorf("store: preferences.yaml has '%s', not a block. The frame was not saved",
+		return "", fmt.Errorf("store: The settings file has a line '%s' where Sextile expects a list. Your defaults were not saved",
 			strings.TrimSpace(lines[fb.start]))
 	}
 	if fb.stray >= 0 {
@@ -229,7 +294,7 @@ func mergeFrame(existing, houses, zodiac string) (string, error) {
 			strings.TrimSpace(lines[fb.stray]))
 	}
 	var inserted []string
-	for _, kv := range [][2]string{{"houses", houses}, {"zodiac", zodiac}} {
+	for _, kv := range kvs {
 		if i, ok := fb.at[kv[0]]; ok {
 			// Only the value token moves (setValueToken, the experimental
 			// writer's): the key as spelled, the whitespace and comment after

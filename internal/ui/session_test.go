@@ -137,6 +137,20 @@ func withObjectList(m Model) Model {
 	reg := startObjectList()
 	m.objectRegistry = reg
 	m.lens.Registry = reg
+	return withAspectList(m)
+}
+
+// withAspectList is a Model that has Astrolog's aspect list in, as a normal
+// start has it before any chart is cast.
+func withAspectList(m Model) Model {
+	m.lens.AspectRegistry = testAspects()
+	return m
+}
+
+// withoutAspectList is a Model whose start has not heard of the aspect list
+// yet: the tests of the wait for it build their Model so.
+func withoutAspectList(m Model) Model {
+	m.lens.AspectRegistry = aspect.AspectRegistry{}
 	return m
 }
 
@@ -165,7 +179,7 @@ func startObjectList() []aspect.RegistryObject {
 func sessionLines(m Model) []string {
 	var out []string
 	for _, l := range m.logLines {
-		if strings.HasPrefix(l.text, "session:") || (l.lane == laneError && strings.HasPrefix(l.text, "Couldn't restore the last session")) {
+		if strings.HasPrefix(l.text, "session:") {
 			out = append(out, l.text)
 		}
 	}
@@ -346,7 +360,7 @@ func TestQuitInModalDoesNotWriteSession(t *testing.T) {
 		name string
 		open func(Model) Model
 	}{
-		{"help", func(m Model) Model { m.helpOpen = true; return m }},
+		{"help", func(m Model) Model { m = openedKeybindings(m); return m }},
 		{"atlas", func(m Model) Model { m.startup = startupAtlasOpen; return m }},
 		{"charts", func(m Model) Model {
 			m.startup = startupChartOpen
@@ -440,7 +454,7 @@ func TestRestoreNoSessionSilent(t *testing.T) {
 }
 
 // keptNote is the specification C3's note-lane line.
-var keptNote = regexp.MustCompile(`^session: refused, kept session\.yaml\.refused-[0-9]{8}T[0-9]{6}Z(-[0-9]+)?$`)
+var keptNote = regexp.MustCompile(`^session: unreadable, kept session\.yaml\.refused-[0-9]{8}T[0-9]{6}Z(-[0-9]+)?$`)
 
 // C21: a session file this build must not act on is named once, ignored, kept
 // beside the new session (the specification C1; it was "overwritten by
@@ -479,7 +493,7 @@ func TestRestoreMalformedSessionIgnored(t *testing.T) {
 			// kept, written when the perimeter arrives (C4), so before the
 			// restore's own refusal line.
 			got := sessionLines(m)
-			if len(got) != 2 || !keptNote.MatchString(got[0]) || got[1] != "Couldn't restore the last session. Its file cannot be used." {
+			if len(got) != 2 || !keptNote.MatchString(got[0]) || got[1] != "session: the last session did not open, its file cannot be read" {
 				t.Fatalf("log = %v, want the kept-copy note and then the refusal", got)
 			}
 			// C16: exactly one line, and it is an error.
@@ -560,7 +574,7 @@ func TestRestoreSnapshotUnusable(t *testing.T) {
 			p := withSession(perimeter(), v1(&broken, false, false, nil, nil))
 			m := startedModel(t, p)
 
-			if got, want := sessionLines(m), []string{"session: natal not restored"}; !reflect.DeepEqual(got, want) {
+			if got, want := sessionLines(m), []string{"session: the chart of the last session did not open"}; !reflect.DeepEqual(got, want) {
 				t.Errorf("log = %v, want %v", got, want)
 			}
 			if a := firstAnchor(m.slots); a != nil {
@@ -701,7 +715,7 @@ func TestRestoreKeepsUnknownBodies(t *testing.T) {
 		t.Errorf("floating kept names = %v, want [eris]", got)
 	}
 	for _, name := range []string{"sedna", "eris"} {
-		line := name + " is not an object of this Astrolog, kept in the session"
+		line := name + " is not known to this Astrolog, the session keeps its name"
 		if n := countLines(m, line); n != 1 {
 			t.Errorf("the Log carries %q %d times, want once:\n%s", line, n, strings.Join(logTexts(m), "\n"))
 		}
@@ -743,12 +757,12 @@ func TestRestoreHintLines(t *testing.T) {
 				p.SessionErr = os.ErrInvalid
 				return p
 			}(),
-			want: []string{"Couldn't restore the last session. Its file cannot be used."},
+			want: []string{"session: the last session did not open, its file cannot be read"},
 		},
 		{
 			name: "a snapshot that cannot stand on its own",
 			p:    withSession(perimeter(), v1(&broken, false, false, nil, nil)),
-			want: []string{"session: natal not restored"},
+			want: []string{"session: the chart of the last session did not open"},
 		},
 		{
 			// The name is kept and said with the drawn set's line, which is no

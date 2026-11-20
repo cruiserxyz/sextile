@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cruiserxyz/sextile/internal/location"
+	"github.com/cruiserxyz/sextile/internal/lookup"
 	"github.com/cruiserxyz/sextile/internal/store"
 	"github.com/cruiserxyz/sextile/pkg/aspect"
 )
@@ -37,7 +38,7 @@ func TestAdvanceTime_UnitsAndDirections(t *testing.T) {
 	}{
 		// Start time = 2026-04-25 12:00 UTC = 14:00 CEST (Berlin DST on).
 		// Calendar steps preserve the user's local clock time (14:00) per
-		// the DST-aware AdvanceFloating contract; week/day fall within
+		// the DST-aware stepping contract; week/day fall within
 		// CEST so the UTC offset is unchanged. "month -1" crosses into
 		// March 25, which is BEFORE Berlin's 2026 DST start (Mar 29) —
 		// i.e. CET (UTC+1) — so the 14:00 local clock corresponds to
@@ -141,6 +142,12 @@ func TestAdvanceTime_LeadingThenCoalesce(t *testing.T) {
 	// Run 1 completes mid-burst: the LEADING frame commits (slot.Time
 	// advances — instant feedback) and NO follow-up is chained (the
 	// pending tick owns the trailing run).
+	// The frame's void window is remembered, so the only command the commit
+	// could return is a text follow-up.
+	fl := m.slots.Floating()
+	if _, key, ok := m.voidRequestFor(leadTime, m.ownHouses(&fl).hs, m.ownZodiac(&fl)); ok {
+		m.mem.voids = m.mem.voids.put(key, lookup.VoidResult{})
+	}
 	var tm tea.Model = m
 	tm, cmd = tm.Update(FirstFrameReadyMsg{RunID: 1, WantID: 1, TransitTime: leadTime})
 	m = tm.(Model)
@@ -167,27 +174,31 @@ func TestAdvanceTime_LeadingThenCoalesce(t *testing.T) {
 	}
 }
 
-// TestStepDirectionFromRune asserts the direction-from-rune contract:
-// lowercase letters map to forward (+1), uppercase to backward (-1).
-// Defends against accidental case-sign-flip regressions.
-func TestStepDirectionFromRune(t *testing.T) {
-	cases := []struct {
-		name string
-		msg  tea.KeyMsg
-		want int
+// TestTimeKeysStepTheirOwnWay: each lower case time key steps forward and its
+// upper case key steps back, as actions of their own.
+func TestTimeKeysStepTheirOwnWay(t *testing.T) {
+	for _, c := range []struct {
+		key  string
+		want func(time.Time) time.Time
 	}{
-		{"y lowercase forward", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}, +1},
-		{"Y uppercase backward", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}}, -1},
-		{"d lowercase forward", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}, +1},
-		{"D uppercase backward", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}}, -1},
-		{"empty runes defaults forward", tea.KeyMsg{Type: tea.KeyRunes}, +1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := stepDirectionFromRune(tc.msg); got != tc.want {
-				t.Errorf("stepDirectionFromRune(%v) = %d, want %d", tc.msg, got, tc.want)
-			}
-		})
+		{"y", func(t time.Time) time.Time { return t.AddDate(1, 0, 0) }},
+		{"Y", func(t time.Time) time.Time { return t.AddDate(-1, 0, 0) }},
+		{"d", func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }},
+		{"D", func(t time.Time) time.Time { return t.AddDate(0, 0, -1) }},
+		{"s", func(t time.Time) time.Time { return t.Add(time.Second) }},
+		{"S", func(t time.Time) time.Time { return t.Add(-time.Second) }},
+	} {
+		m := newTestModel(t, Config{Accessible: true}, FrozenClock(testFrozenTimeUTC()))
+		slots, err := store.NewSlots(testFrozenTimeUTC(), testPlaceBerlin())
+		if err != nil {
+			t.Fatalf("NewSlots: %v", err)
+		}
+		m.slots, m.place, m.width, m.height = slots, testPlaceBerlin(), 132, 40
+		m.targetFloatingTime = slots.Floating().Time
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(c.key)})
+		if got, want := updated.(Model).targetFloatingTime, c.want(testFrozenTimeUTC()); !got.Equal(want) {
+			t.Errorf("%s: target %v, want %v", c.key, got.UTC(), want.UTC())
+		}
 	}
 }
 

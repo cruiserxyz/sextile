@@ -59,7 +59,7 @@ func TestFocusAspectsReadsFrameAndFencesOldReport(t *testing.T) {
 	m, _ = applyTextCommit(m, frameWithReports())
 	m.details = detailsViewState{title: "[0] Chart", body: "chart raw", pending: true}
 	m.refresh[surfaceDetails].runningRunID = 3
-	m, cmd := pressKey(t, m, '3')
+	m, cmd := pressKey(t, m, '4')
 	if cmd != nil {
 		t.Error("focusing Aspects returned a Cmd; expected a synchronous frame read")
 	}
@@ -87,7 +87,6 @@ func TestAspectsDetailsKeepsLastFrameOnEmptyReport(t *testing.T) {
 func TestAspectsDetailsNoopWhenHidden(t *testing.T) {
 	m := tabsPairModel(t, Config{Accessible: true})
 	m.width, m.height = 80, 24
-	m.limitedViewShown = true // the one-time notice is not what this test asks about
 	m, cmd := applyTextCommit(m, frameWithReports())
 	if cmd != nil || m.details.body != "" {
 		t.Errorf("hidden Details was filled or produced a Cmd: %+v", m.details)

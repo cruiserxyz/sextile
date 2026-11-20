@@ -40,10 +40,10 @@ func TestSlotNameAndPlaceForAstrolog(t *testing.T) {
 		wantLabel    store.ReportLabel
 		wantListedAs string
 	}{
-		{"titled.as", "Test Person", false, store.ReportLabel{Name: "Test Person", Place: "Munich, DE"}, "Munich, DE"},
-		{"untitled.as", "untitled", true, store.ReportLabel{}, "Munich, DE"},
-		{"empty-zi.as", "empty-zi", true, store.ReportLabel{}, "Munich, DE"},
-		{"twice.as", "Last", false, store.ReportLabel{Name: "Last", Place: "Munich, DE"}, "Munich, DE"},
+		{"titled.as", "Test Person", false, store.ReportLabel{Name: "Test Person", Place: "Munich, Germany"}, "Munich, Germany"},
+		{"untitled.as", "untitled", true, store.ReportLabel{}, "11°34'E 48°08'N"},
+		{"empty-zi.as", "empty-zi", true, store.ReportLabel{}, "Somewhere"},
+		{"twice.as", "Last", false, store.ReportLabel{Name: "Last", Place: "y"}, "y"},
 	} {
 		row, ok := rows[tc.file]
 		if !ok {
@@ -62,8 +62,8 @@ func TestSlotNameAndPlaceForAstrolog(t *testing.T) {
 		if picked.Label != tc.wantLabel {
 			t.Errorf("%s: label %+v, want %+v", tc.file, picked.Label, tc.wantLabel)
 		}
-		if !picked.HasPlace || picked.Place.Display() != tc.wantListedAs {
-			t.Errorf("%s: resolved place %+v (has %v), want the list's %q", tc.file, picked.Place, picked.HasPlace, tc.wantListedAs)
+		if picked.Place.Display() != tc.wantListedAs {
+			t.Errorf("%s: resolved place %+v, want the list's %q", tc.file, picked.Place, tc.wantListedAs)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func TestResolveReadsNameMomentAndPlaceTogether(t *testing.T) {
 	if picked.When.Year() != 2001 {
 		t.Errorf("moment %v is not the replacement's", picked.When)
 	}
-	if !picked.HasPlace || picked.Place.Name == "Munich" || picked.Place.TZ != "Europe/Berlin" {
+	if picked.Place.Name != "Berlin" || picked.Place.Lon < 13 {
 		t.Errorf("resolved place %+v is not the replacement's", picked.Place)
 	}
 }
@@ -169,12 +169,13 @@ func TestSaveAndRetitleLongLabelsRoundTrip(t *testing.T) {
 	t.Run("retitle", func(t *testing.T) {
 		dir := useLibraryDir(t)
 		writeChartFile(t, dir, "munich.as", munichChart)
-		dest := filepath.Join(dir, "out.as")
-		if err := os.WriteFile(dest, []byte("placeholder"), 0o600); err != nil {
+		src := filepath.Join(dir, "munich.as")
+		record, err := astrolog.RetitleRecord(context.Background(), src, atBound, atBound)
+		if err != nil {
 			t.Fatal(err)
 		}
-		src := filepath.Join(dir, "munich.as")
-		if err := astrolog.RetitleTo(context.Background(), src, atBound, atBound, dest); err != nil {
+		dest := filepath.Join(t.TempDir(), "out.as")
+		if err := os.WriteFile(dest, record, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		h, err := astrolog.ReadChartFileHeader(dest)
@@ -188,10 +189,10 @@ func TestSaveAndRetitleLongLabelsRoundTrip(t *testing.T) {
 			t.Errorf("Astrolog cannot read back what was retitled at the bound: %v", err)
 		}
 		var long *astrolog.LabelTooLongError
-		if err := astrolog.RetitleTo(context.Background(), src, over, atBound, dest); !errors.As(err, &long) {
+		if _, err := astrolog.RetitleRecord(context.Background(), src, over, atBound); !errors.As(err, &long) {
 			t.Errorf("a 55-byte title got %v, want a LabelTooLongError", err)
 		}
-		if err := astrolog.RetitleTo(context.Background(), src, atBound, over, dest); !errors.As(err, &long) || long.Bytes != 55 || long.What != "place" {
+		if _, err := astrolog.RetitleRecord(context.Background(), src, atBound, over); !errors.As(err, &long) || long.Bytes != 55 || long.What != "place" {
 			t.Errorf("a 55-byte place got %v, want a LabelTooLongError of 55 bytes", err)
 		}
 	})

@@ -13,7 +13,7 @@ import (
 // in the last one), then the chart entry and the rest.
 const (
 	sampleHead = "/usr/local/bin/astrolog -YQ 0 '-~g' '' '-~a' '' '-~Zd' '' '-~kO' '' '-~5i' ''"
-	sampleTail = "-qj 2462084.299467593 -zl 13:25E 52:31N -zZ -1 0 -zi '' '' -c 0 _s _Ys _sr0 :sz -qag 10 15 1582 12:00am 0 0:00E 0:00N '=Yt' _Yd -Yn -R 11 -R 17 -R 18 -R 25 -R 28 '=j0' -k0"
+	sampleTail = "-qj 2462084.299467593 -zl 13:25E 52:31N -zZ -1 0 -zi '' '' -c 0 _s _Ys _sr0 :sz -qag 10 15 1582 12:00am 0 0:00E 0:00N '=Yt' _Yd =Yn _Ynn -R 11 -R 17 -R 18 -R 25 -R 28 '=j0' -k0"
 	sampleFull = sampleHead + " " + sampleTail
 )
 
@@ -67,7 +67,7 @@ func TestArgvDisplayShort(t *testing.T) {
 		m := readyModelWithSlots(t, berlinP)
 		m.width, m.height = 144, 40
 		m = m.logCommands([]string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"})
-		m, _ = press(t, m, ",", "l", "l")
+		m, _ = press(t, m, ",", "L", "l")
 		if !m.console.open {
 			t.Fatal("the console did not open")
 		}
@@ -97,7 +97,7 @@ func TestArgvCopyIsFull(t *testing.T) {
 	m := readyModelWithSlots(t, berlinP)
 	m.width, m.height = 144, 40
 	m = m.logCommands([]string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"})
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	for _, want := range []string{sampleFull, "/usr/local/bin/astrolog -qj 1 -k0"} {
 		at := -1
 		for i, l := range m.console.snapshot {

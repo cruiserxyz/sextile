@@ -11,93 +11,70 @@ import (
 	"github.com/cruiserxyz/sextile/internal/lookup"
 )
 
-// TestChartSlotLine_Format pins the slot line: date/time/TZ on the left, the
-// condensed house·zodiac tag ("WhTr") at the far right, the location between —
-// all fitted to exactly the given width.
-func TestChartSlotLine_Format(t *testing.T) {
+// TestChartRowFormat pins a row of an atlas place: date, clock with seconds
+// and the offset, the place, and the condensed house and zodiac tag ("WhTr")
+// at the far right, fitted to exactly the given width.
+func TestChartRowFormat(t *testing.T) {
 	when := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 	place := location.PlaceInfo{Name: "Bremen", Country: "DE", TZ: "Europe/Berlin"}
 
 	const width = 64
-	got := chartSlotLine(when, place, lookup.Hellenistic, width, Config{})
+	got := rowText(when, place, "", "WhTr", width, Config{})
 
 	if w := ansi.StringWidth(got); w != width {
-		t.Fatalf("slot line display width = %d, want %d (%q)", w, width, got)
+		t.Fatalf("row display width = %d, want %d (%q)", w, width, got)
 	}
-	if !strings.HasPrefix(got, "Sat Apr 25, 2026 14:00 CEST") {
-		t.Errorf("slot line should start with the Berlin-zoned moment, got %q", got)
+	if !strings.HasPrefix(got, "Sat Apr 25, 2026 14:00:00 +2 DT Bremen, DE") {
+		t.Errorf("the row should read the Berlin clock, its offset and the place, got %q", got)
 	}
 	if !strings.HasSuffix(got, "WhTr") {
-		t.Errorf("slot line should end with the condensed tag WhTr, got %q", got)
-	}
-	if !strings.Contains(got, "Bremen, DE") {
-		t.Errorf("slot line should carry the location, got %q", got)
+		t.Errorf("the row should end with the condensed tag WhTr, got %q", got)
 	}
 }
 
-// TestChartSlotLine_NoTimezone returns empty so the panel body stays blank
-// before a location is resolved.
-func TestChartSlotLine_NoTimezone(t *testing.T) {
+// TestChartRowNoTimezone: a place with no zone (a chart file's, before its
+// file is read) shows the instant in UT, whose offset is +0.
+func TestChartRowNoTimezone(t *testing.T) {
 	when := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
-	if got := chartSlotLine(when, location.PlaceInfo{Name: "Nowhere"}, lookup.Hellenistic, 64, Config{}); got != "" {
-		t.Errorf("no-timezone slot line should be empty, got %q", got)
+	if got := rowText(when, location.PlaceInfo{Name: "Nowhere"}, "", "WhTr", 70, Config{}); !strings.HasPrefix(got, "Sat Apr 25, 2026 12:00:00 +0 ") {
+		t.Errorf("a place with no zone shows its instant in UT, got %q", got)
 	}
 }
 
-// TestLayoutSlotLine_TruncatesLocation verifies the location is ellipsis-
-// truncated to fit, the tag stays pinned right, and the width is exact.
-func TestLayoutSlotLine_TruncatesLocation(t *testing.T) {
-	left := "Sat Apr 25, 2026 14:00 CEST"
-	// width leaves only 7 cells for the location field → "Bremen…" ("Brem..." under --accessible)
-	width := ansi.StringWidth(left) + 1 + 7 + 1 + 4
-	got := layoutSlotLine(left, "Bremen, DE", "WhTr", width, Config{})
-
+// TestChartRowCutsTheWords: confirmed place words are cut with the mark, the
+// tag stays pinned right, and the width is exact.
+func TestChartRowCutsTheWords(t *testing.T) {
+	when := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+	place := location.PlaceInfo{Name: "Bremen", Country: "DE", TZ: "Europe/Berlin"}
+	left := "Sat Apr 25, 2026 14:00:00 +2 DT"
+	width := ansi.StringWidth(left) + 1 + 14 + 1 + 4
+	got := rowText(when, place, "", "WhTr", width, Config{})
 	if w := ansi.StringWidth(got); w != width {
 		t.Fatalf("width = %d, want %d (%q)", w, width, got)
 	}
-	if !strings.Contains(got, "Bremen…") {
-		t.Errorf("location should be cut to %q, got %q", "Bremen…", got)
+	if !strings.Contains(got, "Bremen, DE") || !strings.HasSuffix(got, "WhTr") {
+		t.Errorf("a place that fits stays whole and the tag pinned right, got %q", got)
 	}
-	if got := layoutSlotLine(left, "Bremen, DE", "WhTr", width, Config{Accessible: true}); !strings.Contains(got, "Brem...") {
-		t.Errorf("under --accessible the location should be cut to %q, got %q", "Brem...", got)
+	long := location.PlaceInfo{Name: "Bremerhaven-Lehe", Country: "DE", TZ: "Europe/Berlin"}
+	if got := rowText(when, long, "", "WhTr", width, Config{}); !strings.Contains(got, "Bremerhaven-L…") {
+		t.Errorf("long words should be cut to %q, got %q", "Bremerhaven-L…", got)
 	}
-	if !strings.HasSuffix(got, "WhTr") {
-		t.Errorf("tag should stay pinned right, got %q", got)
+	if got := rowText(when, long, "", "WhTr", width, Config{Accessible: true}); !strings.Contains(got, "Bremerhaven...") {
+		t.Errorf("under --accessible the words should be cut to %q, got %q", "Bremerhaven...", got)
 	}
 }
 
-// TestLayoutSlotLine_WideCharLocation guards display-width correctness: a CJK
-// location (each glyph 2 cells) must still produce a line of exactly width
-// DISPLAY cells, matching renderTitledBox's padBody (rune count would be wrong).
-func TestLayoutSlotLine_WideCharLocation(t *testing.T) {
-	left := "Sat Apr 25, 2026 14:00 JST"
+// TestChartRowWideCharPlace guards display-width correctness: a CJK place
+// (each glyph 2 cells) still gives a row of exactly width display cells.
+func TestChartRowWideCharPlace(t *testing.T) {
+	when := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 	const width = 60
-	got := layoutSlotLine(left, "東京, JP", "WhTr", width, Config{}) // 東京 = 4 display cells
-
+	got := rowText(when, location.PlaceInfo{Name: "東京", Country: "JP", TZ: "Asia/Tokyo"}, "", "WhTr", width, Config{})
 	if w := ansi.StringWidth(got); w != width {
 		t.Fatalf("display width = %d, want %d (%q)", w, width, got)
 	}
 	if !strings.HasSuffix(got, "WhTr") {
 		t.Errorf("tag should stay pinned right, got %q", got)
-	}
-}
-
-// TestLayoutSlotLine_NarrowFallback pins the policy: when width can't fit
-// left + tag + gaps, the location is dropped, the tag stays pinned right, and
-// the line is still exactly width cells.
-func TestLayoutSlotLine_NarrowFallback(t *testing.T) {
-	left := "Sat Apr 25, 2026 14:00 CEST"
-	width := ansi.StringWidth(left) + 4 // only room for left + "WhTr", no location
-	got := layoutSlotLine(left, "Bremen, DE", "WhTr", width, Config{})
-
-	if w := ansi.StringWidth(got); w != width {
-		t.Fatalf("display width = %d, want %d (%q)", w, width, got)
-	}
-	if !strings.HasSuffix(got, "WhTr") {
-		t.Errorf("tag should stay pinned right even when location is dropped, got %q", got)
-	}
-	if strings.Contains(got, "Bremen") {
-		t.Errorf("location should be dropped when there's no room, got %q", got)
 	}
 }
 

@@ -12,7 +12,7 @@ func TestConsolePageKeys(t *testing.T) {
 	// A terminal short enough for a 12-row console (the smallest there is) over 60 lines.
 	m := consoleModel(t, 60)
 	m.height = 15
-	m, _ = press(t, m, ",", "l", "l")
+	m, _ = press(t, m, ",", "L", "l")
 	if !m.console.open {
 		t.Fatal("the console did not open")
 	}

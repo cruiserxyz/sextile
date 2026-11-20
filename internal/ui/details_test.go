@@ -432,7 +432,7 @@ func TestReportRefusesAnUnknownZone(t *testing.T) {
 	before := len(m.logLines)
 	m, _ = m.commitRefresh(surfaceDetails, msg)
 	got := m.logLines[before:]
-	if len(got) != 1 || got[0].lane != laneError || !strings.HasPrefix(got[0].text, "Couldn't read the full report.") {
+	if len(got) != 1 || got[0].lane != laneError || !strings.HasPrefix(got[0].text, "details: report not read") {
 		t.Errorf("Log gained %+v, want exactly one report error", got)
 	}
 }

@@ -10,7 +10,7 @@ import (
 // to cross: whether Astrolog is installed at all.
 //
 // internal/ui may import this package and may not import internal/astrolog
-// (invariants.TestPerimeterDoesNotReachActive), so the cause and the probe are
+// (ui's TestUIDoesNotImportAstrolog), so the cause and the probe are
 // re-exported here rather than reached for directly. Nothing is interpreted on
 // the way through: the perimeter still decides what to say about it.
 
@@ -60,3 +60,24 @@ func AstrologWarnings(err error) []string {
 	}
 	return nil
 }
+
+// PrivateTempError is a private temp folder Sextile could not make: its Dir
+// is the cache folder it was to go in.
+type PrivateTempError = astrolog.PrivateTempError
+
+// ChartRefused is a chart file Sextile does not hand to Astrolog, naming the
+// switch that refused it; FileNote is a line of a file Astrolog does not get.
+type (
+	ChartRefused    = astrolog.ChartRefused
+	FileNote        = astrolog.FileNote
+	FileSwitchClass = astrolog.FileSwitchClass
+)
+
+// The classes of a line a chart file holds that Astrolog does not get.
+const (
+	SwitchLens = astrolog.SwitchLens
+)
+
+// ErrHomeNotAbsolute is a private temp folder with no place: HOME is not an
+// absolute path.
+var ErrHomeNotAbsolute = astrolog.ErrHomeNotAbsolute

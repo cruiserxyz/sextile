@@ -6,7 +6,7 @@ import (
 	"github.com/cruiserxyz/sextile/internal/ui/term"
 )
 
-// experiments.go is the hidden Experiments popup (`,l p`): one row per
+// experiments.go is the hidden Experiments popup (`,L p`): one row per
 // experimental switch with a tick, its id and one line saying what it changes.
 // Space flips the focused row, Enter, Esc and q close. The popup writes
 // nothing and keeps no truth of its own: ui runs the write, and only a write
@@ -98,13 +98,18 @@ func (e Experiments) rowSpec(i int) menu.RowSpec {
 	return menu.RowSpec{Left: mark + " " + row.ID + "  " + row.Line, Cursor: i == e.Cursor}
 }
 
-// Fit is the popup's size: as wide as its widest row, one row each and the foot.
+// Fit is the popup's size: as wide as its widest row, one row each, and the foot
+// line while it says something.
 func (e Experiments) Fit(cfg term.Style) dialog.Fit {
 	w := 1
 	for i := range e.Rows {
 		w = max(w, menu.RowWidth(e.rowSpec(i), cfg))
 	}
-	return dialog.Fit{Width: w, Rows: len(e.Rows) + 1}
+	rows := len(e.Rows)
+	if e.Foot != "" {
+		rows++
+	}
+	return dialog.Fit{Width: w, Rows: rows}
 }
 
 // Render draws the popup.
@@ -118,7 +123,9 @@ func (e Experiments) Render(cfg term.Style, termW, termH int, chrome dialog.Chro
 		for i := range e.Rows {
 			lines = append(lines, menu.Row(e.rowSpec(i), cfg, width))
 		}
-		lines = append(lines, menu.Note(e.Foot, width, cfg))
+		if e.Foot != "" {
+			lines = append(lines, menu.Note(e.Foot, width, cfg))
+		}
 		return menu.Block(lines, width, height)
 	})
 }

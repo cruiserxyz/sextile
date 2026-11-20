@@ -54,6 +54,14 @@ type Config struct {
 	// named session it keeps that one (sessions_popup_model.go).
 	SecondWindow bool
 
+	// Version is Sextile's own version, as `sextile --version` prints it. The
+	// Status panel's Details names it.
+	Version string
+
+	// Copyright is the copyright line of the LICENSE file, as the program is
+	// started with it; the Credits tab shows it. Empty shows no line.
+	Copyright string
+
 	// Launch is what the launcher says about how it started this copy: the
 	// value of SEXTILE_LAUNCH, `docker <image>` or `no-docker <describe>`.
 	// The Log's first line names it. Any other shape, and empty, says nothing.
@@ -64,15 +72,20 @@ type Config struct {
 	// there was nothing to copy.
 	Migration string
 
-	// NamedSession is the lock of the named session --session asked for, taken
-	// by main; this window runs that session from the start. NamedSessionName is
+	// NamedSession is the lock of the named session --session asked for, or
+	// the last one this charts folder ran, taken by main; this window runs that session from the start. NamedSessionName is
 	// its name. Nil runs the general session (or, in a second window, none).
 	NamedSession     *store.SessionLock
 	NamedSessionName string
 
-	// SessionNote is the one Log line saying why --session could not be
-	// honoured; empty when it was, or was not asked.
+	// SessionNote is the one Log line saying why --session, or the last
+	// session a start reopens, could not be run; empty when it was, or there
+	// was none.
 	SessionNote string
+
+	// LastSessionTrace is a large-log line: the record of the last session
+	// could not be read, so the start ran the unnamed session.
+	LastSessionTrace string
 }
 
 // UseColor reports whether explicit colours should be emitted for this render.

@@ -246,31 +246,12 @@ func TestSingleBodySelectionHasNoAspects(t *testing.T) {
 	}
 }
 
-// C15: an aspect kind Astrolog can select but Sextile cannot type is omitted at
-// the parser boundary; the remaining typed rows still render a healthy frame.
-func TestAspectsOmitUnnameableKinds(t *testing.T) {
-	baseline, _ := fixtureLookup(t, lookup.Hellenistic, nil)
-	lens := lookup.Hellenistic
-	lens.Aspects = recipe.AspectPolicy{Explicit: true, Indices: []int{1, 13}}
-	changed, spawns := fixtureLookup(t, lens, func(in string) string {
-		return strings.ReplaceAll(in, "Con ", "Sep ")
-	})
-	requireFirstSpawnBand(t, spawns, "-RA0", []int{1, 13})
-	if len(changed.Aspects) == 0 || len(changed.Aspects) >= len(baseline.Aspects) {
-		t.Fatalf("unknown-kind fixture produced %d typed rows from baseline %d; want only the unnameable rows omitted", len(changed.Aspects), len(baseline.Aspects))
-	}
-	if body := renderAspectsBody(chartViewState{aspects: changed.Aspects}, TabAspects, 64, 6, Config{Accessible: true, Color: ColorNever}); strings.TrimSpace(body) == "" {
-		t.Fatal("omitting unknown kinds blanked the remaining typed aspect rows")
-	}
-}
-
 // (Name kept: the specification C10a cites it. The behaviour now KEEPS the row.)
-// C10a is deliberately separate from C15: an unknown endpoint and an unknown
-// kind are resolved by different tables and can regress independently. An
-// unknown KIND is still omitted (C15); an unknown ENDPOINT is no longer: the
-// operator's 2026-10-05 report ("it has to work anyway, even with a
-// placeholder") reversed the old omission, so the row is kept, carries
-// Astrolog's printed name, and draws the placeholder.
+// An unknown endpoint is kept: the operator's 2026-10-05 report ("it has to
+// work anyway, even with a placeholder") reversed the old omission, so the row
+// is kept, carries Astrolog's printed name, and draws the placeholder. An
+// aspect the registry does not hold is not a row at all: the list is refused
+// (TestFirstAspectsListIsCompleteOrRefused).
 func TestAspectsKeepUnnameableEndpoints(t *testing.T) {
 	baseline, _ := fixtureLookup(t, lookup.Hellenistic, nil)
 	lens := lookup.Hellenistic
@@ -301,20 +282,24 @@ func TestAspectsKeepUnnameableEndpoints(t *testing.T) {
 }
 
 // stripSpawnPrefix splits a recorded spawn argv into the call's own argv and
-// what stood before it: `-YQ 0`, then the hook-clear band, a run of `-~<hook>`
-// `""` pairs (the specification C1). internal/ui may not import
-// internal/astrolog, so the exact band is pinned there
-// (TestEveryCallClearsHooks); this helper holds only its shape and that a band
-// is present.
+// what stood before it: `-YQ 0`, the host band, then the hook-clear band, a
+// run of `-~<hook>` `""` pairs (the specification C1). internal/ui may not
+// import internal/astrolog, so the exact bands are pinned there
+// (TestEveryCallClearsHooks, TestAHostSettingChangesNoCall); this helper holds
+// only their shape and that a hook band is present.
 func stripSpawnPrefix(argv []string) (own, prefix []string, ok bool) {
 	if len(argv) < 2 || argv[0] != "-YQ" || argv[1] != "0" {
 		return nil, nil, false
 	}
 	i := 2
+	for i < len(argv) && !strings.HasPrefix(argv[i], "-~") {
+		i++ // the host band
+	}
+	start := i
 	for i+1 < len(argv) && strings.HasPrefix(argv[i], "-~") && argv[i+1] == "" {
 		i += 2
 	}
-	if i == 2 {
+	if i == start {
 		return nil, nil, false
 	}
 	return argv[i:], argv[:i], true
